@@ -1,0 +1,508 @@
+TCILogger — Change Log
+======================
+
+v0.43 Beta  (2026-04-05)
+------------------------
+- New: Club Log real-time upload support — each saved QSO is automatically
+  uploaded to clublog.org via the real-time API (realtime.php), which is the
+  correct per-QSO endpoint. The batch endpoint (putlogs.php) is intentionally
+  NOT used as repeated single-QSO calls to it trigger IP blocking.
+- Club Log requires: account email, Application Password (separate from login
+  password), callsign, and a developer API key from clublog.org/requestapikey.php.
+- HTTP 403 from Club Log immediately halts all further upload attempts and flags
+  the block in the UI — credentials must be corrected and re-saved to resume.
+  This prevents Club Log from firewalling the user's IP address.
+- Settings panel: new Club Log section with email, app password, callsign, API
+  key fields and a "Test Credentials" button that verifies auth without uploading.
+- QSO save confirmation toast now shows ClubLog ✓ on success or an inline error.
+- Club Log upload also fires for QSOs auto-logged from digital apps when enabled.
+- Help guide: Club Log section added with setup instructions, real-time vs batch
+  explanation, and IP-blocking warning. Settings reference table updated.
+
+v0.42 Beta  (2026-04-05)
+------------------------
+- New: ARRL LoTW (Logbook of the World) upload support — each saved QSO can be
+  automatically signed and uploaded to LoTW via the TQSL command-line tool.
+  Configure the path to tqsl.exe in Settings → LoTW; use "Verify TQSL Path" to
+  confirm the executable is found. Requires TQSL installed with a valid callsign
+  certificate already loaded. Upload is off by default.
+- LoTW upload also fires for QSOs auto-logged from digital apps (WSJT-X, JTDX, etc.)
+  when enabled, matching existing QRZ Logbook behaviour.
+- QSO save confirmation now shows "LoTW ✓" on success or a brief error inline.
+- Help guide updated: LoTW section added under Callsign Lookup, settings reference
+  table updated, QSO save paragraph updated.
+- Backend: /api/lotw_test route added to verify the TQSL path from the Settings UI.
+- Added import subprocess + tempfile to support TQSL process invocation.
+
+v0.41 Beta  (2026-04-04)
+------------------------
+- CW: Panel layout refined — controls split into two side-by-side columns:
+  Col A (Tone + AFC) and Col B (Squelch + Threshold) sit left of the waterfall;
+  Snap/Exact button moved to the RIGHT of the waterfall canvas, using previously
+  wasted space. Waterfall shifted rightward and stands clear of the controls.
+- CW: All decode-panel text enlarged — labels 14 px, value readouts 13 px,
+  AFC range dropdown 12 px, AFC lock indicator 12 px, range sliders widened to 110 px.
+- CW: Macro buttons and labels enlarged further — button font 12 px (min-height 34 px),
+  macro label inputs 12 px.
+- CW: Full layout revert history preserved in CSS/HTML comments for one-step rollback.
+
+v0.40 Beta  (2026-04-04)
+------------------------
+- CW: Panel layout redesigned — Tone, AFC, Squelch and Threshold controls moved to a left
+  column beside the waterfall, making use of previously wasted space to the right of the
+  canvas. Total panel height reduced (four controls now sit alongside the waterfall rather
+  than stacking above and below it).
+- CW: Control text enlarged — labels increased 12 → 13 px, value readouts 11 → 12 px,
+  AFC lock indicator 10 → 11 px; all easier to read at a glance.
+- CW: Macro buttons and labels slightly larger — macro button font 10 → 11 px,
+  minimum button height 30 → 32 px; macro labels 10 → 11 px. Easier to read and click.
+- CW: Old stacked layout preserved as a CSS/HTML comment block for one-step revert.
+
+v0.39 Beta  (2026-04-04)
+------------------------
+- CW: Threshold hysteresis lock-up bug fixed — when Threshold was set below ~12% the
+  mark-end condition (threshold − HYST_OFF) went negative; since norm is always ≥ 0 the
+  mark never ended, locking lastLevel=true permanently and silencing all decodes. Fix:
+  clamp end condition to a minimum of 2% so marks always eventually close. Slider minimum
+  raised from 10% to 15% to keep users clear of the worst zone. Direction is correct:
+  LEFT = more sensitive (lower threshold), RIGHT = more selective (stronger signal only).
+- CW: AFC range dropdown added (±50 / ±100 / ±150 / ±200 Hz, default ±100 Hz) — tighter
+  range avoids locking onto adjacent signals; wider range handles drifty or far-off-tune
+  carriers. Replaces the old fixed ±200 Hz constant. Changing range resets AFC immediately.
+- CW: Waterfall narrowed — canvas capped at 340px wide so signals appear as thinner streaks
+  and click-to-tune is more precise
+- CW: Waterfall FFT improved — N=2048 → N=4096 (doubles frequency resolution):
+  11.7 Hz/bin @ 48 kHz, 1.95 Hz/bin @ 8 kHz; CW carriers now display as narrow lines
+  rather than fat blobs, especially noticeable in TCI audio mode
+- CW: Waterfall display range narrowed from ±600 Hz to ±400 Hz — better zoom for CW work;
+  combined with higher FFT resolution, signals are visually thinner and easier to click
+- CW: Waterfall colour scheme changed to blue-family only (black → deep navy → royal blue →
+  white); cyan/green tones removed; cleaner classic look
+- CW: Waterfall cursor line changed from yellow to red — stands out more clearly against the
+  blue gradient, easier to see at a glance
+- CW: Waterfall frequency labels improved — larger font (10px), dark backing rectangle
+  behind each label for legibility against bright signals, higher opacity
+
+v0.38 Beta  (2026-04-04)
+------------------------
+- CW: Waterfall display added — a 72px strip below the Tone slider showing
+  ±600 Hz around the set tone (or AFC-locked frequency) as a classic blue-black
+  → cyan → white scrolling waterfall; updates at ~20 rows/sec regardless of
+  audio sample rate; works with both TCI audio and microphone input without any
+  additional data source — the same audio samples used for decoding feed a
+  2048-point FFT with Hann windowing
+- CW: Click-to-tune — click anywhere on the waterfall to re-tune the decoder
+  to that frequency; triggers a full signal-chain reset so the new frequency
+  calibrates immediately without a restart
+- CW: Snap / Exact click-mode toggle (⌖ Snap / ⌖ Exact button next to the
+  waterfall) — Snap (default) finds the highest magnitude peak within ±60 Hz
+  of your click and locks onto it, useful when a signal is visible but not
+  exactly under the cursor; Exact tunes to precisely where you clicked; mode
+  is saved and restored across sessions
+- CW: Yellow dashed cursor line on waterfall shows the live AFC-locked
+  frequency; frequency label floats above the cursor; scale ticks drawn at
+  100 Hz intervals with Hz labels every 200 Hz
+
+v0.37 Beta  (2026-04-04)
+------------------------
+- CW Decoder: fixed "no decodes after running for a while" — noiseFloor was fully
+  frozen during marks; if band noise rose while a mark was active, noiseFloor fell
+  behind the true noise level, the decoder got stuck in lastLevel=true, and decoding
+  stopped until a manual restart; fix: noiseFloor can now fall (but not rise) during
+  marks — the one-directional update allows floor to track downward if the signal
+  dips, while still preventing mark energy from contaminating the noise estimate
+- CW Decoder: fixed "frequency change stops decoding" — toneFreqChanged() only reset
+  AFC state, leaving noiseFloor/peakPower/envVal calibrated to the old pitch, and the
+  matched-filter ring buffer and IQ oscillator holding stale energy at the old frequency;
+  fix: full signal-chain reset on tone slider move — envelope state, matched filter
+  ring buffer, IQ accumulators, phase accumulator, and decoder edge state are all
+  cleared so the new frequency calibrates cleanly from scratch
+- CW Decoder: added upper mark duration guard in processEdge — during signal fade the
+  SNR dynamic range compresses, inflating norm for noise bursts and creating implausibly
+  long "marks" (several seconds); these were passed to bayesLearnMark(), corrupting the
+  learned dit timing; marks longer than 8× the current dit estimate are now discarded
+  before classification or learning (8× ≈ 480ms at 20 WPM — safely above any real dah)
+- CW Decoder: dit/dah boundary refined from 1.5× to 1.565× — direct extraction from
+  CWGET binary decoder section (d64 at offset 0x0107BC and mirror at 0x028390, both at
+  the timing decision point); the previous 1.5 came from a generic constant appearing
+  elsewhere in the binary; 1.565 is the actual threshold value used in both decoder paths
+- CW Decoder: asymmetric speed learning added to bayesLearnMark — CWGET binary uses
+  "instant fall / slow rise" (0.33 alpha) for element-length tracking; we mirror this
+  by applying full alpha when the observed dit is shorter than current model (operator
+  speeding up — track quickly) and half alpha when longer (momentary hesitation — wait
+  before slowing the model down); this improves tracking when operators accelerate mid-QSO
+
+v0.36 Beta  (2026-04-04)
+------------------------
+- CW Decoder: bootstrap dit/dah boundary changed from √3 (1.732×) to 1.5× dit —
+  CWGET binary analysis found the constant 1.50 appears 13× as the dit/dah decision
+  boundary; 1.5× biases toward calling borderline marks as dahs, which is correct for
+  real-world CW where operators commonly send short dahs (~1.5–2T) especially at speed
+- CW Decoder: hysteresis widened and made asymmetric — CWGET uses two separate thresholds
+  (Treshold=320 ON, CwFilterTreshold=175 OFF, ratio=0.547); symmetric ±4% was too narrow
+  and caused chatter on signals hovering near threshold; new HYST_ON=6% (start a mark)
+  and HYST_OFF=12% (hold a mark); at default 27% threshold: mark starts at 33%, holds
+  until norm drops below 15% — substantially more stable on marginal signals
+- CW Decoder: Bayesian variance floor now scales with dit duration (10% CV minimum)
+  instead of a fixed 25ms²; at 15 WPM (80ms dit) the old floor was σ=5ms = 6% CV,
+  making the Gaussian over-sharp and brittle; new floor scales so slow operators always
+  get at least 10% tolerance around their learned timing
+- CW Decoder: corrected ENV_DKY comment — was "slightly faster so noise spikes clear
+  quickly" (backwards: lower alpha = slower change); corrected to describe fast attack
+  (~1.7ms half-life) and slow decay (~8ms half-life) with confirmation from CWGET binary
+  (attack=0.297, decay=0.0615 confirmed to match our ENV_ATK=0.30, ENV_DKY=0.06)
+
+v0.35 Beta  (2026-04-04)
+------------------------
+- CW: Gain slider replaced with Squelch (SNR gate) slider — the Gain control was
+  mathematically a no-op: norm=(mfVal−noiseFloor)/(peakPower−noiseFloor) cancels any
+  gain factor identically in numerator and denominator, and the SNR gate comparison
+  (peakPower ≥ k × noiseFloor) also cancels gain; moving the knob from ×0.01 to ×20
+  had zero effect on decode quality, signal bar, or any threshold comparison; the
+  gain multiplication is removed from both the TCI and microphone audio paths
+- CW: Squelch slider (×1.1–×3.0, default ×1.5) now controls the SNR gate directly —
+  the minimum signal-to-noise ratio required before the decoder runs at all; this
+  mirrors CWGET's separate SquelchThreshold parameter; low setting (×1.1) decodes
+  weak/noisy signals at the cost of more false triggers; high setting (×3.0) requires
+  a clean strong signal; ×1.5 preserves prior default behaviour
+
+v0.34 Beta  (2026-04-04)
+------------------------
+- CW Decoder: fixed critical SNR gate dropout between characters — PEAK_FALL reduced
+  from 0.03 to 0.003; at ~1400 IQ windows/sec, the old value gave the peak tracker a
+  16ms half-life, collapsing it to near-zero during every 3T inter-character space
+  (144ms at 25 WPM), which caused the SNR gate to fail between every character; the new
+  value gives a 165ms half-life: peak holds at ~55% across a 25 WPM char-space, drops
+  appropriately during word gaps (~24% after 7T), and correctly decays to zero after
+  ~1.5s of true silence (7 half-lives)
+- CW Decoder: noise floor now only updates during confirmed spaces (lastLevel=false) —
+  during a mark, mfVal is at signal level; FLOOR_RISE was slowly pulling the noise
+  reference upward mid-element, compressing the norm range and risking threshold dropout
+  on long dahs; floor now only learns from silence, which is what it should represent
+- CW Decoder: bootstrap dit/dah boundary corrected from 2.0× to √3 (≈1.732×) dit —
+  √3 is the geometric mean of 1T (dit) and 3T (dah), i.e. the Bayes-optimal decision
+  boundary where misclassification probability is equal on both sides; 2.0× was biased
+  toward over-calling dits: marks between 1.73T and 2.0T were incorrectly classified
+  as dits during the bootstrap phase before the Gaussian model was trained
+
+v0.33 Beta  (2026-04-04)
+------------------------
+- CW Decoder: inter-element space model corrected to 0.85× dit (was 1.0×) — analysis of
+  CWGET's internal parameters (DotLen=945, ShortPauseLen=806 at 11025 Hz, ratio=0.853)
+  reveals real operators send inter-element gaps at ~85% of the dit duration, not 100%;
+  the Gaussian classifier now uses _bElemSpaceMu (≈0.85× dit) as the inter-element
+  center instead of _bDitMu, correcting systematic misclassification of char-spaces as
+  inter-element spaces
+- CW Decoder: bootstrap space thresholds tightened to CWGET-derived geometric means —
+  elem/char boundary moves from 2.0× to 1.6× dit (√(0.85×3)), char/word boundary from
+  5.5× to 4.6× dit (√(3×7)); these are the exact decision boundaries that minimise
+  Bayes error between adjacent classes
+- CW Decoder: inter-element space timing tracked separately via _bElemSpaceMu — updates
+  via slow half-weight EMA from confirmed inter-element spaces once bootstrapped, clamped
+  to 0.4–1.5× dit; mirrors CWGET's separate ShortPauseLen tracking that has been
+  maintained through every version since 0.01
+- AFC: search range widened from ±80 Hz to ±200 Hz — CWGET uses ±300 Hz global; ±80 Hz
+  was too narrow and frequently failed to acquire signals drifted by QRM or operator
+  offset; ±200 Hz covers normal amateur practice without pulling onto adjacent signals
+
+v0.32 Beta  (2026-04-04)
+------------------------
+- CW Decoder: fixed Bayesian bootstrap speed mismatch — _bDitMu and _bDitVar are now
+  seeded from the TX WPM setting at startup (same as dotEstMs), not hardcoded to 80ms
+  (15 WPM); at 25 WPM the old hardcoded value put the 2× bootstrap threshold at 160ms,
+  causing 144ms dahs to be classified as dits and immediately corrupting the model
+- CW Decoder: fixed bayesClassifySpace bootstrap — inter-element / inter-character /
+  word-gap classification now uses simple ratio thresholds (2.0× and 5.5× dotEstMs)
+  during the first 8 marks rather than the Gaussian model; previously all spaces were
+  fed into the Gaussian with a wrong _bDitMu, preventing characters from ever flushing
+- CW Decoder: added plausibility guard to bayesLearnMark — model update is skipped if
+  the derived dit-unit estimate falls outside 0.3×–2.5× of the current mean; prevents
+  misclassified marks from inflating _bDitVar and degrading the classifier mid-stream
+
+v0.31 Beta  (2026-04-04)
+------------------------
+- CW Decoder: replaced fixed-ratio dit/dah classifier with Bayesian Gaussian timing
+  model — the decoder now learns each operator's actual dit and dah duration distributions
+  in real time via exponential moving average (EMA) and uses log-likelihood comparison to
+  classify each mark, instead of a fixed 2× midpoint threshold; adapts continuously to
+  speed changes and irregular fist (timing variation)
+- CW Decoder: space classification (inter-element / inter-character / word) similarly
+  replaced with three-class Bayesian model (Gaussian likelihoods for 1T, 3T, 7T); word
+  gap uses one-sided model so arbitrarily long silences never incur a penalty
+- CW Decoder: bootstrap — decoder uses simple 2× fallback for the first 8 marks then
+  switches to the learned Gaussian model; model re-initializes from TX WPM setting on
+  Reset/reconnect for a sensible cold-start
+- CW Decoder: dah parameters kept coupled to dit (μ_dah = 3·μ_dit) — theoretically
+  correct for well-sent CW and halves bootstrap time; dah observations contribute at
+  half weight since dah/3 is a noisier dit estimate than a direct dit measurement
+- CW Decoder: Bayesian model deliberately preserved across CLR button (keeps learned
+  speed for current station); reset only on explicit decoder reset or reconnect
+
+v0.30 Beta  (2026-04-04)
+------------------------
+- CW: Auto-gain (AUTO toggle) removed — broadband RMS normalization was counterproductive;
+  the adaptive noise floor + SNR gate already normalize the signal internally, and AUTO was
+  lifting background noise alongside the signal causing false decodes
+- CW: Gain slider range extended from ×0.1–×20 down to ×0.01–×20 (step 0.01) — gives
+  sufficient attenuation for very strong signals; display shows 2 decimal places below ×1.0
+  (e.g. ×0.05) for precision at low settings
+- CW: AFC ON/OFF toggle added next to the Tone slider — when OFF, the decoder locks to the
+  exact Tone Hz you set and the label shows "AFC OFF"; toggle state saved and restored
+- CW: Gain and Threshold split onto separate rows with a visual divider — was previously on
+  the same row as the removed AUTO toggle, making it unclear which control AUTO affected
+- CW: NR status label "OFF — enable to auto-increment & log to Remarks" brightened
+  (was near-invisible muted gray)
+
+v0.29 Beta  (2026-04-04)
+------------------------
+- CW Decoder: fixed decoder going silent after short time — matched filter ring buffer
+  was not reinitialized when _mfWin changed as WPM was estimated; corrupted _mfSum caused
+  mfVal to collapse to zero, locking norm at 0; buffer now reinitializes whenever window
+  size changes
+- CW Decoder: peak power now tracked from raw envelope (envVal) instead of filtered value
+  (mfVal) — ensures peakPower reflects true signal level even during element-edge transitions
+- CW Decoder: SNR gate lowered from 2.0× back to 1.5× noise floor — 2.0 was too tight and
+  prevented recovery after brief noise bursts on otherwise strong signals
+- CW Decoder: threshold hysteresis added (±4%) — requires norm to rise above threshold+4%
+  to start a mark, but only threshold−4% to sustain one; prevents rapid EE/E toggling at
+  the detection boundary
+- App: browser-close shutdown replaced with keepalive heartbeat — each page now sends POST
+  /api/keepalive every 20 s; server exits automatically after 3 minutes of silence; fixes
+  app dying when opening the Help guide or navigating between pages (race condition in the
+  old pagehide/sendBeacon/cancel approach sent a shutdown before the new page could cancel)
+
+v0.28 Beta  (2026-04-04)
+------------------------
+- CW Decoder: added matched filter — running average of IQ envelope over ~0.5 dit duration;
+  smooths sub-dit noise spikes that caused false EE/E decodes without blurring real edges
+- CW Decoder: SNR gate raised from 1.5× to 2.0× noise floor — further reduces false decodes
+  in noisy conditions before a real signal establishes itself
+- CW Decoder: AFC label brightened and made larger (was near-invisible muted gray)
+- CW: font sizes adjusted — Large now 16px (was 18), X-Large now 20px (was 22)
+- CW: macro editor replaced browser prompt() with custom modal — token buttons ({MYCALL},
+  {MYNAME}, {CALL}, {NAME}, {RST}, {NR}) click to insert at cursor; Enter=OK, Esc=Cancel,
+  click outside=Cancel
+- QSO Entry: fixed RST values reverting to 59/559 while typing — values are now preserved
+  once the user edits them; RST only resets automatically when mode actually changes or
+  the form is cleared
+
+v0.27 Beta  (2026-04-04)
+------------------------
+- CW Decoder: replaced block Goertzel with continuous IQ downconversion — carrier envelope
+  updated every ~0.7 ms (was ~6 ms per block), giving 8× better edge timing resolution;
+  directly improves accuracy at higher speeds and on hand-keyed irregular fist
+- CW Decoder: AFC (Automatic Frequency Control) added — scans ±80 Hz around the set Tone
+  every ~250 ms; only locks when a real signal peak is found (≥3× scan average); locked
+  frequency shown as "AFC xxx Hz" next to the Tone slider; resets when slider is moved
+- CW Decoder: dit/dah boundary changed from 2.2× to 2.0× dotEstMs — theoretically correct
+  midpoint between dit (1 unit) and dah (3 units), handles uneven spacing better
+- CW Decoder: char-space flush tightened to 5.5× dotEstMs (was 6.5×), word-space to 8.0×
+
+v0.26 Beta  (2026-04-03)
+------------------------
+- CW: Gain slider now supports attenuation — range changed from 0–20 to ×0.1–×20 (step 0.1);
+  default changed to ×0.3 (was OFF/unity) so the signal starts quieter and you adjust up
+- CW: Gain slider no longer has an "OFF" position — ×1.0 is unity gain; below ×1.0 attenuates
+
+v0.25 Beta  (2026-04-03)
+------------------------
+- CW: CLR buttons moved to below the RX Decode and TX Sent windows, now styled red for clarity
+- CW: RESET macro button changed to red so it stands out from regular controls
+- CW: Token reference bar at bottom of Macros panel brightened — "TOKENS:" label now cyan,
+  token text changed from near-invisible gray to legible light color
+- CW: NR status label ("OFF — enable to auto-increment & log to Remarks") brightened
+- CW: Macro header hint text ({MYCALL} {MYNAME}…) brightened
+- App: closing the browser tab/window now automatically shuts down TCILogger — the server
+  exits and the tray icon disappears within a few seconds of closing the page
+- Help: PstRotator section corrected — UDP query/reply protocol documented (not TCP);
+  port 12001 reply port noted; CLR button and threshold (27%) defaults updated
+- Help: Auto-Log 73 documented in CW Send section
+- Help: browser-close shutdown behaviour documented in tray icon controls
+
+v0.24 Beta  (2026-04-03)
+------------------------
+- Rotator: PstRotator poller corrected to use the documented UDP query/reply protocol —
+  sends <PST>AZ?</PST> to port 12000 every 500 ms and reads AZ:xxx.x reply on port 12001
+  (previous TCP approach was using the wrong transport and wrong data format)
+
+v0.23 Beta  (2026-04-03)
+------------------------
+- HamQTH: added free callsign lookup via HamQTH.com — username/password configured in
+  Settings → HamQTH Lookup; Test Login button verifies credentials; returns name, QTH,
+  grid, country, CQ zone, ITU zone
+- Lookup: unified /api/callsign_lookup endpoint tries QRZ first, falls back to HamQTH;
+  lookup popup now shows source (QRZ / HamQTH) and adds Country, CQ Zone, ITU Zone fields
+- Auto-fill on callsign entry now triggers if either QRZ or HamQTH is configured
+- CW: Start/Stop Listening button moved next to the device refresh button
+- CW: default gain changed to OFF (0), threshold to 27% — better out-of-box decode rate
+- CW: mouse wheel now adjusts all sliders (Tone, Gain, Threshold, TX WPM)
+- CW: Tone Hz slider syncs from Thetis CW pitch on first TCI connect (bidirectional —
+  moving the slider also sends cw_pitch to Thetis)
+- Help: microphone permission note expanded — clarifies access is for device enumeration
+  only and does not activate the mic; links to Microsoft privacy settings page
+- Launcher: fixed digital UDP, digital TCP, and HamLib threads not starting when running
+  via the installed launcher (only ran when executing main.py directly)
+- Settings: all user settings now persisted to app_settings.json and restored on restart
+
+v0.22 Beta  (2026-04-03)
+------------------------
+- CW: Spectrum display removed — narrow-band peak spectrum and Tune Tone / Tune VFO buttons
+  deferred for a future release (results were inconsistent)
+- CW: Default gain lowered 5 → 2; auto-gain RMS target halved (0.04, was 0.08) — reduces
+  over-driving and improves threshold effectiveness / false-decode rate
+- Rotator: PstRotator poller temporarily switched to TCP streaming (superseded in v0.24)
+- Digital: UDP listener hardened — socket is now always closed in a finally block so the
+  listener restarts cleanly if the bind fails (e.g. port in use); fixes WSJT-X / MSHV /
+  JTDX / VarAC auto-log broken after prior session
+
+v0.21 Beta  (2026-04-03)
+------------------------
+- CW: Auto-Log 73 toggle — when ON, sending any message containing "73" automatically fires
+  saveQSO() in TCILogger (same as clicking ▶ Save QSO). Status bar confirms with ✓ QSO auto-logged.
+  Toggle is OFF by default; enable only when actively logging contacts.
+
+v0.20 Beta  (2026-04-03)
+------------------------
+CW — Macro fixes:
+- Default macros corrected: "Ans CQ" replaces "QTH" ({CALL}{CALL} DE {MYCALL} K — for calling a station)
+- Default "QRZ?" macro corrected: was "QRN? QRZ?" (invalid combo) → "QRZ? DE {MYCALL} K"
+- Default "CFM" macro corrected: added "DE {MYCALL} K" sign-off
+- Default "RST" macro corrected: "UR RST {RST} {RST}" (added RST label)
+- RESET button restores ALL 16 macros to these corrected factory defaults
+
+CW — Token reference bar:
+- Permanent token reference strip at bottom of Macros panel showing all tokens with hover descriptions
+
+CW — NR serial number:
+- ON/OFF toggle added to NR row — must be enabled for auto-increment and Remarks logging to occur
+- Prevents accidental serial advancement during casual QSOs; flip ON only during contests
+
+CW — Threshold / false decode fix:
+- SNR gate added: mark detection is suppressed unless peak power is ≥ 1.5× the noise floor
+- Eliminates EEEE false decodes from background noise when no CW signal is present
+- Peak decay rate increased (PEAK_ALPHA 0.01 → 0.04) so peakPower recovers faster after signal ends
+- Threshold slider now has meaningful effect in all conditions
+
+CW — Narrow-band spectrum display (SPEC toggle):
+- Enable SPEC toggle in the decoder panel to show a ±300 Hz spectrum around the tone frequency
+- 19-bin Goertzel spectrum computed from existing audio stream — no extra connections required
+- Click any bar to set the Tone Hz to that frequency
+- ⌖ Tune Tone — auto-shifts tone slider to the dominant CW peak
+- ⌖ Tune VFO — moves TCI radio VFO to bring the peak signal to your sidetone pitch (TCI only)
+- VFO frequency tracked from TCI text messages (vfo:0,0,<hz>); displayed next to Tune VFO button
+- Toggle off during contests to prevent accidental VFO moves
+
+v0.19 Beta  (2026-04-03)
+------------------------
+- CW: {MYNAME} token added — sends your own operator name from Settings → Operator Name
+- CW: {NAME} token clarified — sends the worked station's name from QSO entry Name field
+- CW: {RST} confirmed as My RST Sent (the report you are giving them), not RST received
+- CW: Default "My Name" macro updated — uses {MYNAME} (own name, not worked station)
+- CW: Default "QTH" macro updated — uses {MYNAME} for correct operator name in exchange
+- CW: {NR} serial number — live counter displayed in Send panel with +/− and CLR controls
+- CW: {NR} auto-increments after each successful send containing {NR}
+- CW: {NR} persists across restarts (saved to cw_serial.json alongside config)
+- CW: {NR} logs sent serial to QSO entry Remarks field (e.g. "NR: 007") on each send
+- CW: Macro RESET button added to Macros panel header — restores factory defaults (with confirmation)
+- CW: Right-click macro edit prompt updated to list all tokens including {MYNAME}
+- App: MY_NAME global added — populated from Settings → Operator Name, returned in /api/cw_status
+- App: /api/cw_serial route added — GET returns current serial; POST supports set/increment/reset
+- Help: Token table updated — {MYNAME} added, {NAME}/{RST} descriptions clarified
+- Help: Contest Serial Number section added with {NR} usage, persistence, and Remarks logging explained
+- Help: Macro RESET button documented
+
+v0.18 Beta  (2026-04-03)
+------------------------
+- CW Fix: {MYCALL} token added — sends your own callsign from Settings
+- CW Fix: {CALL} now correctly pulls from QSO entry callsign field (id="callsign")
+- CW Fix: {NAME} now correctly pulls from QSO entry name field (id="name")
+- CW Fix: {RST} now correctly pulls from RST Sent field (id="my_rst_sent")
+- CW Fix: Default macros updated — CQ/TU/DE lines use {MYCALL}, {CALL} reserved for worked station
+- CW: Right-click macro button to edit text (replaces double-click which triggered send)
+- CW: Separate CLR buttons — RX window and TX window each have their own CLR in lower-right corner
+- CW: RX and TX windows are now resizable (drag bottom edge)
+- CW: TX Sent window moved to its own panel between Send and Macros
+- CW: Single header CLR button removed (replaced by per-window CLR buttons)
+- CW: mycall returned in /api/cw_status for token expansion without extra API call
+- Help: CW section updated with correct token descriptions ({MYCALL} vs {CALL})
+
+v0.17 Beta  (2026-04-03)
+------------------------
+- CW Keyer/Decoder popup window added (CW button in header, opens /cw)
+- CW Decoder: Goertzel tone detection with adaptive timing — works with any audio input
+- CW Decoder: TCI Audio source — direct WebSocket to Thetis, no VAC or sound device needed
+- CW Decoder: Audio device selector — supports TCI, VAC, USB codecs, physical soundcards
+- CW Decoder: Adjustable tone frequency (300–1200 Hz), live signal strength bar, live RX WPM
+- CW Decoder: Auto-match TX WPM to decoded RX speed (with min/max clamp)
+- CW Send: Text input with Enter-to-send, WPM slider (5–60), STOP TX button
+- CW Send: Break-in toggle — sends cw_msg_break_in TCI command
+- CW Send: Routes via TCI (cw_msg_send) or HamLib (\send_morse) automatically
+- CW Macros: 8 programmable macro buttons with editable labels and text
+- CW Macros: {CALL} {NAME} {RST} {NR} token substitution from logger QSO entry
+- CW Macros: Labels and text persist in browser localStorage
+- App: /cw, /api/cw_send, /api/cw_stop, /api/cw_speed, /api/cw_breakin, /api/cw_status routes added
+- CW Fix: Corrected TCI command names — cw_macros, cw_macros_speed, cw_macros_stop (per TCI v2.0 spec)
+- CW Fix: TCI audio frame parsing corrected — 64-byte header, float32/int16 format detection, stereo→mono
+- CW Fix: audio_start uses rx index only; sample rate and format read dynamically from frame header
+- CW: Gain slider now goes to 0 (OFF); AUTO gain toggle for adaptive RMS normalization
+- CW: Threshold slider (10–70%) replaces hardcoded 30% — tune to your signal conditions
+- CW: TX monitor window added — shows outgoing sent text in its own scrolling display
+- CW: Auto-match WPM tightened — median filter (not mean), smoothing window 6→14, 2 WPM hysteresis
+- CW: Font size selector (S/M/L/XL) for RX and TX windows
+- CW: RX and TX color pickers — green/amber/white/cyan/yellow-green presets
+- CW: Macros expanded 8→16 buttons (4×4 grid)
+- CW: All settings (device, tone, gain, threshold, WPM, font, colors) saved and restored on reopen
+- CW: Break-in toggle replaced with informational note (break-in configured in Thetis CW setup)
+- CW: Macro hint text brightened for visibility
+
+v0.16 Beta  (2026-04-03)
+------------------------
+- Rotator: Live AZ now uses active polling (<PST>AZ?</PST>) instead of passive listener
+- Rotator: Correctly parses PstRotator AZ:xxx response format
+- Rotator: Current AZ display polls at 300ms for smooth real-time tracking
+- Rotator: Current AZ shown as zero-padded 3 digits (045°, 003°, 316°)
+- Rotator: Shows —° when rotator is offline or disabled
+- App: import sys added to main.py (fixes /changelog Internal Server Error)
+
+v0.15 Beta  (2026-04-02)
+------------------------
+- UI: Help Guide (📖) icon button added to header banner — one-click access from anywhere
+- UI: Credits text brightened throughout Help Guide
+- Help Guide: Fixed "TCILog" typo → "TCILogger" in credits section
+- Help Guide: Change Log section added to Applying Updates — links to live /changelog page
+- App: /changelog route added — serves CHANGELOG.txt as a styled in-browser page
+- CHANGELOG.txt introduced — installed to C:\TCILogger\ with every build
+
+v0.14 Beta  (2026-04-02)
+------------------------
+- Rotator: STOP button now halts rotation mid-move (all protocols)
+- Rotator: Live Current AZ display updates in real time while rotating
+- Rotator: PstRotator commands switched to UDP (fixes stop/control issues)
+- Rotator: PstRotator stop command uses correct UDP format (<PST><STOP>1</STOP></PST>)
+- Solar: XRay flux class added to header display
+- Solar: Color coding added (green/yellow/red) for SFI, SSN, A, K, XRay
+- UI: GENERAL / POTA toggle moved from header to New QSO Entry panel header
+- UI: Brightened settings panel descriptive text, field hints, and section labels
+- UI: Brightened version label, field labels, and panel hint text throughout app
+- UI: Solar header and band heatmap re-centered in banner
+- Installer: Shows notice when existing installation detected (confirms data is safe)
+- Installer: Clears stale zip-updated .py files on upgrade (fixes version display bug)
+- Help Guide: Updated rotator section (Stop button, UDP setup, live AZ description)
+- Help Guide: Updated POTA section (toggle now in QSO Entry panel, not header)
+- Help Guide: Solar color-coding table added with XRay row
+
+v0.13 Beta  (2026-03-xx)
+------------------------
+- Rotator Control panel added (PstRotator, GS-232, EasyComm II support)
+- Auto-rotate on callsign lookup / DX spot click
+- Short-path and long-path bearing display
+- DX Spotting from log table via right-click context menu
+- Spotter Region Filter added to DX Clusters settings
+- Context menu text and DX cluster spotter text brightened
+- Settings section headings and field labels brightened
+- Help Guide: Rotator Control section added
+- Help Guide: QSO Log right-click context menu tip added
+
+v0.12 Beta  (prior)
+-------------------
+- (earlier beta releases — see git history)

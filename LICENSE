@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Rick de N8SDR
+Copyright (c) 2026 Rick Langford (N8SDR)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,17 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+SDRLogger+ — Ham Radio SDR Logbook
+Version 0.43 Beta
+Author: Rick Langford, N8SDR
+
+SDRLogger+ is not affiliated with QRZ.com, Expert Electronics (Thetis SDR),
+WSJT-X, JTDX, MSHV, VarAC, PstRotator, or any DX cluster operator.
+
+QRZ.com integration requires your own active QRZ.com account and subscription.
+
+The user is solely responsible for operating in accordance with their amateur
+radio licence and all applicable regulations.

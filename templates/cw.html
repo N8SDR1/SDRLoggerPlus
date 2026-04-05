@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDRLogger+ — CW Keyer / Decoder</title>
+<link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
+<style>
+  :root {
+    --bg:#0a0d12; --surface:#111620; --card:#161c28; --border:#1e2a3a;
+    --accent:#00e5ff; --accent2:#39ff14; --warn:#ff6b35; --text:#cdd9e5;
+    --muted:#5a7080; --green:#00c851; --red:#ff4444;
+    --mono:'Courier New',monospace;
+    --cw-color:#39ff14;
+    --cw-font-size:14px;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;
+    font-size:13px;display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+  body::after{content:'';position:fixed;inset:0;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px);
+    pointer-events:none;z-index:9999;}
+
+  /* Header */
+  .cw-header{background:var(--surface);border-bottom:1px solid var(--border);
+    padding:6px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+  .cw-title{font-family:'Courier New',monospace;font-size:15px;font-weight:700;
+    color:var(--accent);letter-spacing:2px;text-transform:uppercase;}
+  .cw-title span{color:var(--accent2);}
+  .conn-badge{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:3px;
+    background:#1a0d0d;color:var(--red);border:1px solid var(--red);margin-left:auto;}
+  .conn-badge.ok{background:#0d1a0d;color:var(--green);border-color:var(--green);}
+  .conn-badge.hamlib{background:#0d0d1a;color:var(--accent);border-color:var(--accent);}
+  .ver-label{font-family:var(--mono);font-size:10px;color:var(--muted);}
+
+  /* Panels */
+  .panels{display:flex;flex-direction:column;flex:1;overflow:hidden;}
+  .panel{background:var(--card);border-bottom:1px solid var(--border);
+    display:flex;flex-direction:column;overflow:hidden;}
+  .panel-head{background:var(--surface);border-bottom:1px solid var(--border);
+    padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--accent);display:flex;align-items:center;gap:8px;
+    flex-shrink:0;}
+  .panel-body{padding:8px 12px;display:flex;flex-direction:column;gap:7px;overflow:auto;}
+
+  /* Decode / TX output windows */
+  .win-wrap{position:relative;}
+  .cw-window{background:var(--bg);border:1px solid var(--border);border-radius:4px;
+    padding:7px 10px;font-family:var(--mono);font-size:var(--cw-font-size);
+    height:80px;min-height:40px;max-height:300px;overflow-y:auto;line-height:1.6;
+    word-break:break-all;white-space:pre-wrap;resize:vertical;}
+  #decode-output{color:var(--cw-color);}
+  #tx-output{color:var(--cw-color);height:60px;}
+  .win-label{font-size:10px;color:#8fafc0;font-family:var(--mono);letter-spacing:.5px;
+    margin-bottom:2px;}
+  .win-clr-row{text-align:right;margin-top:2px;}
+  .btn-clr-win{background:transparent;border:1px solid var(--red);color:var(--red);
+    font-size:9px;font-family:var(--mono);padding:1px 8px;border-radius:2px;
+    cursor:pointer;transition:all .15s;}
+  .btn-clr-win:hover{background:rgba(255,68,68,.15);}
+
+  /* Display settings row */
+  .disp-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
+  .disp-row label{color:#8fafc0;font-size:11px;}
+
+  /* Audio controls */
+  .decode-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .decode-controls label{color:#8fafc0;font-size:12px;}
+  select.cw-sel{background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:3px;padding:3px 6px;font-size:12px;cursor:pointer;max-width:200px;}
+  select.cw-sel:focus{outline:none;border-color:var(--accent);}
+  .ctrl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .ctrl-row label{color:#8fafc0;font-size:12px;}
+  input[type=range].cw-range{-webkit-appearance:none;height:4px;border-radius:2px;
+    background:var(--border);outline:none;cursor:pointer;width:100px;}
+  input[type=range].cw-range::-webkit-slider-thumb{-webkit-appearance:none;
+    width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;}
+  .val-lbl{font-family:var(--mono);font-size:11px;color:var(--accent);min-width:38px;}
+  .signal-wrap{display:flex;align-items:center;gap:6px;margin-left:auto;}
+  .signal-wrap label{color:#8fafc0;font-size:11px;}
+  #signal-bar{width:90px;height:10px;background:var(--border);border-radius:5px;overflow:hidden;}
+  #signal-fill{height:100%;width:0%;background:var(--accent2);transition:width .08s;border-radius:5px;}
+  #rx-wpm-disp{font-family:var(--mono);font-size:11px;color:var(--accent);min-width:52px;}
+
+  /* Buttons */
+  .btn-sm{background:transparent;border:1px solid var(--border);color:#8fafc0;
+    padding:3px 10px;border-radius:3px;cursor:pointer;font-size:11px;
+    font-family:var(--mono);letter-spacing:.5px;transition:all .15s;}
+  .btn-sm:hover{border-color:var(--accent);color:var(--accent);}
+  .btn-sm.active{background:rgba(0,229,255,.12);border-color:var(--accent);color:var(--accent);}
+  .btn-sm.danger{border-color:var(--red);color:var(--red);}
+  .btn-sm.danger:hover{background:rgba(255,68,68,.1);}
+
+  /* Send panel */
+  #send-panel{flex:0 0 auto;}
+  .send-row{display:flex;gap:8px;align-items:stretch;}
+  #cw-input{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:3px;padding:7px 10px;font-family:var(--mono);font-size:14px;
+    letter-spacing:1px;outline:none;transition:border-color .15s;}
+  #cw-input:focus{border-color:var(--accent);}
+  #cw-input::placeholder{color:var(--muted);}
+  .btn-send{background:rgba(0,229,255,.1);border:1px solid var(--accent);color:var(--accent);
+    padding:7px 18px;border-radius:3px;cursor:pointer;font-family:var(--mono);
+    font-size:13px;font-weight:700;letter-spacing:1px;transition:all .15s;}
+  .btn-send:hover{background:rgba(0,229,255,.2);}
+  .btn-stop{background:rgba(255,107,53,.1);border:1px solid var(--warn);color:var(--warn);
+    padding:7px 14px;border-radius:3px;cursor:pointer;font-family:var(--mono);
+    font-size:13px;font-weight:700;letter-spacing:1px;transition:all .15s;}
+  .btn-stop:hover{background:rgba(255,107,53,.25);}
+  .wpm-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .wpm-row label{color:#8fafc0;font-size:12px;}
+  input[type=range].wpm-sl{width:150px;}
+  #wpm-val{font-family:var(--mono);font-size:13px;color:var(--accent);min-width:50px;}
+  .opt-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .cw-toggle{position:relative;display:inline-block;width:34px;height:18px;flex-shrink:0;}
+  .cw-toggle input{opacity:0;width:0;height:0;}
+  .cw-slider{position:absolute;inset:0;background:var(--border);border-radius:9px;
+    cursor:pointer;transition:.2s;}
+  .cw-slider:before{content:'';position:absolute;height:12px;width:12px;left:3px;bottom:3px;
+    background:var(--muted);border-radius:50%;transition:.2s;}
+  .cw-toggle input:checked+.cw-slider{background:rgba(0,229,255,.3);}
+  .cw-toggle input:checked+.cw-slider:before{transform:translateX(16px);background:var(--accent);}
+  .toggle-label{color:#8fafc0;font-size:12px;}
+  .wpm-clamp{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);}
+  .wpm-clamp input[type=number]{width:40px;background:var(--bg);color:var(--text);
+    border:1px solid var(--border);border-radius:3px;padding:2px 4px;text-align:center;
+    font-family:var(--mono);font-size:11px;}
+  .wpm-clamp input[type=number]:focus{outline:none;border-color:var(--accent);}
+  .breakin-note{color:#8fafc0;font-size:11px;font-style:italic;}
+
+  /* Macro panel */
+  #macro-panel{flex:1 1 0;min-height:0;}
+  .macro-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;}
+  .macro-btn-wrap{display:flex;flex-direction:column;gap:2px;}
+  .macro-label-input{background:transparent;border:none;border-bottom:1px solid var(--border);
+    color:#8fafc0;font-size:10px;font-family:var(--mono);text-align:center;width:100%;
+    padding:1px 2px;outline:none;transition:border-color .15s;}
+  .macro-label-input:focus{border-color:var(--accent);color:var(--accent);}
+  .macro-btn{background:var(--surface);border:1px solid var(--border);color:var(--text);
+    padding:5px 4px;border-radius:3px;cursor:pointer;font-family:var(--mono);
+    font-size:10px;text-align:center;transition:all .15s;word-break:break-all;
+    min-height:30px;width:100%;}
+  .macro-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,229,255,.06);}
+  .macro-btn:active{background:rgba(0,229,255,.15);}
+
+  /* Macro editor modal */
+  #macro-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
+    z-index:1000;align-items:center;justify-content:center;}
+  #macro-modal.open{display:flex;}
+  .macro-modal-box{background:var(--card);border:1px solid var(--border);border-radius:6px;
+    padding:16px;width:min(420px,94vw);display:flex;flex-direction:column;gap:10px;}
+  .macro-modal-title{font-family:var(--mono);font-size:11px;color:var(--accent);
+    letter-spacing:1px;font-weight:700;}
+  #macro-modal-input{background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:3px;padding:7px 10px;font-family:var(--mono);font-size:13px;
+    letter-spacing:.5px;outline:none;width:100%;transition:border-color .15s;}
+  #macro-modal-input:focus{border-color:var(--accent);}
+  .macro-token-row{display:flex;flex-wrap:wrap;gap:5px;}
+  .macro-token-row span{font-family:var(--mono);font-size:9px;color:var(--muted);
+    align-self:center;letter-spacing:.5px;}
+  .macro-tok-btn{background:var(--surface);border:1px solid var(--border);
+    color:var(--accent);font-family:var(--mono);font-size:10px;padding:2px 8px;
+    border-radius:3px;cursor:pointer;letter-spacing:.5px;transition:all .15s;}
+  .macro-tok-btn:hover{border-color:var(--accent);background:rgba(0,229,255,.08);}
+  .macro-modal-btns{display:flex;gap:8px;justify-content:flex-end;}
+  .macro-modal-btns button{font-family:var(--mono);font-size:11px;padding:4px 16px;
+    border-radius:3px;cursor:pointer;letter-spacing:.5px;transition:all .15s;}
+  #macro-modal-ok{background:rgba(0,229,255,.1);border:1px solid var(--accent);
+    color:var(--accent);}
+  #macro-modal-ok:hover{background:rgba(0,229,255,.2);}
+  #macro-modal-cancel{background:transparent;border:1px solid var(--border);
+    color:var(--muted);}
+  #macro-modal-cancel:hover{border-color:var(--text);color:var(--text);}
+
+  /* Status bar */
+  .status-bar{background:var(--surface);border-top:1px solid var(--border);
+    padding:4px 12px;font-family:var(--mono);font-size:10px;color:var(--muted);
+    display:flex;align-items:center;gap:12px;flex-shrink:0;}
+  #status-msg{flex:1;}
+  #tx-path-lbl{color:var(--muted);}
+
+  /* Waterfall strip */
+  .wf-row{display:flex;align-items:center;gap:6px;}
+  #wf-canvas{flex:0 0 auto;width:340px;max-width:calc(100% - 72px);height:72px;
+    cursor:crosshair;border-radius:3px;background:#000;display:block;
+    border:1px solid var(--border);}
+  #wf-canvas:hover{border-color:var(--accent);}
+  /* Compact AFC range select */
+  select.cw-sel-sm{background:var(--bg);color:#8fafc0;border:1px solid var(--border);
+    border-radius:3px;padding:2px 3px;font-size:10px;font-family:var(--mono);
+    cursor:pointer;letter-spacing:.3px;}
+  select.cw-sel-sm:focus{outline:none;border-color:var(--accent);}
+
+  /* ── v0.41 four-column layout: ColA | ColB | Canvas | Snap ──────────────────
+     ColA = Tone + AFC   ColB = Squelch + Thresh   then canvas   then Snap btn
+     Snap/Exact button sits to the RIGHT of the canvas, vertically centred.
+     To revert to v0.40 (single controls col + canvas below snap):
+       Restore .rx-controls-col with all four rows and .rx-wf-col with canvas+snap below.
+     To revert to original stacked rows (pre-v0.40):
+       <div class="ctrl-row"> Tone + AFC </div>
+       <div class="wf-row">   canvas + snap </div>
+       <div class="ctrl-row"> Squelch + Thresh </div>
+  ────────────────────────────────────────────────────────────────────────── */
+  .rx-split-row{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;}
+  .rx-col-a,.rx-col-b{display:flex;flex-direction:column;gap:9px;flex-shrink:0;}
+  /* Canvas + Snap button sit side-by-side, vertically centred to canvas */
+  .rx-wf-snap{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+  /* ── Bumped font sizes for all decode controls ── */
+  .rx-col-a .ctrl-row label,
+  .rx-col-b .ctrl-row label{font-size:14px;}
+  .rx-col-a .ctrl-row .val-lbl,
+  .rx-col-b .ctrl-row .val-lbl{font-size:13px;min-width:44px;}
+  .rx-col-a .ctrl-row .toggle-label{font-size:14px;}
+  select.cw-sel-sm{font-size:12px;padding:3px 5px;}
+  /* AFC lock indicator */
+  #afc-lbl{font-size:12px !important;}
+  /* Range sliders slightly wider to match larger text */
+  input[type=range].cw-range{width:110px;}
+  /* Macro panel — larger fonts */
+  .macro-label-input{font-size:12px;}
+  .macro-btn{font-size:12px;min-height:34px;padding:6px 4px;}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="cw-header">
+  <img src="/static/img/sdrLogger_icon.png" alt="SDRLogger+" style="width:44px;height:44px;border-radius:6px;flex-shrink:0;object-fit:cover;">
+  <div class="cw-title">SDR<span>Logger+</span> &nbsp;CW</div>
+  <span class="ver-label">{{ version }}</span>
+  <span id="conn-badge" class="conn-badge">DISCONNECTED</span>
+</div>
+
+<div class="panels">
+
+  <!-- ── DECODER ─────────────────────────────────────────────────────────── -->
+  <div class="panel" id="decode-panel">
+    <div class="panel-head">
+      <span>▼ CW Decoder</span>
+    </div>
+    <div class="panel-body">
+
+      <!-- RX window -->
+      <div class="win-label">▼ RX DECODE</div>
+      <div class="win-wrap">
+        <div id="decode-output" class="cw-window">&#8203;</div>
+      </div>
+      <div class="win-clr-row">
+        <button class="btn-clr-win" onclick="clearRx()" title="Clear RX window">CLR</button>
+      </div>
+
+      <!-- Display settings -->
+      <div class="disp-row">
+        <label>Font:</label>
+        <select class="cw-sel" id="font-size-sel" onchange="setFontSize(parseInt(this.value))">
+          <option value="12">Small (12)</option>
+          <option value="14" selected>Medium (14)</option>
+          <option value="16">Large (16)</option>
+          <option value="20">X-Large (20)</option>
+        </select>
+        <label>Text Color:</label>
+        <select class="cw-sel" id="cw-color-sel" onchange="setCwColor(this.value)">
+          <option value="#39ff14">Green</option>
+          <option value="#ffb347">Amber</option>
+          <option value="#f0f0f0">White</option>
+          <option value="#00e5ff">Cyan</option>
+          <option value="#ccff00">Yellow-Green</option>
+        </select>
+      </div>
+
+      <!-- Audio controls row 1 -->
+      <div class="decode-controls">
+        <label>Audio In:</label>
+        <select class="cw-sel" id="audio-device-sel" onchange="changeAudioDevice()">
+          <option value="">-- select device --</option>
+        </select>
+        <button class="btn-sm" onclick="refreshAudioDevices()" title="Refresh device list — use after granting microphone permission in Windows Privacy settings">&#8635;</button>
+        <button class="btn-sm" id="btn-rx-toggle" onclick="toggleRx()">Start Listening</button>
+        <div class="signal-wrap">
+          <label>Sig:</label>
+          <div id="signal-bar"><div id="signal-fill"></div></div>
+          <span id="rx-wpm-disp">— WPM</span>
+        </div>
+      </div>
+
+      <!-- ── v0.41 layout: ColA(Tone+AFC) | ColB(Squelch+Thresh) | Canvas | Snap ──
+           To revert to v0.40: single .rx-controls-col with all four rows + .rx-wf-col
+           CSS revert comment in the style block above has the full history.
+      ─────────────────────────────────────────────────────────────────────── -->
+      <div class="rx-split-row">
+
+        <!-- COL A: Tone + AFC -->
+        <div class="rx-col-a">
+
+          <!-- Tone row -->
+          <div class="ctrl-row">
+            <label>Tone:</label>
+            <input type="range" class="cw-range" id="tone-freq" min="300" max="1200" value="700"
+              title="Tone Hz — match this to the CW sidetone pitch set in Thetis. Default 700 Hz. Adjust if decodes are missed."
+              oninput="toneFreqChanged(this.value)">
+            <span class="val-lbl" id="tone-freq-val">700 Hz</span>
+          </div>
+
+          <!-- AFC row -->
+          <div class="ctrl-row">
+            <label class="cw-toggle" title="AFC — Automatic Frequency Control: auto-tracks the carrier within the selected range of the set tone. Disable to lock to the exact tone frequency you set.">
+              <input type="checkbox" id="afc-chk" onchange="setAfcEnabled(this.checked)" checked>
+              <span class="cw-slider"></span>
+            </label>
+            <span class="toggle-label">AFC</span>
+            <select class="cw-sel-sm" id="afc-range-sel" onchange="afcRangeChanged(this.value)"
+              title="AFC search range — how far from the set tone AFC will scan for a carrier.&#10;±50 Hz: tight lock, won't grab adjacent signals&#10;±100 Hz: good general default&#10;±150 Hz: handles moderate drift&#10;±200 Hz: maximum range for drifty signals">
+              <option value="50">±50Hz</option>
+              <option value="100" selected>±100Hz</option>
+              <option value="150">±150Hz</option>
+              <option value="200">±200Hz</option>
+            </select>
+            <span id="afc-lbl" style="font-family:var(--mono);color:#8fafc0;min-width:80px;letter-spacing:.5px;">AFC —</span>
+          </div>
+
+        </div><!-- /.rx-col-a -->
+
+        <!-- COL B: Squelch + Thresh -->
+        <div class="rx-col-b">
+
+          <!-- Squelch row -->
+          <div class="ctrl-row">
+            <label>Squelch:</label>
+            <input type="range" class="cw-range" id="squelch-sl" min="1.1" max="3.0" step="0.1" value="1.5"
+              title="Squelch — minimum signal-to-noise ratio required before the decoder runs. Low (×1.1) = sensitive, decodes weak signals but more noise triggers. High (×3.0) = clean signals only. Default ×1.5."
+              oninput="squelchChanged(this.value)">
+            <span class="val-lbl" id="squelch-val">×1.5</span>
+          </div>
+
+          <!-- Threshold row -->
+          <div class="ctrl-row">
+            <label>Thresh:</label>
+            <input type="range" class="cw-range" id="threshold-sl" min="15" max="70" value="27"
+              title="Threshold — how far above the noise floor the signal must be to count as a mark.&#10;Slide LEFT = lower threshold = more sensitive (decodes weaker signals, more noise risk).&#10;Slide RIGHT = higher threshold = more selective (strong signals only, cleaner output).&#10;Default 27%. Stay above 15% — very low values cause the mark-end level to go near zero."
+              oninput="thresholdChanged(this.value)">
+            <span class="val-lbl" id="threshold-val">27%</span>
+          </div>
+
+        </div><!-- /.rx-col-b -->
+
+        <!-- WATERFALL + SNAP: canvas with Snap/Exact button to its right -->
+        <div class="rx-wf-snap">
+          <canvas id="wf-canvas" height="72"
+            title="Waterfall — shows ±400 Hz around the set tone. Click to tune (Snap finds nearest peak; Exact tunes where you click). Red cursor = AFC-locked frequency."></canvas>
+          <button class="btn-sm" id="wf-snap-btn" onclick="wfToggleSnap()"
+            title="Click-to-tune mode&#10;Snap: locks to the strongest peak within ±60 Hz of your click&#10;Exact: tunes to precisely where you click">⌖ Snap</button>
+        </div><!-- /.rx-wf-snap -->
+
+      </div><!-- /.rx-split-row -->
+
+    </div>
+  </div>
+
+  <!-- ── SEND ───────────────────────────────────────────────────────────── -->
+  <div class="panel" id="send-panel">
+    <div class="panel-head">▼ Send</div>
+    <div class="panel-body">
+      <div class="send-row">
+        <input type="text" id="cw-input" placeholder="Type message and press Enter or SEND…"
+          onkeydown="if(event.key==='Enter')sendCw()">
+        <button class="btn-send" onclick="sendCw()">SEND</button>
+        <button class="btn-stop" onclick="stopCw()">STOP</button>
+      </div>
+      <div class="wpm-row">
+        <label>TX WPM:</label>
+        <input type="range" class="cw-range wpm-sl" id="wpm-slider" min="5" max="60" value="20"
+          oninput="wpmSliderChanged(this.value)">
+        <span id="wpm-val">20 WPM</span>
+      </div>
+      <div class="opt-row">
+        <label class="cw-toggle" title="Auto-match TX WPM to decoded RX speed">
+          <input type="checkbox" id="auto-wpm-chk" onchange="setAutoWpm(this.checked)">
+          <span class="cw-slider"></span>
+        </label>
+        <span class="toggle-label">Auto-match RX WPM</span>
+        <span class="wpm-clamp" id="wpm-clamp-row" style="opacity:.4">
+          &nbsp;min:<input type="number" id="auto-wpm-min" value="8" min="5" max="60">
+          max:<input type="number" id="auto-wpm-max" value="45" min="5" max="60">
+        </span>
+        <span class="breakin-note">Break-in: configure in Thetis CW setup</span>
+        &nbsp;&nbsp;
+        <label class="cw-toggle" title="Auto-log QSO when a message containing 73 is sent — fires saveQSO() in SDRLogger+ automatically">
+          <input type="checkbox" id="auto-log-chk" onchange="setAutoLog73(this.checked)">
+          <span class="cw-slider"></span>
+        </label>
+        <span class="toggle-label" title="Auto-save QSO entry when 73 is sent">Auto-Log 73</span>
+      </div>
+      <div class="opt-row" id="nr-row" style="align-items:center;gap:6px;flex-wrap:wrap;">
+        <label class="cw-toggle" title="Enable NR serial number — auto-increments {NR} on send and logs to Remarks">
+          <input type="checkbox" id="nr-enable-chk" onchange="setNrEnabled(this.checked)">
+          <span class="cw-slider"></span>
+        </label>
+        <span class="toggle-label" style="font-size:11px;letter-spacing:1px;">NR {NR}</span>
+        <span id="nr-display" style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--accent);min-width:38px;text-align:center;">001</span>
+        <button onclick="nrAdj(-1)" title="Previous serial" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:1px 7px;border-radius:3px;cursor:pointer;font-size:13px;">−</button>
+        <button onclick="nrAdj(1)"  title="Next serial"     style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:1px 7px;border-radius:3px;cursor:pointer;font-size:13px;">+</button>
+        <button onclick="nrReset()" title="Reset serial to 1" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:1px 8px;border-radius:3px;cursor:pointer;font-size:11px;letter-spacing:1px;">CLR</button>
+        <span id="nr-status-lbl" style="font-size:10px;color:#b8ccd8;">OFF — enable to auto-increment &amp; log to Remarks</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TX MONITOR ────────────────────────────────────────────────────── -->
+  <div class="panel" id="tx-panel">
+    <div class="panel-head">▼ TX Sent</div>
+    <div class="panel-body" style="padding-bottom:6px;">
+      <div class="win-wrap">
+        <div id="tx-output" class="cw-window">&#8203;</div>
+      </div>
+      <div class="win-clr-row">
+        <button class="btn-clr-win" onclick="clearTx()" title="Clear TX window">CLR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MACROS ─────────────────────────────────────────────────────────── -->
+  <div class="panel" id="macro-panel">
+    <div class="panel-head">
+      <span>▼ Macros</span>
+      <span style="margin-left:auto;font-size:10px;color:#b0c4d4;font-weight:400;text-transform:none;letter-spacing:0;">
+        {MYCALL} {MYNAME} {CALL} {NAME} {RST} {NR} — click label to rename &bull; right-click to edit
+      </span>
+      <button onclick="resetMacros()" title="Reset all macros to factory defaults" style="margin-left:10px;background:var(--surface);border:1px solid var(--red);color:var(--red);padding:1px 7px;border-radius:3px;cursor:pointer;font-size:10px;letter-spacing:1px;flex-shrink:0;">RESET</button>
+    </div>
+    <div class="panel-body" style="overflow:auto;">
+      <div class="macro-grid" id="macro-grid"></div>
+    </div>
+    <div style="font-size:10px;color:#9fbdcc;padding:4px 12px 5px;border-top:1px solid var(--border);font-family:var(--mono);line-height:1.7;flex-shrink:0;background:var(--surface);">
+      <span style="color:var(--accent);font-weight:700;letter-spacing:1px;">TOKENS: </span>
+      <span title="Your callsign from Settings">{MYCALL}</span> = My Call &nbsp;·&nbsp;
+      <span title="Your operator name from Settings">{MYNAME}</span> = My Name &nbsp;·&nbsp;
+      <span title="Callsign in QSO entry panel">{CALL}</span> = Their Call &nbsp;·&nbsp;
+      <span title="Name in QSO entry panel">{NAME}</span> = Their Name &nbsp;·&nbsp;
+      <span title="My RST Sent field in QSO entry panel">{RST}</span> = RST Sent &nbsp;·&nbsp;
+      <span title="Contest serial number — auto-increments on send">{NR}</span> = Serial #
+    </div>
+  </div>
+
+</div><!-- /panels -->
+
+<!-- Macro editor modal -->
+<div id="macro-modal" role="dialog" aria-modal="true">
+  <div class="macro-modal-box">
+    <div class="macro-modal-title" id="macro-modal-title">EDIT MACRO</div>
+    <input type="text" id="macro-modal-input" autocomplete="off" spellcheck="false">
+    <div class="macro-token-row">
+      <span>INSERT:</span>
+      <button class="macro-tok-btn" data-tok="{MYCALL}">{MYCALL}</button>
+      <button class="macro-tok-btn" data-tok="{MYNAME}">{MYNAME}</button>
+      <button class="macro-tok-btn" data-tok="{CALL}">{CALL}</button>
+      <button class="macro-tok-btn" data-tok="{NAME}">{NAME}</button>
+      <button class="macro-tok-btn" data-tok="{RST}">{RST}</button>
+      <button class="macro-tok-btn" data-tok="{NR}">{NR}</button>
+    </div>
+    <div class="macro-modal-btns">
+      <button id="macro-modal-cancel" onclick="closeMacroModal(false)">Cancel</button>
+      <button id="macro-modal-ok" onclick="closeMacroModal(true)">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <span id="status-msg">Ready.</span>
+  <span id="tx-path-lbl"></span>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// Settings — persisted in localStorage
+// ════════════════════════════════════════════════════════════════════════════
+const SETTINGS_KEY = 'cw_settings';
+const SETTINGS_DEFAULTS = {
+  deviceId:'', toneHz:700, squelch:1.5, afcEnabled:true, threshold:27,
+  afcRange:100,     // AFC search range in Hz (±); options: 50/100/150/200
+  wpm:20, autoWpm:false, autoWpmMin:8, autoWpmMax:45,
+  fontSize:14, cwColor:'#39ff14',
+  nrEnabled:false, autoLog73:false,
+  wfSnapToPeak:true
+};
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+    return s ? Object.assign({}, SETTINGS_DEFAULTS, s) : {...SETTINGS_DEFAULTS};
+  } catch(e) { return {...SETTINGS_DEFAULTS}; }
+}
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(cfg));
+}
+const cfg = loadSettings();
+
+// ════════════════════════════════════════════════════════════════════════════
+// Runtime state
+// ════════════════════════════════════════════════════════════════════════════
+let txWpm        = cfg.wpm;
+let autoWpmEnabled = cfg.autoWpm;
+let afcEnabled = cfg.afcEnabled !== undefined ? cfg.afcEnabled : true;
+let myCAll = '';
+let myName = '';
+let cwSerial   = 1;
+let nrEnabled   = cfg.nrEnabled;
+let autoLog73   = cfg.autoLog73;
+let gThreshold = cfg.threshold / 100;  // 0.0–1.0; higher % = more selective
+let rxActive     = false;
+
+// Audio
+let audioCtx = null, scriptNode = null, mediaStream = null;
+let currentDeviceId = cfg.deviceId;
+let tciWs = null, tciSampleBuf = [];
+const TCI_BLOCK = 256;
+
+// Tone detection
+let gToneHz    = cfg.toneHz;
+let gSampleRate = 48000;   // updated on first audio block
+
+// IQ downconversion state (replaces single-block Goertzel)
+let _iqPhaseAcc = 0;       // oscillator phase accumulator [0, 2π)
+let _iqI = 0, _iqQ = 0;   // I/Q accumulators for current window
+let _iqCount    = 0;       // samples in current IQ window
+let envVal      = 0;       // smoothed carrier envelope magnitude
+
+// Envelope follower — asymmetric attack/decay (applied per ~0.7 ms IQ window)
+const ENV_ATK  = 0.30;     // fast attack  — half-life ~2.3 IQ windows (~1.7 ms); catches mark leading edge quickly
+const ENV_DKY  = 0.06;     // slow decay   — half-life ~11 IQ windows (~8 ms); holds level during brief element dips
+                            // Confirmed by CWGET binary: attack=0.297, decay=0.0615
+
+// Matched filter — running average of the envelope over ~0.5 dit duration.
+// Smooths sub-dit noise spikes while preserving true element edges.
+// Window adapts to estimated WPM; ring buffer max 256 IQ windows.
+const MF_MAX   = 256;
+let _mfBuf     = new Float32Array(MF_MAX);
+let _mfPos     = 0;
+let _mfSum     = 0;
+let _mfWin     = 32;       // updated each block from dotEstMs
+let _mfWinLast = 0;        // tracks previous window size — resets buffer on change
+
+// Adaptive noise floor + signal peak
+let noiseFloor = 0, peakPower = 0;
+const FLOOR_RISE = 0.002;
+const FLOOR_FALL = 0.010;
+// PEAK_FALL must be slow enough that the peak does not collapse during inter-character
+// spaces.  At ~1400 IQ windows/sec, PEAK_FALL=0.03 gives a 16ms half-life — peak falls
+// to near-zero during every 3T char-space (144ms at 25 WPM), causing the SNR gate to
+// drop between characters.  0.003 gives a 165ms half-life: peak stays at ~55% after a
+// 25 WPM char-space, recovers instantly when the next mark arrives (fast track), and
+// still decays to ~zero after ~1.5 s of true silence (7 half-lives ≈ 1.15 s).
+const PEAK_FALL  = 0.003;
+// SNR_GATE is now user-controlled via the Squelch slider (replaces the old Gain control).
+// Gain was mathematically a no-op: norm=(mfVal-noiseFloor)/(peakPower-noiseFloor) cancels
+// any gain factor identically in numerator and denominator.  The SNR gate is the meaningful
+// threshold: it gates the entire decoder off until peakPower ≥ gSquelch × noiseFloor.
+let gSquelch = parseFloat(cfg.squelch) || 1.5;  // live — updated by squelchChanged()
+// Asymmetric hysteresis — CWGET uses two separate thresholds (Treshold=320 ON, CwFilterTreshold=175 OFF,
+// ratio=0.547).  A symmetric ±4% band was too narrow: signals hovering near threshold caused rapid
+// on/off chatter.  Wider asymmetric band: easy to start a mark (small ON addend), hard to lose one
+// (large OFF reduction).  At default threshold=27%: starts at 33%, holds until 15%.
+const HYST_ON  = 0.06;   // norm must reach  gThreshold + 6% to START a mark
+const HYST_OFF = 0.12;   // norm can drop to gThreshold − 12% before mark ENDS (wider hold)
+
+// AFC — Automatic Frequency Control
+// Scans ±AFC_RANGE Hz every AFC_PERIOD samples; locks to strongest CW signal.
+let _afcHz     = null;     // null = not yet locked; use gToneHz directly
+let _afcBuf    = [];       // sample accumulation buffer for the Goertzel scan
+let _afcCount  = 0;        // samples accumulated since last scan
+const AFC_WIN    = 2048;   // scan window — gives ~23 Hz bin resolution at 48 kHz
+const AFC_PERIOD = 12000;  // rescan every N samples (~250 ms at 48 kHz)
+let gAfcRange    = cfg.afcRange || 100;  // user-selectable via dropdown; ±Hz search range
+const AFC_STEP   = 20;                  // scan step in Hz
+
+// Adaptive timing decoder
+const DOT_MIN_MS = 20, DOT_MAX_MS = 320;
+// Initialize from the user's TX WPM — gives the bootstrap a realistic starting point.
+// Hardcoding 80ms (15 WPM) caused dahs to be mis-classified as dits at higher speeds,
+// which immediately corrupted the Bayesian model before it could converge.
+let dotEstMs   = Math.round(1200 / Math.max(5, Math.min(60, cfg.wpm)));
+let lastEdge   = 0;
+let lastLevel  = false;
+let currentChar = '';
+let decodedLine = '';
+const MORSE_TABLE = buildMorseTable();
+
+// ── Bayesian timing classifier ──────────────────────────────────────────────
+// Maintains online Gaussian models for dit and dah mark durations plus the
+// three space classes (inter-element ≈1T, inter-char ≈3T, word ≈7T).
+// Each confirmed element updates the model via EMA so the decoder continuously
+// tracks each operator's speed and "fist" (timing style).
+//
+// Architecture mirrors the ag1le / HamFist approach:
+//   • Signal detection layer (SNR gate, threshold, hysteresis) → edge stream
+//   • Bayesian duration classifier (this) → dit / dah / space type
+// The two layers are deliberately separate: the SNR gate prevents noise from
+// creating false edges; the Bayesian layer classifies real edges accurately.
+//
+// Bootstrap: for the first BAYES_MIN marks the model uses a simple 2× midpoint
+// fallback (same as before), then switches to the learned Gaussian model.
+// The dah parameters are kept coupled (μ_dah = 3·μ_dit, σ_dah ≈ √3·σ_dit)
+// which is theoretically correct for well-sent CW and speeds up convergence.
+
+let _bDitMu  = dotEstMs;                       // dit mean — seeded from TX WPM (same as dotEstMs)
+let _bDitVar = Math.pow(dotEstMs * 0.30, 2);  // dit variance — 30% CV prior
+let _bMarkN  = 0;       // marks observed so far (bootstrap counter)
+// Inter-element space mean — tracked separately from _bDitMu.
+// CWGET empirical (DotLen=945, ShortPauseLen=806 at 11025 Hz): real operators send
+// inter-element gaps at ~85% of the dit duration, not 100%.  Initialised at 0.85× dit;
+// updates via slow EMA from confirmed inter-element spaces once bootstrapped.
+let _bElemSpaceMu = dotEstMs * 0.85;
+
+const BAYES_MIN   = 8;      // fallback to simple ratio thresholds until this many marks
+const BAYES_ALPHA = 0.15;   // EMA weight per new observation (0.15 = responsive but stable)
+
+// Signal bar update throttle (avoid DOM layout thrash from per-sample updates)
+let _sigBarCounter = 0;
+
+// Macros
+const MACRO_COUNT = 16;
+const MACRO_DEFAULTS = [
+  {label:'CQ',       text:'CQ CQ CQ DE {MYCALL} {MYCALL} K'},
+  {label:'My Call',  text:'{MYCALL}'},
+  {label:'RST',      text:'UR RST {RST} {RST}'},
+  {label:'My Name',  text:'MY NAME IS {MYNAME} {MYNAME}'},
+  {label:'Ans CQ',   text:'{CALL} {CALL} DE {MYCALL} {MYCALL} K'},
+  {label:'TU 73',    text:'TU 73 DE {MYCALL} SK'},
+  {label:'AGN?',     text:'AGN? AGN?'},
+  {label:'QRZ?',     text:'QRZ? DE {MYCALL} K'},
+  {label:'QSL?',     text:'QSL? PSE QSL'},
+  {label:'NR',       text:'NR {NR} NR {NR}'},
+  {label:'PSE RPT',  text:'PSE RPT'},
+  {label:'CFM',      text:'CFM QSO TU 73 DE {MYCALL} K'},
+  {label:'M13',     text:''},
+  {label:'M14',     text:''},
+  {label:'M15',     text:''},
+  {label:'M16',     text:''},
+];
+let macros = loadMacros();
+
+// ════════════════════════════════════════════════════════════════════════════
+// Init
+// ════════════════════════════════════════════════════════════════════════════
+// Keepalive heartbeat — tells the server this browser session is still active.
+// The server exits automatically if no keepalive arrives within 3 minutes.
+// This replaces the old pagehide/sendBeacon approach that caused spurious shutdowns
+// when navigating between pages (e.g. opening the Help guide).
+fetch('/api/keepalive', {method:'POST'}).catch(()=>{});
+setInterval(function() {
+  fetch('/api/keepalive', {method:'POST'}).catch(()=>{});
+}, 20000);
+
+(async function init() {
+  applyDisplaySettings();
+  buildMacroGrid();
+  restoreFormValues();
+  await populateAudioDevices();
+  await fetchStatus();
+  setInterval(fetchStatus, 5000);
+  // Mouse wheel on all range sliders
+  document.querySelectorAll('input[type=range].cw-range').forEach(sl => {
+    sl.addEventListener('wheel', e => {
+      e.preventDefault();
+      const step = parseFloat(sl.step) || 1;
+      const dir  = e.deltaY < 0 ? 1 : -1;
+      sl.value = Math.max(parseFloat(sl.min), Math.min(parseFloat(sl.max),
+        parseFloat(sl.value) + step * dir));
+      sl.dispatchEvent(new Event('input'));
+    }, {passive: false});
+  });
+})();
+
+function restoreFormValues() {
+  document.getElementById('wpm-slider').value = txWpm;
+  document.getElementById('wpm-val').textContent = txWpm + ' WPM';
+  document.getElementById('tone-freq').value = gToneHz;
+  document.getElementById('tone-freq-val').textContent = gToneHz + ' Hz';
+  const _sq = parseFloat(cfg.squelch) || 1.5;
+  document.getElementById('squelch-sl').value = _sq;
+  document.getElementById('squelch-val').textContent = '×' + _sq.toFixed(1);
+  document.getElementById('afc-chk').checked = afcEnabled;
+  if (!afcEnabled) { const afcEl = document.getElementById('afc-lbl'); if (afcEl) afcEl.textContent = 'AFC OFF'; }
+  document.getElementById('threshold-sl').value = cfg.threshold;
+  document.getElementById('threshold-val').textContent = cfg.threshold + '%';
+  document.getElementById('auto-wpm-chk').checked = autoWpmEnabled;
+  document.getElementById('auto-wpm-min').value = cfg.autoWpmMin;
+  document.getElementById('auto-wpm-max').value = cfg.autoWpmMax;
+  document.getElementById('wpm-clamp-row').style.opacity = autoWpmEnabled ? '1' : '.4';
+  document.getElementById('font-size-sel').value = cfg.fontSize;
+  document.getElementById('cw-color-sel').value = cfg.cwColor;
+  document.getElementById('auto-log-chk').checked = autoLog73;
+  document.getElementById('nr-enable-chk').checked = nrEnabled;
+  setNrEnabled(nrEnabled);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Display settings
+// ════════════════════════════════════════════════════════════════════════════
+function applyDisplaySettings() {
+  document.documentElement.style.setProperty('--cw-font-size', cfg.fontSize + 'px');
+  document.documentElement.style.setProperty('--cw-color', cfg.cwColor);
+}
+
+function setFontSize(px) {
+  cfg.fontSize = px;
+  document.documentElement.style.setProperty('--cw-font-size', px + 'px');
+  document.getElementById('font-size-sel').value = px;
+  saveSettings();
+}
+
+function setCwColor(val) {
+  cfg.cwColor = val;
+  document.documentElement.style.setProperty('--cw-color', val);
+  document.getElementById('cw-color-sel').value = val;
+  saveSettings();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Connection status
+// ════════════════════════════════════════════════════════════════════════════
+let _wasTciConnected = false;
+async function fetchStatus() {
+  try {
+    const r = await fetch('/api/cw_status');
+    if (!r.ok) return;
+    const d = await r.json();
+    const badge = document.getElementById('conn-badge');
+    if (d.tci)         { badge.textContent='TCI';         badge.className='conn-badge ok'; }
+    else if (d.hamlib) { badge.textContent='HamLib';      badge.className='conn-badge hamlib'; }
+    else               { badge.textContent='DISCONNECTED';badge.className='conn-badge'; }
+    document.getElementById('tx-path-lbl').textContent =
+      d.tci ? 'via TCI' : d.hamlib ? 'via HamLib' : '';
+    if (d.mycall)  myCAll = d.mycall;
+    if (d.myname !== undefined) myName = d.myname;
+    if (d.serial  !== undefined) { cwSerial = d.serial; updateNrDisplay(); }
+    // Sync tone from Thetis on first TCI connect
+    if (d.tci && !_wasTciConnected && d.cw_pitch) {
+      gToneHz = d.cw_pitch;
+      document.getElementById('tone-freq').value = gToneHz;
+      document.getElementById('tone-freq-val').textContent = gToneHz + ' Hz';
+      noiseFloor = 0; peakPower = 0;
+      cfg.toneHz = gToneHz; saveSettings();
+    }
+    _wasTciConnected = d.tci;
+  } catch(e) {}
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SEND
+// ════════════════════════════════════════════════════════════════════════════
+async function sendCw() {
+  const inp = document.getElementById('cw-input');
+  const raw = inp.value.trim();
+  if (!raw) return;
+  const hasNr = /\{NR\}/i.test(raw);
+  const text = expandTokens(raw);
+  appendTxOutput(text);
+  setStatus(`Sending: ${text}`);
+  try {
+    const r = await fetch('/api/cw_send', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({text, wpm: txWpm})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setStatus(`Sent via ${d.path} @ ${txWpm} WPM`);
+      inp.value = '';
+      if (hasNr) nrIncrement();
+      if (autoLog73 && /\b73\b/.test(text)) {
+        try {
+          const pw = window.opener;
+          if (pw && typeof pw.saveQSO === 'function') {
+            pw.saveQSO();
+            setStatus(`Sent via ${d.path} @ ${txWpm} WPM  ✓ QSO auto-logged`);
+          }
+        } catch(e) {}
+      }
+    }
+    else setStatus('Error: ' + (d.error || 'unknown') + ' — is Thetis in CW mode?', true);
+  } catch(e) { setStatus('Send failed: ' + e.message, true); }
+}
+
+async function stopCw() {
+  setStatus('TX stopped.');
+  try { await fetch('/api/cw_stop', {method:'POST'}); } catch(e) {}
+}
+
+function appendTxOutput(text) {
+  const el = document.getElementById('tx-output');
+  const cur = el.textContent.replace('\u200b','');
+  el.textContent = (cur ? cur + '\n' : '') + '> ' + text;
+  el.scrollTop = el.scrollHeight;
+}
+
+function wpmSliderChanged(v) {
+  setSliderWpm(parseInt(v));
+  cfg.wpm = txWpm; saveSettings();
+  fetch('/api/cw_speed', {method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({wpm:txWpm})}).catch(()=>{});
+}
+
+function setSliderWpm(v) {
+  txWpm = Math.max(5, Math.min(60, v));
+  document.getElementById('wpm-slider').value = txWpm;
+  document.getElementById('wpm-val').textContent = txWpm + ' WPM';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Audio device management
+// ════════════════════════════════════════════════════════════════════════════
+async function populateAudioDevices() {
+  const sel = document.getElementById('audio-device-sel');
+  sel.innerHTML = '<option value="">-- select device --</option>';
+
+  // TCI option
+  try {
+    const ti = await fetch('/api/tci_info').then(r => r.json());
+    const opt = document.createElement('option');
+    opt.value = '__tci__';
+    opt.dataset.host = ti.host;
+    opt.dataset.port = ti.port;
+    opt.textContent = `TCI Audio (${ti.host}:${ti.port})` + (ti.connected ? '' : ' — offline');
+    sel.appendChild(opt);
+  } catch(e) {}
+
+  // Windows audio inputs (mic, VAC, USB, loopback etc.)
+  try {
+    const tmp = await navigator.mediaDevices.getUserMedia({audio:true});
+    tmp.getTracks().forEach(t => t.stop());
+  } catch(e) {}
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    devices.filter(d => d.kind === 'audioinput').forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.deviceId;
+      opt.textContent = d.label || `Audio input (${d.deviceId.slice(0,8)})`;
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
+
+  // Restore saved device
+  if (cfg.deviceId) {
+    for (const opt of sel.options) {
+      if (opt.value === cfg.deviceId) { sel.value = cfg.deviceId; break; }
+    }
+  }
+}
+
+async function refreshAudioDevices() {
+  const sel = document.getElementById('audio-device-sel');
+  const prev = sel.value;
+  await populateAudioDevices();
+  if (prev) sel.value = prev;  // restore selection if still present
+  setStatus('Audio device list refreshed.');
+}
+
+async function changeAudioDevice() {
+  const sel = document.getElementById('audio-device-sel');
+  currentDeviceId = sel.value || null;
+  cfg.deviceId = currentDeviceId || ''; saveSettings();
+  if (rxActive) { stopRx(); if (currentDeviceId) await startRx(); }
+}
+
+async function toggleRx() {
+  if (rxActive) { stopRx(); return; }
+  const sel = document.getElementById('audio-device-sel');
+  if (!sel.value) { setStatus('Select an audio input device first.', true); return; }
+  currentDeviceId = sel.value;
+  await startRx();
+}
+
+async function startRx() {
+  resetDecoder();
+  if (currentDeviceId === '__tci__') await startTciAudio();
+  else await startMicAudio();
+}
+
+async function startMicAudio() {
+  try {
+    const constraints = {audio:{deviceId:{exact:currentDeviceId},
+      echoCancellation:false, noiseSuppression:false, autoGainControl:false}};
+    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    gSampleRate = audioCtx.sampleRate;
+    const blockSize = Math.floor(gSampleRate * 0.020);
+    const source = audioCtx.createMediaStreamSource(mediaStream);
+    scriptNode = audioCtx.createScriptProcessor(blockSize, 1, 1);
+    source.connect(scriptNode);
+    scriptNode.connect(audioCtx.destination);
+    scriptNode.onaudioprocess = (evt) =>
+      processAudioSamples(evt.inputBuffer.getChannelData(0), gSampleRate);
+    rxActive = true;
+    setRxBtn(true); setStatus('Listening via audio device…');
+  } catch(e) { setStatus('Audio error: ' + e.message, true); }
+}
+
+async function startTciAudio() {
+  const sel = document.getElementById('audio-device-sel');
+  const opt = sel.options[sel.selectedIndex];
+  const host = opt.dataset.host || '127.0.0.1';
+  const port = opt.dataset.port || '50001';
+  return new Promise((resolve) => {
+    tciWs = new WebSocket(`ws://${host}:${port}`);
+    tciWs.binaryType = 'arraybuffer';
+    tciWs.onopen = () => {
+      tciWs.send('audio_start:0');
+      rxActive = true;
+      setRxBtn(true); setStatus('Listening via TCI audio…');
+      resolve();
+    };
+    tciWs.onmessage = (evt) => {
+      if (!(evt.data instanceof ArrayBuffer)) return;
+      const HEADER = 64;
+      if (evt.data.byteLength <= HEADER) return;
+      const view = new DataView(evt.data);
+      const sampleRate = view.getUint32(4, true) || 48000;
+      const format     = view.getUint32(8, true);   // 0=int16, 3=float32
+      const channels   = Math.max(1, view.getUint32(28, true));
+      const bodyBytes = evt.data.byteLength - HEADER;
+      let mono;
+      if (format === 3) {
+        const floats = new Float32Array(evt.data, HEADER, bodyBytes / 4);
+        const fc = Math.floor(floats.length / channels);
+        mono = new Float32Array(fc);
+        for (let i = 0; i < fc; i++) mono[i] = floats[i * channels];
+      } else {
+        const fc = Math.floor(bodyBytes / 2 / channels);
+        mono = new Float32Array(fc);
+        for (let i = 0; i < fc; i++)
+          mono[i] = view.getInt16(HEADER + i * channels * 2, true) / 32768.0;
+      }
+      for (let i = 0; i < mono.length; i++) {
+        tciSampleBuf.push(mono[i]);
+        if (tciSampleBuf.length >= TCI_BLOCK)
+          processAudioSamples(tciSampleBuf.splice(0, TCI_BLOCK), sampleRate);
+      }
+    };
+    tciWs.onerror = () => { setStatus('TCI audio error.', true); stopRx(); resolve(); };
+    tciWs.onclose = () => { if (rxActive) { setStatus('TCI audio closed.', true); stopRx(); } };
+  });
+}
+
+function stopTciAudio() {
+  if (tciWs) {
+    try { tciWs.send('audio_stop:0'); } catch(e) {}
+    tciWs.onclose = null; tciWs.close(); tciWs = null;
+  }
+  tciSampleBuf = [];
+}
+
+function stopRx() {
+  stopTciAudio();
+  if (scriptNode)  { scriptNode.disconnect(); scriptNode = null; }
+  if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+  if (audioCtx)    { audioCtx.close(); audioCtx = null; }
+  rxActive = false;
+  setRxBtn(false);
+  document.getElementById('signal-fill').style.width = '0%';
+  document.getElementById('rx-wpm-disp').textContent = '— WPM';
+  setStatus('Listening stopped.');
+}
+
+function setRxBtn(on) {
+  const btn = document.getElementById('btn-rx-toggle');
+  btn.textContent = on ? 'Stop Listening' : 'Start Listening';
+  btn.classList.toggle('active', on);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Waterfall display
+// Both TCI and microphone paths funnel through processAudioSamples(), so a
+// single JavaScript FFT serves both modes — no AnalyserNode or second TCI
+// connection needed.  A 4096-point windowed real FFT is computed at ~20 Hz
+// from samples accumulated in a ring buffer.  Display spans ±400 Hz around
+// the AFC-locked (or manually set) tone.  Click-to-tune with snap/exact mode.
+//
+// FFT resolution: 11.7 Hz/bin @ 48 kHz; 1.95 Hz/bin @ 8 kHz.
+// ════════════════════════════════════════════════════════════════════════════
+
+const WF_N   = 4096;  // FFT size: 11.7 Hz/bin @ 48 kHz, 1.95 Hz/bin @ 8 kHz
+const WF_HOP = 512;   // minimum new samples before next FFT (time-gated to ~20 fps)
+const WF_HZ  = 400;   // display half-range — waterfall shows tone ±400 Hz
+const WF_H   = 72;    // canvas height in pixels
+
+// ── Hann window ───────────────────────────────────────────────────────────
+const _wfHann = new Float32Array(WF_N);
+(()=>{ for(let i=0;i<WF_N;i++) _wfHann[i]=0.5*(1-Math.cos(2*Math.PI*i/(WF_N-1))); })();
+
+// ── Blue-family → white colour LUT (256 entries) ─────────────────────────
+// Black → deep navy → royal blue → steel blue → white.  No cyan or green.
+// Packed as uint32 little-endian RGBA: value = R | G<<8 | B<<16 | 0xff<<24
+const _wfLut = new Uint32Array(256);
+(()=>{
+  for(let i=0;i<256;i++){
+    let r=0,g=0,b=0;
+    if      (i< 55){ b=Math.round(i*3.27); }                             // black → deep navy
+    else if (i<135){ b=Math.min(255,180+Math.round((i-55)*0.94)); }      // navy → pure blue
+    else if (i<215){ const t=(i-135)/80; r=Math.round(t*t*255);          // blue → white
+                     g=Math.round(t*t*255); b=255; }                      //  (quadratic curve)
+    else           { r=255; g=255; b=255; }                               // white (hot)
+    _wfLut[i]=(0xff<<24)|(b<<16)|(g<<8)|r;
+  }
+})();
+
+// ── 12-bit reversal table for N=4096 radix-2 FFT ─────────────────────────
+const _wfBitRev = new Uint16Array(WF_N);
+(()=>{
+  for(let i=0;i<WF_N;i++){
+    let rev=0,x=i;
+    for(let b=0;b<12;b++){rev=(rev<<1)|(x&1);x>>=1;}
+    _wfBitRev[i]=rev;
+  }
+})();
+
+// ── Precomputed twiddle factors for N=4096 ───────────────────────────────
+const _wfTwRe=new Float32Array(WF_N/2), _wfTwIm=new Float32Array(WF_N/2);
+(()=>{
+  for(let k=0;k<WF_N/2;k++){
+    const a=-2*Math.PI*k/WF_N;
+    _wfTwRe[k]=Math.cos(a); _wfTwIm[k]=Math.sin(a);
+  }
+})();
+
+// ── In-place radix-2 DIT FFT (12-stage for N=4096) ───────────────────────
+// x: Float32Array length 2*WF_N, interleaved complex [re0,im0,re1,im1,…]
+function _wfFft(x){
+  for(let i=0;i<WF_N;i++){
+    const j=_wfBitRev[i];
+    if(i<j){
+      let t=x[2*i];  x[2*i]=x[2*j];  x[2*j]=t;
+          t=x[2*i+1];x[2*i+1]=x[2*j+1];x[2*j+1]=t;
+    }
+  }
+  for(let s=1;s<=12;s++){
+    const m=1<<s, mh=m>>1, stride=WF_N/m;
+    for(let k=0;k<WF_N;k+=m){
+      for(let j=0;j<mh;j++){
+        const tw=j*stride;
+        const wRe=_wfTwRe[tw], wIm=_wfTwIm[tw];
+        const ei=2*(k+j), oi=2*(k+j+mh);
+        const eRe=x[ei],eIm=x[ei+1], oRe=x[oi],oIm=x[oi+1];
+        const tRe=wRe*oRe-wIm*oIm, tIm=wRe*oIm+wIm*oRe;
+        x[ei]  =eRe+tRe; x[ei+1]=eIm+tIm;
+        x[oi]  =eRe-tRe; x[oi+1]=eIm-tIm;
+      }
+    }
+  }
+}
+
+// ── Waterfall runtime state ───────────────────────────────────────────────
+let _wfRing   = new Float32Array(WF_N); // sample ring buffer
+let _wfWrIdx  = 0;                      // ring write head
+let _wfHopN   = 0;                      // new samples since last FFT
+let _wfLastMs = 0;                      // timestamp of last FFT (rate-limits to 20 fps)
+let _wfWork   = new Float32Array(WF_N*2); // FFT work array (complex interleaved)
+let _wfMag    = new Float32Array(WF_N/2); // magnitude spectrum from last FFT
+let _wfPeak   = 1e-6;                   // running display peak magnitude (auto-gain)
+let _wfReady  = false;                  // new spectrum waiting to be rendered
+let _wfCanvas = null, _wfCtx = null;
+let _wfImgData= null, _wfU32 = null;   // ImageData + Uint32Array view for fast pixel writes
+let _wfW      = 0;                      // current canvas width in pixels
+let _wfSnap   = (cfg.wfSnapToPeak !== undefined) ? !!cfg.wfSnapToPeak : true;
+
+// ── Sample input — called from processAudioSamples ────────────────────────
+function wfPushSamples(samples){
+  if(!_wfImgData) return;
+  for(let i=0;i<samples.length;i++){
+    _wfRing[_wfWrIdx]=samples[i];
+    _wfWrIdx=(_wfWrIdx+1)%WF_N;
+    _wfHopN++;
+  }
+  // Rate-limit FFT to ~20/sec regardless of audio sample rate
+  const now=performance.now();
+  if(_wfHopN>=WF_HOP && now-_wfLastMs>=50){
+    _wfHopN=0; _wfLastMs=now;
+    _wfComputeSpectrum();
+  }
+}
+
+function _wfComputeSpectrum(){
+  // Copy ring buffer oldest→newest into work array with Hann window
+  for(let i=0;i<WF_N;i++){
+    const src=(_wfWrIdx+i)%WF_N;
+    _wfWork[2*i]  =_wfRing[src]*_wfHann[i];
+    _wfWork[2*i+1]=0;
+  }
+  _wfFft(_wfWork);
+  // Magnitude of positive-frequency bins; track running peak for auto-gain
+  let peak=0;
+  for(let k=0;k<WF_N/2;k++){
+    const re=_wfWork[2*k], im=_wfWork[2*k+1];
+    const m=Math.sqrt(re*re+im*im);
+    _wfMag[k]=m;
+    if(m>peak) peak=m;
+  }
+  // Slow peak decay (~1.15 s half-life at 20 fps) — keeps auto-gain stable
+  _wfPeak=Math.max(_wfPeak*0.97, peak, 1e-6);
+  _wfReady=true;
+}
+
+// ── Render loop (requestAnimationFrame) ──────────────────────────────────
+function wfRender(){
+  requestAnimationFrame(wfRender);
+  if(!_wfReady||!_wfImgData) return;
+  _wfReady=false;
+
+  const w=_wfW, h=WF_H;
+  const sr=gSampleRate||48000;
+  // Show display centred on AFC-locked frequency (or manually set tone)
+  const centerHz=(afcEnabled&&_afcHz!==null)?_afcHz:gToneHz;
+  const bpHz=WF_N/sr;            // bins per Hz
+  const cBin=centerHz*bpHz;
+  const rBin=WF_HZ*bpHz;        // half-range in bins
+  const binLo=cBin-rBin, binHi=cBin+rBin;
+  const maxBin=WF_N/2-2;
+
+  // Scroll existing waterfall down by 1 pixel row (new data appears at top)
+  _wfU32.copyWithin(w, 0, w*(h-1));
+
+  // Render new top row via linear interpolation between FFT bins
+  const invPeak=255/_wfPeak;
+  for(let px=0;px<w;px++){
+    const fbin=binLo+(binHi-binLo)*px/(w-1);
+    const b0=Math.max(0,Math.min(maxBin,fbin|0));
+    const t=fbin-b0;
+    const mag=_wfMag[b0]*(1-t)+_wfMag[b0+1]*t;
+    // 0.92 factor leaves slight headroom so strong signals don't fully saturate
+    _wfU32[px]=_wfLut[Math.min(255,mag*invPeak*0.92)|0];
+  }
+
+  const ctx=_wfCtx;
+  ctx.putImageData(_wfImgData,0,0);
+
+  ctx.save();
+  ctx.textAlign='center';
+
+  // Frequency scale — ticks every 100 Hz, labels every 200 Hz
+  ctx.font='10px "Courier New",monospace';
+  for(let df=-400;df<=400;df+=100){
+    const hz=centerHz+df;
+    const tickBin=hz*bpHz;
+    const px=Math.round((tickBin-binLo)/(binHi-binLo)*(w-1));
+    if(px<2||px>w-2) continue;
+    const major=(df%200===0);
+    ctx.strokeStyle=major?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.2)';
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(px+0.5, h-(major?13:5));
+    ctx.lineTo(px+0.5, h);
+    ctx.stroke();
+    if(major && df!==0){
+      const lbl=Math.round(hz)+'Hz';
+      // Dark backing rectangle for label legibility
+      const tw=ctx.measureText(lbl).width;
+      ctx.fillStyle='rgba(0,0,20,0.65)';
+      ctx.fillRect(px-tw/2-2, h-25, tw+4, 13);
+      ctx.fillStyle='rgba(160,200,255,0.92)';
+      ctx.fillText(lbl, px, h-14);
+    }
+  }
+
+  // AFC/tone cursor — dashed red line
+  const curPx=Math.round((cBin-binLo)/(binHi-binLo)*(w-1));
+  ctx.strokeStyle='rgba(255,55,55,0.9)';
+  ctx.lineWidth=1;
+  ctx.setLineDash([3,3]);
+  ctx.beginPath();
+  ctx.moveTo(curPx+0.5,0);
+  ctx.lineTo(curPx+0.5,h);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Centre frequency label at top — dark backing, red text
+  const cLbl=Math.round(centerHz)+'Hz';
+  const clx=Math.max(22, Math.min(w-22, curPx));
+  ctx.font='10px "Courier New",monospace';
+  const clw=ctx.measureText(cLbl).width;
+  ctx.fillStyle='rgba(0,0,20,0.65)';
+  ctx.fillRect(clx-clw/2-2, 1, clw+4, 13);
+  ctx.fillStyle='rgba(255,90,90,0.95)';
+  ctx.fillText(cLbl, clx, 11);
+
+  ctx.restore();
+}
+
+// ── Initialise waterfall (called once after DOM is ready) ─────────────────
+function wfInit(){
+  _wfCanvas=document.getElementById('wf-canvas');
+  if(!_wfCanvas) return;
+  _wfCtx=_wfCanvas.getContext('2d');
+
+  function wfResize(){
+    _wfW=_wfCanvas.offsetWidth||400;
+    _wfCanvas.width=_wfW;
+    _wfImgData=_wfCtx.createImageData(_wfW,WF_H);
+    _wfU32=new Uint32Array(_wfImgData.data.buffer);
+    _wfU32.fill(_wfLut[0]);   // pre-fill with noise-floor colour (dark blue-black)
+  }
+  wfResize();
+  new ResizeObserver(wfResize).observe(_wfCanvas);
+
+  _wfCanvas.addEventListener('click', _wfHandleClick);
+  _wfUpdateSnapBtn();
+  requestAnimationFrame(wfRender);
+}
+
+// ── Click-to-tune handler ─────────────────────────────────────────────────
+function _wfHandleClick(evt){
+  if(!rxActive) return;
+  const rect=_wfCanvas.getBoundingClientRect();
+  const px=evt.clientX-rect.left;
+  const sr=gSampleRate||48000;
+  const centerHz=(afcEnabled&&_afcHz!==null)?_afcHz:gToneHz;
+  const bpHz=WF_N/sr;
+  const cBin=centerHz*bpHz;
+  const rBin=WF_HZ*bpHz;
+  const clickBin=cBin-rBin+(2*rBin)*px/(_wfW-1);
+
+  let tuneHz;
+  if(_wfSnap){
+    // Snap: find the highest magnitude bin within ±60 Hz of the click position
+    const searchBins=Math.round(60*bpHz);
+    const b0=Math.max(0,          (clickBin|0)-searchBins);
+    const b1=Math.min(WF_N/2-1,   (clickBin|0)+searchBins);
+    let bestMag=-1, bestBin=clickBin|0;
+    for(let b=b0;b<=b1;b++){
+      if(_wfMag[b]>bestMag){bestMag=_wfMag[b];bestBin=b;}
+    }
+    tuneHz=Math.round(bestBin*sr/WF_N);
+  } else {
+    // Exact: tune to precisely where the user clicked
+    tuneHz=Math.round(clickBin*sr/WF_N);
+  }
+
+  tuneHz=Math.max(300,Math.min(1200,tuneHz));
+  document.getElementById('tone-freq').value=tuneHz;
+  toneFreqChanged(tuneHz);
+}
+
+function wfToggleSnap(){
+  _wfSnap=!_wfSnap;
+  cfg.wfSnapToPeak=_wfSnap; saveSettings();
+  _wfUpdateSnapBtn();
+}
+
+function _wfUpdateSnapBtn(){
+  const btn=document.getElementById('wf-snap-btn');
+  if(!btn) return;
+  btn.textContent=_wfSnap?'⌖ Snap':'⌖ Exact';
+  btn.classList.toggle('active',_wfSnap);
+  btn.title=_wfSnap
+    ?'Click-to-tune: Snap — locks to the strongest peak within ±60 Hz of your click'
+    :'Click-to-tune: Exact — tunes to precisely where you click on the waterfall';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// IQ downconversion decoder
+// goertzel() is retained as a single-bin DFT for the AFC frequency scanner.
+// ════════════════════════════════════════════════════════════════════════════
+function goertzel(samples, targetHz, sampleRate) {
+  const N = samples.length;
+  const k = Math.round(N * targetHz / sampleRate);
+  const omega = 2 * Math.PI * k / N;
+  const coeff = 2 * Math.cos(omega);
+  let s0 = 0, s1 = 0, s2 = 0;
+  for (let i = 0; i < N; i++) { s0 = samples[i] + coeff*s1 - s2; s2 = s1; s1 = s0; }
+  return s1*s1 + s2*s2 - coeff*s1*s2;
+}
+
+// AFC: sweep ±AFC_RANGE Hz around centerHz; return smoothed best frequency.
+// Returns current _afcHz unchanged if no clear signal peak is found.
+function runAfc(buf, sampleRate, centerHz) {
+  let bestHz = centerHz, bestPow = -1, totalPow = 0, scanCount = 0;
+  for (let df = -gAfcRange; df <= gAfcRange; df += AFC_STEP) {
+    const hz = centerHz + df;
+    if (hz < 200 || hz > 2000) continue;
+    const p = goertzel(buf, hz, sampleRate);
+    if (p > bestPow) { bestPow = p; bestHz = hz; }
+    totalPow += p; scanCount++;
+  }
+  const el = document.getElementById('afc-lbl');
+  // Only lock if the peak is ≥3× the scan average — noise won't trigger AFC
+  if (scanCount === 0 || bestPow < (totalPow / scanCount) * 3) {
+    if (el) el.textContent = 'AFC —';
+    return _afcHz !== null ? _afcHz : centerHz;
+  }
+  const result = _afcHz !== null ? _afcHz * 0.7 + bestHz * 0.3 : bestHz;
+  if (el) el.textContent = 'AFC ' + Math.round(result) + ' Hz';
+  return result;
+}
+
+function processAudioSamples(rawSamples, sampleRate) {
+  gSampleRate = sampleRate;
+  // Feed waterfall before any other processing (display-only, no side-effects)
+  wfPushSamples(rawSamples);
+  // No gain applied — the adaptive noise floor + peak tracker normalise everything
+  // internally; any gain factor cancels identically in the norm calculation.
+  const samples = rawSamples;
+
+  // ── AFC accumulation ──────────────────────────────────────────────────────
+  if (afcEnabled) {
+    for (let i = 0; i < samples.length; i++) _afcBuf.push(samples[i]);
+    _afcCount += samples.length;
+    if (_afcCount >= AFC_PERIOD && _afcBuf.length >= AFC_WIN) {
+      _afcHz = runAfc(_afcBuf.slice(-AFC_WIN), sampleRate, gToneHz);
+      _afcCount = 0;
+      if (_afcBuf.length > AFC_WIN * 2) _afcBuf = _afcBuf.slice(-AFC_WIN);
+    }
+  }
+
+  // ── IQ downconversion — sample-by-sample ─────────────────────────────────
+  // Integration window ~0.7 ms at any common sample rate.
+  const iqWin = Math.max(4, Math.min(48, Math.round(sampleRate / 1400)));
+  const detHz = (afcEnabled && _afcHz !== null) ? _afcHz : gToneHz;
+
+  // Matched filter window = ~0.5 × dit duration in IQ windows.
+  // Averages out sub-dit noise spikes while preserving element edges.
+  // iqWin samples per IQ window; dotEstMs ms per dit.
+  const msMsPerIqWin = (iqWin / sampleRate) * 1000;
+  const _mfWinNew = Math.max(2, Math.min(MF_MAX, Math.round(dotEstMs * 0.5 / msMsPerIqWin)));
+  if (_mfWinNew !== _mfWinLast) {
+    // Window size changed — must reinitialize ring buffer to prevent _mfSum corruption
+    _mfWin = _mfWinNew; _mfWinLast = _mfWinNew;
+    _mfBuf.fill(0); _mfSum = 0; _mfPos = 0;
+  }
+
+  // Pre-compute oscillator rotation step for this block (avoids trig in loop)
+  const dphi  = 2 * Math.PI * detHz / sampleRate;
+  const cosDp = Math.cos(dphi);
+  const sinDp = Math.sin(dphi);
+  let oscCos  = Math.cos(_iqPhaseAcc);
+  let oscSin  = Math.sin(_iqPhaseAcc);
+
+  const blockStart  = performance.now();
+  const msPerSample = 1000 / sampleRate;
+
+  for (let i = 0; i < samples.length; i++) {
+    // Mix sample with quadrature oscillator
+    _iqI += samples[i] * oscCos;
+    _iqQ += samples[i] * oscSin;
+    _iqCount++;
+
+    // Advance oscillator via rotation — no Math.cos/sin in inner loop
+    const nc = oscCos*cosDp - oscSin*sinDp;
+    oscSin   = oscSin*cosDp + oscCos*sinDp;
+    oscCos   = nc;
+
+    if (_iqCount >= iqWin) {
+      // Carrier envelope magnitude for this IQ window
+      const mag = Math.sqrt(_iqI*_iqI + _iqQ*_iqQ) / iqWin;
+      _iqI = 0; _iqQ = 0; _iqCount = 0;
+
+      // Asymmetric envelope follower (fast attack, slow decay)
+      envVal = mag > envVal
+        ? envVal*(1-ENV_ATK) + mag*ENV_ATK
+        : envVal*(1-ENV_DKY) + mag*ENV_DKY;
+
+      // ── Matched filter (running average over ~0.5 dit) ──────────────────
+      // Subtracts oldest sample, adds new one — O(1) per window.
+      _mfSum -= _mfBuf[_mfPos];
+      _mfBuf[_mfPos] = envVal;
+      _mfSum += envVal;
+      _mfPos = (_mfPos + 1) % _mfWin;
+      const mfVal = _mfSum / _mfWin;
+
+      // Adaptive noise floor — two-mode update:
+      //  • During spaces (lastLevel=false) or init (=0): full two-way EMA — floor can
+      //    rise toward noise or fall if quiet. This is the normal calibration path.
+      //  • During marks (lastLevel=true, floor>0): one-directional — floor can only FALL
+      //    (track downward if signal dips), never rise (prevents signal contamination).
+      //    Previously the floor was fully frozen during marks; the freeze caused a
+      //    dead-lock: if band noise rose while in a mark, the frozen floor was too low,
+      //    so mfVal (now at noise level) appeared above the threshold — decoder stayed
+      //    stuck in lastLevel=true and could not recover without a full restart.
+      if (!lastLevel || noiseFloor === 0) {
+        noiseFloor = mfVal < noiseFloor || noiseFloor === 0
+          ? noiseFloor*(1-FLOOR_FALL) + mfVal*FLOOR_FALL
+          : noiseFloor*(1-FLOOR_RISE) + mfVal*FLOOR_RISE;
+      } else if (mfVal < noiseFloor) {
+        // Mark in progress but envelope dipped — allow floor to track downward only
+        noiseFloor = noiseFloor*(1-FLOOR_FALL) + mfVal*FLOOR_FALL;
+      }
+
+      // Peak tracks envVal (raw envelope) — not mfVal — so it reflects true signal
+      // level even when the matched filter window briefly straddles an element edge.
+      if (envVal > peakPower) peakPower = envVal;
+      else peakPower = Math.max(noiseFloor, peakPower*(1-PEAK_FALL));
+
+      // Normalise and apply SNR gate (threshold set by Squelch slider → gSquelch)
+      const range = peakPower - noiseFloor;
+      const snrOk = noiseFloor > 0 && peakPower >= noiseFloor * gSquelch;
+      const norm  = (snrOk && range > 0)
+        ? Math.max(0, Math.min(1, (mfVal - noiseFloor) / range)) : 0;
+
+      // Asymmetric hysteresis: easy to start a mark (threshold+HYST_ON),
+      // hard to drop one (threshold-HYST_OFF) — mirrors CWGET two-threshold architecture.
+      // Clamp end condition to a small positive floor: if gThreshold < HYST_OFF (12%)
+      // the raw value goes negative and norm (always ≥ 0) never drops below it —
+      // the mark would never end, locking lastLevel=true forever → no decodes.
+      const isMark = lastLevel
+        ? norm >= Math.max(0.02, gThreshold - HYST_OFF)
+        : norm >= gThreshold + HYST_ON;
+      const nowMs  = blockStart + i * msPerSample;
+
+      if (isMark !== lastLevel) {
+        processEdge(lastLevel, nowMs - lastEdge);
+        lastEdge = nowMs; lastLevel = isMark;
+      }
+      if (!isMark) {
+        const sp = nowMs - lastEdge;
+        if (sp > dotEstMs * 5.5 && currentChar.length > 0) flushChar();
+        if (sp > dotEstMs * 8.0 && decodedLine.length > 0 && !decodedLine.endsWith(' '))
+          appendDecoded(' ');
+      }
+
+      // Throttle signal bar DOM updates (every 32 windows ≈ every 22 ms)
+      if (++_sigBarCounter >= 32) {
+        document.getElementById('signal-fill').style.width = Math.round(norm*100)+'%';
+        _sigBarCounter = 0;
+      }
+    }
+  }
+  // Save oscillator phase for coherent continuation in next block
+  _iqPhaseAcc = Math.atan2(oscSin, oscCos);
+  if (_iqPhaseAcc < 0) _iqPhaseAcc += 2 * Math.PI;
+}
+
+// ── Bayesian classifier functions ────────────────────────────────────────────
+
+// Log-Gaussian likelihood (normalization constant omitted — cancels in ratio)
+function logGaussian(x, mu, varr) {
+  const z = x - mu;
+  return -(z * z) / (2 * Math.max(varr, 1));
+}
+
+// Classify a mark duration as dit (true) or dah (false).
+// Bootstrap threshold: 1.565× dit — extracted directly from CWGET binary decoder section
+// (d64 at 0x0107BC and mirror at 0x028390; two identical instances, both at the timing
+// decision point).  Previous build used 1.5 which came from the "constant appears 13×"
+// analysis — those 13 instances are likely generic 3÷2 values elsewhere in the binary;
+// 1.565 is the actual decision threshold.  Biased toward calling borderline marks as dahs:
+// real operators often send short dahs (~1.5–2T) especially at speed.
+const _MARK_BOUNDARY = 1.565;
+function bayesClassifyMark(ms) {
+  if (_bMarkN < BAYES_MIN) return ms < _bDitMu * _MARK_BOUNDARY;
+  const dahMu  = _bDitMu * 3;
+  const dahVar = _bDitVar * 3;   // dah variance ≈ 3× dit variance (wider spread)
+  return logGaussian(ms, _bDitMu, _bDitVar) >= logGaussian(ms, dahMu, dahVar);
+}
+
+// Classify a space duration as 'elem' (≈0.85T), 'char' (≈3T), or 'word' (≈7T).
+//
+// Bootstrap fallback uses ratio thresholds derived from CWGET empirical data:
+//   • CWGET INI: DotLen=945, ShortPauseLen=806 at 11025 Hz → elem ≈ 0.85× dit
+//   • elem/char boundary = geometric mean of 0.85 and 3.0 = √2.55 ≈ 1.6×
+//   • char/word boundary = geometric mean of 3.0 and 7.0 = √21  ≈ 4.6×
+//
+// Once bootstrapped, Gaussian log-likelihood is used with _bElemSpaceMu (0.85× dit)
+// as the inter-element center instead of 1T — this is the key CWGET insight.
+// Word-gap uses a one-sided model: any space ≥ 7× dit scores as word regardless
+// of how long it is (avoids penalizing long silences between transmissions).
+function bayesClassifySpace(ms) {
+  if (_bMarkN < BAYES_MIN) {
+    if (ms < dotEstMs * 1.6) return 'elem';   // boundary at √(0.85×3) ≈ 1.6×
+    if (ms < dotEstMs * 4.6) return 'char';   // boundary at √(3×7)    ≈ 4.6×
+    return 'word';
+  }
+  const llE1 = logGaussian(ms, _bElemSpaceMu,  _bDitVar * 2);  // inter-element ≈ 0.85T (CWGET empirical)
+  const llE3 = logGaussian(ms, _bDitMu * 3,    _bDitVar * 4);  // inter-char    ≈ 3T
+  const e7Mu = _bDitMu * 7;
+  const llE7 = (ms >= e7Mu) ? 0 : logGaussian(ms, e7Mu, _bDitVar * 8);  // word ≈ 7T
+  if (llE7 >= llE3 && llE7 >= llE1) return 'word';
+  if (llE3 >= llE1)                  return 'char';
+  return 'elem';
+}
+
+// Update the Bayesian model from a confirmed mark.
+// Dit samples update at full BAYES_ALPHA; dah samples at half weight
+// (dah/3 is a noisier estimate of the dit unit than a direct dit measurement).
+// Plausibility guard: skip update if the derived dit estimate is wildly off from
+// the current model — this prevents misclassified marks from corrupting the model.
+//
+// Asymmetric learning rate — mirrors CWGET binary 0x0107BC (asymmetric speed tracker):
+//   "instant fall" (new < stored → immediate) for speed-ups; "slow rise" (α=0.33) for
+//   slowdowns.  In our model: if the operator is sending faster (ditSample < _bDitMu)
+//   we apply full alpha so we track the new speed quickly; if they are slower we apply
+//   half alpha to avoid over-reacting to a single hesitation.
+function bayesLearnMark(ms, isDit) {
+  const ditSample = isDit ? ms : ms / 3;         // dit-unit estimate from this mark
+  // Reject if ditSample is outside 0.3×–2.5× the current mean (outlier guard)
+  if (ditSample < _bDitMu * 0.3 || ditSample > _bDitMu * 2.5) return;
+  _bMarkN++;
+  // Asymmetric alpha: track speed-ups aggressively, slowdowns conservatively
+  const baseAlpha = isDit ? BAYES_ALPHA : BAYES_ALPHA * 0.5;
+  const alpha     = ditSample < _bDitMu ? baseAlpha : baseAlpha * 0.5;
+  // EMA update of mean and variance (online approximation of Welford's algorithm)
+  const newMu  = _bDitMu * (1 - alpha) + ditSample * alpha;
+  const dev    = ditSample - newMu;
+  // Variance floor scales with speed: minimum 10% CV so the model stays
+  // appropriately uncertain at slow speeds (fixed 25ms² floor = 5ms σ was
+  // too tight relative to a slow operator's 80ms+ dit, over-sharpening the Gaussian).
+  const _varFloor = Math.pow(_bDitMu * 0.10, 2);
+  _bDitVar     = Math.max(_bDitVar * (1 - alpha) + dev * dev * alpha, _varFloor);
+  _bDitMu      = Math.max(DOT_MIN_MS, Math.min(DOT_MAX_MS, newMu));
+  // Sync dotEstMs — used by timeout thresholds and matched-filter window sizing
+  dotEstMs     = _bDitMu;
+  // Update WPM display
+  const rxWpm = Math.round(1200 / dotEstMs);
+  document.getElementById('rx-wpm-disp').textContent = rxWpm + ' WPM';
+  if (autoWpmEnabled) applyAutoWpm(rxWpm);
+}
+
+function processEdge(wasMarkBefore, durationMs) {
+  if (durationMs < 8) return;
+  if (wasMarkBefore) {
+    // Upper guard: during signal fade the SNR range compresses, inflating norm for noise
+    // bursts and creating implausibly long "marks".  8× dit ≈ 480ms at 20 WPM — anything
+    // longer is not a real CW element; discard it rather than corrupt the Bayesian model.
+    if (durationMs > _bDitMu * 8.0) return;
+    const isDit = bayesClassifyMark(durationMs);
+    currentChar += isDit ? '.' : '-';
+    bayesLearnMark(durationMs, isDit);
+  } else {
+    const spType = bayesClassifySpace(durationMs);
+    if      (spType === 'word') { flushChar(); appendDecoded(' '); }
+    else if (spType === 'char') { flushChar(); }
+    else if (spType === 'elem' && _bMarkN >= BAYES_MIN) {
+      // Learn inter-element space timing separately (mirrors CWGET ShortPauseLen tracking).
+      // Use half-weight EMA and clamp to 0.4–1.5× dit to stay physically plausible.
+      const newElem = _bElemSpaceMu * (1 - BAYES_ALPHA * 0.5) + durationMs * (BAYES_ALPHA * 0.5);
+      _bElemSpaceMu = Math.max(_bDitMu * 0.4, Math.min(_bDitMu * 1.5, newElem));
+    }
+  }
+}
+
+function flushChar() {
+  if (!currentChar) return;
+  appendDecoded(MORSE_TABLE[currentChar] || '?');
+  currentChar = '';
+}
+
+function appendDecoded(ch) {
+  decodedLine += ch;
+  const el = document.getElementById('decode-output');
+  el.textContent = decodedLine;
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearRx() {
+  decodedLine = '';
+  document.getElementById('decode-output').textContent = '\u200b';
+  // Note: Bayesian model (_bDitMu, _bDitVar) is intentionally preserved on CLR
+  // so the decoder keeps its learned speed estimate for the current station.
+}
+
+function clearTx() {
+  document.getElementById('tx-output').textContent = '\u200b';
+}
+
+function resetDecoder() {
+  currentChar = ''; decodedLine = '';
+  lastEdge = 0; lastLevel = false;
+  noiseFloor = 0; peakPower = 0;
+  envVal = 0;
+  _iqI = 0; _iqQ = 0; _iqCount = 0; _iqPhaseAcc = 0;
+  _mfBuf.fill(0); _mfPos = 0; _mfSum = 0; _mfWinLast = 0;
+  _afcHz = null; _afcBuf = []; _afcCount = 0;
+  _sigBarCounter = 0;
+  // Re-initialize Bayesian model from current TX WPM — gives a sensible starting
+  // point when switching stations rather than waiting for bootstrap from scratch
+  const _initDit = Math.round(1200 / Math.max(5, Math.min(60, txWpm)));
+  _bDitMu       = _initDit;
+  _bDitVar      = Math.pow(_initDit * 0.30, 2);  // 30% CV as initial uncertainty
+  _bMarkN       = 0;
+  _bElemSpaceMu = _initDit * 0.85;  // CWGET empirical: inter-element ≈ 0.85× dit
+  dotEstMs      = _bDitMu;
+  const afcEl = document.getElementById('afc-lbl');
+  if (afcEl) afcEl.textContent = afcEnabled ? 'AFC —' : 'AFC OFF';
+  document.getElementById('decode-output').textContent = '\u200b';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Controls
+// ════════════════════════════════════════════════════════════════════════════
+function squelchChanged(v) {
+  gSquelch = parseFloat(v);
+  document.getElementById('squelch-val').textContent = '×' + gSquelch.toFixed(1);
+  cfg.squelch = gSquelch; saveSettings();
+}
+
+function setAfcEnabled(en) {
+  afcEnabled = en;
+  cfg.afcEnabled = en; saveSettings();
+  const afcEl = document.getElementById('afc-lbl');
+  if (!en) {
+    _afcHz = null; _afcBuf = []; _afcCount = 0;
+    if (afcEl) afcEl.textContent = 'AFC OFF';
+  } else {
+    if (afcEl) afcEl.textContent = 'AFC —';
+  }
+}
+
+function thresholdChanged(v) {
+  gThreshold = parseInt(v) / 100;
+  document.getElementById('threshold-val').textContent = v + '%';
+  cfg.threshold = parseInt(v); saveSettings();
+}
+
+function afcRangeChanged(v) {
+  gAfcRange = parseInt(v);
+  cfg.afcRange = gAfcRange; saveSettings();
+  // Reset AFC so it rescans immediately with the new range
+  _afcHz = null; _afcCount = 0;
+  const afcEl = document.getElementById('afc-lbl');
+  if (afcEl && afcEnabled) afcEl.textContent = 'AFC —';
+}
+
+function toneFreqChanged(v) {
+  gToneHz = parseInt(v);
+  document.getElementById('tone-freq-val').textContent = gToneHz + ' Hz';
+  // Full signal-chain reset so old-frequency calibration doesn't bleed into the new pitch.
+  // Without this, noiseFloor/peakPower/envVal still reflect the previous tone, the matched
+  // filter ring buffer holds stale IQ energy, and decoding stalls until a manual restart.
+  noiseFloor = 0; peakPower = 0; envVal = 0;
+  _mfBuf.fill(0); _mfPos = 0; _mfSum = 0; _mfWinLast = 0;
+  _iqI = 0; _iqQ = 0; _iqCount = 0; _iqPhaseAcc = 0;
+  lastLevel = false; lastEdge = 0; currentChar = '';
+  _afcHz = null; _afcBuf = []; _afcCount = 0;
+  const afcEl = document.getElementById('afc-lbl');
+  if (afcEl) afcEl.textContent = afcEnabled ? 'AFC —' : 'AFC OFF';
+  cfg.toneHz = gToneHz; saveSettings();
+  // Sync new pitch to Thetis (best-effort — silently ignored if TCI not connected)
+  fetch('/api/cw_tone', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({hz: gToneHz})}).catch(()=>{});
+}
+
+function setAutoWpm(en) {
+  autoWpmEnabled = en;
+  cfg.autoWpm = en; saveSettings();
+  document.getElementById('wpm-clamp-row').style.opacity = en ? '1' : '.4';
+}
+
+function applyAutoWpm(rxWpm) {
+  const mn = parseInt(document.getElementById('auto-wpm-min').value) || 8;
+  const mx = parseInt(document.getElementById('auto-wpm-max').value) || 45;
+  cfg.autoWpmMin = mn; cfg.autoWpmMax = mx;
+  const clamped = Math.max(mn, Math.min(mx, rxWpm));
+  // Hysteresis: only update if change > 2 WPM to avoid jitter
+  if (Math.abs(clamped - txWpm) < 2) return;
+  setSliderWpm(clamped);
+  cfg.wpm = txWpm; saveSettings();
+  fetch('/api/cw_speed', {method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({wpm:clamped})}).catch(()=>{});
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Macros
+// ════════════════════════════════════════════════════════════════════════════
+function buildMacroGrid() {
+  const grid = document.getElementById('macro-grid');
+  grid.innerHTML = '';
+  for (let i = 0; i < MACRO_COUNT; i++) {
+    const m = macros[i];
+    const wrap = document.createElement('div');
+    wrap.className = 'macro-btn-wrap';
+
+    const lbl = document.createElement('input');
+    lbl.type = 'text'; lbl.className = 'macro-label-input';
+    lbl.value = m.label; lbl.title = 'Edit label';
+    lbl.addEventListener('change', () => { macros[i].label = lbl.value; saveMacros(); });
+
+    const btn = document.createElement('button');
+    btn.className = 'macro-btn';
+    btn.textContent = m.text || '(empty)';
+    btn.title = 'Click to send • Right-click to edit';
+    btn.addEventListener('click', () => { if (m.text) sendMacro(i); });
+    btn.addEventListener('contextmenu', (e) => { e.preventDefault(); editMacroText(i, btn); });
+
+    wrap.appendChild(lbl); wrap.appendChild(btn);
+    grid.appendChild(wrap);
+  }
+}
+
+function sendMacro(i) {
+  const raw  = macros[i].text;
+  const hasNr = /\{NR\}/i.test(raw);
+  const text = expandTokens(raw);
+  document.getElementById('cw-input').value = raw;
+  sendCwText(text, hasNr);
+}
+
+async function sendCwText(text, hasNr) {
+  appendTxOutput(text);
+  setStatus(`Sending: ${text}`);
+  try {
+    const r = await fetch('/api/cw_send', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({text, wpm: txWpm})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setStatus(`Sent via ${d.path} @ ${txWpm} WPM`);
+      if (hasNr) nrIncrement();
+      if (autoLog73 && /\b73\b/.test(text)) {
+        try {
+          const pw = window.opener;
+          if (pw && typeof pw.saveQSO === 'function') {
+            pw.saveQSO();
+            setStatus(`Sent via ${d.path} @ ${txWpm} WPM  ✓ QSO auto-logged`);
+          }
+        } catch(e) {}
+      }
+    }
+    else setStatus('Error: ' + (d.error||'unknown') + ' — is Thetis in CW mode?', true);
+  } catch(e) { setStatus('Send failed: ' + e.message, true); }
+}
+
+// ── Macro editor modal ────────────────────────────────────────────────────
+let _macroEditIdx = -1, _macroEditBtn = null;
+
+function editMacroText(i, btn) {
+  _macroEditIdx = i;
+  _macroEditBtn = btn;
+  const inp = document.getElementById('macro-modal-input');
+  inp.value = macros[i].text;
+  document.getElementById('macro-modal-title').textContent =
+    'EDIT MACRO ' + (i + 1) + (macros[i].label ? ' — ' + macros[i].label.toUpperCase() : '');
+  document.getElementById('macro-modal').classList.add('open');
+  inp.focus();
+  inp.selectionStart = inp.selectionEnd = inp.value.length;
+}
+
+function closeMacroModal(save) {
+  if (save && _macroEditIdx >= 0) {
+    const nv = document.getElementById('macro-modal-input').value;
+    macros[_macroEditIdx].text = nv;
+    if (_macroEditBtn) _macroEditBtn.textContent = nv || '(empty)';
+    saveMacros();
+  }
+  document.getElementById('macro-modal').classList.remove('open');
+  _macroEditIdx = -1; _macroEditBtn = null;
+}
+
+// Token insert buttons — click inserts token at cursor position
+document.querySelectorAll('.macro-tok-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    const inp = document.getElementById('macro-modal-input');
+    const tok = b.dataset.tok;
+    const s = inp.selectionStart, e = inp.selectionEnd;
+    inp.value = inp.value.slice(0, s) + tok + inp.value.slice(e);
+    inp.selectionStart = inp.selectionEnd = s + tok.length;
+    inp.focus();
+  });
+});
+
+// Enter = OK, Escape = Cancel
+document.getElementById('macro-modal-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter')  { e.preventDefault(); closeMacroModal(true); }
+  if (e.key === 'Escape') { e.preventDefault(); closeMacroModal(false); }
+});
+
+// Click outside modal box = cancel
+document.getElementById('macro-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('macro-modal')) closeMacroModal(false);
+});
+
+function expandTokens(text) {
+  // {MYCALL}  = your own callsign from Settings
+  // {MYNAME}  = your own operator name from Settings
+  // {CALL}    = callsign in QSO entry panel (the station you're working)
+  // {NAME}    = their name in QSO entry panel
+  // {RST}     = My RST Sent (what you're reporting to them)
+  // {NR}      = current contest serial number (auto-increments after send)
+  let mycall = myCAll || '';
+  let myname = myName || '';
+  let call = '', name = '', rst = '599';
+  const nr = String(cwSerial).padStart(3, '0');
+  try {
+    const pw = window.opener;
+    if (pw) {
+      call = (pw.document.getElementById('callsign')?.value || '').toUpperCase();
+      name =  pw.document.getElementById('name')?.value || '';
+      rst  =  pw.document.getElementById('my_rst_sent')?.value || '599';
+    }
+  } catch(e) {}
+  return text
+    .replace(/\{MYCALL\}/gi,  mycall || '{MYCALL}')
+    .replace(/\{MYNAME\}/gi,  myname || '{MYNAME}')
+    .replace(/\{CALL\}/gi,    call   || '{CALL}')
+    .replace(/\{NAME\}/gi,    name   || '{NAME}')
+    .replace(/\{RST\}/gi,     rst)
+    .replace(/\{NR\}/gi,      nr);
+}
+
+// ── Serial number (NR) helpers ───────────────────────────────────────────────
+function setAutoLog73(on) {
+  autoLog73 = on;
+  cfg.autoLog73 = on; saveSettings();
+}
+
+function setNrEnabled(on) {
+  nrEnabled = on;
+  cfg.nrEnabled = on; saveSettings();
+  const lbl = document.getElementById('nr-status-lbl');
+  if (lbl) lbl.textContent = on
+    ? 'ON — auto-increments on send, logs NR to Remarks'
+    : 'OFF — enable to auto-increment & log to Remarks';
+  const row = document.getElementById('nr-row');
+  if (row) row.style.opacity = on ? '1' : '0.6';
+}
+
+function updateNrDisplay() {
+  const el = document.getElementById('nr-display');
+  if (el) el.textContent = String(cwSerial).padStart(3, '0');
+}
+
+function nrAdj(delta) {
+  cwSerial = Math.max(1, cwSerial + delta);
+  updateNrDisplay();
+  fetch('/api/cw_serial', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({set: cwSerial})});
+}
+
+function nrReset() {
+  if (!confirm('Reset serial number to 1?')) return;
+  cwSerial = 1;
+  updateNrDisplay();
+  fetch('/api/cw_serial', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({reset: 1})});
+}
+
+function nrIncrement() {
+  if (!nrEnabled) return;  // NR toggle must be ON
+  cwSerial += 1;
+  updateNrDisplay();
+  fetch('/api/cw_serial', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({increment: true})});
+  // Log serial to parent window Remarks field
+  try {
+    const pw = window.opener;
+    if (pw) {
+      const rem = pw.document.getElementById('remarks');
+      if (rem) {
+        const cur = rem.value.trim();
+        const tag = `NR: ${String(cwSerial - 1).padStart(3,'0')}`;
+        rem.value = cur ? cur + '  ' + tag : tag;
+      }
+    }
+  } catch(e) {}
+}
+
+function loadMacros() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('cw_macros') || 'null');
+    if (Array.isArray(saved)) {
+      return Array.from({length: MACRO_COUNT}, (_, i) =>
+        saved[i] ? saved[i] : {...(MACRO_DEFAULTS[i] || {label:`M${i+1}`, text:''})});
+    }
+  } catch(e) {}
+  return MACRO_DEFAULTS.map(m => ({...m}));
+}
+
+function saveMacros() {
+  localStorage.setItem('cw_macros', JSON.stringify(macros));
+}
+
+function resetMacros() {
+  if (!confirm('Reset all macros to factory defaults? Your custom macros will be lost.')) return;
+  macros = MACRO_DEFAULTS.map(m => ({...m}));
+  saveMacros();
+  buildMacroGrid();
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// Morse table
+// ════════════════════════════════════════════════════════════════════════════
+function buildMorseTable() {
+  const t = {};
+  [['.-','A'],['-...','B'],['-.-.','C'],['-..','D'],['.','E'],
+   ['..-.','F'],['--.','G'],['....','H'],['..','I'],['.---','J'],
+   ['-.-','K'],['.-..','L'],['--','M'],['-.','N'],['---','O'],
+   ['.--.','P'],['--.-','Q'],['.-.','R'],['...','S'],['-','T'],
+   ['..-','U'],['...-','V'],['.--','W'],['-..-','X'],['-.--','Y'],
+   ['--..','Z'],
+   ['-----','0'],['.----','1'],['..---','2'],['...--','3'],['....-','4'],
+   ['.....','5'],['-....','6'],['--...','7'],['---..','8'],['----.','9'],
+   ['.-.-.-','.'],[' --..--',','],[' ..--..','?'],['.----.','\''],
+   ['-.-.--','!'],['-..-.','/'],['-.--.','('],['-...-','='],
+   ['.-.-.','+'],['-....-','-'],['.-..-.','\"'],['.--.-.','@'],
+  ].forEach(([code,ch]) => t[code] = ch);
+  return t;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Utility
+// ════════════════════════════════════════════════════════════════════════════
+function setStatus(msg, isErr=false) {
+  const el = document.getElementById('status-msg');
+  el.textContent = msg;
+  el.style.color = isErr ? 'var(--warn)' : 'var(--muted)';
+}
+
+// ── Startup ───────────────────────────────────────────────────────────────
+wfInit();
+// Restore AFC range dropdown to saved value
+(()=>{
+  const sel=document.getElementById('afc-range-sel');
+  if(sel) sel.value=String(gAfcRange);
+})();
+</script>
+</body>
+</html>
