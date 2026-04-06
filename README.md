@@ -115,6 +115,20 @@ Bug reports, feature requests, and general discussion all welcome.
 
 ---
 
+## ❤️ Support SDRLogger+
+
+SDRLogger+ is built by a fellow ham, for the community — free to use, free to share. If it's added value to your shack, a small donation keeps the coffee hot and the code flowing.
+
+<div align="center">
+
+**[💰 Donate via PayPal — Thank You!](https://www.paypal.com/donate/?business=NP2ZQS4LR454L&no_recurring=0&item_name=Built+by+a+fellow+ham%2C+for+the+community.++Free+to+use%2C+free+to+share.+A+small+donation+keeps+the+code+flowing.+73+de+N8SDR&currency_code=USD)**
+
+*73 de N8SDR*
+
+</div>
+
+---
+
 ## 🆓 License & Credits
 
 SDRLogger+ is free, open-source software released under the **MIT License**.
