@@ -154,8 +154,8 @@
 
   <!-- OVERVIEW -->
   <h2>Overview</h2>
-  <p>SDRLogger+ is a browser-based ham radio contact logger designed for use with <strong>Expert Electronics TCI/SDR compatible rigs</strong> <em><strong>(EESDR, Anan, Hermes-Lite transceivers)</strong></em> via the TCI (Transceiver Control Interface) protocol, with full waterfall integration. It provides real-time frequency, mode and callsign synchronisation between your radio and the logging form, a live DX cluster display, distance mapping, ADIF import/export, and solar propagation data — all in a single dark-themed interface. SDRLogger+ also supports any <strong>HamLib-compatible rig</strong> for frequency/mode sync and DX spot tuning.</p>
-  <p>SDRLogger+ also features <strong>automatic digital mode QSO logging</strong> — QSOs completed in WSJT-X, JTDX, MSHV, VarAC, and other digital applications are captured automatically over UDP or TCP and saved to your log without any manual entry. An integrated <strong>Rotator Control</strong> panel can command your antenna rotator via PstRotator, GS-232, or EasyComm II whenever a DX station is looked up, automatically pointing your beam at the short-path or long-path bearing. The built-in <strong>CW Keyer / Decoder</strong> popup lets you send CW text via TCI or HamLib, decode incoming CW from TCI audio or any sound device, and fire programmable macro buttons with live {CALL}, {NAME}, and {RST} substitution from the QSO entry form.</p>
+  <p>SDRLogger+ is a browser-based ham radio contact logger designed for use with <strong>Expert Electronics TCI/SDR compatible rigs</strong> <em><strong>(EESDR, Anan, Hermes-Lite transceivers)</strong></em> via the TCI (Transceiver Control Interface) protocol, with full waterfall integration. It provides real-time frequency, mode and callsign synchronisation between your radio and the logging form, a live DX cluster display, distance mapping, ADIF import/export, and solar propagation data — all in a single dark-themed interface. SDRLogger+ also supports <strong>flrig</strong> (W1HKJ) for clean XML-RPC rig control with bidirectional frequency/mode control, and any <strong>HamLib-compatible rig</strong> via rigctld — all three rig paths can run simultaneously with TCI taking priority. CW keying is supported via <strong>TCI</strong> (Thetis), <strong>K1EL WinKeyer</strong> (USB/serial), or <strong>HamLib</strong> (rigctld).</p>
+  <p>SDRLogger+ also features <strong>automatic digital mode QSO logging</strong> — QSOs completed in WSJT-X, JTDX, MSHV, VarAC, and other digital applications are captured automatically over UDP or TCP and saved to your log without any manual entry. Completed QSOs can be automatically uploaded in real-time to <strong>QRZ Logbook, ARRL LoTW, Club Log,</strong> and <strong>eQSL.cc</strong>. An integrated <strong>Rotator Control</strong> panel can command your antenna rotator via PstRotator, GS-232, or EasyComm II whenever a DX station is looked up, automatically pointing your beam at the short-path or long-path bearing. The built-in <strong>CW Keyer / Decoder</strong> popup lets you send CW text via TCI or HamLib, decode incoming CW from TCI audio or any sound device, and fire programmable macro buttons with live {CALL}, {NAME}, and {RST} substitution from the QSO entry form.</p>
 
   <!-- FIRST RUN -->
   <h2>First Run Setup</h2>
@@ -171,13 +171,14 @@
 
     <h3>2 — TCI / Thetis Connection</h3>
     <p>Enter your Thetis TCI host (default <code>127.0.0.1</code>) and port (default <code>50001</code>). When connected, the <span class="badge badge-green">TCI LIVE</span> badge lights up in the header and the logging form auto-fills frequency, mode, and spotted callsigns.</p>
+    <p>SDRLogger+ sends rig control commands back to Thetis via TCI — selecting a <strong>Band</strong> from the QSO entry panel QSYs Thetis to that band's center frequency, and selecting a <strong>Mode</strong> sends the corresponding modulation change. Digital log modes (FT8, FT4, JS8, DATA, WSPR, VarAC, PSK31, etc.) are automatically mapped to <strong>DIGU</strong> (Digital Upper) before being sent — Thetis does not use software mode names directly.</p>
     <div class="tip">If you change the TCI host or port in Settings and click <strong>Save Settings</strong>, SDRLogger+ automatically drops and re-establishes the TCI connection — no restart required.</div>
 
     <h3>3 — Callsign Lookup (QRZ or HamQTH)</h3>
     <p>SDRLogger+ supports two callsign lookup services. Configure one or both — <strong>QRZ is tried first</strong>, with HamQTH used automatically as a fallback if QRZ is not configured or the callsign is not found.</p>
 
     <h4 style="margin-top:10px;">QRZ.com</h4>
-    <p>Enter your QRZ.com username and password. An active <strong>QRZ XML Data subscription</strong> ($35.95/yr) is required for full lookups. When a callsign is entered, SDRLogger+ automatically fills the Name and QTH fields and updates the distance map.</p>
+    <p>Enter your QRZ.com username and password. An active <a href="https://shop.qrz.com/collections/subscriptions" target="_blank" style="color:var(--accent)"><strong>QRZ XML Data subscription</strong></a> is required for full lookups. When a callsign is entered, SDRLogger+ automatically fills the Name and QTH fields and updates the distance map.</p>
     <p>To upload each saved QSO automatically to your QRZ online logbook, enter your <strong>QRZ Logbook API Key</strong> (found under qrz.com → My Logbook → Settings → API Key). The <strong>Auto-upload QSOs to QRZ Logbook</strong> checkbox controls whether uploads fire — it is <strong>ON by default</strong>. Uncheck it to disable uploads while keeping your key saved.</p>
 
     <h4 style="margin-top:10px;">HamQTH.com</h4>
@@ -199,17 +200,89 @@
     <p>Once enabled, each QSO is written to a temporary ADIF file and passed to TQSL with the flags <code>-d -u -x -l &lt;Station Location&gt;</code>, which signs the record with your certificate and uploads it to LoTW in the background. The QSO save confirmation message shows <strong>LoTW ✓</strong> on success or a brief error if the upload fails. For full technical details on the submission protocol see the <a href="https://lotw.arrl.org/lotw-help/developer-submit-qsos/" target="_blank" style="color:var(--accent)">LoTW developer documentation ↗</a>.</p>
     <h4 style="margin-top:10px;">Club Log</h4>
     <p>SDRLogger+ can upload each QSO in real-time to <a href="https://clublog.org" target="_blank" style="color:var(--accent)">Club Log</a> — the popular online tool for DXCC tracking, contest logging, and log verification used by operators worldwide.</p>
-    <p>Club Log uses its own credential system — you will need three things from your Club Log account:</p>
-    <ul style="font-family:var(--mono);font-size:12px;line-height:2;color:var(--text);margin:6px 0 6px 18px;">
-      <li><strong>Email</strong> — the email address registered with Club Log</li>
-      <li><strong>Application Password</strong> — a separate password for API access, set in your Club Log account settings under <em>Application Password</em>. This is <strong>not</strong> your regular login password</li>
-      <li><strong>Developer API Key</strong> — a per-application key that identifies SDRLogger+ to the Club Log API. Request yours at <a href="https://clublog.org/requestapikey.php" target="_blank" style="color:var(--accent)">clublog.org/requestapikey.php</a></li>
-    </ul>
-    <p>SDRLogger+ uses the Club Log <strong>real-time API</strong> (<code>realtime.php</code>), which is the correct endpoint for single-QSO uploads as you log. The batch endpoint (<code>putlogs.php</code>) is for bulk ADIF imports only — using it for repeated single-QSO uploads triggers automatic IP blocking and must not be used here.</p>
-    <div class="tip" style="border-color:#ff9944;"><strong style="color:#ff9944;">⚠ Important — IP blocking:</strong> Club Log automatically firewalls IP addresses that send repeated failed authentication requests. Always click <strong>🔑 Test Credentials</strong> and confirm success before enabling auto-upload. If you change your Application Password in Club Log, update it in SDRLogger+ Settings immediately — uploads are automatically halted after a single 403 error to protect your IP.</div>
+    <p>Club Log uses its own credential system — enter your Club Log <strong>email</strong> and an <strong>Application Password</strong> (generated at clublog.org → Settings → App Passwords). The application API key is built into SDRLogger+ — you do not need to obtain or enter one.</p>
+    <p>Optionally set a <strong>Callsign</strong> to upload under (leave blank to use your station callsign) and an <strong>Upload Designator</strong> — a single letter (default <code>B</code>) added to uploaded records so they are not duplicated on future uploads.</p>
+    <p>The <strong>🔑 Test Credentials</strong> button uses Club Log's safe <code>getlotwstate.php</code> endpoint to verify your email, password, and callsign without uploading any data — this will not trigger IP blocking.</p>
+    <div class="tip" style="border-color:#ff9944;"><strong style="color:#ff9944;">⚠ Important — IP blocking:</strong> Club Log automatically firewalls IP addresses that send repeated failed authentication requests to its real-time upload endpoint. SDRLogger+ implements a <strong>one-strike rule</strong>: if a single 403 error is received during a real-time upload, all further uploads are immediately disabled until you correct your credentials in Settings and re-test. This protects your IP from being blocked.</div>
 
     <div class="tip"><strong>LoTW upload is off by default.</strong> It only activates once you have checked <em>Auto-upload QSOs to LoTW</em> in Settings and saved. QRZ Logbook and LoTW uploads are independent — you can enable both, either, or neither.<br><br>
     <strong>PATH note:</strong> If you enter just <code>tqsl</code> as the path (without a full directory), TQSL must be added to your Windows <strong>Environment Variables → Path</strong> (System Properties → Advanced → Environment Variables). If you use the full path to <code>tqsl.exe</code> this is not required.</div>
+
+    <h4 style="margin-top:10px;">eQSL.cc</h4>
+    <p>SDRLogger+ can upload each QSO in real-time to <a href="https://www.eqsl.cc" target="_blank" style="color:var(--accent)">eQSL.cc</a> — the free electronic QSL card exchange system used by operators worldwide.</p>
+    <p>Setup is simple — just a username and password:</p>
+    <ol style="font-family:var(--mono);font-size:12px;line-height:2;color:var(--text);margin:8px 0 8px 18px;">
+      <li>Create a free account at <a href="https://www.eqsl.cc" target="_blank" style="color:var(--accent)">eqsl.cc</a> if you don't already have one</li>
+      <li>In SDRLogger+ <strong>⚙ Settings → eQSL.cc</strong>, enter your eQSL username and password</li>
+      <li>Click <strong>🔑 Test Credentials</strong> to confirm they are accepted</li>
+      <li>Check <strong>Auto-upload QSOs to eQSL.cc</strong> and click <strong>Save Settings</strong></li>
+    </ol>
+    <p>Each saved QSO is uploaded immediately in ADIF format. The ADIF header includes <code>PROGRAMID:10&gt;SDRLogger+</code> which suppresses the "Logger not found" notice on the eQSL site. Digital mode QSOs logged via WSJT-X, JTDX, MSHV, or VarAC are also uploaded automatically.</p>
+    <div class="tip">eQSL does not block IP addresses on repeated requests, so there is no risk of being locked out. The save toast notification will show <strong>· eQSL ✓</strong> on a successful upload.</div>
+  </div>
+
+  <!-- FLRIG -->
+  <h2>flrig Rig Control</h2>
+  <div class="section-card">
+    <p><strong>flrig</strong> (by W1HKJ, author of fldigi) is a standalone transceiver control application that exposes an XML-RPC server on your local network. SDRLogger+ connects to it as a client for frequency/mode following, DX spot tuning, and <strong>bidirectional control</strong> — changing the band or mode in SDRLogger+ pushes the change to the radio via flrig, and changes on the radio update SDRLogger+ automatically.</p>
+    <p>flrig is the recommended rig control option for most users. It has a straightforward GUI for rig setup, supports all major Icom, Yaesu, Kenwood, and Elecraft transceivers, and provides the cleanest integration path of all available rig control options.</p>
+
+    <h3>How It Works</h3>
+    <p>flrig runs as a small GUI application on your Windows PC. It handles the direct serial/USB connection to your transceiver and exposes all rig functions over an XML-RPC interface on <code>localhost:12345</code> (default). SDRLogger+ polls this interface every 1.5 seconds for frequency and mode updates, and sends tune commands when you click a DX spot.</p>
+    <div class="tip">Priority order for rig control: <strong>TCI → flrig → HamLib</strong>. All three can be enabled simultaneously — each acts as a fallback for the one before it. If you run TCI for your Expert Electronics SDR and flrig for a second radio, both work at the same time without conflict.</div>
+
+    <h3>Step 1 — Install flrig</h3>
+    <p>Download the latest Windows installer from W1HKJ's site:
+      <a href="https://w1hkj.com/files/flrig/" target="_blank" rel="noopener" style="color:var(--accent);">w1hkj.com/files/flrig/ ↗</a>.
+      Run the installer — no command-line setup required.</p>
+
+    <h3>Step 2 — Configure Your Rig in flrig</h3>
+    <ol style="font-family:var(--mono);font-size:12px;line-height:2;color:var(--text);margin:8px 0 8px 18px;">
+      <li>Open flrig and go to <strong>Config → Setup → Transceiver</strong></li>
+      <li>Select your rig from the <strong>Rig</strong> dropdown</li>
+      <li>Select the correct <strong>COM port</strong> (check Device Manager → Ports if unsure)</li>
+      <li>Set the <strong>Baud Rate</strong> to match your radio's CAT/CI-V menu setting</li>
+      <li>Click <strong>Init</strong> — flrig should show your rig's frequency and mode in its window</li>
+    </ol>
+    <div class="tip">For Icom radios: set <strong>CI-V Transceive ON</strong> in the rig's menu (SET → Connectors → CI-V) so flrig receives frequency updates automatically when you turn the VFO.</div>
+
+    <h3>Step 3 — Enable in SDRLogger+</h3>
+    <ol style="font-family:var(--mono);font-size:12px;line-height:2;color:var(--text);margin:8px 0 8px 18px;">
+      <li>Open <strong>⚙ Settings → flrig</strong></li>
+      <li>Check <strong>Enable flrig rig control</strong></li>
+      <li>Leave Host as <code>127.0.0.1</code> and Port as <code>12345</code> unless you changed flrig's XML-RPC port</li>
+      <li>Click <strong>Test Connection</strong> — should return your rig name and current frequency</li>
+      <li>Click <strong>Save Settings</strong></li>
+    </ol>
+    <p>Once connected the <strong>FLRIG: &lt;rig name&gt;</strong> badge appears in the header (blue). Frequency and mode follow automatically. Clicking a DX cluster spot tunes the rig instantly. Changing the band or mode selector in SDRLogger+ pushes the change back to the radio.</p>
+
+    <h3>Digital Mode Name (Icom / Yaesu / Kenwood)</h3>
+    <p>When clicking a DX cluster spot for FT8, FT4, JS8, WSPR, or PSK31, SDRLogger+ needs to tell flrig which audio-passthrough mode name to use. Different manufacturers use different names:</p>
+    <table>
+      <thead><tr><th>Radio</th><th>Mode Name to Enter</th></tr></thead>
+      <tbody>
+        <tr><td>Icom (IC-9100, IC-7300, IC-7610, IC-705…)</td><td><code>USB-D</code></td></tr>
+        <tr><td>Kenwood (TS-890, TS-590…)</td><td><code>DATA-U</code></td></tr>
+        <tr><td>Yaesu (FT-991A, FT-DX10…)</td><td><code>DATA-U</code> or <code>PKT-U</code></td></tr>
+      </tbody>
+    </table>
+    <p>Set this in <strong>Settings → flrig → Digital Mode Name</strong>. Leave blank to let SDRLogger+ auto-detect (may not work on all rigs).</p>
+    <div class="tip"><strong>RTTY Mode Name</strong> — a separate field for RTTY cluster spots. Leave blank for native FSK RTTY (default). Set to <code>USB-D</code> if you run RTTY via fldigi in AFSK mode, which routes audio through the USB-D passthrough just like FT8.</div>
+
+    <h3>What flrig Controls</h3>
+    <table>
+      <thead><tr><th>Feature</th><th>flrig</th><th>HamLib</th><th>TCI</th></tr></thead>
+      <tbody>
+        <tr><td>Frequency following</td><td style="color:var(--accent2)">✓</td><td style="color:var(--accent2)">✓</td><td style="color:var(--accent2)">✓</td></tr>
+        <tr><td>Mode following</td><td style="color:var(--accent2)">✓</td><td style="color:var(--accent2)">✓</td><td style="color:var(--accent2)">✓</td></tr>
+        <tr><td>Tune to DX spot</td><td style="color:var(--accent2)">✓</td><td style="color:var(--accent2)">✓</td><td style="color:var(--accent2)">✓</td></tr>
+        <tr><td>CW keying</td><td style="color:var(--muted)">✗ not supported</td><td style="color:var(--accent2)">✓</td><td style="color:var(--accent2)">✓ TCI only</td></tr>
+        <tr><td>Bidirectional control</td><td style="color:var(--accent2)">✓ band/mode push to radio</td><td style="color:var(--muted)">✗</td><td style="color:var(--accent2)">✓</td></tr>
+        <tr><td>GUI rig setup</td><td style="color:var(--accent2)">✓ easy GUI</td><td style="color:var(--muted)">✗ command-line</td><td style="color:var(--muted)">N/A</td></tr>
+        <tr><td>Cross-platform</td><td style="color:var(--accent2)">✓ Win/Mac/Linux</td><td style="color:var(--accent2)">✓</td><td style="color:var(--muted)">Windows focused</td></tr>
+        <tr><td>Shared by other apps</td><td style="color:var(--accent2)">✓ XML-RPC</td><td style="color:var(--accent2)">✓ TCP</td><td style="color:var(--muted)">N/A</td></tr>
+      </tbody>
+    </table>
   </div>
 
   <!-- HAMLIB -->
@@ -218,7 +291,7 @@
     <p>SDRLogger+ can connect to any <strong>HamLib-compatible transceiver</strong> via the <code>rigctld</code> network daemon — giving non-TCI rig owners full frequency/mode following and DX spot tuning. Over 300 radios are supported including Yaesu FT-991A, FT-DX10, Icom IC-7300, IC-7610, IC-705, Kenwood TS-590, TS-890, and many more.</p>
 
     <h3>How It Works</h3>
-    <p>HamLib's <code>rigctld</code> program runs on your PC and acts as a small TCP server on port 4532. SDRLogger+ connects to it as a client, polling for frequency and mode updates every 1.5 seconds and sending tune commands when you click a DX spot.</p>
+    <p>HamLib's <code>rigctld</code> program runs on your PC and acts as a small TCP server on port 4532. SDRLogger+ connects to it as a client, polling for frequency and mode updates every 750 ms and sending tune commands when you click a DX spot.</p>
     <div class="tip">TCI and HamLib can both be enabled at the same time. <strong>TCI always takes priority</strong> — HamLib only updates the form and tunes the rig when TCI is not connected. This lets TCI SDR users enable HamLib as a fallback without any conflict.</div>
 
     <h3>Step 1 — Install HamLib</h3>
@@ -234,6 +307,7 @@
     <table>
       <thead><tr><th>Rig</th><th>Model #</th><th>Example command</th></tr></thead>
       <tbody>
+        <tr><td>Icom IC-9100</td><td>3068</td><td><code>rigctld.exe -m 3068 -r COM3 -s 19200</code></td></tr>
         <tr><td>Icom IC-7300</td><td>3073</td><td><code>rigctld.exe -m 3073 -r COM3 -s 19200</code></td></tr>
         <tr><td>Icom IC-7610</td><td>3078</td><td><code>rigctld.exe -m 3078 -r COM4 -s 115200</code></td></tr>
         <tr><td>Icom IC-705</td><td>3085</td><td><code>rigctld.exe -m 3085 -r COM5 -s 19200</code></td></tr>
@@ -276,6 +350,57 @@
     <div class="tip">A full list of supported radios is available on the HamLib GitHub wiki: <a href="https://github.com/Hamlib/Hamlib/wiki/Supported-Radios" target="_blank" rel="noopener" style="color:var(--accent);">github.com/Hamlib/Hamlib/wiki/Supported-Radios ↗</a>. For full rigctld command reference see the <a href="https://hamlib.sourceforge.net/html/rigctld.1.html" target="_blank" rel="noopener" style="color:var(--accent);">rigctld man page ↗</a>.</div>
   </div>
 
+  <!-- WINKEYER -->
+  <h2>K1EL WinKeyer — Hardware CW Keyer</h2>
+  <div class="section-card">
+    <p>SDRLogger+ can connect to a <strong>K1EL WinKeyer</strong> (WK1, WK2, WK3, WKmini, or compatible clone) via USB/serial for dedicated hardware CW keying. This is the recommended CW option for operators who don't use TCI — the WinKeyer handles all CW timing, weighting, and PTT control in hardware, independent of PC timing jitter.</p>
+
+    <h3>How It Works</h3>
+    <p>SDRLogger+ speaks the K1EL WinKeyer host protocol at <strong>1200 baud, 8-N-2</strong> (8 data bits, no parity, 2 stop bits). When you type text in the CW Keyer panel and click <strong>SEND</strong>, SDRLogger+ sends raw ASCII characters to the WinKeyer over the serial port. The WinKeyer converts them to perfectly timed CW and keys your transmitter via its Key and PTT output jacks.</p>
+    <p>A background thread monitors the connection and automatically reconnects if the WinKeyer is unplugged and re-plugged, or if the USB port resets.</p>
+    <div class="tip"><strong>CW priority order:</strong> TCI → WinKeyer → HamLib. If TCI is connected, CW always routes through Thetis. WinKeyer is used when TCI is not connected. HamLib's <code>\send_morse</code> is the last fallback.</div>
+
+    <h3>Step 1 — Connect the WinKeyer</h3>
+    <ol>
+      <li>Plug your WinKeyer into a USB port. Windows assigns a COM port (e.g. <code>COM2</code>).</li>
+      <li>If you don't know the COM port, check <strong>Device Manager → Ports (COM &amp; LPT)</strong>.</li>
+      <li>Connect the WinKeyer's <strong>Key</strong> output to your radio's CW key jack, and optionally the <strong>PTT</strong> output to your radio's PTT jack.</li>
+    </ol>
+
+    <h3>Step 2 — Enable in SDRLogger+</h3>
+    <ol>
+      <li>Go to <strong>⚙ Settings → K1EL WinKeyer</strong></li>
+      <li>Check <strong>Enable WinKeyer</strong></li>
+      <li>Select your COM port from the dropdown (SDRLogger+ auto-detects available ports)</li>
+      <li>Set your preferred defaults:
+        <ul>
+          <li><strong>Default WPM</strong> — initial sending speed (overridden by the CW panel slider)</li>
+          <li><strong>Key Output</strong> — Port 1 (default), Port 2, or Both</li>
+          <li><strong>Keyer Mode</strong> — Iambic B (default), Iambic A, Ultimatic, or Bug (for paddle input)</li>
+          <li><strong>Enable PTT</strong> — check if your WinKeyer drives a PTT line to the radio</li>
+          <li><strong>PTT Lead / Tail</strong> — delay before first element / after last element (ms)</li>
+        </ul>
+      </li>
+      <li>Click <strong>Test WinKeyer</strong> — a confirmation shows the firmware version (e.g. <em>✓ WinKeyer v31 on COM2</em>)</li>
+      <li>Click <strong>Save Settings</strong></li>
+    </ol>
+    <p>Once connected, the CW Keyer popup shows a <span style="color:#f5a623;font-weight:600;">WinKeyer</span> badge in the top-right corner, and the TX path label shows <em>via WinKeyer</em>.</p>
+
+    <h3>What WinKeyer Controls</h3>
+    <table>
+      <thead><tr><th>Feature</th><th>WinKeyer</th><th>TCI</th><th>HamLib</th></tr></thead>
+      <tbody>
+        <tr><td>CW keying (text → Morse)</td><td style="color:var(--accent2)">✓ hardware</td><td style="color:var(--accent2)">✓ Thetis CWX</td><td style="color:var(--accent2)">✓ rigctld</td></tr>
+        <tr><td>WPM speed control</td><td style="color:var(--accent2)">✓</td><td style="color:var(--accent2)">✓</td><td style="color:var(--accent2)">✓</td></tr>
+        <tr><td>PTT output</td><td style="color:var(--accent2)">✓ hardware PTT</td><td style="color:var(--accent2)">✓ via TCI</td><td style="color:var(--muted)">✗ depends on rig</td></tr>
+        <tr><td>Paddle / straight key input</td><td style="color:var(--accent2)">✓ Iambic A/B, Ultimatic, Bug</td><td style="color:var(--muted)">✗ not via TCI</td><td style="color:var(--muted)">✗</td></tr>
+        <tr><td>Frequency / mode control</td><td style="color:var(--muted)">✗ CW only</td><td style="color:var(--accent2)">✓ full rig control</td><td style="color:var(--accent2)">✓ full rig control</td></tr>
+      </tbody>
+    </table>
+    <div class="tip"><strong>WinKeyer + HamLib together:</strong> Enable both WinKeyer and HamLib for the best non-TCI experience — HamLib handles frequency/mode following and DX spot tuning, while WinKeyer handles CW keying with hardware-quality timing. CW goes through WinKeyer (higher priority); rig control goes through HamLib.</div>
+    <div class="tip"><strong>Sharing COM ports:</strong> The WinKeyer uses its own dedicated COM port. It does not share a port with rigctld, flrig, or any other CAT control software. Your radio's CAT port and the WinKeyer port are separate USB connections.</div>
+  </div>
+
   <!-- SETTINGS REFERENCE -->
   <h2>Settings Reference</h2>
   <div class="section-card">
@@ -284,8 +409,10 @@
       <tbody>
         <tr><td><code>My Callsign</code></td><td>Your station callsign. Displayed in header and used for cluster login.</td></tr>
         <tr><td><code>Grid Square</code></td><td>Maidenhead locator for distance/bearing calculations.</td></tr>
+        <tr><td><code>ITU Region</code></td><td>Your ITU region: <strong>1</strong> (Europe/Africa/Russia), <strong>2</strong> (Americas, default), <strong>3</strong> (Asia-Pacific). Used to check whether your VFO frequency is within the ITU band allocation — a warning toast appears if you tune outside the region's allocation for the selected band.</td></tr>
+        <tr><td><code>TCI — Enable</code></td><td>Enable or disable TCI connection to Thetis. Disable if you are running flrig-only and don't want SDRLogger+ attempting TCI reconnects. The TCI LIVE badge is hidden when disabled.</td></tr>
         <tr><td><code>TCI Host / Port</code></td><td>Address of Thetis TCI WebSocket server (default 127.0.0.1:50001). Changing either value and saving automatically reconnects — no restart needed.</td></tr>
-        <tr><td><code>QRZ Username / Password</code></td><td>QRZ.com credentials for XML lookup. Requires active data subscription ($35.95/yr).</td></tr>
+        <tr><td><code>QRZ Username / Password</code></td><td>QRZ.com credentials for XML lookup. Requires an active <a href="https://shop.qrz.com/collections/subscriptions" target="_blank" style="color:var(--accent)">XML Data subscription</a>.</td></tr>
         <tr><td><code>QRZ Logbook API Key</code></td><td>Your QRZ Logbook API key (qrz.com → My Logbook → Settings). The key is stored masked (hidden) for security.</td></tr>
         <tr><td><code>Auto-upload QSOs to QRZ Logbook</code></td><td>Checkbox — <strong style="color:#ff4444;">ON by default.</strong> Uncheck to disable automatic QSO uploads to QRZ while keeping your key saved.</td></tr>
         <tr><td><code>HamQTH Username / Password</code></td><td>HamQTH.com credentials for free callsign lookup. Used as primary source if QRZ is not configured, or as fallback if QRZ does not find a callsign.</td></tr>
@@ -293,20 +420,37 @@
         <tr><td><code>Station Location</code></td><td>The Station Location name as defined in TQSL (File → Station Locations). More precise than callsign alone — required if you operate from multiple locations. Leave blank to fall back to your callsign certificate.</td></tr>
         <tr><td><code>Auto-upload QSOs to LoTW</code></td><td>Checkbox — <strong>off by default.</strong> Enable to automatically sign and upload each saved QSO to ARRL LoTW via TQSL. Requires a valid callsign certificate already loaded in TQSL.</td></tr>
         <tr><td><code>Club Log Email</code></td><td>The email address registered with your Club Log account.</td></tr>
-        <tr><td><code>Club Log Application Password</code></td><td>A separate password for API access set in Club Log account settings — <strong>not</strong> your regular login password.</td></tr>
+        <tr><td><code>Club Log Password</code></td><td>Your Club Log <strong>Application Password</strong> — generate one at clublog.org → Settings → App Passwords. Recommended over your main login password for security. The developer API key is built into SDRLogger+ — no separate key entry needed.</td></tr>
         <tr><td><code>Club Log Callsign</code></td><td>The callsign to upload under. Leave blank to use your station callsign.</td></tr>
-        <tr><td><code>Club Log API Key</code></td><td>Developer API key identifying SDRLogger+ to Club Log. Request at clublog.org/requestapikey.php. Stored masked for security.</td></tr>
-        <tr><td><code>Auto-upload QSOs to Club Log</code></td><td>Checkbox — <strong>off by default.</strong> Uses the real-time API only. Always test credentials first — repeated auth failures cause IP blocking.</td></tr>
+        <tr><td><code>Upload Designator</code></td><td>Single letter (default <code>B</code>) added to uploaded records to prevent duplicate uploads on future sessions.</td></tr>
+        <tr><td><code>Auto-upload QSOs to Club Log</code></td><td>Checkbox — <strong>off by default.</strong> Always test credentials first with the 🔑 Test button. On a 403 error, uploads auto-disable (one-strike rule) to prevent IP blocking.</td></tr>
+        <tr><td><code>eQSL Username / Password</code></td><td>Your eQSL.cc account credentials. Used for real-time QSO uploads to eQSL.cc.</td></tr>
+        <tr><td><code>Auto-upload QSOs to eQSL.cc</code></td><td>Checkbox — <strong>off by default.</strong> Uploads each saved QSO immediately. Digital mode QSOs from WSJT-X / VarAC etc. are also uploaded automatically.</td></tr>
+        <tr><td><code>flrig — Enable</code></td><td>Activates flrig XML-RPC rig control. Requires flrig running with your rig configured. Acts as second-priority rig path after TCI.</td></tr>
+        <tr><td><code>flrig Host / Port</code></td><td>Address of the flrig XML-RPC server. Default <code>127.0.0.1:12345</code>. Only change if flrig is running on a different machine or port.</td></tr>
+        <tr><td><code>flrig — Digital Mode Name</code></td><td>The mode name flrig sends to the radio for FT8/FT4/JS8/WSPR/PSK31 cluster spots. Use <code>USB-D</code> for Icom, <code>DATA-U</code> for Kenwood/Yaesu. Leave blank to auto-detect.</td></tr>
+        <tr><td><code>flrig — RTTY Mode Name</code></td><td>The mode name sent for RTTY cluster spots. Leave blank for native FSK RTTY. Set to <code>USB-D</code> if using fldigi in AFSK mode.</td></tr>
+        <tr><td><code>HamLib — Enable</code></td><td>Activates HamLib rig control via rigctld. Requires rigctld running separately. Third-priority rig path after TCI and flrig.</td></tr>
+        <tr><td><code>HamLib Host / Port</code></td><td>Address of the rigctld TCP server. Default <code>127.0.0.1:4532</code>.</td></tr>
+        <tr><td><code>WinKeyer — Enable</code></td><td>Activates K1EL WinKeyer hardware CW keyer. Auto-connects on the configured COM port at 1200 baud, 8-N-2.</td></tr>
+        <tr><td><code>WinKeyer COM Port</code></td><td>The serial port assigned to your WinKeyer (e.g. <code>COM2</code>). The dropdown auto-detects available ports on your system.</td></tr>
+        <tr><td><code>WinKeyer Default WPM</code></td><td>Initial CW speed (5–99 WPM). Can be overridden at any time from the CW panel speed slider.</td></tr>
+        <tr><td><code>WinKeyer Key Output</code></td><td>Which output port keys the radio: Port 1 (default), Port 2, or Both. Must match your physical wiring.</td></tr>
+        <tr><td><code>WinKeyer Keyer Mode</code></td><td>Paddle mode: Iambic B (default), Iambic A, Ultimatic, or Bug. Only affects paddle input — host-mode text sending works in any mode.</td></tr>
+        <tr><td><code>WinKeyer PTT</code></td><td>Enable to have the WinKeyer assert PTT before keying. Connect the WinKeyer PTT jack to your radio's PTT input.</td></tr>
+        <tr><td><code>WinKeyer PTT Lead / Tail</code></td><td>Lead-in delay before the first CW element, and tail delay after the last element (0–250 ms, in 10 ms steps).</td></tr>
+        <tr><td><code>Debug &amp; Diagnostics — Download Report</code></td><td>Generates and downloads a plain-text <code>.txt</code> file containing your rig connection status, sanitized settings (no passwords), and the last 200 internal log entries. Attach this file when reporting a bug on GitHub or Discord.</td></tr>
         <tr><td><code>Cluster 1/2/3</code></td><td>Telnet DX cluster server and port. Enable each independently.</td></tr>
         <tr><td><code>Spothole.app API</code></td><td>Aggregated REST spot feed. Configure age, source type, and band filter.</td></tr>
         <tr><td><code>Band Filter</code></td><td>Comma-separated bands to show (e.g. <code>20m,15m,10m</code>). Blank = all.</td></tr>
-        <tr><td><code>Mode Filter</code></td><td>Comma-separated modes to show (e.g. <code>FT8,CW</code>). Blank = all.</td></tr>
+        <tr><td><code>Mode Filter</code></td><td>Comma-separated modes to show (e.g. <code>FT8,CW,USB,LSB</code>). Blank = all. Entering <code>SSB</code> automatically matches <code>USB</code>, <code>LSB</code>, and <code>SSB</code> — cluster spots are almost always tagged USB or LSB rather than the generic SSB abbreviation.</td></tr>
         <tr><td><code>Max Spots</code></td><td>Maximum number of spots shown in the list at once (1–100, default 25).</td></tr>
         <tr><td><code>DXCC Entity Filter</code></td><td>Comma-separated callsign prefixes (e.g. <code>W,VE,DL</code>). Only DX calls matching a prefix are shown. Blank = all.</td></tr>
         <tr><td><code>CQ Zone Filter</code></td><td>Comma-separated CQ zone numbers (e.g. <code>4,5,14</code>). Blank = all zones.</td></tr>
         <tr><td><code>Continent Filter</code></td><td>Comma-separated continent codes: <code>NA SA EU AF AS OC</code>. Blank = all continents.</td></tr>
         <tr><td><code>Highlight Hot Stations</code></td><td>Checkbox to enable red highlighting of watchlist callsigns in the spot list.</td></tr>
         <tr><td><code>Hot Stations Watchlist</code></td><td>Comma-separated callsigns to highlight in red when spotted (e.g. <code>DX0DX,VK9XX</code>).</td></tr>
+        <tr><td><code>Announce via speech</code></td><td>When checked, a voice announcement plays each time a watchlist callsign is spotted. Repeats at most once every 15 minutes per callsign to prevent continuous alerts if a DXpedition is heavily spotted.</td></tr>
         <tr><td><code>Text Size</code></td><td>UI zoom level: Normal, Large (×1.18), X-Large (×1.30).</td></tr>
         <tr><td><code>Panadapter Spot Color</code></td><td>Color used for spot markers on the Thetis or EESDR panadapter display.</td></tr>
         <tr><td><code>Digital App — UDP Listener</code></td><td>Enable to receive QSOLogged packets from WSJT-X, JTDX, MSHV (binary) or VarAC/Log4OM ADIF-over-UDP. Default port 2237.</td></tr>
@@ -327,8 +471,8 @@
       <tbody>
         <tr><td><code>Callsign</code></td><td>Required. Auto-fills from TCI spot activation or DX cluster click. Triggers QRZ lookup on focus-out.</td></tr>
         <tr><td><code>Date / Time UTC</code></td><td>Time runs live (UTC) until you click Save QSO. You can manually override if needed.</td></tr>
-        <tr><td><code>Band / Mode</code></td><td>Auto-set from TCI frequency and mode. Mode also sets default RST values (59 / 559 / −10 dB).</td></tr>
-        <tr><td><code>Frequency</code></td><td>Auto-filled from TCI in MHz.</td></tr>
+        <tr><td><code>Band / Mode</code></td><td>Auto-set from TCI or flrig frequency and mode. Changing the band or mode manually pushes the change to the radio (bidirectional). Mode also sets default RST values (59 / 559 / −10 dB).</td></tr>
+        <tr><td><code>Frequency</code></td><td>Auto-filled from TCI or flrig in MHz. WARC bands (60m, 30m, 17m, 12m) are fully supported.</td></tr>
         <tr><td><code>RST Sent / Rcvd</code></td><td>Defaults to 59 (SSB), 559 (CW), or −10 dB (digital) based on the current mode. You can type over these values at any time — once edited, they are preserved for the rest of that QSO and will not revert. RST only resets automatically when the mode actually changes or the form is cleared for a new QSO.</td></tr>
         <tr><td><code>Contest / Event</code></td><td>Optional label stored with the QSO.</td></tr>
         <tr><td><code>Remarks</code></td><td>Free-text notes, antenna info, exchange data, etc.</td></tr>
@@ -366,15 +510,16 @@
     </ul>
     <h3>Advanced Spot Filters (Settings → DX Clusters)</h3>
     <ul>
-      <li><strong>Mode Filter</strong> — comma-separated modes to show (e.g. <code>FT8,CW,SSB</code>). Leave blank for all modes.</li>
+      <li><strong>Mode Filter</strong> — comma-separated modes to show (e.g. <code>FT8,CW,USB,LSB</code>). Leave blank for all modes. Entering <code>SSB</code> automatically includes <code>USB</code> and <code>LSB</code> — most spotter software tags phone spots as USB or LSB, not the generic SSB label.</li>
       <li><strong>DXCC Entity Filter</strong> — comma-separated callsign prefixes (e.g. <code>W,VE,DL,JA</code>). Only spots whose DX callsign starts with one of these prefixes are shown. Leave blank for all entities.</li>
       <li><strong>CQ Zone Filter</strong> — comma-separated zone numbers (e.g. <code>4,5,14</code>). Leave blank for all zones.</li>
       <li><strong>Continent Filter</strong> — comma-separated continent codes (e.g. <code>NA,EU,AS</code>). Uses prefix-based continent lookup. Supported codes: <code>NA</code> North America, <code>SA</code> South America, <code>EU</code> Europe, <code>AF</code> Africa, <code>AS</code> Asia, <code>OC</code> Oceania. Leave blank for all.</li>
     </ul>
-    <h3>Hot Stations (Watchlist Highlight)</h3>
+    <h3>Hot Stations (Watchlist Highlight &amp; Announcement)</h3>
     <p>Enable <strong>Highlight Hot Stations</strong> in Settings → DX Clusters and enter a comma-separated watchlist of callsigns (e.g. <code>DX0DX,VK9XX,ZL9HR</code>). When a watched callsign appears in the spot list, it is highlighted with a <strong style="color:#ff4444">red callsign</strong> and a red left border — making it easy to spot rare DX at a glance. Toggle the checkbox to turn highlighting on or off without clearing the watchlist.</p>
+    <p>Enable <strong>Announce via speech</strong> to also hear a voice alert when a watchlist callsign is spotted — for example: <em>"Hot spot. D X zero D X. 20m, USB."</em> Announcements use your system's built-in text-to-speech and repeat at most once every 15 minutes per callsign, so a heavily-worked DXpedition won't trigger continuous alerts.</p>
     <h3>Clicking a Spot</h3>
-    <p>Clicking any spot row fills the callsign and frequency in the logging form <em>and</em> sends a TCI tune command to retune your Thetis radio to that frequency and mode automatically.</p>
+    <p>Clicking any spot row fills the callsign, frequency, and mode in the logging form <em>and</em> tunes your radio automatically via whichever rig path is active (TCI → flrig → HamLib). For TCI/Thetis, digital modes (FT8, FT4, JS8, DATA, WSPR, VarAC, PSK31, DIGI) are automatically sent as <strong>DIGU</strong> (Digital Upper); RTTY-R spots use <strong>DIGL</strong>. USB, LSB, CW, AM, and FM pass through unchanged.</p>
     <h3>Panadapter Integration</h3>
     <p>All received spots are mirrored to the Thetis or EESDR panadapter as colored markers. The marker color is configurable in Settings → Display → Panadapter Spot Color.</p>
     <div class="tip">Spothole.app aggregates DX Cluster, RBN, POTA, and SOTA spots. Enable it in Settings for a much richer spot feed with no Telnet required.</div>
@@ -548,7 +693,7 @@
     <ul>
       <li>Click <strong>CW</strong> in the top-right header of SDRLogger+</li>
       <li>The popup is independent — SDRLogger+ continues running normally while the CW window is open</li>
-      <li>Connection status (TCI / HamLib / Disconnected) is shown in the top-right corner of the CW window</li>
+      <li>Connection status (TCI / WinKeyer / HamLib / No keyer) is shown in the top-right corner of the CW window</li>
     </ul>
 
     <h3>Sending CW</h3>
@@ -560,18 +705,20 @@
       <li>Click the red <strong>CLR</strong> button below the TX Sent window to clear it</li>
       <li><strong>Auto-Log 73</strong> toggle — when enabled, sending any message containing <code>73</code> automatically fires <strong>▶ Save QSO</strong> in SDRLogger+, logging the contact without needing to click it manually. The status bar confirms with <em>✓ QSO auto-logged</em>. Keep this OFF during casual monitoring or when testing macros.</li>
     </ul>
-    <div class="tip"><strong>Thetis must be in CW mode (CWL or CWU)</strong> for the send command to work. If the radio is in SSB or any other mode, Thetis will silently ignore the CW text. Switch your VFO to a CW mode first.</div>
+    <div class="tip"><strong>When using TCI (Thetis):</strong> Thetis must be in CW mode (CWL or CWU) for the send command to work. If the radio is in SSB or any other mode, Thetis will silently ignore the CW text. Switch your VFO to a CW mode first.</div>
 
     <h3>How CW is Keyed</h3>
-    <p>SDRLogger+ routes CW through the best available path automatically:</p>
-    <ul>
-      <li><strong>TCI connected</strong> — sends <code>cw_macros:0,text</code> directly to Thetis via the TCI WebSocket. Thetis handles all timing and keys the radio hardware (HL2, ANAN) via its internal CWX engine. No COM port or PTT interface needed.</li>
-      <li><strong>HamLib connected (no TCI)</strong> — sends <code>\send_morse text</code> to rigctld, which keys the rig via CAT/serial</li>
-    </ul>
+    <p>SDRLogger+ routes CW through the best available path automatically, in this priority order:</p>
+    <ol>
+      <li><strong>TCI connected</strong> — sends <code>cw_macros:0,text</code> directly to Thetis via the TCI WebSocket. Thetis handles all timing and keys the radio hardware (HL2, ANAN, Hermes-Lite) via its internal CWX engine. No COM port or PTT interface needed.</li>
+      <li><strong>WinKeyer connected</strong> — sends ASCII text to a K1EL WinKeyer (or compatible clone) via USB/serial at 1200 baud, 8-N-2. The WinKeyer handles all CW timing, weighting, and PTT control in hardware. Configure the COM port, keyer mode (Iambic A/B, Ultimatic, Bug), key output port, and PTT lead/tail in Settings. The badge shows <span style="color:#f5a623;font-weight:600;">WinKeyer</span> when connected.</li>
+      <li><strong>HamLib connected</strong> — sends <code>\send_morse text</code> to rigctld, which keys the rig via CAT/serial.</li>
+    </ol>
+    <div class="tip"><strong>flrig does not support CW keying</strong> — the flrig XML-RPC API has no <code>send_morse</code> method. This is by design: flrig handles frequency/mode/PTT only. For CW without Thetis/TCI, use WinKeyer or HamLib.</div>
     <div class="tip">Break-in (QSK) is not a TCI command — it is configured directly in <strong>Thetis Setup → CW</strong> and applies to all CW transmitted through Thetis regardless of source.</div>
 
     <h3>CW Decoder</h3>
-    <p>The decoder uses <strong>IQ downconversion</strong> — sample-by-sample quadrature mixing — to track the carrier envelope at up to ~1400 updates per second. A running matched filter (~0.5 dit long) smooths sub-dit noise spikes without blurring element edges. Detection uses two gates in series: <strong>Squelch</strong> gates the decoder off entirely until the signal-to-noise ratio is sufficient; within that gate <strong>Threshold</strong> sets the exact mark/space boundary with asymmetric hysteresis (+6% to start a mark, −12% to hold it) that prevents chatter on marginal signals. Each element is classified by a <strong>Bayesian Gaussian timing model</strong> that learns the dit and dah distributions for the specific operator being copied — no fixed ratio is assumed. The model bootstraps from the first few elements (using your TX WPM as the starting estimate) then switches to full Bayesian classification. Speed tracking is asymmetric: the model follows speed-ups quickly and slowdowns more cautiously, matching the way real operators accelerate. Inter-element spacing is tracked independently because operators consistently send gaps slightly shorter than a full dit. The noise floor updates asymmetrically — freely during silence, fall-only during marks — so strong signal energy never contaminates the noise reference. Pressing <strong>CLR</strong> clears decoded text but intentionally <em>preserves</em> the learned timing so the decoder does not have to re-adapt to the same station. Decoded text appears in the <strong>RX Decode</strong> window. Both windows are resizable — drag the bottom edge.</p>
+    <p>The decoder uses <strong>IQ downconversion</strong> — sample-by-sample quadrature mixing — to track the carrier envelope at up to ~1400 updates per second. A running matched filter smooths sub-dit noise spikes without blurring element edges; its bandwidth adapts automatically and can be tightened further with the <strong>DSP</strong> toggle for conventional rigs. An optional <strong>Noise Blanker (NB)</strong> clamps impulse noise before detection — useful for rigs without SDR-grade filtering. Detection uses two gates in series: <strong>Squelch</strong> gates the decoder off entirely until the signal-to-noise ratio is sufficient; within that gate <strong>Threshold</strong> sets the exact mark/space boundary with asymmetric hysteresis (+6% to start a mark, −12% to hold it) that prevents chatter on marginal signals. Each element is classified by a <strong>Bayesian Gaussian timing model</strong> that learns the dit and dah distributions for the specific operator being copied — no fixed ratio is assumed. The model bootstraps from the first few elements (using your TX WPM as the starting estimate) then switches to full Bayesian classification. Speed tracking is asymmetric: the model follows speed-ups quickly and slowdowns more cautiously, matching the way real operators accelerate. Inter-element, inter-character, and word spacing are all tracked independently — this means <strong>Farnsworth-spaced</strong> CW (fast elements with stretched gaps) is decoded correctly without run-together or chopped text. The <strong>AFC</strong> includes multi-signal rejection: when two CW signals are close together in the passband, it holds steady on the locked signal instead of jumping between them. The peak tracker has <strong>QSB/fading recovery</strong> — after a deep HF fade, the decoder snaps its threshold back instantly when the signal returns instead of lagging for several seconds. The noise floor updates asymmetrically — freely during silence, fall-only during marks — so strong signal energy never contaminates the noise reference. Pressing <strong>CLR</strong> clears decoded text but intentionally <em>preserves</em> the learned timing so the decoder does not have to re-adapt to the same station. Decoded text appears in the <strong>RX Decode</strong> window. Both windows are resizable — drag the bottom edge.</p>
 
     <h3>Quick Start — Getting a Decode</h3>
     <ol>
@@ -585,11 +732,11 @@
     <h3>Troubleshooting Decodes</h3>
     <ul>
       <li><strong>Sig bar flat / no output</strong> — Squelch may be too high (lower it toward ×1.1), or the tone frequency is off. Look at the waterfall: the signal streak should be under the yellow cursor line. Click the streak to re-tune.</li>
-      <li><strong>Garbage characters / noise triggers</strong> — Squelch too low or Threshold too low. Raise Squelch first; if the band is noisy, try ×2.0–×2.5. Then raise Threshold slightly (30–35%) if false marks persist.</li>
+      <li><strong>Garbage characters / noise triggers</strong> — Squelch too low or Threshold too low. Raise Squelch first; if the band is noisy, try ×2.0–×2.5. Then raise Threshold if false marks persist — start around 30–40% and work up; on a very noisy band values of 60–75% may be needed. The slider goes to 85%.</li>
       <li><strong>Decoding stops after running for a while</strong> — click the signal in the waterfall to force a full reset and immediate re-calibration. This is equivalent to a Stop/Start but without losing your audio device selection.</li>
       <li><strong>Changed frequency and decoding died</strong> — move the Tone slider to the new sidetone pitch (or click the new signal in the waterfall). The full signal chain resets automatically on any tone change.</li>
       <li><strong>Dits read as dahs or vice versa</strong> — the model is still bootstrapping. Give it a full callsign exchange (~10–15 elements) to adapt. Ensure TX WPM is set close to the station's actual speed before you start listening.</li>
-      <li><strong>AFC jumps to wrong signal</strong> — disable AFC, click the correct signal in the waterfall using <strong>⌖ Snap</strong> mode, then re-enable AFC. Or switch to <strong>⌖ Exact</strong> click mode and click precisely on the desired carrier.</li>
+      <li><strong>AFC jumps to wrong signal</strong> — the AFC now has multi-signal rejection (requires 3 consecutive scans on a new frequency before jumping), but if two strong signals are very close it may still switch. Disable AFC, click the correct signal in the waterfall using <strong>⌖ Snap</strong> mode, then re-enable AFC. Or switch to <strong>⌖ Exact</strong> click mode and click precisely on the desired carrier.</li>
     </ul>
 
     <h3>Controls Reference</h3>
@@ -614,10 +761,12 @@
       </li>
       <li><strong>Squelch</strong> — sets the minimum signal-to-noise ratio required before the decoder runs at all. The decoder measures how much stronger the detected tone is relative to the background noise floor and only activates when that ratio meets this threshold. Range is <strong>×1.1 to ×3.0</strong>, default <strong>×1.5</strong>. Lower values (×1.1–×1.3) allow the decoder to work on weak or noisy signals but increase the chance of false triggers from band noise. Higher values (×2.0–×3.0) require a strong clean signal before decoding starts, which reduces garbage output on a busy or noisy band. Start at ×1.5 and adjust: lower if weak signals are not triggering the decoder at all; raise if noise is producing random characters when no signal is present.</li>
       <li><strong>Threshold</strong> — sets how far above the noise floor the signal must be to register as a mark. Slide <strong>left</strong> to lower the threshold (more sensitive — decodes weaker signals, but more noise risk). Slide <strong>right</strong> to raise it (more selective — strong signals only, cleaner output). Default <strong>27%</strong>; minimum 15%. An asymmetric hysteresis band (+6% to start a mark, −12% to hold it) prevents chattering on signals hovering near the threshold.</li>
+      <li><strong>DSP</strong> toggle — enables a tighter matched-filter bandwidth (0.85× dit instead of 0.5×) for improved noise rejection. <strong>Off by default</strong> for SDR users — Thetis already provides a narrow CW filter (500 Hz) and NR2/NR3 noise reduction. <strong>Enable for conventional rigs</strong> (IC-9100, FT-991A, TS-590, etc.) where the IF passband may be 1200 Hz or wider and no DSP noise reduction is available. The tighter filter narrows the effective decoder bandwidth to match the CW element rate, significantly improving weak-signal copy on rigs without SDR-grade filtering.</li>
+      <li><strong>NB</strong> toggle — enables an impulse noise blanker that clamps static crashes and key clicks before they reach the envelope detector. Tracks a running average of signal magnitude and limits any spike exceeding 3.5× the average. <strong>Off by default</strong> for SDR users — Thetis NR2/NR3 handles impulse noise in the SDR processing chain. <strong>Enable for conventional rigs</strong> whose built-in noise blanker is insufficient or unavailable.</li>
       <li><strong>Sig</strong> bar — shows real-time signal strength at the detected tone frequency. Should pulse clearly on each dit and dah. If the bar is completely flat while a signal is audible, the tone frequency is off — use the waterfall to click the correct signal.</li>
       <li><strong>RX WPM display</strong> — shows the decoder's current speed estimate (e.g. <em>22 WPM</em>), updated after every classified element. Useful for confirming the model has locked onto the correct timing. Shows <em>— WPM</em> before any elements have been classified.</li>
     </ul>
-    <div class="tip"><strong>Recommended starting settings for most signals:</strong> Squelch ×1.5 · Threshold 27% · AFC ON · Snap mode ON. Lower Squelch toward ×1.1 for weak signals; raise toward ×2.5 for a noisy band. Threshold rarely needs to move off 27% — if you do adjust it, move in small steps (2–3% at a time).</div>
+    <div class="tip"><strong>Recommended starting settings for most signals:</strong> Squelch ×1.5 · Threshold 27% · AFC ON · Snap mode ON. Lower Squelch toward ×1.1 for weak signals; raise toward ×2.5 for a noisy band. On a clean band, Threshold rarely needs to move off 27%. On a noisy band, raise Squelch first, then nudge Threshold up in small steps — the slider goes up to 85% for high-QRM conditions.</div>
 
     <h3>Auto-Match RX WPM</h3>
     <p>When enabled, the TX WPM slider automatically tracks the speed of the station you are copying:</p>

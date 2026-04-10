@@ -30,6 +30,7 @@
   .conn-badge{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:3px;
     background:#1a0d0d;color:var(--red);border:1px solid var(--red);margin-left:auto;}
   .conn-badge.ok{background:#0d1a0d;color:var(--green);border-color:var(--green);}
+  .conn-badge.winkeyer{background:#1a150d;color:#f5a623;border-color:#f5a623;}
   .conn-badge.hamlib{background:#0d0d1a;color:var(--accent);border-color:var(--accent);}
   .ver-label{font-family:var(--mono);font-size:10px;color:var(--muted);}
 
@@ -335,10 +336,24 @@
           <!-- Threshold row -->
           <div class="ctrl-row">
             <label>Thresh:</label>
-            <input type="range" class="cw-range" id="threshold-sl" min="15" max="70" value="27"
-              title="Threshold — how far above the noise floor the signal must be to count as a mark.&#10;Slide LEFT = lower threshold = more sensitive (decodes weaker signals, more noise risk).&#10;Slide RIGHT = higher threshold = more selective (strong signals only, cleaner output).&#10;Default 27%. Stay above 15% — very low values cause the mark-end level to go near zero."
+            <input type="range" class="cw-range" id="threshold-sl" min="15" max="85" value="27"
+              title="Threshold — how far above the noise floor the signal must be to count as a mark.&#10;Slide LEFT = lower threshold = more sensitive (decodes weaker signals, more noise risk).&#10;Slide RIGHT = higher threshold = more selective (strong signals only, cleaner output).&#10;Default 27%. Range 15–85%. On a noisy band, raise Squelch first, then Threshold — both controls together give the best rejection."
               oninput="thresholdChanged(this.value)">
             <span class="val-lbl" id="threshold-val">27%</span>
+          </div>
+
+          <!-- DSP Filter + Noise Blanker row — for conventional rigs -->
+          <div class="ctrl-row">
+            <label class="cw-toggle" title="DSP Filter — tighter matched-filter bandwidth for conventional rigs (IC-9100, etc). Off by default for SDR users (Thetis already filters). Enable when using a rig with a wide IF passband.">
+              <input type="checkbox" id="dsp-filter-chk" onchange="setDspFilter(this.checked)">
+              <span class="cw-slider"></span>
+            </label>
+            <span class="toggle-label">DSP</span>
+            <label class="cw-toggle" title="Noise Blanker — clamps impulse noise (static crashes, key clicks) before detection. Off by default for SDR users (use Thetis NR2/NR3). Enable for conventional rigs without good NB.">
+              <input type="checkbox" id="nb-chk" onchange="setNoiseBlanker(this.checked)">
+              <span class="cw-slider"></span>
+            </label>
+            <span class="toggle-label">NB</span>
           </div>
 
         </div><!-- /.rx-col-b -->
@@ -481,7 +496,9 @@ const SETTINGS_DEFAULTS = {
   wpm:20, autoWpm:false, autoWpmMin:8, autoWpmMax:45,
   fontSize:14, cwColor:'#39ff14',
   nrEnabled:false, autoLog73:false,
-  wfSnapToPeak:true
+  wfSnapToPeak:true,
+  dspFilter:false,   // #1 — narrower BW matched filter (off by default for SDR users)
+  noiseBlanker:false  // #2 — impulse noise blanker (off by default for SDR users)
 };
 
 function loadSettings() {
@@ -518,6 +535,30 @@ const TCI_BLOCK = 256;
 // Tone detection
 let gToneHz    = cfg.toneHz;
 let gSampleRate = 48000;   // updated on first audio block
+
+// #1 DSP Filter & #2 Noise Blanker toggles (off by default — for conventional rigs)
+let gDspFilter    = !!cfg.dspFilter;
+let gNoiseBlanker = !!cfg.noiseBlanker;
+
+// #2 Noise Blanker — impulse rejection state
+// Tracks a running average of magnitude; samples > NB_RATIO× average are clamped.
+const NB_RATIO   = 3.5;    // clamp threshold: 3.5× running average
+const NB_ALPHA   = 0.02;   // EMA weight for running average (slow-tracking)
+let _nbRunAvg    = 0;       // running average of |sample|
+
+// #4 AFC multi-signal rejection state
+let _afcPrevHz    = null;   // previous AFC lock frequency
+let _afcLockCount = 0;      // consecutive scans locked to same frequency
+const AFC_LOCK_MIN = 3;     // scans needed before AFC will jump to a new signal
+const AFC_JUMP_HZ  = 40;    // Hz difference to consider a "jump" to different signal
+
+// #5 QSB/fading recovery state
+let _qsbLastPeak  = 0;      // peak power at last mark-end
+let _qsbFadeFlag  = false;  // true when deep fade detected
+
+// #3 Farnsworth — independent space model
+let _bCharSpaceMu  = 0;     // learned inter-character space (0 = not yet learned)
+let _bWordSpaceMu  = 0;     // learned inter-word space (0 = not yet learned)
 
 // IQ downconversion state (replaces single-block Goertzel)
 let _iqPhaseAcc = 0;       // oscillator phase accumulator [0, 2π)
@@ -692,6 +733,8 @@ function restoreFormValues() {
   document.getElementById('auto-log-chk').checked = autoLog73;
   document.getElementById('nr-enable-chk').checked = nrEnabled;
   setNrEnabled(nrEnabled);
+  document.getElementById('dsp-filter-chk').checked = gDspFilter;
+  document.getElementById('nb-chk').checked = gNoiseBlanker;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -726,11 +769,13 @@ async function fetchStatus() {
     if (!r.ok) return;
     const d = await r.json();
     const badge = document.getElementById('conn-badge');
-    if (d.tci)         { badge.textContent='TCI';         badge.className='conn-badge ok'; }
-    else if (d.hamlib) { badge.textContent='HamLib';      badge.className='conn-badge hamlib'; }
-    else               { badge.textContent='DISCONNECTED';badge.className='conn-badge'; }
+    if      (d.tci)     { badge.textContent='TCI';          badge.className='conn-badge ok'; }
+    else if (d.winkeyer){ badge.textContent='WinKeyer';     badge.className='conn-badge winkeyer'; }
+    else if (d.hamlib)  { badge.textContent='HamLib';       badge.className='conn-badge hamlib'; }
+    else                { badge.textContent='DISCONNECTED'; badge.className='conn-badge'; }
+    window._wkConnected = !!d.winkeyer;
     document.getElementById('tx-path-lbl').textContent =
-      d.tci ? 'via TCI' : d.hamlib ? 'via HamLib' : '';
+      d.tci ? 'via TCI' : d.winkeyer ? 'via WinKeyer' : d.hamlib ? 'via HamLib' : '';
     if (d.mycall)  myCAll = d.mycall;
     if (d.myname !== undefined) myName = d.myname;
     if (d.serial  !== undefined) { cwSerial = d.serial; updateNrDisplay(); }
@@ -777,7 +822,7 @@ async function sendCw() {
         } catch(e) {}
       }
     }
-    else setStatus('Error: ' + (d.error || 'unknown') + ' — is Thetis in CW mode?', true);
+    else setStatus('Error: ' + (d.error || 'unknown'), true);
   } catch(e) { setStatus('Send failed: ' + e.message, true); }
 }
 
@@ -883,7 +928,11 @@ async function startMicAudio() {
     mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     gSampleRate = audioCtx.sampleRate;
-    const blockSize = Math.floor(gSampleRate * 0.020);
+    // createScriptProcessor requires a power-of-2 buffer size (256–16384).
+    // Target ~20 ms per block; round up to nearest power of 2.
+    const targetSamples = Math.floor(gSampleRate * 0.020);
+    let blockSize = 256;
+    while (blockSize < targetSamples) blockSize <<= 1;  // e.g. 960→1024 @ 48 kHz
     const source = audioCtx.createMediaStreamSource(mediaStream);
     scriptNode = audioCtx.createScriptProcessor(blockSize, 1, 1);
     source.connect(scriptNode);
@@ -1270,21 +1319,53 @@ function goertzel(samples, targetHz, sampleRate) {
 
 // AFC: sweep ±AFC_RANGE Hz around centerHz; return smoothed best frequency.
 // Returns current _afcHz unchanged if no clear signal peak is found.
+//
+// #4 Multi-signal rejection: when two CW signals are within the AFC range,
+// the naive approach picks whichever is loudest on each scan, causing the AFC
+// to jump between them.  We now require AFC_LOCK_MIN consecutive scans agreeing
+// on a new frequency (>AFC_JUMP_HZ away from current lock) before switching.
+// The current locked signal is favoured unless the new one is consistently stronger.
 function runAfc(buf, sampleRate, centerHz) {
-  let bestHz = centerHz, bestPow = -1, totalPow = 0, scanCount = 0;
+  let bestHz = centerHz, bestPow = -1, secondPow = -1;
+  let totalPow = 0, scanCount = 0;
   for (let df = -gAfcRange; df <= gAfcRange; df += AFC_STEP) {
     const hz = centerHz + df;
     if (hz < 200 || hz > 2000) continue;
     const p = goertzel(buf, hz, sampleRate);
-    if (p > bestPow) { bestPow = p; bestHz = hz; }
+    if (p > bestPow) { secondPow = bestPow; bestPow = p; bestHz = hz; }
+    else if (p > secondPow) { secondPow = p; }
     totalPow += p; scanCount++;
   }
   const el = document.getElementById('afc-lbl');
   // Only lock if the peak is ≥3× the scan average — noise won't trigger AFC
   if (scanCount === 0 || bestPow < (totalPow / scanCount) * 3) {
     if (el) el.textContent = 'AFC —';
+    _afcLockCount = 0;
     return _afcHz !== null ? _afcHz : centerHz;
   }
+
+  // #4 Multi-signal rejection: if we already have a lock and the new best is
+  // far from it, require AFC_LOCK_MIN consecutive scans before jumping.
+  if (_afcHz !== null && Math.abs(bestHz - _afcHz) > AFC_JUMP_HZ) {
+    if (_afcPrevHz !== null && Math.abs(bestHz - _afcPrevHz) < AFC_JUMP_HZ) {
+      _afcLockCount++;
+    } else {
+      _afcLockCount = 1;  // new candidate — start counting
+    }
+    _afcPrevHz = bestHz;
+    if (_afcLockCount < AFC_LOCK_MIN) {
+      // Not enough evidence to jump — hold current lock
+      if (el) el.textContent = 'AFC ' + Math.round(_afcHz) + ' Hz';
+      return _afcHz;
+    }
+    // Enough consecutive scans — allow the jump
+    _afcLockCount = 0;
+    _afcPrevHz = null;
+  } else {
+    _afcLockCount = 0;
+    _afcPrevHz = null;
+  }
+
   const result = _afcHz !== null ? _afcHz * 0.7 + bestHz * 0.3 : bestHz;
   if (el) el.textContent = 'AFC ' + Math.round(result) + ' Hz';
   return result;
@@ -1314,11 +1395,12 @@ function processAudioSamples(rawSamples, sampleRate) {
   const iqWin = Math.max(4, Math.min(48, Math.round(sampleRate / 1400)));
   const detHz = (afcEnabled && _afcHz !== null) ? _afcHz : gToneHz;
 
-  // Matched filter window = ~0.5 × dit duration in IQ windows.
-  // Averages out sub-dit noise spikes while preserving element edges.
-  // iqWin samples per IQ window; dotEstMs ms per dit.
+  // Matched filter window — adapts to estimated dit duration.
+  // #1 DSP Filter: when enabled, uses 0.85× dit (tighter BW) for conventional rigs.
+  //   When off, uses 0.5× dit (wider — lets SDR handle bandwidth filtering).
   const msMsPerIqWin = (iqWin / sampleRate) * 1000;
-  const _mfWinNew = Math.max(2, Math.min(MF_MAX, Math.round(dotEstMs * 0.5 / msMsPerIqWin)));
+  const mfRatio = gDspFilter ? 0.85 : 0.5;
+  const _mfWinNew = Math.max(2, Math.min(MF_MAX, Math.round(dotEstMs * mfRatio / msMsPerIqWin)));
   if (_mfWinNew !== _mfWinLast) {
     // Window size changed — must reinitialize ring buffer to prevent _mfSum corruption
     _mfWin = _mfWinNew; _mfWinLast = _mfWinNew;
@@ -1348,8 +1430,17 @@ function processAudioSamples(rawSamples, sampleRate) {
 
     if (_iqCount >= iqWin) {
       // Carrier envelope magnitude for this IQ window
-      const mag = Math.sqrt(_iqI*_iqI + _iqQ*_iqQ) / iqWin;
+      let mag = Math.sqrt(_iqI*_iqI + _iqQ*_iqQ) / iqWin;
       _iqI = 0; _iqQ = 0; _iqCount = 0;
+
+      // #2 Noise Blanker — clamp impulse spikes before they reach the envelope follower.
+      // Tracks a slow running average of magnitude; anything > NB_RATIO× average is clamped.
+      // Effective against static crashes and key clicks from nearby signals on conventional rigs.
+      if (gNoiseBlanker) {
+        if (_nbRunAvg === 0) _nbRunAvg = mag;
+        else _nbRunAvg = _nbRunAvg * (1 - NB_ALPHA) + mag * NB_ALPHA;
+        if (_nbRunAvg > 0 && mag > _nbRunAvg * NB_RATIO) mag = _nbRunAvg * NB_RATIO;
+      }
 
       // Asymmetric envelope follower (fast attack, slow decay)
       envVal = mag > envVal
@@ -1384,8 +1475,24 @@ function processAudioSamples(rawSamples, sampleRate) {
 
       // Peak tracks envVal (raw envelope) — not mfVal — so it reflects true signal
       // level even when the matched filter window briefly straddles an element edge.
-      if (envVal > peakPower) peakPower = envVal;
-      else peakPower = Math.max(noiseFloor, peakPower*(1-PEAK_FALL));
+      //
+      // #5 QSB/fading recovery: detect deep fades (peak decayed to < 2× noise floor)
+      // and use a faster decay rate.  When the signal returns strong after a fade,
+      // snap peak immediately so the threshold is correct within one IQ window
+      // instead of waiting ~1s for the normal slow decay to catch up.
+      if (envVal > peakPower) {
+        // Signal rising — if we were in a fade, snap peak instantly for fast recovery
+        if (_qsbFadeFlag && envVal > noiseFloor * gSquelch) {
+          peakPower = envVal;           // instant snap — no EMA lag
+          _qsbFadeFlag = false;
+        } else {
+          peakPower = envVal;
+        }
+      } else {
+        peakPower = Math.max(noiseFloor, peakPower*(1-PEAK_FALL));
+        // Detect deep fade: peak has decayed close to noise floor
+        if (peakPower < noiseFloor * 2.0) _qsbFadeFlag = true;
+      }
 
       // Normalise and apply SNR gate (threshold set by Squelch slider → gSquelch)
       const range = peakPower - noiseFloor;
@@ -1460,16 +1567,24 @@ function bayesClassifyMark(ms) {
 // as the inter-element center instead of 1T — this is the key CWGET insight.
 // Word-gap uses a one-sided model: any space ≥ 7× dit scores as word regardless
 // of how long it is (avoids penalizing long silences between transmissions).
+//
+// #3 Farnsworth spacing: inter-char and word space models are tracked independently
+// from dit duration.  Farnsworth senders use fast element speed but stretch the
+// inter-character/word gaps, so coupling space thresholds to 3T/7T of dit misclassifies.
+// Once _bCharSpaceMu and _bWordSpaceMu are learned (after enough confirmed samples),
+// the classifier uses those learned centers instead of fixed multiples of dit.
 function bayesClassifySpace(ms) {
   if (_bMarkN < BAYES_MIN) {
     if (ms < dotEstMs * 1.6) return 'elem';   // boundary at √(0.85×3) ≈ 1.6×
     if (ms < dotEstMs * 4.6) return 'char';   // boundary at √(3×7)    ≈ 4.6×
     return 'word';
   }
+  // Use learned space centers if available (#3 Farnsworth), else fall back to dit multiples
+  const charMu = _bCharSpaceMu > 0 ? _bCharSpaceMu : _bDitMu * 3;
+  const wordMu = _bWordSpaceMu > 0 ? _bWordSpaceMu : _bDitMu * 7;
   const llE1 = logGaussian(ms, _bElemSpaceMu,  _bDitVar * 2);  // inter-element ≈ 0.85T (CWGET empirical)
-  const llE3 = logGaussian(ms, _bDitMu * 3,    _bDitVar * 4);  // inter-char    ≈ 3T
-  const e7Mu = _bDitMu * 7;
-  const llE7 = (ms >= e7Mu) ? 0 : logGaussian(ms, e7Mu, _bDitVar * 8);  // word ≈ 7T
+  const llE3 = logGaussian(ms, charMu,         _bDitVar * 4);  // inter-char (learned or ≈3T)
+  const llE7 = (ms >= wordMu) ? 0 : logGaussian(ms, wordMu, _bDitVar * 8);  // word (learned or ≈7T)
   if (llE7 >= llE3 && llE7 >= llE1) return 'word';
   if (llE3 >= llE1)                  return 'char';
   return 'elem';
@@ -1525,11 +1640,27 @@ function processEdge(wasMarkBefore, durationMs) {
     const spType = bayesClassifySpace(durationMs);
     if      (spType === 'word') { flushChar(); appendDecoded(' '); }
     else if (spType === 'char') { flushChar(); }
-    else if (spType === 'elem' && _bMarkN >= BAYES_MIN) {
-      // Learn inter-element space timing separately (mirrors CWGET ShortPauseLen tracking).
-      // Use half-weight EMA and clamp to 0.4–1.5× dit to stay physically plausible.
-      const newElem = _bElemSpaceMu * (1 - BAYES_ALPHA * 0.5) + durationMs * (BAYES_ALPHA * 0.5);
-      _bElemSpaceMu = Math.max(_bDitMu * 0.4, Math.min(_bDitMu * 1.5, newElem));
+    // Learn space timings after bootstrap (#3 Farnsworth — independent space models)
+    if (_bMarkN >= BAYES_MIN) {
+      const spAlpha = BAYES_ALPHA * 0.5;  // half-weight EMA for all space learning
+      if (spType === 'elem') {
+        // Learn inter-element space (mirrors CWGET ShortPauseLen tracking).
+        const newElem = _bElemSpaceMu * (1 - spAlpha) + durationMs * spAlpha;
+        _bElemSpaceMu = Math.max(_bDitMu * 0.4, Math.min(_bDitMu * 1.5, newElem));
+      } else if (spType === 'char') {
+        // #3 Farnsworth: learn inter-character space independently of dit duration.
+        // Clamp to 1.5T–8T to stay plausible (Farnsworth can stretch to ~5-6T).
+        const newChar = _bCharSpaceMu > 0
+          ? _bCharSpaceMu * (1 - spAlpha) + durationMs * spAlpha
+          : durationMs;  // first observation — seed directly
+        _bCharSpaceMu = Math.max(_bDitMu * 1.5, Math.min(_bDitMu * 8, newChar));
+      } else if (spType === 'word') {
+        // #3 Farnsworth: learn word space independently.  Clamp to 4T–20T.
+        const newWord = _bWordSpaceMu > 0
+          ? _bWordSpaceMu * (1 - spAlpha) + durationMs * spAlpha
+          : durationMs;
+        _bWordSpaceMu = Math.max(_bDitMu * 4, Math.min(_bDitMu * 20, newWord));
+      }
     }
   }
 }
@@ -1574,6 +1705,12 @@ function resetDecoder() {
   _bDitVar      = Math.pow(_initDit * 0.30, 2);  // 30% CV as initial uncertainty
   _bMarkN       = 0;
   _bElemSpaceMu = _initDit * 0.85;  // CWGET empirical: inter-element ≈ 0.85× dit
+  _bCharSpaceMu = 0;                // #3 Farnsworth — reset learned char space
+  _bWordSpaceMu = 0;                // #3 Farnsworth — reset learned word space
+  _nbRunAvg     = 0;                // #2 Noise blanker running average
+  _afcPrevHz    = null;             // #4 AFC multi-signal rejection
+  _afcLockCount = 0;
+  _qsbFadeFlag  = false;            // #5 QSB recovery
   dotEstMs      = _bDitMu;
   const afcEl = document.getElementById('afc-lbl');
   if (afcEl) afcEl.textContent = afcEnabled ? 'AFC —' : 'AFC OFF';
@@ -1605,6 +1742,19 @@ function thresholdChanged(v) {
   gThreshold = parseInt(v) / 100;
   document.getElementById('threshold-val').textContent = v + '%';
   cfg.threshold = parseInt(v); saveSettings();
+}
+
+function setDspFilter(on) {
+  gDspFilter = on;
+  cfg.dspFilter = on; saveSettings();
+  // Force matched filter window recalculation on next audio block
+  _mfWinLast = 0;
+}
+
+function setNoiseBlanker(on) {
+  gNoiseBlanker = on;
+  cfg.noiseBlanker = on; saveSettings();
+  _nbRunAvg = 0;  // reset running average
 }
 
 function afcRangeChanged(v) {
