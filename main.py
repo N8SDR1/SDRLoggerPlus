@@ -5,6 +5,7 @@ Then open browser to: http://localhost:5000
 """
 
 import sys
+import re
 import sqlite3
 import socket
 import threading
@@ -20,6 +21,13 @@ from flask_sock import Sock
 import io
 import subprocess
 import tempfile
+
+# Club Log application key — loaded from gitignored clublog_key.py so it is
+# never published to the public repository but is bundled into the compiled exe.
+try:
+    from clublog_key import CLUBLOG_APP_KEY
+except ImportError:
+    CLUBLOG_APP_KEY = ""   # key file absent (source-only / contributor build)
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -61,11 +69,14 @@ def _load_app_settings():
     global QRZ_USER, QRZ_PASS, QRZ_LOGBOOK_KEY, QRZ_LOGBOOK_UPLOAD_ENABLED
     global HAMQTH_USER, HAMQTH_PASS
     global LOTW_TQSL_PATH, LOTW_STATION_LOCATION, LOTW_UPLOAD_ENABLED
-    global CLUBLOG_API_KEY, CLUBLOG_EMAIL, CLUBLOG_PASSWORD, CLUBLOG_CALLSIGN, CLUBLOG_UPLOAD_ENABLED
-    global TELNET_ENABLED, TELNET_SERVER, TELNET_PORT, MY_CALLSIGN, MY_NAME, TCI_HOST, TCI_PORT
+    global CLUBLOG_EMAIL, CLUBLOG_PASSWORD, CLUBLOG_CALLSIGN, CLUBLOG_UPLOAD_ENABLED, CLUBLOG_UPLOAD_DESIGNATOR
+    global TELNET_ENABLED, TELNET_SERVER, TELNET_PORT, MY_CALLSIGN, MY_NAME, TCI_ENABLED, TCI_HOST, TCI_PORT, ITU_REGION
     global DIGITAL_UDP_ENABLED, DIGITAL_UDP_PORT, DIGITAL_TCP_ENABLED, DIGITAL_TCP_PORT
     global ROTATOR_ENABLED, ROTATOR_HOST, ROTATOR_PORT, ROTATOR_PROTOCOL, ROTATOR_AUTO
-    global BACKUP_PATH, HAMLIB_ENABLED, HAMLIB_HOST, HAMLIB_PORT
+    global BACKUP_PATH, FLRIG_ENABLED, FLRIG_HOST, FLRIG_PORT, FLRIG_DIGITAL_MODE, FLRIG_RTTY_MODE
+    global HAMLIB_ENABLED, HAMLIB_HOST, HAMLIB_PORT
+    global WINKEYER_ENABLED, WINKEYER_PORT, WINKEYER_WPM, WINKEYER_KEY_OUT, WINKEYER_MODE, WINKEYER_PTT, WINKEYER_PTT_LEAD, WINKEYER_PTT_TAIL
+    global EQSL_USER, EQSL_PASS, EQSL_UPLOAD_ENABLED
     global POTA_MY_PARK, POTA_USER, POTA_PASS
     try:
         with open(_APP_SETTINGS_FILE) as _f:
@@ -80,11 +91,11 @@ def _load_app_settings():
         if data.get("lotw_tqsl_path"):           LOTW_TQSL_PATH           = data["lotw_tqsl_path"]
         if "lotw_station_location" in data:     LOTW_STATION_LOCATION    = data["lotw_station_location"]
         if "lotw_upload_enabled" in data:       LOTW_UPLOAD_ENABLED      = bool(data["lotw_upload_enabled"])
-        if data.get("clublog_api_key"):         CLUBLOG_API_KEY          = data["clublog_api_key"]
-        if data.get("clublog_email"):           CLUBLOG_EMAIL            = data["clublog_email"]
-        if data.get("clublog_password"):        CLUBLOG_PASSWORD         = data["clublog_password"]
-        if "clublog_callsign" in data:          CLUBLOG_CALLSIGN         = data["clublog_callsign"]
-        if "clublog_upload_enabled" in data:    CLUBLOG_UPLOAD_ENABLED   = bool(data["clublog_upload_enabled"])
+        if data.get("clublog_email"):              CLUBLOG_EMAIL              = data["clublog_email"]
+        if data.get("clublog_password"):           CLUBLOG_PASSWORD           = data["clublog_password"]
+        if "clublog_callsign" in data:             CLUBLOG_CALLSIGN           = data["clublog_callsign"]
+        if "clublog_upload_enabled" in data:       CLUBLOG_UPLOAD_ENABLED     = bool(data["clublog_upload_enabled"])
+        if data.get("clublog_upload_designator"):  CLUBLOG_UPLOAD_DESIGNATOR  = data["clublog_upload_designator"][:1].upper()
         if "telnet_enabled" in data:            TELNET_ENABLED            = bool(data["telnet_enabled"])
         if data.get("telnet_server"):           TELNET_SERVER             = data["telnet_server"]
         if data.get("telnet_port"):             TELNET_PORT               = int(data["telnet_port"])
@@ -92,6 +103,8 @@ def _load_app_settings():
         if "opname" in data:                    MY_NAME                   = data["opname"]
         if data.get("tci_host"):                TCI_HOST                  = data["tci_host"]
         if data.get("tci_port"):                TCI_PORT                  = int(data["tci_port"])
+        if "tci_enabled"  in data:              TCI_ENABLED               = bool(data["tci_enabled"])
+        if "itu_region"   in data:              ITU_REGION                = int(data["itu_region"])
         if "digital_udp_enabled" in data:       DIGITAL_UDP_ENABLED       = bool(data["digital_udp_enabled"])
         if data.get("digital_udp_port"):        DIGITAL_UDP_PORT          = int(data["digital_udp_port"])
         if "digital_tcp_enabled" in data:       DIGITAL_TCP_ENABLED       = bool(data["digital_tcp_enabled"])
@@ -102,9 +115,25 @@ def _load_app_settings():
         if data.get("rotator_protocol"):        ROTATOR_PROTOCOL          = data["rotator_protocol"]
         if "rotator_auto" in data:              ROTATOR_AUTO              = bool(data["rotator_auto"])
         if "backup_path" in data:               BACKUP_PATH               = data["backup_path"].strip()
+        if "flrig_enabled" in data:             FLRIG_ENABLED             = bool(data["flrig_enabled"])
+        if data.get("flrig_host"):              FLRIG_HOST                = data["flrig_host"].strip()
+        if data.get("flrig_port"):              FLRIG_PORT                = int(data["flrig_port"])
+        if "flrig_digital_mode" in data:        FLRIG_DIGITAL_MODE        = data["flrig_digital_mode"].strip()
+        if "flrig_rtty_mode"    in data:        FLRIG_RTTY_MODE           = data["flrig_rtty_mode"].strip()
         if "hamlib_enabled" in data:            HAMLIB_ENABLED            = bool(data["hamlib_enabled"])
         if data.get("hamlib_host"):             HAMLIB_HOST               = data["hamlib_host"].strip()
         if data.get("hamlib_port"):             HAMLIB_PORT               = int(data["hamlib_port"])
+        if "winkeyer_enabled" in data:          WINKEYER_ENABLED          = bool(data["winkeyer_enabled"])
+        if data.get("winkeyer_port"):           WINKEYER_PORT             = data["winkeyer_port"].strip()
+        if data.get("winkeyer_wpm"):            WINKEYER_WPM              = int(data["winkeyer_wpm"])
+        if data.get("winkeyer_key_out"):        WINKEYER_KEY_OUT          = data["winkeyer_key_out"]
+        if data.get("winkeyer_mode"):           WINKEYER_MODE             = data["winkeyer_mode"]
+        if "winkeyer_ptt" in data:              WINKEYER_PTT              = bool(data["winkeyer_ptt"])
+        if "winkeyer_ptt_lead" in data:         WINKEYER_PTT_LEAD         = int(data["winkeyer_ptt_lead"])
+        if "winkeyer_ptt_tail" in data:         WINKEYER_PTT_TAIL         = int(data["winkeyer_ptt_tail"])
+        if data.get("eqsl_user"):               EQSL_USER                 = data["eqsl_user"].strip()
+        if data.get("eqsl_pass"):               EQSL_PASS                 = data["eqsl_pass"]
+        if "eqsl_upload_enabled" in data:       EQSL_UPLOAD_ENABLED       = bool(data["eqsl_upload_enabled"])
         if data.get("pota_my_park"):            POTA_MY_PARK              = data["pota_my_park"].strip().upper()
         if "pota_user" in data:                 POTA_USER                 = data["pota_user"].strip()
         if "pota_pass" in data:                 POTA_PASS                 = data["pota_pass"].strip()
@@ -131,12 +160,17 @@ LOTW_TQSL_PATH         = ""     # Full path to tqsl.exe, or just "tqsl" if it is
 LOTW_STATION_LOCATION  = ""     # TQSL Station Location name (as defined in TQSL) — passed as -l; falls back to -c callsign if blank
 LOTW_UPLOAD_ENABLED    = False  # Auto-upload QSOs to LoTW via TQSL (off by default — user must configure)
 
-CLUBLOG_API_KEY        = ""     # Club Log developer API key — request at clublog.org/requestapikey.php
-CLUBLOG_EMAIL          = ""     # Club Log account email address
-CLUBLOG_PASSWORD       = ""     # Club Log Application Password (set in Club Log account settings — NOT your login password)
-CLUBLOG_CALLSIGN       = ""     # Callsign to upload under (defaults to MY_CALLSIGN if blank)
-CLUBLOG_UPLOAD_ENABLED = False  # Auto-upload QSOs to Club Log realtime API (off by default)
+CLUBLOG_EMAIL              = ""    # Club Log account email address
+CLUBLOG_PASSWORD           = ""    # Club Log account password or App Password
+CLUBLOG_CALLSIGN           = ""    # Callsign to upload under (defaults to MY_CALLSIGN if blank)
+CLUBLOG_UPLOAD_ENABLED     = False # Auto-upload QSOs to Club Log (off by default)
+CLUBLOG_UPLOAD_DESIGNATOR  = "B"   # Single letter added to uploaded records to prevent duplicate uploads
 _clublog_blocked       = False  # Set True on 403 to stop further requests until credentials are corrected
+
+# ─── eQSL Integration ─────────────────────────────────────────────────────────
+EQSL_USER            = ""     # eQSL.cc username
+EQSL_PASS            = ""     # eQSL.cc password
+EQSL_UPLOAD_ENABLED  = False  # Auto-upload QSOs to eQSL.cc (off by default)
 
 TELNET_ENABLED = False          # Set True to enable DX cluster spotting
 TELNET_SERVER = "ve7cc.net"
@@ -144,10 +178,12 @@ TELNET_PORT = 23
 MY_CALLSIGN = "YOURCALLSIGN"    # Your callsign
 MY_NAME     = ""                # Operator name (shown in {MYNAME} CW token)
 
+TCI_ENABLED = True          # Set False to disable TCI connection (e.g. when using flrig/HamLib only)
+ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=Asia-Pacific
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "0.43 Beta"
+VERSION  = "0.49 Beta"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -170,11 +206,38 @@ _rot_live_az_lock = threading.Lock()
 # ─── Backup ───────────────────────────────────────────────────────────────────
 BACKUP_PATH = ""   # User-configured local folder for DB backups (empty = browser download)
 
+# ─── flrig (W1HKJ) XML-RPC Integration ───────────────────────────────────────
+FLRIG_ENABLED      = False
+FLRIG_HOST         = "127.0.0.1"
+FLRIG_PORT         = 12345      # flrig default XML-RPC port
+FLRIG_DIGITAL_MODE = ""         # Override digital passthrough mode name (e.g. "USB-D" for Icom, "DATA-U" for Kenwood/Yaesu)
+FLRIG_RTTY_MODE    = ""         # Override RTTY mode name sent to flrig (blank = "RTTY"; set "USB-D" for AFSK/fldigi)
+                                # Empty = auto-detect via rig.get_modes() at connect time
+# ──────────────────────────────────────────────────────────────────────────────
+
 # ─── HamLib (rigctld) Integration ─────────────────────────────────────────────
 HAMLIB_ENABLED  = False
 HAMLIB_HOST     = "127.0.0.1"
 HAMLIB_PORT     = 4532          # rigctld default
 # ──────────────────────────────────────────────────────────────────────────────
+
+# ─── K1EL WinKeyer (WKmini / WK2 / WK3 / WKUSB) ─────────────────────────────
+# Serial CW keyer using the K1EL WinKeyer protocol (1200 baud, 8N2).
+# CW priority order: TCI → WinKeyer → HamLib
+WINKEYER_ENABLED   = False
+WINKEYER_PORT      = ""         # COM port (e.g. "COM2")
+WINKEYER_WPM       = 26         # Default CW speed (5-99)
+WINKEYER_KEY_OUT   = "port1"    # "port1", "port2", or "both"
+WINKEYER_MODE      = "iambicb"  # "iambica", "iambicb", "ultimatic", "bug"
+WINKEYER_PTT       = True       # Enable PTT output
+WINKEYER_PTT_LEAD  = 0          # PTT lead-in delay in ms (0-250)
+WINKEYER_PTT_TAIL  = 0          # PTT tail delay in ms (0-250)
+_wk_serial         = None       # pyserial Serial object (set by background thread)
+_wk_lock           = threading.Lock()   # guard serial writes
+_wk_is_open        = False      # True when host-mode session is active
+_wk_version        = 0          # firmware version returned by Admin:Open
+# ──────────────────────────────────────────────────────────────────────────────
+
 
 # ─── POTA (Parks on the Air) ──────────────────────────────────────────────────
 POTA_DATABASE   = "pota.db"     # Separate DB for POTA activations
@@ -187,6 +250,17 @@ POTA_PASS       = ""            # POTA.app password for self-spotting
 # Global storage for latest TCI data received
 latest_tci     = {"callsign": "", "freq_mhz": "", "mode": ""}
 _tci_cw_pitch  = None   # CW sidetone pitch (Hz) last reported by Thetis via TCI
+
+# ─── Debug / error log ────────────────────────────────────────────────────────
+import collections as _collections
+_debug_log = _collections.deque(maxlen=200)   # rolling buffer of last 200 entries
+
+def _log(msg):
+    """Append a timestamped entry to the in-memory debug log and print to console."""
+    from datetime import datetime
+    entry = f"[{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC] {msg}"
+    _debug_log.append(entry)
+    print(entry)
 
 # Runtime settings (overridden via /api/settings)
 runtime_settings = {}
@@ -260,6 +334,145 @@ def init_db():
 
 tci_ws_connected = False
 
+# ─── flrig XML-RPC state ──────────────────────────────────────────────────────
+latest_flrig    = {"freq_mhz": "", "mode": "", "rig": "",
+                   "digital_usb": "DATA-U",   # rig's USB digital mode name (auto-detected)
+                   "digital_lsb": "DATA-L"}    # rig's LSB digital mode name (auto-detected)
+flrig_connected = False
+
+# Digital mode names flrig may use — checked in priority order at connect time
+_FLRIG_DIGITAL_USB_NAMES = ["USB-D", "DATA-U", "PKT-U", "DIGU"]
+_FLRIG_DIGITAL_LSB_NAMES = ["LSB-D", "DATA-L", "PKT-L", "DIGL"]
+
+def _flrig_server():
+    """Return a connected xmlrpc.client.ServerProxy for flrig."""
+    import xmlrpc.client
+    return xmlrpc.client.ServerProxy(
+        f"http://{FLRIG_HOST}:{FLRIG_PORT}", allow_none=True)
+
+# ── flrig mode name normalisation ──────────────────────────────────────────────
+# flrig → SDRLogger+ (for display / QSO form)
+_FLRIG_MODE_IN = {
+    "USB":"USB",   "LSB":"LSB",
+    "CW":"CWU",    "CW-R":"CWL",   "CWR":"CWL",
+    "FM":"FM",     "NFM":"NFM",    "AM":"AM",    "SAM":"SAM",
+    "RTTY":"RTTY", "RTTYR":"RTTY", "RTTY-R":"RTTY",
+    # Generic DATA modes (Kenwood, Yaesu etc.)
+    "DATA-U":"DIGU", "DATA-L":"DIGL", "PKT-U":"DIGU", "PKT-L":"DIGL",
+    "DIGU":"DIGU",   "DIGL":"DIGL",
+    # IC-9100 / Icom USB-D / LSB-D digital passthrough modes
+    "USB-D":"DIGU",  "LSB-D":"DIGL",
+    "USBD":"DIGU",   "LSBD":"DIGL",
+    "FT8":"FT8", "FT4":"FT4", "JS8":"JS8", "WSPR":"WSPR",
+    "JT65":"JT65", "JT9":"JT9",
+}
+# SDRLogger+ → flrig (for tune commands from DX spot / form)
+_FLRIG_MODE_OUT = {
+    "USB":"USB",   "LSB":"LSB",
+    "CWU":"CW",    "CWL":"CW-R",   "CW":"CW",
+    "FM":"FM",     "NFM":"FM",     "AM":"AM",    "SAM":"AM",
+    # RTTY is a native radio mode (not audio passthrough) — send directly
+    "RTTY":"RTTY", "RTTY-R":"RTTY-R", "RTTYR":"RTTY-R",
+    # Digital passthrough — these are overridden by FLRIG_DIGITAL_MODE when set
+    "DIGU":"DATA-U", "DIGL":"DATA-L",
+    "FT8":"DATA-U",  "FT4":"DATA-U",  "JS8":"DATA-U",
+    "WSPR":"DATA-U", "JT65":"DATA-U", "JT9":"DATA-U",
+    "DIGI":"DATA-U", "PSK31":"DATA-U",
+}
+
+def flrig_poller():
+    """
+    Background thread: polls flrig XML-RPC every 1.5 s for frequency and mode.
+    flrig exposes rig.get_vfoA() (Hz string) and rig.get_mode() (mode string).
+    Only runs when FLRIG_ENABLED is True.
+    """
+    global latest_flrig, flrig_connected
+    while True:
+        if not FLRIG_ENABLED:
+            flrig_connected = False
+            threading.Event().wait(3)
+            continue
+        try:
+            srv  = _flrig_server()
+            freq = srv.rig.get_vfoA()
+            mode = srv.rig.get_mode()
+            if freq:
+                latest_flrig["freq_mhz"] = round(int(freq) / 1_000_000, 6)
+            if mode:
+                # Normalise flrig mode name → SDRLogger+ dropdown value
+                raw = mode.strip().upper()
+                latest_flrig["mode"] = _FLRIG_MODE_IN.get(raw, raw)
+            # Auto-detect this rig's digital mode names once per connection cycle
+            if not flrig_connected:
+                try:
+                    modes_raw = srv.rig.get_modes() or ""
+                    avail = {m.strip().upper() for m in modes_raw.split(',')}
+                    for dm in _FLRIG_DIGITAL_USB_NAMES:
+                        if dm.upper() in avail:
+                            latest_flrig["digital_usb"] = dm
+                            break
+                    for dm in _FLRIG_DIGITAL_LSB_NAMES:
+                        if dm.upper() in avail:
+                            latest_flrig["digital_lsb"] = dm
+                            break
+                    _log(f"flrig digital modes detected — USB: {latest_flrig['digital_usb']}  LSB: {latest_flrig['digital_lsb']}")
+                except Exception:
+                    pass  # get_modes() not supported on this flrig build — keep defaults
+            try:
+                latest_flrig["rig"] = srv.rig.get_xcvr() or ""
+            except Exception:
+                pass
+            flrig_connected = True
+        except Exception:
+            flrig_connected = False
+        threading.Event().wait(1.5)
+
+def flrig_set_freq_mode(freq_mhz, mode=""):
+    """
+    Set frequency and optionally mode via flrig XML-RPC.
+    Frequency and mode are set independently — a mode failure will not
+    prevent the frequency from being tuned.
+    Tries integer first (most flrig versions), falls back to string if needed.
+    """
+    if not FLRIG_ENABLED:
+        return False
+    freq_ok = False
+    hz = int(float(freq_mhz) * 1_000_000)
+    try:
+        srv = _flrig_server()
+        # flrig XML-RPC set_vfoA requires a double (<double> XML-RPC type), not int or string
+        srv.rig.set_vfoA(float(hz))
+        freq_ok = True
+    except Exception as e:
+        _log(f"flrig set_vfoA error ({freq_mhz} MHz → {hz} Hz): {e}")
+        return False
+    if mode:
+        flrig_mode = mode   # fallback label for error logging
+        try:
+            mode_up = mode.strip().upper()
+            # Audio-passthrough digital modes — apply FLRIG_DIGITAL_MODE override if set
+            # RTTY/RTTY-R are native radio modes and bypass this; they go to _FLRIG_MODE_OUT directly
+            _DIGITAL_PASSTHROUGH_USB = {"FT8","FT4","JS8","WSPR","JT65","JT9","DIGI","PSK31","DIGU","DATA-U","PKT-U"}
+            _DIGITAL_PASSTHROUGH_LSB = {"DIGL","DATA-L","PKT-L"}
+            if mode_up in _DIGITAL_PASSTHROUGH_USB:
+                # Use manual override first (e.g. "USB-D" for Icom), then auto-detected, then default
+                flrig_mode = FLRIG_DIGITAL_MODE if FLRIG_DIGITAL_MODE else latest_flrig.get("digital_usb", "DATA-U")
+            elif mode_up in _DIGITAL_PASSTHROUGH_LSB:
+                # LSB passthrough (DIGL) — use auto-detected LSB digital name
+                flrig_mode = latest_flrig.get("digital_lsb", "DATA-L")
+            elif mode_up in {"RTTY", "RTTY-R", "RTTYR"}:
+                # RTTY — use override if set (e.g. "USB-D" for AFSK/fldigi), else native RTTY mode
+                flrig_mode = FLRIG_RTTY_MODE if FLRIG_RTTY_MODE else _FLRIG_MODE_OUT.get(mode_up, mode_up)
+            else:
+                # All other native modes (USB, LSB, CW, AM, FM, etc.)
+                flrig_mode = _FLRIG_MODE_OUT.get(mode_up, mode_up)
+            _log(f"flrig set_mode: SDRLogger+ mode={mode} → flrig mode={flrig_mode}")
+            srv.rig.set_mode(flrig_mode)
+        except Exception as e:
+            _log(f"flrig set_mode error ({mode} → {flrig_mode}): {e}")
+            pass   # Mode set failed — frequency still tuned, not a fatal error
+    return freq_ok
+
 # ─── HamLib rigctld state ─────────────────────────────────────────────────────
 latest_hamlib    = {"freq_mhz": "", "mode": ""}
 hamlib_connected = False
@@ -310,11 +523,11 @@ def hamlib_poller():
             mode_line = mode_resp.split("\n")[0].strip()
             if mode_line and not mode_line.startswith("RPRT"):
                 mode = mode_line.split()[0].upper()
-                # Normalise rigctld mode names → SDRLogger+ mode names
-                _mode_map = {"USB":"SSB","LSB":"SSB","AM":"AM","FM":"FM",
-                             "CW":"CW","CWR":"CW","RTTY":"RTTY","RTTYR":"RTTY",
-                             "PKTUSB":"FT8","PKTLSB":"FT8","PKTFM":"FT8",
-                             "DIGI":"DIGI","DIGU":"DIGI","DIGL":"DIGI"}
+                # Normalise rigctld mode names → SDRLogger+ dropdown values
+                _mode_map = {"USB":"USB","LSB":"LSB","AM":"AM","FM":"FM","NFM":"FM",
+                             "CW":"CWU","CWR":"CWL","RTTY":"RTTY","RTTYR":"RTTY",
+                             "PKTUSB":"DIGU","PKTLSB":"DIGL","PKTFM":"DIGU",
+                             "DIGI":"DIGU","DIGU":"DIGU","DIGL":"DIGL"}
                 latest_hamlib["mode"] = _mode_map.get(mode, mode)
         threading.Event().wait(1.5)
 
@@ -323,13 +536,22 @@ def hamlib_set_freq_mode(freq_mhz, mode=""):
     """Send set_freq (and optionally set_mode) commands to rigctld."""
     if not HAMLIB_ENABLED:
         return False
+    # SDRLogger+ mode name → rigctld mode name
+    _rig_map = {
+        "USB":"USB",   "LSB":"LSB",
+        "CWU":"CW",    "CWL":"CWR",   "CW":"CW",
+        "AM":"AM",     "FM":"FM",     "NFM":"FM",   "SAM":"AM",
+        "RTTY":"RTTY", "RTTY-R":"RTTYR","RTTYR":"RTTYR",
+        "DIGU":"PKTUSB","DIGL":"PKTLSB",
+        "FT8":"PKTUSB","FT4":"PKTUSB","JS8":"PKTUSB","WSPR":"PKTUSB",
+        "JT65":"PKTUSB","JT9":"PKTUSB","PSK31":"PKTUSB",
+        "DIGI":"PKTUSB","DATA":"PKTUSB","VARAC":"PKTUSB",
+    }
     try:
-        freq_hz = int(float(freq_mhz) * 1_000_000)
-        _hamlib_cmd(f"\\set_freq {freq_hz}")
+        if freq_mhz is not None:
+            freq_hz = int(float(freq_mhz) * 1_000_000)
+            _hamlib_cmd(f"\\set_freq {freq_hz}")
         if mode:
-            # Map our mode names back to rigctld names
-            _rig_map = {"SSB":"USB","CW":"CW","FT8":"PKTUSB","JS8":"PKTUSB",
-                        "RTTY":"RTTY","AM":"AM","FM":"FM","DIGI":"PKTUSB"}
             rig_mode = _rig_map.get(mode.upper(), mode.upper())
             _hamlib_cmd(f"\\set_mode {rig_mode} 0")
         return True
@@ -496,15 +718,21 @@ def tci_ws_client():
     """
     global tci_ws_connected, tci_active_sock
     while True:
+        if not TCI_ENABLED:
+            tci_ws_connected = False
+            with tci_send_lock:
+                tci_active_sock = None
+            threading.Event().wait(3)
+            continue
         try:
-            print(f"TCI: connecting to ws://{TCI_HOST}:{TCI_PORT} …")
+            _log(f"TCI: connecting to ws://{TCI_HOST}:{TCI_PORT} …")
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
             sock.connect((TCI_HOST, TCI_PORT))
             sock.settimeout(None)
 
             if not ws_handshake(sock, TCI_HOST, TCI_PORT):
-                print("TCI: WebSocket handshake failed — retrying in 10s")
+                _log("TCI: WebSocket handshake failed — retrying in 10s")
                 sock.close()
                 threading.Event().wait(10)
                 continue
@@ -512,7 +740,7 @@ def tci_ws_client():
             tci_ws_connected = True
             with tci_send_lock:
                 tci_active_sock = sock
-            print(f"TCI: connected to Thetis on {TCI_HOST}:{TCI_PORT}")
+            _log(f"TCI: connected to Thetis on {TCI_HOST}:{TCI_PORT}")
 
             while True:
                 frame = ws_recv_frame(sock)
@@ -530,13 +758,13 @@ def tci_ws_client():
 
             sock.close()
         except Exception as e:
-            print(f"TCI: connection failed ({e})")
+            _log(f"TCI: connection failed ({e})")
         finally:
             tci_ws_connected = False
             with tci_send_lock:
                 tci_active_sock = None
 
-        print("TCI: disconnected — reconnecting in 10s …")
+        _log("TCI: disconnected — reconnecting in 10s …")
         threading.Event().wait(10)
 
 
@@ -691,8 +919,8 @@ def clublog_upload(qso):
 
     if _clublog_blocked:
         return False, "Club Log uploads disabled — authentication failed previously; re-check credentials in Settings"
-    if not CLUBLOG_API_KEY:
-        return False, "Club Log API key not configured"
+    if not CLUBLOG_APP_KEY:
+        return False, "Club Log application key not available in this build"
     if not CLUBLOG_EMAIL:
         return False, "Club Log email not configured"
     if not CLUBLOG_PASSWORD:
@@ -723,33 +951,101 @@ def clublog_upload(qso):
             "<EOR>"
         )
 
+        # Club Log realtime.php uses application/x-www-form-urlencoded.
+        # multipart is only for putlogs.php (batch file upload).
+        _log(f"[clublog] uploading QSO: {qso.get('callsign','')} {qso.get('band','')} {qso.get('mode','')}")
         resp = requests.post(
             "https://clublog.org/realtime.php",
             data={
-                "api":      CLUBLOG_API_KEY,
+                "api":      CLUBLOG_APP_KEY.strip(),
                 "email":    CLUBLOG_EMAIL,
                 "password": CLUBLOG_PASSWORD,
                 "callsign": callsign,
                 "adif":     adif,
             },
+            headers={"User-Agent": f"SDRLoggerPlus/{VERSION}"},
             timeout=10
         )
 
-        if resp.status_code == 403:
-            _clublog_blocked = True   # stop all further uploads until credentials are fixed
-            return False, "Club Log: authentication failed (403) — uploads halted; re-check credentials in Settings"
+        body = resp.text.strip()
+        _log(f"[clublog] HTTP {resp.status_code} — {body[:200]}")
+        if resp.status_code == 403 or body.startswith("Login rejected"):
+            _clublog_blocked = True   # ONE-STRIKE RULE: stop ALL further uploads immediately
+            _log("[clublog] 403 received — uploads BLOCKED to prevent IP firewall ban")
+            return False, "Club Log: authentication failed (403) — uploads disabled to prevent IP ban. Re-check credentials in Settings."
         elif resp.status_code == 400:
-            return False, f"Club Log: QSO rejected — {resp.text.strip()[:200]}"
+            return False, f"Club Log: QSO rejected — {body[:200]}"
         elif resp.status_code == 500:
             return False, "Club Log: server error (500) — try again later"
         elif resp.status_code == 200:
-            body = resp.text.strip()
-            if "QSO OK" in body or "QSO Modified" in body or "QSO Duplicate" in body:
+            # Club Log actual response strings per their API: "OK", "Dupe", "Updated QSO"
+            if re.search(r'\bOK\b', body) or re.search(r'\bDupe\b', body) or "Updated QSO" in body:
                 return True, None
             else:
                 return False, f"Club Log: unexpected response — {body[:200]}"
         else:
             return False, f"Club Log: HTTP {resp.status_code}"
+
+    except Exception as e:
+        return False, str(e)
+
+
+def eqsl_upload(qso):
+    """
+    Upload a single QSO to eQSL.cc via the ADIF import API.
+
+    POST to https://www.eQSL.cc/qslcard/ImportADIF.cfm with fields:
+      EQSL_USER, EQSL_PSWD, ADIFData
+    PROGRAMID:10>SDRLogger+ is included in the ADIF header to suppress
+    the "Logger not found" warning.  eQSL does not block IPs on errors.
+    Returns (True, None) on success or (False, error_string) on failure.
+    """
+    if not EQSL_USER:
+        return False, "eQSL username not configured"
+    if not EQSL_PASS:
+        return False, "eQSL password not configured"
+
+    try:
+        def adif_field(name, val):
+            v = str(val) if val else ""
+            return f"<{name}:{len(v)}>{v}" if v else ""
+
+        date_str = (qso.get("date_worked") or "").replace("-", "")
+        time_str = (qso.get("time_worked") or "").replace(":", "")[:6]
+
+        adif = (
+            "<ADIF_VER:5>3.1.0"
+            "<PROGRAMID:10>SDRLogger+"
+            "<EOH>"
+            + adif_field("CALL",       qso.get("callsign", ""))
+            + adif_field("QSO_DATE",   date_str)
+            + adif_field("TIME_ON",    time_str)
+            + adif_field("BAND",       qso.get("band", ""))
+            + adif_field("MODE",       qso.get("mode", ""))
+            + adif_field("FREQ",       str(qso.get("freq_mhz", "")))
+            + adif_field("RST_SENT",   qso.get("my_rst_sent", ""))
+            + adif_field("RST_RCVD",   qso.get("their_rst_rcvd", ""))
+            + "<EOR>"
+        )
+
+        resp = requests.post(
+            "https://www.eQSL.cc/qslcard/ImportADIF.cfm",
+            data={"EQSL_USER": EQSL_USER, "EQSL_PSWD": EQSL_PASS, "ADIFData": adif},
+            timeout=15,
+        )
+
+        body = resp.text or ""
+        if resp.status_code != 200:
+            return False, f"eQSL: HTTP {resp.status_code}"
+        if "Record Inserted" in body or "Duplicate" in body:
+            return True, None
+        if "incorrectly formatted" in body.lower() or "error" in body.lower():
+            # Extract short message from HTML
+            import re as _re2
+            m = _re2.search(r'<font[^>]*>([^<]{5,120})</font>', body, _re2.IGNORECASE)
+            snippet = m.group(1).strip() if m else body[:120].strip()
+            return False, f"eQSL: {snippet}"
+        return True, None
 
     except Exception as e:
         return False, str(e)
@@ -969,6 +1265,11 @@ def digital_save_qso(qso_dict):
             threading.Thread(target=clublog_upload,
                              args=(qso_dict | {"callsign": qso_dict["callsign"]},),
                              daemon=True).start()
+        # Optional eQSL upload
+        if EQSL_UPLOAD_ENABLED:
+            threading.Thread(target=eqsl_upload,
+                             args=(qso_dict | {"callsign": qso_dict["callsign"]},),
+                             daemon=True).start()
     except Exception as e:
         print(f"digital_save_qso error: {e}")
 
@@ -1146,11 +1447,13 @@ def _pstrotator_poller():
                             pass
                 except socket.timeout:
                     pass  # no reply this cycle — keep trying
+                except ConnectionResetError:
+                    pass  # Windows: ICMP port-unreachable when PstRotator not running — ignore
 
                 _t.sleep(0.15)  # poll every 150 ms — smooth real-time AZ display
 
         except Exception as exc:
-            print(f"RotatorPoller: {exc}")
+            _log(f"RotatorPoller: {exc}")   # debug report only — not console spam
             with _rot_live_az_lock:
                 _rot_live_az = None
         finally:
@@ -1266,6 +1569,210 @@ def changelog():
     return html
 
 
+# ── K1EL WinKeyer serial management ──────────────────────────────────────────
+
+def _wk_build_pincfg():
+    """Build the PINCFG byte from user settings (Key port, PTT enable)."""
+    cfg = 0
+    if WINKEYER_KEY_OUT in ("port1", "both"):
+        cfg |= 0x04          # Bit 2 = KEYPORT1
+    if WINKEYER_KEY_OUT in ("port2", "both"):
+        cfg |= 0x08          # Bit 3 = KEYPORT0 (Port 2)
+    if WINKEYER_PTT:
+        cfg |= 0x01          # Bit 0 = USEPTT
+    return cfg
+
+
+def _wk_connect():
+    """Open the serial port, sync the parser, enter host mode, configure."""
+    global _wk_serial, _wk_is_open, _wk_version
+    import serial as _ser
+
+    if _wk_is_open:
+        return True
+    if not WINKEYER_PORT:
+        return False
+
+    try:
+        _log(f"WinKeyer: opening {WINKEYER_PORT} at 1200 baud 8N2 ...")
+        ser = _ser.Serial(
+            port=WINKEYER_PORT,
+            baudrate=1200,
+            bytesize=_ser.EIGHTBITS,
+            parity=_ser.PARITY_NONE,
+            stopbits=_ser.STOPBITS_TWO,  # 8N2 per K1EL spec
+            timeout=1.0,
+            write_timeout=3.0,
+            dsrdtr=False,                # manual DTR — avoids DSR hang
+        )
+        ser.dtr = True                   # WKmini requires DTR asserted
+        import time
+        time.sleep(0.1)
+
+        # ── Phase 1: Admin:Close any stale session ──
+        with _wk_lock:
+            ser.write(b'\x00\x03')       # Admin:Close
+            ser.flush()
+        time.sleep(0.5)
+        ser.reset_input_buffer()
+
+        # ── Phase 2: parser sync — four null commands ──
+        with _wk_lock:
+            ser.write(b'\x13\x13\x13\x13')
+            ser.flush()
+        time.sleep(0.1)
+        ser.reset_input_buffer()
+
+        # ── Phase 3: Admin:Open — WinKeyer returns firmware version byte ──
+        with _wk_lock:
+            ser.write(b'\x00\x02')
+            ser.flush()
+        version_byte = ser.read(1)
+        if not version_byte:
+            _log("WinKeyer: no version response — device not found or wrong port")
+            ser.close()
+            return False
+
+        _wk_version = ord(version_byte)
+        _log(f"WinKeyer: connected — firmware version {_wk_version}")
+
+        _wk_serial = ser
+
+        # ── Phase 4: configure device ──
+        _wk_configure_locked()
+
+        _wk_is_open = True
+        return True
+
+    except Exception as e:
+        _log(f"WinKeyer: connect failed — {e}")
+        _wk_is_open = False
+        _wk_version = 0
+        if _wk_serial:
+            try:
+                _wk_serial.close()
+            except Exception:
+                pass
+            _wk_serial = None
+        return False
+
+
+def _wk_configure_locked():
+    """Push current user settings to the connected WinKeyer."""
+    ser = _wk_serial
+    if not ser or not ser.is_open:
+        return
+    try:
+        with _wk_lock:
+            # 0x09 = PINCFG (Port routing + PTT)
+            pincfg = _wk_build_pincfg()
+            ser.write(bytes([0x09, pincfg]))
+            ser.flush()
+
+            # 0x0E = WinKeyer Mode register (keyer mode)
+            mode_byte = {"iambicb": 0x00, "iambica": 0x01,
+                         "ultimatic": 0x02, "bug": 0x03}.get(WINKEYER_MODE, 0x00)
+            ser.write(bytes([0x0E, mode_byte]))
+            ser.flush()
+
+            # 0x04 = PTT Lead/Tail (units of 10 ms)
+            lead = max(0, min(250, int(WINKEYER_PTT_LEAD / 10)))
+            tail = max(0, min(250, int(WINKEYER_PTT_TAIL / 10)))
+            ser.write(bytes([0x04, lead, tail]))
+            ser.flush()
+
+            # 0x02 = WPM speed
+            wpm = max(5, min(99, WINKEYER_WPM))
+            ser.write(bytes([0x02, wpm]))
+            ser.flush()
+
+        _log(f"WinKeyer: configured — pincfg=0x{pincfg:02X}(cmd 0x09) "
+             f"mode=0x{mode_byte:02X}(cmd 0x0E) "
+             f"ptt_lead={WINKEYER_PTT_LEAD}ms ptt_tail={WINKEYER_PTT_TAIL}ms "
+             f"wpm={WINKEYER_WPM}")
+    except Exception as e:
+        _log(f"WinKeyer: configure error — {e}")
+
+
+def _wk_disconnect():
+    """Close host-mode session and release the serial port."""
+    global _wk_serial, _wk_is_open, _wk_version
+    ser = _wk_serial
+    if ser:
+        try:
+            with _wk_lock:
+                ser.write(b'\x00\x03')   # Admin:Close
+                ser.flush()
+            import time
+            time.sleep(0.1)
+            ser.close()
+        except Exception:
+            pass
+    _wk_serial = None
+    _wk_is_open = False
+    _wk_version = 0
+    _log("WinKeyer: disconnected")
+
+
+def _wk_send_text(text):
+    """Send ASCII text to WinKeyer for CW transmission (max 32-char chunks)."""
+    ser = _wk_serial
+    if not ser or not ser.is_open or not _wk_is_open:
+        return False
+    try:
+        data = text.upper().encode("ascii", errors="ignore")
+        with _wk_lock:
+            # Send in 32-byte chunks (WinKeyer internal buffer limit)
+            for i in range(0, len(data), 32):
+                ser.write(data[i:i+32])
+                ser.flush()
+                if i + 32 < len(data):
+                    import time
+                    time.sleep(0.05)   # brief pause between chunks
+        return True
+    except Exception as e:
+        _log(f"WinKeyer: send error — {e}")
+        return False
+
+
+def _wk_abort():
+    """Clear the WinKeyer buffer — stops transmission immediately."""
+    ser = _wk_serial
+    if not ser or not ser.is_open:
+        return
+    try:
+        with _wk_lock:
+            ser.write(b'\x0A')           # Clear Buffer command
+            ser.flush()
+    except Exception:
+        pass
+
+
+def _wk_set_speed(wpm):
+    """Update WinKeyer WPM speed on the fly."""
+    ser = _wk_serial
+    if not ser or not ser.is_open or not _wk_is_open:
+        return
+    wpm = max(5, min(99, int(wpm)))
+    try:
+        with _wk_lock:
+            ser.write(bytes([0x02, wpm]))
+            ser.flush()
+    except Exception:
+        pass
+
+
+def winkeyer_manager():
+    """Background thread: auto-connect / reconnect WinKeyer when enabled."""
+    import time
+    while True:
+        if WINKEYER_ENABLED and WINKEYER_PORT and not _wk_is_open:
+            _wk_connect()
+        elif not WINKEYER_ENABLED and _wk_is_open:
+            _wk_disconnect()
+        time.sleep(5)
+
+
 # ── CW Keyer / Decoder ────────────────────────────────────────────────────────
 _cw_wpm      = 20
 _cw_break_in = False
@@ -1303,20 +1810,38 @@ def api_cw_send():
         return jsonify({"ok": False, "error": "No text provided"})
     _cw_wpm = wpm
     if tci_ws_connected:
-        send_tci_command(f"cw_macros_speed:{wpm}")
-        send_tci_command(f"cw_macros:0,{text}")
+        r1 = send_tci_command(f"cw_macros_speed:{wpm}")
+        r2 = send_tci_command(f"cw_macros:0,{text}")
+        _log(f"TCI CW: speed_cmd={'OK' if r1 else 'FAIL'} macros_cmd={'OK' if r2 else 'FAIL'} wpm={wpm} text='{text}'")
         return jsonify({"ok": True, "path": "tci"})
+    if WINKEYER_ENABLED and _wk_is_open:
+        _log(f"WinKeyer: sending CW — wpm={wpm} text='{text}'")
+        _wk_set_speed(wpm)
+        if _wk_send_text(text):
+            _log("WinKeyer: send OK")
+            return jsonify({"ok": True, "path": "winkeyer"})
+        else:
+            _log("WinKeyer: send FAILED — _wk_send_text returned False")
     if HAMLIB_ENABLED and hamlib_connected:
         resp = _hamlib_cmd(f"\\send_morse {text}")
         if resp is not None:
             return jsonify({"ok": True, "path": "hamlib"})
-    return jsonify({"ok": False, "error": "No TCI or HamLib connection active"})
+    return jsonify({"ok": False, "error": "No CW keyer active — enable TCI, WinKeyer, or HamLib in Settings"})
 
 @app.route("/api/cw_stop", methods=["POST"])
 def api_cw_stop():
     if tci_ws_connected:
         send_tci_command("cw_macros_stop")
         return jsonify({"ok": True, "path": "tci"})
+    if WINKEYER_ENABLED and _wk_is_open:
+        _wk_abort()
+        return jsonify({"ok": True, "path": "winkeyer"})
+    if FLRIG_ENABLED and flrig_connected:
+        try:
+            _flrig_server().rig.stop_morse()
+            return jsonify({"ok": True, "path": "flrig"})
+        except Exception:
+            pass
     if HAMLIB_ENABLED and hamlib_connected:
         _hamlib_cmd("\\stop")
         return jsonify({"ok": True, "path": "hamlib"})
@@ -1329,8 +1854,12 @@ def api_cw_speed():
         _cw_wpm = max(5, min(60, int((request.json or {}).get("wpm", _cw_wpm))))
         if tci_ws_connected:
             send_tci_command(f"cw_macros_speed:{_cw_wpm}")
+        if WINKEYER_ENABLED and _wk_is_open:
+            _wk_set_speed(_cw_wpm)
     return jsonify({"wpm": _cw_wpm, "tci": tci_ws_connected,
-                    "hamlib": bool(HAMLIB_ENABLED and hamlib_connected)})
+                    "flrig":   bool(FLRIG_ENABLED and flrig_connected),
+                    "hamlib":  bool(HAMLIB_ENABLED and hamlib_connected),
+                    "winkeyer": bool(WINKEYER_ENABLED and _wk_is_open)})
 
 @app.route("/api/cw_breakin", methods=["POST"])
 def api_cw_breakin():
@@ -1341,8 +1870,10 @@ def api_cw_breakin():
 
 @app.route("/api/cw_status")
 def api_cw_status():
-    return jsonify({"tci": tci_ws_connected,
-                    "hamlib": bool(HAMLIB_ENABLED and hamlib_connected),
+    return jsonify({"tci":      tci_ws_connected,
+                    "flrig":    bool(FLRIG_ENABLED and flrig_connected),
+                    "hamlib":   bool(HAMLIB_ENABLED and hamlib_connected),
+                    "winkeyer": bool(WINKEYER_ENABLED and _wk_is_open),
                     "wpm": _cw_wpm, "breakin": _cw_break_in,
                     "mycall": MY_CALLSIGN, "myname": MY_NAME,
                     "serial": _cw_serial,
@@ -1447,10 +1978,22 @@ def save_qso():
         else:
             print(f"Club Log upload OK — {callsign}")
 
+    # Auto-upload to eQSL.cc if configured
+    eqsl_ok = None
+    eqsl_msg = None
+    if EQSL_UPLOAD_ENABLED:
+        eqsl_ok, eqsl_err = eqsl_upload(data | {"callsign": callsign})
+        if eqsl_err:
+            print(f"eQSL upload failed: {eqsl_err}")
+            eqsl_msg = eqsl_err
+        else:
+            print(f"eQSL upload OK — {callsign}")
+
     return jsonify({"ok": True, "callsign": callsign,
                     "qrz_logid": qrz_logid, "qrz_msg": qrz_msg,
                     "lotw_ok": lotw_ok, "lotw_msg": lotw_msg,
-                    "clublog_ok": clublog_ok, "clublog_msg": clublog_msg})
+                    "clublog_ok": clublog_ok, "clublog_msg": clublog_msg,
+                    "eqsl_ok": eqsl_ok, "eqsl_msg": eqsl_msg})
 
 
 @app.route("/api/worked_before/<callsign>")
@@ -1469,10 +2012,72 @@ def worked_before(callsign):
 def tci_data():
     """Browser polls this to get latest data pushed from Thetis SDR."""
     data = dict(latest_tci)
-    data["connected"] = tci_ws_connected
+    data["connected"] = tci_ws_connected and TCI_ENABLED
+    data["enabled"]   = TCI_ENABLED
     latest_tci["callsign"] = ""   # clear callsign after reading (one-shot)
     # keep freq_mhz and mode — they stay until SDR sends new values
     return jsonify(data)
+
+
+@app.route("/api/debug_log")
+def debug_log():
+    """Return the recent in-memory error/event log as JSON."""
+    return jsonify({"entries": list(_debug_log), "version": VERSION})
+
+
+@app.route("/api/debug_report")
+def debug_report():
+    """Generate a plain-text debug report for bug reporting."""
+    import platform
+    from datetime import datetime
+    lines = [
+        "=" * 60,
+        "SDRLogger+ Debug Report",
+        f"Version  : {VERSION}",
+        f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC",
+        f"OS       : {platform.system()} {platform.release()} ({platform.version()})",
+        f"Python   : {platform.python_version()}",
+        "=" * 60,
+        "",
+        "=== Rig Status ===",
+        f"TCI      : {'ENABLED' if TCI_ENABLED else 'disabled'} | connected={tci_ws_connected}",
+        f"flrig    : {'ENABLED' if FLRIG_ENABLED else 'disabled'} | connected={flrig_connected} | host={FLRIG_HOST}:{FLRIG_PORT}",
+        f"HamLib   : {'ENABLED' if HAMLIB_ENABLED else 'disabled'} | connected={hamlib_connected} | host={HAMLIB_HOST}:{HAMLIB_PORT}",
+        f"WinKeyer : {'ENABLED' if WINKEYER_ENABLED else 'disabled'} | open={_wk_is_open} | port={WINKEYER_PORT} | v{_wk_version}",
+        "",
+        "=== Settings (sanitized) ===",
+        f"Callsign : {MY_CALLSIGN}",
+        f"ITU Rgn  : {ITU_REGION}",
+        f"TCI      : {TCI_HOST}:{TCI_PORT}",
+        f"QRZ      : user={'set' if QRZ_USER else 'not set'} | logbook={'enabled' if QRZ_LOGBOOK_UPLOAD_ENABLED else 'off'}",
+        f"LoTW     : {'enabled' if LOTW_UPLOAD_ENABLED else 'off'} | tqsl={'set' if LOTW_TQSL_PATH else 'not set'}",
+        f"ClubLog  : {'enabled' if CLUBLOG_UPLOAD_ENABLED else 'off'} | email={'set' if CLUBLOG_EMAIL else 'not set'} | blocked={_clublog_blocked}",
+        f"eQSL     : {'enabled' if EQSL_UPLOAD_ENABLED else 'off'} | user={'set' if EQSL_USER else 'not set'}",
+        f"Rotator  : {'enabled' if ROTATOR_ENABLED else 'off'} | {ROTATOR_HOST}:{ROTATOR_PORT} ({ROTATOR_PROTOCOL})",
+        f"Telnet   : {'enabled' if TELNET_ENABLED else 'off'} | {TELNET_SERVER}:{TELNET_PORT}",
+        "",
+        "=== Recent Log (newest last) ===",
+    ]
+    lines.extend(list(_debug_log) if _debug_log else ["  (no entries)"])
+    lines += ["", "=" * 60, "End of report", "=" * 60]
+    report_text = "\n".join(lines)
+    from flask import Response
+    return Response(
+        report_text,
+        mimetype="text/plain",
+        headers={"Content-Disposition": f"attachment; filename=SDRLoggerPlus_debug_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.txt"}
+    )
+
+
+@app.route("/api/log_js_error", methods=["POST"])
+def log_js_error():
+    """Receive a JavaScript error from the browser and add it to the debug log."""
+    data = request.json or {}
+    msg  = data.get("message", "unknown JS error")
+    url  = data.get("url", "")
+    line = data.get("line", "")
+    _log(f"JS ERROR: {msg} | {url} line {line}")
+    return jsonify({"ok": True})
 
 
 # ─── QRZ XML Session Manager ──────────────────────────────────────────────────
@@ -1785,26 +2390,55 @@ def hamqth_test_lookup():
 
 @app.route("/api/clublog_test")
 def clublog_test():
-    """Test Club Log credentials by uploading nothing — just a credential check via a minimal POST."""
-    email    = request.args.get("email",    CLUBLOG_EMAIL).strip()
-    password = request.args.get("password", CLUBLOG_PASSWORD)
-    callsign = request.args.get("callsign", CLUBLOG_CALLSIGN or MY_CALLSIGN).strip().upper()
-    api_key  = request.args.get("api_key",  CLUBLOG_API_KEY).strip()
-    if not all([email, password, callsign, api_key]):
-        return jsonify({"ok": False, "error": "Fill in all four Club Log fields before testing"})
+    """Test Club Log credentials using getlotwstate.php — a safe read-only
+    endpoint that verifies api + email + password + callsign and returns
+    HTTP 200 on valid credentials.
+
+    NEVER use realtime.php for testing — repeated failed POSTs trigger
+    Club Log's reactive IP firewall.
+
+    getlotwstate.php is a lightweight GET that returns LoTW sync state.
+    We only care about 200 (valid) vs 403 (invalid).
+
+    Ref: https://clublog.freshdesk.com/support/solutions/articles/3000064882
+    """
+    global _clublog_blocked
+    if not CLUBLOG_APP_KEY:
+        return jsonify({"ok": False, "error": "Club Log application key not available in this build"})
+    if not CLUBLOG_EMAIL:
+        return jsonify({"ok": False, "error": "Save your Club Log email in Settings first"})
+    if not CLUBLOG_PASSWORD:
+        return jsonify({"ok": False, "error": "Save your Club Log password in Settings first"})
+    callsign = (CLUBLOG_CALLSIGN or MY_CALLSIGN).strip().upper()
+    if not callsign:
+        return jsonify({"ok": False, "error": "Save your callsign in Settings first"})
     try:
-        # Send a deliberately invalid (empty) ADIF — Club Log returns 400 (not 403) for bad ADIF
-        # but 403 for bad credentials, so this cleanly tests auth without uploading anything.
-        resp = requests.post(
-            "https://clublog.org/realtime.php",
-            data={"api": api_key, "email": email, "password": password,
-                  "callsign": callsign, "adif": ""},
-            timeout=10
+        _log(f"[clublog_test] verifying via getlotwstate.php — "
+             f"email='{CLUBLOG_EMAIL}' | password len={len(CLUBLOG_PASSWORD)} | "
+             f"callsign='{callsign}' | api key len={len(CLUBLOG_APP_KEY.strip())}")
+        resp = requests.get(
+            "https://clublog.org/getlotwstate.php",
+            params={
+                "api":      CLUBLOG_APP_KEY.strip(),
+                "email":    CLUBLOG_EMAIL,
+                "password": CLUBLOG_PASSWORD,
+                "callsign": callsign,
+            },
+            headers={"User-Agent": f"SDRLoggerPlus/{VERSION}"},
+            timeout=15
         )
+        body = resp.text.strip()[:400]
+        is_nginx = "nginx" in body.lower() and "<html" in body.lower()
+        _log(f"[clublog_test] HTTP {resp.status_code} — {body[:200]}")
+        if resp.status_code == 200:
+            _clublog_blocked = False       # credentials good — clear any prior block
+            return jsonify({"ok": True, "note": "Credentials verified — Club Log is ready"})
         if resp.status_code == 403:
-            return jsonify({"ok": False, "error": "Authentication failed (403) — check email, password, and API key"})
-        # 400 = bad ADIF but credentials accepted — that's a pass
-        return jsonify({"ok": True, "note": f"Credentials accepted (HTTP {resp.status_code})"})
+            if is_nginx:
+                return jsonify({"ok": False, "error": "Your IP is temporarily blocked by Club Log's firewall (nginx 403). "
+                                "This is from earlier failed attempts — wait approximately 1 hour, then test again."})
+            return jsonify({"ok": False, "error": "Authentication failed (403) — check your Club Log email, App Password, and callsign"})
+        return jsonify({"ok": False, "error": f"Unexpected response (HTTP {resp.status_code}) — {body[:200]}"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
@@ -1851,14 +2485,17 @@ def callsign_lookup_route(callsign):
 
 @app.route("/api/settings", methods=["POST"])
 def update_settings():
-    global QRZ_USER, QRZ_PASS, QRZ_LOGBOOK_KEY, QRZ_LOGBOOK_UPLOAD_ENABLED, TELNET_ENABLED, TELNET_SERVER, TELNET_PORT, MY_CALLSIGN, MY_NAME, TCI_HOST, TCI_PORT, _qrz_session_key
+    global QRZ_USER, QRZ_PASS, QRZ_LOGBOOK_KEY, QRZ_LOGBOOK_UPLOAD_ENABLED, TELNET_ENABLED, TELNET_SERVER, TELNET_PORT, MY_CALLSIGN, MY_NAME, TCI_ENABLED, TCI_HOST, TCI_PORT, ITU_REGION, _qrz_session_key
     global HAMQTH_USER, HAMQTH_PASS, _hamqth_session_key
     global LOTW_TQSL_PATH, LOTW_STATION_LOCATION, LOTW_UPLOAD_ENABLED
-    global CLUBLOG_API_KEY, CLUBLOG_EMAIL, CLUBLOG_PASSWORD, CLUBLOG_CALLSIGN, CLUBLOG_UPLOAD_ENABLED, _clublog_blocked
+    global CLUBLOG_EMAIL, CLUBLOG_PASSWORD, CLUBLOG_CALLSIGN, CLUBLOG_UPLOAD_ENABLED, CLUBLOG_UPLOAD_DESIGNATOR, _clublog_blocked
     global DIGITAL_UDP_ENABLED, DIGITAL_UDP_PORT, DIGITAL_TCP_ENABLED, DIGITAL_TCP_PORT
     global ROTATOR_ENABLED, ROTATOR_HOST, ROTATOR_PORT, ROTATOR_PROTOCOL, ROTATOR_AUTO
     global BACKUP_PATH
+    global FLRIG_ENABLED, FLRIG_HOST, FLRIG_PORT, FLRIG_DIGITAL_MODE, FLRIG_RTTY_MODE
     global HAMLIB_ENABLED, HAMLIB_HOST, HAMLIB_PORT
+    global WINKEYER_ENABLED, WINKEYER_PORT, WINKEYER_WPM, WINKEYER_KEY_OUT, WINKEYER_MODE, WINKEYER_PTT, WINKEYER_PTT_LEAD, WINKEYER_PTT_TAIL
+    global EQSL_USER, EQSL_PASS, EQSL_UPLOAD_ENABLED
     global POTA_MY_PARK, POTA_USER, POTA_PASS
     data = request.json or {}
     runtime_settings.update(data)
@@ -1879,15 +2516,15 @@ def update_settings():
     if "lotw_tqsl_path"      in data: LOTW_TQSL_PATH         = data["lotw_tqsl_path"].strip()
     if "lotw_station_location" in data: LOTW_STATION_LOCATION = data["lotw_station_location"].strip()
     if "lotw_upload_enabled" in data: LOTW_UPLOAD_ENABLED    = bool(data["lotw_upload_enabled"])
-    if data.get("clublog_api_key"):      CLUBLOG_API_KEY      = data["clublog_api_key"].strip()
     if "clublog_email"    in data:
         CLUBLOG_EMAIL    = data["clublog_email"].strip()
         _clublog_blocked = False   # credential change — clear block
     if "clublog_password" in data:
         CLUBLOG_PASSWORD = data["clublog_password"]
         _clublog_blocked = False
-    if "clublog_callsign" in data:       CLUBLOG_CALLSIGN     = data["clublog_callsign"].strip().upper()
-    if "clublog_upload_enabled" in data: CLUBLOG_UPLOAD_ENABLED = bool(data["clublog_upload_enabled"])
+    if "clublog_callsign" in data:            CLUBLOG_CALLSIGN           = data["clublog_callsign"].strip().upper()
+    if "clublog_upload_enabled" in data:      CLUBLOG_UPLOAD_ENABLED     = bool(data["clublog_upload_enabled"])
+    if data.get("clublog_upload_designator"): CLUBLOG_UPLOAD_DESIGNATOR  = data["clublog_upload_designator"][:1].upper()
     if "telnet_enabled" in data:    TELNET_ENABLED   = bool(data["telnet_enabled"]) if not isinstance(data["telnet_enabled"], str) else data["telnet_enabled"].lower() == "true"
     if data.get("telnet_server"):   TELNET_SERVER    = data["telnet_server"]
     if data.get("telnet_port"):     TELNET_PORT      = int(data["telnet_port"])
@@ -1906,6 +2543,15 @@ def update_settings():
             if tci_active_sock:
                 try: tci_active_sock.close()
                 except Exception: pass
+    if "tci_enabled" in data:
+        TCI_ENABLED = bool(data["tci_enabled"])
+        if not TCI_ENABLED:
+            with tci_send_lock:
+                if tci_active_sock:
+                    try: tci_active_sock.close()
+                    except Exception: pass
+    if "itu_region" in data:
+        ITU_REGION = int(data["itu_region"])
     # Digital app integration settings
     if "digital_udp_enabled" in data: DIGITAL_UDP_ENABLED = bool(data["digital_udp_enabled"])
     if data.get("digital_udp_port"):  DIGITAL_UDP_PORT    = int(data["digital_udp_port"])
@@ -1918,10 +2564,29 @@ def update_settings():
     if data.get("rotator_protocol"):ROTATOR_PROTOCOL = data["rotator_protocol"]
     if "rotator_auto"     in data: ROTATOR_AUTO     = bool(data["rotator_auto"])
     if "backup_path"      in data: BACKUP_PATH      = data["backup_path"].strip()
+    # flrig settings
+    if "flrig_enabled"      in data: FLRIG_ENABLED      = bool(data["flrig_enabled"])
+    if data.get("flrig_host"):       FLRIG_HOST          = data["flrig_host"].strip()
+    if data.get("flrig_port"):       FLRIG_PORT          = int(data["flrig_port"])
+    if "flrig_digital_mode" in data: FLRIG_DIGITAL_MODE  = data["flrig_digital_mode"].strip()
+    if "flrig_rtty_mode"    in data: FLRIG_RTTY_MODE     = data["flrig_rtty_mode"].strip()
     # HamLib settings
     if "hamlib_enabled"   in data: HAMLIB_ENABLED   = bool(data["hamlib_enabled"])
     if data.get("hamlib_host"):    HAMLIB_HOST       = data["hamlib_host"].strip()
     if data.get("hamlib_port"):    HAMLIB_PORT       = int(data["hamlib_port"])
+    # WinKeyer settings
+    if "winkeyer_enabled"  in data: WINKEYER_ENABLED  = bool(data["winkeyer_enabled"])
+    if data.get("winkeyer_port"):   WINKEYER_PORT     = data["winkeyer_port"].strip()
+    if data.get("winkeyer_wpm"):    WINKEYER_WPM      = int(data["winkeyer_wpm"])
+    if data.get("winkeyer_key_out"):WINKEYER_KEY_OUT  = data["winkeyer_key_out"]
+    if data.get("winkeyer_mode"):   WINKEYER_MODE     = data["winkeyer_mode"]
+    if "winkeyer_ptt"      in data: WINKEYER_PTT      = bool(data["winkeyer_ptt"])
+    if "winkeyer_ptt_lead" in data: WINKEYER_PTT_LEAD = int(data["winkeyer_ptt_lead"])
+    if "winkeyer_ptt_tail" in data: WINKEYER_PTT_TAIL = int(data["winkeyer_ptt_tail"])
+    # eQSL settings
+    if data.get("eqsl_user"):          EQSL_USER           = data["eqsl_user"].strip()
+    if "eqsl_pass"         in data:    EQSL_PASS           = data["eqsl_pass"]
+    if "eqsl_upload_enabled" in data:  EQSL_UPLOAD_ENABLED = bool(data["eqsl_upload_enabled"])
     # POTA settings
     if data.get("pota_my_park"):   POTA_MY_PARK      = data["pota_my_park"].strip().upper()
     if "pota_user"        in data: POTA_USER         = data["pota_user"].strip()
@@ -1932,7 +2597,12 @@ def update_settings():
 
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
-    return jsonify(runtime_settings)
+    # Merge runtime_settings with hard-coded defaults for fields that may not
+    # exist in older saved settings files (new fields added in later versions).
+    defaults = {
+        "clublog_upload_designator":  CLUBLOG_UPLOAD_DESIGNATOR,
+    }
+    return jsonify({**defaults, **runtime_settings})
 
 
 @app.route("/api/backup_db", methods=["GET", "POST"])
@@ -2110,12 +2780,12 @@ def hamlib_data():
 
 @app.route("/api/hamlib_tune", methods=["POST"])
 def hamlib_tune():
-    """Tune rig to given frequency/mode via rigctld."""
+    """Tune rig to given frequency and/or mode via rigctld."""
     data     = request.json or {}
     freq_mhz = data.get("freq_mhz")
     mode     = data.get("mode", "")
-    if not freq_mhz:
-        return jsonify({"ok": False, "error": "freq_mhz required"}), 400
+    if freq_mhz is None and not mode:
+        return jsonify({"ok": False, "error": "freq_mhz or mode required"}), 400
     ok = hamlib_set_freq_mode(freq_mhz, mode)
     return jsonify({"ok": ok, "connected": hamlib_connected})
 
@@ -2128,6 +2798,175 @@ def hamlib_test():
         return jsonify({"ok": False, "error": f"Cannot connect to rigctld at {HAMLIB_HOST}:{HAMLIB_PORT}"})
     # First line of dump_state is protocol version — just confirm connected
     return jsonify({"ok": True, "info": f"rigctld connected at {HAMLIB_HOST}:{HAMLIB_PORT}"})
+
+
+@app.route("/api/serial_ports")
+def serial_ports():
+    """Return a list of available COM ports on this machine."""
+    try:
+        from serial.tools.list_ports import comports
+        ports = [{"port": p.device, "desc": p.description} for p in sorted(comports())]
+    except Exception:
+        ports = []
+    return jsonify({"ports": ports})
+
+
+@app.route("/api/winkeyer_test", methods=["POST"])
+def winkeyer_test():
+    """Test WinKeyer connection — open, read version, close if not already open."""
+    global WINKEYER_ENABLED
+    try:
+        data = request.get_json(silent=True) or {}
+    except Exception:
+        data = {}
+    port = (data.get("port") or WINKEYER_PORT or "").strip()
+    if not port:
+        return jsonify({"ok": False, "error": "No COM port specified"})
+    # If already connected on this port, just report the version
+    if _wk_is_open and WINKEYER_PORT == port:
+        return jsonify({"ok": True, "version": _wk_version, "info": f"WinKeyer connected on {port} — firmware version {_wk_version}"})
+    # Otherwise do a fresh connect test
+    import serial as _ser
+    try:
+        ser = _ser.Serial(port=port, baudrate=1200, bytesize=_ser.EIGHTBITS,
+                          parity=_ser.PARITY_NONE, stopbits=_ser.STOPBITS_TWO,
+                          timeout=1.0, write_timeout=3.0, dsrdtr=False)
+        ser.dtr = True
+        import time
+        time.sleep(0.1)
+        ser.write(b'\x00\x03')  # close any stale session
+        ser.flush()
+        time.sleep(0.3)
+        ser.reset_input_buffer()
+        ser.write(b'\x13\x13\x13\x13')  # parser sync
+        ser.flush()
+        time.sleep(0.1)
+        ser.reset_input_buffer()
+        ser.write(b'\x00\x02')  # Admin:Open
+        ser.flush()
+        ver = ser.read(1)
+        if ver:
+            v = ord(ver)
+            ser.write(b'\x00\x03')  # Admin:Close
+            ser.flush()
+            time.sleep(0.1)
+            ser.close()
+            return jsonify({"ok": True, "version": v, "info": f"WinKeyer found on {port} — firmware version {v}"})
+        else:
+            ser.close()
+            return jsonify({"ok": False, "error": f"No response from {port} — check WinKeyer is powered and connected"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Cannot open {port} — {e}"})
+
+
+@app.route("/api/flrig_data")
+def flrig_data():
+    """Browser polls this to get latest frequency/mode/rig from flrig."""
+    return jsonify({
+        "connected": flrig_connected,
+        "enabled":   FLRIG_ENABLED,
+        "freq_mhz":  latest_flrig.get("freq_mhz", ""),
+        "mode":      latest_flrig.get("mode", ""),
+        "rig":       latest_flrig.get("rig", ""),
+    })
+
+
+@app.route("/api/flrig_tune", methods=["POST"])
+def flrig_tune():
+    """Tune flrig rig to the requested frequency and/or mode.
+    freq_mhz is optional — omit to change mode only."""
+    if not FLRIG_ENABLED:
+        return jsonify({"ok": False, "error": "flrig not enabled", "connected": False})
+    if not flrig_connected:
+        return jsonify({"ok": False, "error": "flrig not connected", "connected": False})
+    data     = request.json or {}
+    freq_mhz = data.get("freq_mhz")
+    mode     = str(data.get("mode", "") or "")
+    if freq_mhz is None and not mode:
+        return jsonify({"ok": False, "error": "freq_mhz or mode required"}), 400
+    if freq_mhz is not None:
+        # Frequency (and optional mode) change
+        _log(f"flrig_tune called: freq={freq_mhz} MHz  mode={mode!r}  digital_override={FLRIG_DIGITAL_MODE!r}")
+        ok = flrig_set_freq_mode(freq_mhz, mode)
+    else:
+        # Mode-only change — use same digital mode logic as flrig_set_freq_mode
+        ok = False
+        flrig_mode = mode   # fallback label for error logging
+        try:
+            srv = _flrig_server()
+            mode_up = mode.strip().upper()
+            _DIGITAL_PASSTHROUGH_USB = {"FT8","FT4","JS8","WSPR","JT65","JT9","DIGI","PSK31","DIGU","DATA-U","PKT-U"}
+            _DIGITAL_PASSTHROUGH_LSB = {"DIGL","DATA-L","PKT-L"}
+            if mode_up in _DIGITAL_PASSTHROUGH_USB:
+                flrig_mode = FLRIG_DIGITAL_MODE if FLRIG_DIGITAL_MODE else latest_flrig.get("digital_usb", "DATA-U")
+            elif mode_up in _DIGITAL_PASSTHROUGH_LSB:
+                flrig_mode = latest_flrig.get("digital_lsb", "DATA-L")
+            elif mode_up in {"RTTY", "RTTY-R", "RTTYR"}:
+                flrig_mode = FLRIG_RTTY_MODE if FLRIG_RTTY_MODE else _FLRIG_MODE_OUT.get(mode_up, mode_up)
+            else:
+                flrig_mode = _FLRIG_MODE_OUT.get(mode_up, mode_up)
+            _log(f"flrig set_mode (mode-only): SDRLogger+ mode={mode} → flrig mode={flrig_mode}")
+            srv.rig.set_mode(flrig_mode)
+            ok = True
+        except Exception as e:
+            _log(f"flrig set_mode error ({mode} → {flrig_mode}): {e}")
+    return jsonify({"ok": ok, "connected": flrig_connected,
+                    "error": "" if ok else "flrig tune failed — check Python console"})
+
+
+@app.route("/api/list_serial_ports")
+def list_serial_ports():
+    """Return available COM/serial ports."""
+    try:
+        import serial.tools.list_ports as _lp
+        ports = [{"port": p.device, "desc": p.description or p.device}
+                 for p in sorted(_lp.comports(), key=lambda x: x.device)]
+        return jsonify({"ok": True, "ports": ports})
+    except Exception as e:
+        return jsonify({"ok": False, "ports": [], "error": str(e)})
+
+
+@app.route("/api/flrig_test", methods=["POST"])
+def flrig_test():
+    """Test flrig XML-RPC connection — returns rig name and current frequency."""
+    host = (request.json or {}).get("host", FLRIG_HOST) or FLRIG_HOST
+    port = int((request.json or {}).get("port", FLRIG_PORT) or FLRIG_PORT)
+    try:
+        import xmlrpc.client
+        srv     = xmlrpc.client.ServerProxy(f"http://{host}:{port}", allow_none=True)
+        rig     = srv.rig.get_xcvr() or "Unknown rig"
+        freq_hz = srv.rig.get_vfoA()
+        mode    = srv.rig.get_mode() or ""
+        info    = f"flrig connected — {rig}"
+        if freq_hz and int(freq_hz) > 0:
+            info += f" — {round(int(freq_hz)/1_000_000, 3)} MHz {mode}".strip()
+        return jsonify({"ok": True, "info": info})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Cannot connect to flrig at {host}:{port} — {e}"})
+
+
+@app.route("/api/eqsl_test")
+def eqsl_test():
+    """Test eQSL.cc credentials with a minimal ADIF POST."""
+    user = request.args.get("user", EQSL_USER).strip()
+    pwd  = request.args.get("pass", EQSL_PASS)
+    if not user or not pwd:
+        return jsonify({"ok": False, "error": "Enter eQSL username and password first"})
+    try:
+        adif = "<ADIF_VER:5>3.1.0<PROGRAMID:10>SDRLogger+<EOH>"
+        resp = requests.post(
+            "https://www.eQSL.cc/qslcard/ImportADIF.cfm",
+            data={"EQSL_USER": user, "EQSL_PSWD": pwd, "ADIFData": adif},
+            timeout=10,
+        )
+        body = resp.text or ""
+        if resp.status_code != 200:
+            return jsonify({"ok": False, "error": f"HTTP {resp.status_code}"})
+        if "password" in body.lower() or "invalid user" in body.lower() or "not found" in body.lower():
+            return jsonify({"ok": False, "error": "Authentication failed — check username and password"})
+        return jsonify({"ok": True, "note": f"eQSL credentials accepted for {user}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
 
 
 @app.route("/api/set_mode", methods=["POST"])
@@ -2214,6 +3053,8 @@ def spot_spothole():
 @app.route("/api/tci_tune", methods=["POST"])
 def tci_tune():
     """Tune Thetis SDR to a given frequency and/or mode via TCI commands."""
+    if not TCI_ENABLED:
+        return jsonify({"ok": False, "connected": False})
     data    = request.json or {}
     freq_mhz = data.get("freq_mhz")
     mode     = data.get("mode", "").strip().upper()
@@ -2227,8 +3068,19 @@ def tci_tune():
         except (ValueError, TypeError):
             return jsonify({"ok": False, "error": "Invalid frequency"}), 400
     if mode:
-        send_tci_command(f"modulation:0,{mode};")
-        print(f"TCI mode → {mode}")
+        # Map logger/log-only mode names to Thetis TCI modulation names.
+        # Thetis accepts: USB LSB CWU CWL AM FM NFM DIGU DIGL SAM DSB SPEC DRM
+        _TCI_MODE_MAP = {
+            "SSB":  "USB",
+            "CW":   "CWU",
+            "FT8":  "DIGU", "FT4":  "DIGU", "JS8":  "DIGU",
+            "WSPR": "DIGU", "JT65": "DIGU", "JT9":  "DIGU",
+            "PSK31":"DIGU", "DIGI": "DIGU", "DATA": "DIGU", "VARAC":"DIGU",
+            "RTTY": "DIGU", "RTTY-R":"DIGL", "RTTYR":"DIGL",
+        }
+        tci_mode = _TCI_MODE_MAP.get(mode, mode)
+        send_tci_command(f"modulation:0,{tci_mode};")
+        _log(f"TCI mode → {mode} → {tci_mode}")
     return jsonify({"ok": sent, "connected": tci_ws_connected})
 
 
@@ -2961,17 +3813,22 @@ if __name__ == "__main__":
     # Start Digital App integration listeners (always running; activate via settings)
     threading.Thread(target=digital_udp_listener, daemon=True).start()
     threading.Thread(target=digital_tcp_server,   daemon=True).start()
+    # Start flrig poller (always running; activates when FLRIG_ENABLED is True)
+    threading.Thread(target=flrig_poller, daemon=True).start()
     # Start HamLib poller (always running; activates when HAMLIB_ENABLED is True)
     threading.Thread(target=hamlib_poller, daemon=True).start()
-    print("\n🎙  Ham Radio Logbook starting...")
-    print(f"📡  TCI: will connect to ws://{TCI_HOST}:{TCI_PORT}")
-    print(f"🎛  HamLib: rigctld poller ready (enable in Settings)")
-    print(f"🌐  Open your browser to: http://localhost:{WEB_PORT}")
+    # Start WinKeyer manager (always running; activates when WINKEYER_ENABLED is True)
+    threading.Thread(target=winkeyer_manager, daemon=True).start()
+    print("\n  SDRLogger+ starting...")
+    print(f"  TCI    : ws://{TCI_HOST}:{TCI_PORT}")
+    print(f"  flrig  : XML-RPC poller ready (enable in Settings)")
+    print(f"  HamLib : rigctld poller ready (enable in Settings)")
+    print(f"  Browser: http://localhost:{WEB_PORT}")
     if WEB_HOST == "0.0.0.0":
         import socket as _s
         try:
             _lan = _s.gethostbyname(_s.gethostname())
-            print(f"🌐  Also reachable on LAN at: http://{_lan}:{WEB_PORT}")
+            print(f"  LAN    : http://{_lan}:{WEB_PORT}")
         except Exception:
             pass
     print()

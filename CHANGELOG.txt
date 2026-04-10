@@ -1,6 +1,218 @@
 TCILogger — Change Log
 ======================
 
+v0.49 Beta  (2026-04-10)
+------------------------
+- Fix: Installer build — PyInstaller entry point changed from main.py to
+  launcher.py. The v0.47 installer bypassed the launcher entirely, so the
+  frozen exe ran main.py directly with relative paths. Databases, config,
+  and templates were never routed to %APPDATA%\SDRLoggerPlus, the system
+  tray icon never appeared, and the app silently failed to start.
+- Fix: Launcher now starts flrig_poller and winkeyer_manager threads
+  (added in v0.47 but missing from launcher.py).
+- Fix: Launcher sets _APP_SETTINGS_FILE and app.static_folder so settings
+  persist and static assets load correctly in the installed build.
+- Fix: Launcher seeds app_settings.json into AppData on first run.
+- Fix: Club Log credential test switched from checklog.php to the correct
+  getlotwstate.php endpoint — a safe GET that returns 200 on valid
+  credentials without triggering IP blocking.
+- Fix: Help guide updated Club Log reference from checklog.php to
+  getlotwstate.php.
+- Add: CW Decoder — DSP Filter toggle (off by default). Tightens the matched
+  filter bandwidth from 0.5× to 0.85× dit duration for conventional rigs
+  (IC-9100, FT-991A, etc.) that lack SDR-grade bandwidth filtering. Off by
+  default for SDR/Thetis users where Thetis already provides narrow CW filters.
+- Add: CW Decoder — Noise Blanker (NB) toggle (off by default). Clamps impulse
+  noise (static crashes, key clicks) at 3.5× running average before the envelope
+  detector. For conventional rigs without effective built-in NB. SDR users should
+  use Thetis NR2/NR3 instead.
+- Add: CW Decoder — Farnsworth spacing support. Inter-character and word space
+  models are now tracked independently from dit duration. Operators who send fast
+  elements with stretched gaps (common in QRS nets and training) are decoded
+  correctly instead of producing run-together or chopped text.
+- Add: CW Decoder — AFC multi-signal rejection. When two CW signals are within
+  the AFC scan range, the AFC now requires 3 consecutive scans confirming a new
+  frequency (>40 Hz from current lock) before jumping. Prevents AFC bouncing
+  between adjacent signals on a crowded band.
+- Add: CW Decoder — QSB/fading recovery. After a deep HF fade (peak decays to
+  <2× noise floor), the peak tracker snaps instantly when the signal returns
+  instead of lagging ~1 second through normal EMA decay. Eliminates the
+  threshold dead zone that caused missed characters after 20m/40m fades.
+
+v0.47 Beta  (2026-04-10)
+------------------------
+- Add: K1EL WinKeyer hardware CW keyer — full implementation. Connects via
+  USB/serial at 1200 baud, 8-N-2 per K1EL specification. Implements Host Open/
+  Close protocol, parser sync (4× 0x13), PINCFG register (cmd 0x09) for key
+  output port selection (Port 1, Port 2, or Both), Mode Register (cmd 0x0E)
+  for keyer mode (Iambic A/B, Ultimatic, Bug), PTT lead/tail timing (cmd 0x04),
+  and WPM speed control (cmd 0x02). Background manager thread auto-connects and
+  reconnects every 5 seconds when enabled.
+- Add: WinKeyer settings panel in Settings — COM port with auto-detected dropdown,
+  Enable checkbox, Key Output select, Keyer Mode select, PTT enable + lead/tail,
+  default WPM, and Test WinKeyer button that reports firmware version.
+- Add: Amber "WinKeyer" badge on CW page when connected. TX path label shows
+  "via WinKeyer". CW priority order: TCI → WinKeyer → HamLib.
+- Add: /api/serial_ports endpoint — dynamically lists available COM ports on the
+  system. Used by the WinKeyer settings dropdown.
+- Add: WinKeyer status line in Debug & Diagnostics report (enabled/open/port/version).
+- Add: Dedicated WinKeyer section in Quick Start Guide — setup instructions,
+  comparison table, COM port sharing notes, and HamLib combo tips.
+- Add: WinKeyer + HamLib entries added to Settings Reference table in help guide.
+- Fix: PINCFG register was sent to command 0x0E (Mode Register) instead of
+  command 0x09 (Pin Configuration). Key output port and PTT were never actually
+  configured in hardware — WinKeyer accepted text but had no output routed.
+- Fix: serial.TWOSTOPBITS corrected to serial.STOPBITS_TWO (pyserial constant).
+- Fix: WinKeyer test endpoint now returns "version" field in JSON response.
+- Fix: WinKeyer test button sends Content-Type: application/json and checks
+  res.ok before parsing JSON — eliminates "Unexpected token" console errors.
+- Fix: Added res.ok guards to all periodic pollers (TCI, flrig, HamLib, digital
+  events) to prevent JSON parse errors when an endpoint returns non-JSON.
+- Fix: Club Log credential test rewritten — now uses checklog.php (safe read-only
+  endpoint) instead of realtime.php. Previous approach sent a test ADIF record to
+  the upload endpoint, which counted as a failed upload attempt and triggered
+  Club Log's reactive IP firewall on credential errors.
+- Fix: Club Log one-strike rule enforced — on any HTTP 403 from realtime.php,
+  all further uploads are immediately disabled (_clublog_blocked=True) until the
+  user corrects credentials and re-tests. Prevents cascading IP bans.
+- Fix: Club Log upload now includes User-Agent header (SDRLoggerPlus/version)
+  and logs the upload attempt and response to the debug report.
+
+v0.46 Beta  (2026-04-09)
+------------------------
+- Fix: Club Log — credentials are no longer passed through URL query parameters
+  on the way to the test endpoint. Previously the test button sent email,
+  password, and callsign as URL query params (double URL-encoding round-trip),
+  which could silently corrupt App Passwords containing special characters such
+  as +, =, or &. Credentials are now saved to the backend first and read
+  directly from server-side state when the request to Club Log is made.
+- Fix: Club Log — POST body now uses application/x-www-form-urlencoded
+  consistently for realtime.php, matching the Club Log official documentation
+  and the MSHV reference implementation. (multipart/form-data is correct for
+  putlogs.php batch uploads only.)
+- Fix: Club Log — response body parsing corrected. Server returns "OK", "Dupe",
+  and "Updated QSO" (not "QSO OK" / "QSO Duplicate" / "QSO Modified"). A 200
+  with a body containing none of these is now correctly flagged as an error.
+- Fix: Club Log — 403 response now distinguishes nginx firewall block from PHP
+  authentication failure. Debug log annotates each test attempt with (nginx
+  block) or (php) so the source of the rejection is visible in the debug report.
+- Fix: Club Log — application key whitespace guard (.strip()) added before it is
+  sent, preventing any invisible trailing character from invalidating the key.
+- Add: K1EL WinKeyer hardware CW keyer support (full rewrite). Connects via
+  USB/serial at 1200 baud, 8-N-2 per K1EL specification. Implements Host Open/
+  Close protocol, parser sync (4× 0x13), PINCFG register for key output port
+  selection (Port 1, Port 2, or Both), keyer mode (Iambic A/B, Ultimatic, Bug),
+  PTT lead/tail timing, and WPM speed control. Background thread auto-connects
+  and reconnects every 5 seconds when enabled. CW priority: TCI → WinKeyer →
+  HamLib. Settings panel with COM port, mode, key output, PTT, and Test button.
+  Amber "WinKeyer" badge on CW page when connected. Previous dsrdtr hang and
+  premature _wk_is_open bugs resolved.
+- Fix: import re added to top-level imports (was previously inlined inside a
+  function body).
+
+v0.45 Beta  (2026-04-08)
+------------------------
+- Remove: OmniRig rig control interface removed entirely. OmniRig COM mode changes were
+  silently ignored by the IC-9100 (COM STA cross-process SetSimplexMode limitation).
+  Use TCI (Thetis), flrig, or HamLib for rig control. All OmniRig references removed from
+  UI, settings, help, and wiki.
+- Fix: WinKeyer — serial port now opened as 8N2 (8 data bits, no parity, 2 stop bits) per
+  the K1EL WinKeyer hardware specification. Previously used 8N1, causing serial framing
+  errors that prevented the device from decoding host commands correctly.
+- Fix: WinKeyer — dsrdtr=True now used when opening the port so DTR is asserted. The WKmini
+  requires DTR to be active to recognise a host connection; forcing DTR=False (previous
+  behavior) silently blocked host mode from engaging.
+- Fix: WinKeyer — Mode Register command corrected from 0x01 (which is the Sidetone frequency
+  command) to the correct 0x0E (WK2/WK3 Mode Register). Previously, keyer mode and PTT
+  settings were written to the wrong register and had no effect.
+- Fix: WinKeyer — Host Open sequence now matches the reference implementation: Admin:Close
+  is sent first, followed by a 1-second settle delay, then Admin:Open with a 500 ms read
+  window. The previous 150 ms window was too short for some firmware versions to respond.
+- Fix: WinKeyer — Host Close command corrected from `[0x00, 0x09]` (which is "Get WK1
+  Version") to the correct `[0x00, 0x03]` (Admin: Host Close).
+- Fix: WinKeyer — flush() called after every write to guarantee bytes are delivered through
+  the USB-CDC (CH340) driver to the device immediately on Windows.
+- New: WinKeyer settings expanded — Key Output port (PORT1 / PORT2 / Both), Enable PTT,
+  and Keyer Mode (Iambic A / Iambic B / Ultimatic / Bug) configurable in Settings.
+- Fix: CW page — audio ScriptProcessor buffer size corrected. Previously computed as
+  sampleRate × 0.020 = 960 (at 48 kHz), which is not a power-of-two and caused a
+  "buffer size must be 0 or a power of two" browser error. Now rounds up to the next
+  power-of-two (1024 at 48 kHz).
+- Fix: CW page — connection badge now correctly shows "WinKeyer" (amber) when WinKeyer is
+  the active CW path. Previously showed "HamLib" if HamLib was also enabled.
+- Fix: Club Log — API key field removed from settings. Users only need their Club Log email
+  and Application Password (no developer key required).
+- New: Club Log — Upload Designator field added. A single letter (default "B") is recorded
+  against each uploaded QSO to prevent duplicate uploads on future sessions.
+- Fix: HamLib — IC-9100 model number corrected from 368 to 3068 in the Settings page
+  example and the help guide rig table.
+- Fix: HamLib — Band and mode changes from the QSO entry panel now suppress the HamLib
+  frequency/mode poller for 4 seconds, preventing the form from reverting immediately after
+  a user-initiated change. Previously, the poller overwrote the new mode/band within the
+  first poll cycle.
+- Fix: HamLib — Mode-only changes (no frequency) from the QSO form are now accepted by the
+  /api/hamlib_tune route. Previously the route returned 400 if freq_mhz was absent.
+- Fix: HamLib — Full bidirectional mode name map added for both read (rigctld → form) and
+  write (form → rigctld). Modes now correctly translate: USB↔USB, CW↔CW, CWR↔CWL,
+  PKTUSB↔DIGU, PKTLSB↔DIGL, RTTYR↔RTTY-R, etc.
+- Fix: HamLib — Poller interval reduced from 1500ms to 750ms for more responsive mode
+  and frequency updates in the QSO form.
+- Fix: QRZ — Subscription link updated; cost removed from UI and documentation (link to
+  QRZ subscription page instead).
+
+v0.44 Beta  (2026-04-07)
+------------------------
+- Fix: TCI — Band change from QSO entry panel now correctly QSYs Thetis. A suppress timer
+  prevents the TCI frequency poller from overwriting the form during the QSY window (same
+  pattern already used for flrig and HamLib pollers).
+- Fix: TCI — Digital mode spots from the DX cluster now correctly set Thetis to DIGU
+  (Digital Upper). Previously FT8, FT4, JS8, WSPR, JT65, JT9, PSK31, DIGI, DATA, and
+  VarAC spots sent the raw mode name (e.g. "FT8") to Thetis which silently ignored it.
+  All USB-passthrough digital modes now map to DIGU; RTTY-R maps to DIGL.
+- New: DATA mode recognized in DX cluster spot parser — spots flagged as DATA in the
+  cluster comment are detected and routed to DIGU on Thetis.
+- New: WinKeyer CW keyer support — K1EL WinKeyer protocol (WKmini, WK2, WK3, WKUSB) over
+  any COM/serial port. Configure in Settings → WinKeyer: COM port dropdown (auto-scanned),
+  enable checkbox, and Test button that queries and displays firmware version. CW keying
+  priority order: TCI → WinKeyer → HamLib. pyserial dependency added.
+- New: flrig Digital Mode Name — user-configurable field in flrig Settings. Set to USB-D
+  for Icom radios (IC-9100, IC-7300, etc.) or DATA-U for Kenwood/Yaesu. Applies when
+  SDRLogger+ tunes a FT8/FT4/JS8/WSPR/PSK31 DX cluster spot. Leave blank for auto-detect.
+- New: flrig RTTY Mode Name — separate configurable field in flrig Settings. Leave blank
+  to send native RTTY (FSK). Set to USB-D if using software AFSK via fldigi or similar.
+- New: flrig bidirectional control — Band and mode selector changes in the SDRLogger+ form
+  now push to the radio via flrig XML-RPC. Selecting a band QSYs to the band centre
+  frequency; selecting a mode sends the corresponding mode change to the radio.
+- New: ITU Region selector (1 / 2 / 3) in My Station settings. Drives out-of-band VFO
+  warnings — a toast notification is shown when the VFO moves outside the ITU frequency
+  allocation for that region. Region 2 (Americas) is the default.
+- New: WARC bands added to band selector — 60m, 30m, 17m, and 12m. Detection ranges in
+  autoSelectBand widened to handle IC-9100 VFO parking positions (e.g. 10.0 MHz for 30m,
+  18.0676 MHz for 17m).
+- New: TCI enable/disable toggle — same pattern as existing flrig/HamLib toggles.
+  The TCI LIVE badge hides in the header when TCI is disabled.
+- New: Debug & Diagnostics section in Settings. "Download Debug Report" button generates a
+  plain-text .txt file containing current rig status, sanitized settings (passwords
+  redacted), and the last 200 log entries. All rig control operations and errors are now
+  logged to an in-memory rolling buffer. JavaScript errors are also captured in the buffer.
+- Fix: Rotator poller — WinError 10054 (Windows ICMP port-unreachable reply on the UDP
+  socket when PstRotator is not running) is now silently ignored instead of spamming the
+  console with unhandled exception tracebacks.
+- Fix: CW via flrig — flrig does not support CW keying; the `send_morse` XML-RPC method
+  does not exist in flrig. The error message now clearly states this (was showing a generic
+  "no connection" error). For CW without TCI, use WinKeyer.
+- Fix: FT8/FT4 cluster spots now correctly switch IC-9100 to USB-D mode when a Digital
+  Mode Name is configured in flrig Settings.
+- Fix: RTTY cluster spots now always send native radio RTTY mode (FSK). The digital mode
+  name override now applies only to audio-passthrough digital modes (FT8, FT4, JS8, WSPR,
+  PSK31) and is correctly bypassed for RTTY.
+- Fix: 17m and 30m band auto-detection — IC-9100 parks VFOs at positions outside standard
+  ITU band edges (e.g. 10.0 MHz, 18.0676 MHz). Detection window widened so the band
+  selector auto-populates correctly after clicking a DX spot or QSYing to these bands.
+- Fix: DX cluster spot suppress timer — after clicking a spot, the flrig frequency poller
+  is suppressed for 4 seconds so the SDRLogger+ form does not revert to the old frequency
+  before the radio physically completes the QSY.
+
 v0.43 Beta  (2026-04-05)
 ------------------------
 - New: Club Log real-time upload support — each saved QSO is automatically

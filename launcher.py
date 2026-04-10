@@ -50,11 +50,16 @@ if __name__ == "__main__":
 
     os.makedirs(_data, exist_ok=True)
 
-    # ── Seed config.json into data dir on first run ───────────────────────────
+    # ── Seed config files into data dir on first run ───────────────────────────
     _cfg_src = os.path.join(_bundle, "config.json")
     _cfg_dst = os.path.join(_data,   "config.json")
     if not os.path.exists(_cfg_dst) and os.path.exists(_cfg_src):
         shutil.copy2(_cfg_src, _cfg_dst)
+
+    _app_src = os.path.join(_bundle, "app_settings.json")
+    _app_dst = os.path.join(_data,   "app_settings.json")
+    if not os.path.exists(_app_dst) and os.path.exists(_app_src):
+        shutil.copy2(_app_src, _app_dst)
 
     # ── Read port / host from user's config.json ──────────────────────────────
     _port = 5000
@@ -90,10 +95,12 @@ if __name__ == "__main__":
     # ── Import the Flask application ──────────────────────────────────────────
     import main as _app_module
 
-    _app_module._CONFIG_FILE = _cfg_dst
-    _app_module.WEB_PORT     = _port
-    _app_module.WEB_HOST     = _host
+    _app_module._CONFIG_FILE        = _cfg_dst
+    _app_module._APP_SETTINGS_FILE  = os.path.join(_data, "app_settings.json")
+    _app_module.WEB_PORT            = _port
+    _app_module.WEB_HOST            = _host
     _app_module.app.template_folder = _tmpl_dst
+    _app_module.app.static_folder   = os.path.join(_bundle, "static")
 
     # ── Initialise DB, restore settings, and start background threads ─────────
     _app_module.init_db()
@@ -102,7 +109,9 @@ if __name__ == "__main__":
     threading.Thread(target=_app_module.tci_ws_client,          daemon=True).start()
     threading.Thread(target=_app_module.digital_udp_listener,   daemon=True).start()
     threading.Thread(target=_app_module.digital_tcp_server,     daemon=True).start()
+    threading.Thread(target=_app_module.flrig_poller,           daemon=True).start()
     threading.Thread(target=_app_module.hamlib_poller,          daemon=True).start()
+    threading.Thread(target=_app_module.winkeyer_manager,       daemon=True).start()
 
     # ── Start Flask in a background thread ────────────────────────────────────
     def _run_flask():
