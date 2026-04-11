@@ -1,6 +1,30 @@
 TCILogger — Change Log
 ======================
 
+v0.50 Beta  (2026-04-11)
+------------------------
+- New: RBN (Reverse Beacon Network) Band-Opening Alerts — connects to the
+  RBN telnet feed and alerts when VHF/UHF bands open near your location.
+  Skimmer grid squares are looked up via QRZ/HamQTH and cached. Distance
+  from your grid to the skimmer is calculated via Haversine. Configurable
+  RBN server/port (default telnet.reversebeacon.net:7000), bands
+  (10m, 6m, 2m, 70cm), distance threshold (Miles/KM), per-band cooldown,
+  and optional voice announce via browser TTS.
+- New: QSO Log search now includes Remarks and Contest/Event fields.
+- New: QSO Log Prev/Next pagination — replaces rows per page instead of
+  appending. Page size adjusts dynamically based on panel height.
+- New: QSO Log panel now has a vertical resize handle (drag bottom edge)
+  even when it is the only panel in its column.
+- New: 70cm (420-450 MHz) added to JavaScript freqKhzToBand mapping.
+- New: Update notification — checks GitHub releases at startup and shows
+  a clickable banner badge when a newer version is available. Links
+  directly to the release download page. Toggle on/off in Settings →
+  Display → "Check for updates on startup."
+- New: DX Cluster panel scrolls when spot count exceeds visible area.
+- New: Distance Map panel can be resized taller via drag handle.
+- New: Toast notifications support custom duration (used for 15-second
+  band-opening alerts).
+
 v0.49 Beta  (2026-04-10)
 ------------------------
 - Fix: Installer build — PyInstaller entry point changed from main.py to

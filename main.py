@@ -183,7 +183,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "0.49 Beta"
+VERSION  = "0.50 Beta"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -3316,14 +3316,16 @@ def get_log():
     conn   = get_db()
     if search:
         like  = f"%{search}%"
+        where = ("callsign LIKE ? OR band LIKE ? OR mode LIKE ? "
+                 "OR contest_name LIKE ? OR remarks LIKE ?")
+        params = (like, like, like, like, like)
         total = conn.execute(
-            "SELECT COUNT(*) FROM qso_log WHERE callsign LIKE ? OR band LIKE ? OR mode LIKE ? OR contest_name LIKE ?",
-            (like, like, like, like)
+            f"SELECT COUNT(*) FROM qso_log WHERE {where}", params
         ).fetchone()[0]
         rows  = conn.execute(
-            "SELECT * FROM qso_log WHERE callsign LIKE ? OR band LIKE ? OR mode LIKE ? OR contest_name LIKE ? "
+            f"SELECT * FROM qso_log WHERE {where} "
             "ORDER BY date_worked DESC, time_worked DESC LIMIT ? OFFSET ?",
-            (like, like, like, like, limit, offset)
+            params + (limit, offset)
         ).fetchall()
     else:
         total = conn.execute("SELECT COUNT(*) FROM qso_log").fetchone()[0]
@@ -3735,6 +3737,298 @@ def spothole_ws(ws):
     finally:
         stop_evt.set()
     print("Spothole: session ended")
+
+
+# ─── RBN (Reverse Beacon Network) Band-Opening Alerts ────────────────────────
+_rbn_skimmer_cache = {}   # callsign -> grid (persisted in memory for session)
+
+def _rbn_lookup_grid(callsign):
+    """Look up a skimmer's grid via QRZ/HamQTH, return grid str or None."""
+    cs = callsign.upper().rstrip("-#1234567890")  # strip "-#" suffix from skimmer calls
+    if cs in _rbn_skimmer_cache:
+        return _rbn_skimmer_cache[cs]
+    # Try unified lookup (QRZ first, then HamQTH)
+    grid = None
+    if QRZ_USER and QRZ_PASS and QRZ_LOOKUP_ENABLED:
+        data, _ = qrz_lookup(cs)
+        if data and data.get("grid"):
+            grid = data["grid"]
+    if not grid and HAMQTH_USER and HAMQTH_PASS:
+        data, _ = hamqth_lookup(cs)
+        if data and data.get("grid"):
+            grid = data["grid"]
+    _rbn_skimmer_cache[cs] = grid   # cache even None to avoid repeated lookups
+    if grid:
+        print(f"RBN: cached grid for skimmer {cs} -> {grid}")
+    return grid
+
+
+@sock.route("/api/rbn_ws")
+def rbn_ws(ws):
+    """
+    Connects to the Reverse Beacon Network via telnet and streams VHF/UHF
+    spots to the browser for band-opening alerts.
+
+    Query params:
+      callsign  — login callsign
+      bands     — comma-separated band list e.g. "6m,2m,70cm" or "10m,6m,2m,70cm"
+    """
+    callsign = (request.args.get("callsign", "") or MY_CALLSIGN).upper()
+    bands    = request.args.get("bands", "6m,2m,70cm")
+    RBN_HOST = request.args.get("server", "telnet.reversebeacon.net")
+    RBN_PORT = int(request.args.get("port", "7000"))
+
+    # Build DX Spider frequency filter ranges for requested bands
+    band_ranges = []
+    for b in bands.split(","):
+        b = b.strip().lower()
+        if b == "10m":  band_ranges.append(("28000", "29700"))
+        elif b == "6m": band_ranges.append(("50000", "54000"))
+        elif b == "2m": band_ranges.append(("144000", "148000"))
+        elif b in ("70cm", "440"): band_ranges.append(("420000", "450000"))
+
+    if not band_ranges:
+        try: ws.send(json.dumps({"type": "error", "msg": "No valid bands selected"}))
+        except: pass
+        return
+
+    def open_telnet():
+        t = socket.create_connection((RBN_HOST, RBN_PORT), timeout=15)
+        t.settimeout(0.3)
+        return t
+
+    print(f"RBN: connecting to {RBN_HOST}:{RBN_PORT} as {callsign} for bands {bands}")
+    try:
+        _tel = open_telnet()
+    except Exception as e:
+        try: ws.send(json.dumps({"type": "error", "msg": f"Cannot connect to RBN: {e}"}))
+        except: pass
+        return
+
+    tel_ref   = [_tel]
+    tel_lock  = threading.Lock()
+    stop_evt  = threading.Event()
+    logged_in = threading.Event()
+    filters_set = threading.Event()
+
+    import re as _re
+    rbn_spot_re = _re.compile(
+        r"DX\s+de\s+(\S+?):\s+"          # spotter (skimmer) call
+        r"(\d+\.?\d*)\s+"                 # freq in kHz
+        r"(\S+)\s+"                       # DX callsign
+        r"(\S+)\s+"                       # mode (CW, RTTY, FT8, etc.)
+        r"(\d+)\s+dB\s+"                  # SNR
+        r"(\d+)\s+(?:WPM|BPS)\s+"         # speed
+        r"(\S+)\s+"                       # type (CQ, NCDXF, etc.)
+        r"(\d{4})Z",                      # time
+        _re.IGNORECASE
+    )
+
+    def telnet_reader():
+        buf = ""
+        reconnect_tries = 0
+
+        while not stop_evt.is_set():
+            try:
+                with tel_lock:
+                    t = tel_ref[0]
+                chunk = t.recv(4096).decode("utf-8", errors="ignore")
+                if not chunk:
+                    raise OSError("RBN closed connection")
+
+                reconnect_tries = 0
+                buf += chunk
+
+                # Login prompt
+                lower = chunk.lower()
+                if not logged_in.is_set():
+                    if any(p in lower for p in ("login:", "call:", "enter your call", "callsign", "please enter")):
+                        t.sendall((callsign + "\r\n").encode())
+                        print(f"RBN: sent callsign {callsign}")
+                        logged_in.set()
+                        # Set frequency filters after login (small delay for server readiness)
+                        import time as _time
+                        _time.sleep(1)
+                        # Reject all spots first, then accept only our bands
+                        t.sendall(b"set/noskimmer\r\n")
+                        _time.sleep(0.3)
+                        t.sendall(b"reject/spots all\r\n")
+                        _time.sleep(0.3)
+                        for i, (lo, hi) in enumerate(band_ranges, 1):
+                            cmd = f"accept/spots {i} on freq {lo}/{hi}\r\n"
+                            t.sendall(cmd.encode())
+                            _time.sleep(0.2)
+                        filters_set.set()
+                        print(f"RBN: frequency filters set for {bands}")
+
+                # Parse complete lines
+                while "\n" in buf:
+                    line, buf = buf.split("\n", 1)
+                    line = line.rstrip("\r").strip()
+                    if not line:
+                        continue
+
+                    # Only process spot lines after filters are set
+                    if not filters_set.is_set():
+                        continue
+
+                    m = rbn_spot_re.search(line)
+                    if not m:
+                        continue
+
+                    skimmer  = m.group(1).rstrip(":")
+                    freq_khz = m.group(2)
+                    dx_call  = m.group(3).upper()
+                    mode     = m.group(4).upper()
+                    snr      = int(m.group(5))
+                    speed    = m.group(6)
+                    spot_type = m.group(7)
+                    utc_time = m.group(8)
+
+                    # Determine band from frequency
+                    f = float(freq_khz)
+                    if   28000 <= f <= 29700:  band = "10m"
+                    elif 50000 <= f <= 54000:  band = "6m"
+                    elif 144000 <= f <= 148000: band = "2m"
+                    elif 420000 <= f <= 450000: band = "70cm"
+                    else: continue
+
+                    # Look up skimmer grid (cached)
+                    skimmer_grid = _rbn_lookup_grid(skimmer)
+
+                    spot_msg = {
+                        "type":     "rbn_spot",
+                        "dxCall":   dx_call,
+                        "freqKhz":  freq_khz,
+                        "band":     band,
+                        "mode":     mode,
+                        "snr":      snr,
+                        "speed":    speed,
+                        "spotType": spot_type,
+                        "skimmer":  skimmer,
+                        "skimmerGrid": skimmer_grid,
+                        "time":     f"{utc_time[:2]}:{utc_time[2:]}"
+                    }
+
+                    try:
+                        ws.send(json.dumps(spot_msg))
+                    except Exception:
+                        stop_evt.set()
+                        return
+
+            except socket.timeout:
+                continue
+            except OSError as exc:
+                if reconnect_tries >= 8:
+                    print("RBN: too many reconnect failures — closing")
+                    stop_evt.set()
+                    break
+
+                delay = min(5 * (2 ** reconnect_tries), 120)
+                reconnect_tries += 1
+                print(f"RBN: disconnected ({exc}) — reconnect #{reconnect_tries} in {delay}s")
+
+                try:
+                    ws.send(json.dumps({"type": "status", "msg":
+                        f"RBN disconnected — reconnecting in {delay}s (attempt {reconnect_tries})"}))
+                except Exception:
+                    stop_evt.set()
+                    break
+
+                try:
+                    with tel_lock:
+                        tel_ref[0].close()
+                except Exception:
+                    pass
+
+                if stop_evt.wait(delay):
+                    break
+
+                try:
+                    with tel_lock:
+                        tel_ref[0] = open_telnet()
+                    logged_in.clear()
+                    filters_set.clear()
+                    buf = ""
+                    print(f"RBN: reconnected to {RBN_HOST}:{RBN_PORT}")
+                    try:
+                        ws.send(json.dumps({"type": "status", "msg": "Reconnected to RBN"}))
+                    except Exception:
+                        stop_evt.set()
+                        break
+                except Exception as e2:
+                    print(f"RBN: reconnect failed: {e2}")
+
+    # Keepalive every 3 minutes
+    def keepalive():
+        while not stop_evt.wait(180):
+            try:
+                with tel_lock:
+                    tel_ref[0].sendall(b"\r\n")
+            except Exception:
+                pass
+
+    reader    = threading.Thread(target=telnet_reader, daemon=True)
+    ka_thread = threading.Thread(target=keepalive,     daemon=True)
+    reader.start()
+    ka_thread.start()
+
+    # Main loop — keep alive until browser disconnects
+    while not stop_evt.is_set():
+        try:
+            msg = ws.receive(timeout=30)
+            if msg is None:
+                break
+        except Exception as e:
+            err = str(e).lower()
+            if any(x in err for x in ("timed out", "timeout", "time out")):
+                continue
+            break
+
+    stop_evt.set()
+    try:
+        with tel_lock:
+            tel_ref[0].close()
+    except Exception:
+        pass
+    print("RBN: session ended")
+
+
+# ─── Update Check ─────────────────────────────────────────────────────────────
+_update_cache = None   # {"latest": "0.51", "url": "https://...", "has_update": True/False}
+
+@app.route("/api/update_check")
+def update_check():
+    """Check GitHub for a newer release. Called once at startup by the frontend."""
+    global _update_cache
+    if _update_cache is not None:
+        return jsonify(_update_cache)
+    try:
+        resp = requests.get(
+            "https://api.github.com/repos/N8SDR1/SDRLoggerPlus/releases/latest",
+            timeout=10,
+            headers={"Accept": "application/vnd.github.v3+json"}
+        )
+        if resp.ok:
+            data = resp.json()
+            tag = data.get("tag_name", "").lstrip("vV").strip()
+            url = data.get("html_url", "https://github.com/N8SDR1/SDRLoggerPlus/releases")
+            # Compare version numbers (strip " Beta" etc.)
+            current = VERSION.split()[0]  # "0.50"
+            has_update = False
+            try:
+                from packaging.version import Version
+                has_update = Version(tag) > Version(current)
+            except Exception:
+                # Fallback: simple string comparison
+                has_update = tag != current and tag > current
+            _update_cache = {"latest": tag, "url": url, "has_update": has_update, "current": current}
+        else:
+            _update_cache = {"latest": None, "url": None, "has_update": False, "current": VERSION.split()[0]}
+    except Exception as e:
+        print(f"Update check failed: {e}")
+        _update_cache = {"latest": None, "url": None, "has_update": False, "current": VERSION.split()[0]}
+    return jsonify(_update_cache)
 
 
 # ─── Solar Conditions ─────────────────────────────────────────────────────────
