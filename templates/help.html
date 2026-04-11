@@ -150,7 +150,7 @@
 <div class="container">
 
   <h1>SDR<span style="color:var(--accent2);">Logger+</span> Quick Start Guide</h1>
-  <p class="subtitle">v{{ version }} &nbsp;·&nbsp; Ham Radio Logging · DX Cluster · TCI / Thetis SDR Integration · Solar Conditions · Rotator Control · CW Keyer / Decoder</p>
+  <p class="subtitle">v{{ version }} &nbsp;·&nbsp; Ham Radio Logging · DX Cluster · RBN Band-Opening Alerts · TCI / Thetis SDR Integration · Solar Conditions · Rotator Control · CW Keyer / Decoder</p>
 
   <!-- OVERVIEW -->
   <h2>Overview</h2>
@@ -486,11 +486,12 @@
   <!-- QSO LOG -->
   <h2>QSO Log</h2>
   <div class="section-card">
-    <p>The centre panel shows all logged contacts. Use the search box in the panel header to filter by callsign, band, mode, or any field in real time.</p>
+    <p>The centre panel shows all logged contacts. Use the search box in the panel header to filter by callsign, band, mode, remarks, or contest/event name in real time.</p>
     <ul>
       <li>Click <strong>✏</strong> (white pencil) to edit any field of a saved QSO.</li>
       <li>Click <strong>🗑</strong> (red trash) to delete — a confirmation prompt will appear.</li>
-      <li>The log loads 200 QSOs at a time; click <strong>Load More</strong> at the bottom to page through larger logs.</li>
+      <li>Use <strong>◀ Prev</strong> and <strong>Next ▶</strong> buttons above the table to page through your log. Page size adjusts automatically based on the panel's visible height.</li>
+      <li><strong>Resize the panel</strong> vertically by dragging the resize handle at the bottom edge — the page size recalculates when you resize.</li>
       <li><strong>Right-click</strong> any log entry to open a context menu with a <strong>📡 Spot</strong> option — spot that contact directly from the log within a configurable time window after the QSO was worked.</li>
     </ul>
   </div>
@@ -518,6 +519,19 @@
     <h3>Hot Stations (Watchlist Highlight &amp; Announcement)</h3>
     <p>Enable <strong>Highlight Hot Stations</strong> in Settings → DX Clusters and enter a comma-separated watchlist of callsigns (e.g. <code>DX0DX,VK9XX,ZL9HR</code>). When a watched callsign appears in the spot list, it is highlighted with a <strong style="color:#ff4444">red callsign</strong> and a red left border — making it easy to spot rare DX at a glance. Toggle the checkbox to turn highlighting on or off without clearing the watchlist.</p>
     <p>Enable <strong>Announce via speech</strong> to also hear a voice alert when a watchlist callsign is spotted — for example: <em>"Hot spot. D X zero D X. 20m, USB."</em> Announcements use your system's built-in text-to-speech and repeat at most once every 15 minutes per callsign, so a heavily-worked DXpedition won't trigger continuous alerts.</p>
+    <h3>RBN Band-Opening Alerts</h3>
+    <p>SDRLogger+ connects to the <strong>Reverse Beacon Network (RBN)</strong> to detect VHF/UHF band openings near your location. RBN skimmers are automated receivers with known grid squares — when a skimmer within your configured distance hears a signal on a monitored band, SDRLogger+ fires an alert.</p>
+    <p>Configure in <strong>⚙ Settings → DX Clusters → RBN Band-Opening Alerts</strong>:</p>
+    <ul>
+      <li><strong>Enable</strong> — checkbox to activate the RBN connection.</li>
+      <li><strong>RBN Server / Port</strong> — defaults to <code>telnet.reversebeacon.net</code> port <code>7000</code> (the main RBN aggregator). Change if you prefer a different RBN node or mirror.</li>
+      <li><strong>Monitor Bands</strong> — select which bands to watch: 10m, 6m, 2m, 70cm (440 MHz). 6m/2m/70cm openings are rare events worth alerting on; 10m opens more frequently — enable it if desired but expect more alerts during good conditions.</li>
+      <li><strong>Alert Distance</strong> — maximum distance (Miles or KM) from your grid square to the RBN skimmer. Only skimmers within this range trigger alerts.</li>
+      <li><strong>Cooldown</strong> — minutes between repeated alerts on the same band (default 15). Prevents alert spam during sustained openings.</li>
+      <li><strong>Voice Announce</strong> — uses browser text-to-speech to read the alert aloud: <em>"Band opening! 6 meters. K 1 S I X. CW. 142 miles away. 12 dB."</em></li>
+    </ul>
+    <div class="tip">Your <strong>grid square</strong> must be set in Settings for distance calculations. RBN uses server-side frequency filtering so only VHF/UHF spots are streamed — no bandwidth waste on HF traffic.</div>
+
     <h3>Clicking a Spot</h3>
     <p>Clicking any spot row fills the callsign, frequency, and mode in the logging form <em>and</em> tunes your radio automatically via whichever rig path is active (TCI → flrig → HamLib). For TCI/Thetis, digital modes (FT8, FT4, JS8, DATA, WSPR, VarAC, PSK31, DIGI) are automatically sent as <strong>DIGU</strong> (Digital Upper); RTTY-R spots use <strong>DIGL</strong>. USB, LSB, CW, AM, and FM pass through unchanged.</p>
     <h3>Panadapter Integration</h3>
@@ -1033,6 +1047,11 @@
   <!-- APPLYING UPDATES -->
   <h2>Applying Updates</h2>
   <div class="section-card">
+    <h3>Update Notifications</h3>
+    <p>When SDRLogger+ starts, it checks the GitHub releases page for a newer version. If an update is available, a small <strong style="color:var(--accent2);">🔔 v0.XX Available</strong> badge appears in the header banner between your callsign and the solar data. Clicking the badge opens the GitHub release page directly so you can download the new installer.</p>
+    <p>The check runs once at startup — it does not poll repeatedly. No personal data is sent; it is a single read-only request to the public GitHub API. To disable update notifications, uncheck <strong>Check for updates on startup</strong> in <strong>⚙ Settings → Display</strong>.</p>
+
+    <h3>Zip Updater</h3>
     <p>SDRLogger+ includes a built-in zip updater so you can apply new versions without reinstalling. This is found in <strong>Settings → Server Settings &amp; Software Update</strong>.</p>
 
     <h3>How to Apply an Update</h3>

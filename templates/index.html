@@ -19,15 +19,21 @@
 
   /* HEADER */
   header{background:var(--surface);border-bottom:1px solid var(--border);padding:5px 20px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;min-height:70px;}
+  @keyframes updatePulse{0%,100%{opacity:1;}50%{opacity:.6;}}
   .logo{font-family:var(--head);font-size:22px;font-weight:700;color:var(--accent);letter-spacing:3px;text-transform:uppercase;}
   .logo span{color:var(--accent2);}
   .header-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
   #tci-badge{font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:3px;background:#1a0d0d;color:var(--red);border:1px solid var(--red);transition:all .3s;}
   #tci-badge.connected{background:#0d1a0d;color:var(--green);border-color:var(--green);}
+  #tci-badge.tci-disabled{display:none;}
   #hamlib-badge{font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:3px;background:#0d0d1a;color:var(--muted);border:1px solid var(--border);transition:all .3s;display:none;}
   #hamlib-badge.hl-enabled{display:inline-block;}
   #hamlib-badge.hl-connected{background:#0d1220;color:var(--accent2);border-color:var(--accent2);}
   #hamlib-badge.hl-offline{background:#1a0d0d;color:var(--red);border-color:var(--red);}
+  #flrig-badge{font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:3px;background:#0d0d1a;color:var(--muted);border:1px solid var(--border);transition:all .3s;display:none;}
+  #flrig-badge.fl-enabled{display:inline-block;}
+  #flrig-badge.fl-connected{background:#0d1520;color:#39aaff;border-color:#39aaff;}
+  #flrig-badge.fl-offline{background:#1a0d0d;color:var(--red);border-color:var(--red);}
   #utc-clock{font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:1px;}
   .btn-settings{background:transparent;border:1px solid var(--border);color:var(--muted);width:32px;height:32px;border-radius:4px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .2s;}
   .btn-settings:hover{border-color:var(--accent);color:var(--accent);transform:rotate(45deg);}
@@ -52,6 +58,11 @@
     height:2px;width:40px;background:rgba(255,255,255,.2);border-radius:1px;}
   /* Allow panel body to scroll when panel has a fixed height */
   .dock-panel[style*="flex"] .dock-panel-body{overflow-y:auto;}
+  /* Panels with flex layout body should not override to scroll — their children handle it */
+  .dock-panel[style*="flex"] .dock-panel-body[style*="overflow:hidden"]{overflow:hidden !important;}
+  /* Fill panel body height inside fixed-height panels */
+  .dock-panel[style*="flex"]{display:flex;flex-direction:column;}
+  .dock-panel[style*="flex"] > .dock-panel-body{flex:1;min-height:0;}
   /* Rotator panel */
   .rot-bearing-box{display:flex;gap:6px;padding:6px 10px;}
   .rot-bearing{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:5px 7px;text-align:center;}
@@ -84,6 +95,7 @@
     display:flex;align-items:center;gap:7px;user-select:none;}
   .dock-panel.collapsed .dock-panel-hdr{border-bottom:none;}
   .dock-panel.collapsed .dock-panel-body{display:none;}
+  .dock-panel.collapsed #log-pager{display:none !important;}
   .dock-grip{color:var(--muted);font-size:14px;cursor:grab;flex-shrink:0;
     padding:0 1px;line-height:1;letter-spacing:-1px;}
   .dock-grip:active{cursor:grabbing;}
@@ -315,7 +327,8 @@
   body.fs-xxlarge { zoom: 1.30; }
 
   /* ── Distance map ─────────────────────────────────────────────────────────── */
-  #qso-map { height:220px; background:var(--bg); }
+  #qso-map { height:220px; min-height:150px; background:var(--bg); }
+  .dock-panel[style*="flex"] #qso-map { height:100%; }
   #map-info-overlay { display:none; position:absolute; inset:0; align-items:center;
     justify-content:center; font-family:var(--mono); font-size:11px;
     color:var(--muted); text-align:center; padding:16px; pointer-events:none;
@@ -342,6 +355,7 @@
   <img src="/static/img/sdrLogger_icon.png" alt="SDRLogger+" style="width:50px;height:50px;border-radius:7px;flex-shrink:0;object-fit:cover;">
   <div class="logo">SDR<span>Logger+</span><span style="font-size:11px;font-weight:400;color:#a8b8c8;letter-spacing:1px;margin-left:10px;font-family:var(--mono);">v{{ version }}</span></div>
   <div id="header-call" style="font-family:var(--mono);font-size:16px;color:#d0dce8;white-space:nowrap;letter-spacing:.5px;">SDR Logbook</div>
+  <a id="update-banner" href="#" target="_blank" style="display:none;font-family:var(--mono);font-size:11px;color:var(--bg);background:var(--accent2);padding:3px 12px;border-radius:12px;text-decoration:none;white-space:nowrap;letter-spacing:.5px;font-weight:600;animation:updatePulse 2s ease-in-out 3;">🔔 Update Available</a>
   <div class="solar-hdr" id="solar-hdr">
     <span title="Solar Flux Index">SFI<span class="sh-val" id="hdr-sfi">—</span></span>
     <span title="Sunspot Number">SSN<span class="sh-val" id="hdr-ssn">—</span></span>
@@ -353,6 +367,7 @@
   </div>
   <div class="header-right">
     <span id="tci-badge">TCI OFFLINE</span>
+    <span id="flrig-badge">FLRIG OFFLINE</span>
     <span id="hamlib-badge">RIG OFFLINE</span>
     <div style="text-align:right;line-height:1.35;">
       <div id="utc-clock" style="font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:1px;">00:00:00 UTC</div>
@@ -437,18 +452,26 @@
         <div class="form-row">
           <div class="field">
             <label>Band</label>
-            <select id="band">
+            <select id="band" onchange="onBandChange(this.value, event)">
               <option value="">-- select --</option>
-              <option value="160m">160m</option><option value="80m">80m</option>
-              <option value="40m">40m</option><option value="20m">20m</option>
-              <option value="15m">15m</option><option value="10m">10m</option>
-              <option value="6m">6m</option><option value="2m">2m</option>
+              <option value="160m">160m</option>
+              <option value="80m">80m</option>
+              <option value="60m">60m</option>
+              <option value="40m">40m</option>
+              <option value="30m">30m</option>
+              <option value="20m">20m</option>
+              <option value="17m">17m</option>
+              <option value="15m">15m</option>
+              <option value="12m">12m</option>
+              <option value="10m">10m</option>
+              <option value="6m">6m</option>
+              <option value="2m">2m</option>
               <option value="70cm">70cm</option>
             </select>
           </div>
           <div class="field">
-            <label>Mode <span style="color:#8fafc0;font-size:9px">(auto from TCI)</span></label>
-            <select id="mode">
+            <label>Mode <span style="color:#8fafc0;font-size:9px">(auto from rig)</span></label>
+            <select id="mode" onchange="onModeChange(this.value, event)">
               <option value="">-- select --</option>
               <optgroup label="SSB">
                 <option value="USB">USB</option>
@@ -586,8 +609,8 @@
       <span id="map-bearing-badge" style="font-family:var(--mono);font-size:10px;margin-left:10px;white-space:nowrap;">—</span>
       <button class="dock-collapse-btn" onclick="togglePanel('distance')" title="Collapse">—</button>
     </div>
-    <div class="dock-panel-body" id="dpb-distance">
-      <div style="position:relative;">
+    <div class="dock-panel-body" id="dpb-distance" style="display:flex;flex-direction:column;overflow:hidden;">
+      <div style="position:relative;flex:1;min-height:0;">
         <div id="qso-map"></div>
         <div id="map-info-overlay"></div>
       </div>
@@ -610,13 +633,19 @@
          ondragstart="panelDragStart(event,'log')" ondragend="panelDragEnd()">
       <span class="dock-grip" title="Drag to reposition">⠿</span>
       <h2>📋 QSO Log</h2>
-      <input type="text" id="search-input" placeholder="Search callsign, band, mode..." oninput="filterLog()"
+      <input type="text" id="search-input" placeholder="Search callsign, band, mode, remarks, contest..." oninput="filterLog()"
              style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:12px;padding:4px 8px;outline:none;margin:0 6px;">
       <span id="qso-count" style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;">0 QSOs</span>
       <button class="dock-collapse-btn" onclick="togglePanel('log')" title="Collapse">—</button>
     </div>
-    <div class="dock-panel-body" id="dpb-log">
-      <div class="table-wrap">
+    <!-- Pagination bar between header and table -->
+    <div id="log-pager" style="padding:4px 14px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <button id="log-prev-btn" onclick="loadPrevPage()" style="font-family:var(--mono);font-size:11px;padding:2px 10px;border-radius:3px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;display:none;">&#9664; Prev</button>
+      <span id="log-showing" style="font-family:var(--mono);font-size:11px;color:var(--muted);flex:1;text-align:center;"></span>
+      <button id="log-next-btn" onclick="loadNextPage()" style="font-family:var(--mono);font-size:11px;padding:2px 10px;border-radius:3px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;display:none;">Next &#9654;</button>
+    </div>
+    <div class="dock-panel-body" id="dpb-log" style="display:flex;flex-direction:column;overflow:hidden;">
+      <div class="table-wrap" id="log-table-wrap" style="flex:1;overflow-y:auto;overflow-x:auto;min-height:0;">
         <table>
           <thead>
             <tr>
@@ -629,10 +658,6 @@
             <tr><td colspan="12" class="empty-state"><div class="es-icon">📻</div>No QSOs logged yet</td></tr>
           </tbody>
         </table>
-      </div>
-      <div id="log-footer" style="display:none;padding:8px 14px;background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;gap:12px;">
-        <span id="log-showing" style="font-family:var(--mono);font-size:11px;color:var(--muted);"></span>
-        <button id="load-more-btn" onclick="loadMoreLog()" style="font-family:var(--mono);font-size:11px;padding:4px 14px;border-radius:3px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;display:none;">Load More</button>
       </div>
     </div>
   </div><!-- dp-log -->
@@ -662,7 +687,7 @@
       </select>
       <button class="dock-collapse-btn" onclick="togglePanel('cluster')" title="Collapse">—</button>
     </div>
-    <div class="dock-panel-body" id="dpb-cluster" style="display:flex;flex-direction:column;height:calc(100vh - 175px);">
+    <div class="dock-panel-body" id="dpb-cluster" style="display:flex;flex-direction:column;overflow:hidden;">
       <div class="cluster-status">
         <div class="cluster-dot" id="cluster-dot"></div>
         <span id="cluster-status-text">Disconnected</span>
@@ -799,7 +824,19 @@
       </div>
     </div>
     <div class="settings-section">
-      <h4>TCI Interface (Thetis SDR)</h4>
+      <h4>TCI Interface <span style="font-size:9px;color:#8fafc0;font-weight:400;">— Expert Electronics Thetis / EESDR direct SDR control</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Connects to Thetis or EESDR via WebSocket TCI for real-time frequency, mode, callsign decode, and CW keying. Enable only if running Thetis or EESDR — disable if using flrig or HamLib only.
+        TCI is first-priority rig path when enabled.
+      </div>
+      <div class="settings-row full">
+        <div class="settings-field">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+            <input type="checkbox" id="cfg-tci-enabled" style="width:auto;accent-color:var(--green);cursor:pointer;" onchange="toggleTciEnabled(this.checked)">
+            Enable TCI rig control
+          </label>
+        </div>
+      </div>
       <div class="settings-row">
         <div class="settings-field"><label>TCI Host</label><input type="text" id="cfg-tci-host" placeholder="127.0.0.1"></div>
         <div class="settings-field"><label>TCI Port</label><input type="number" id="cfg-tci-port" placeholder="50001"></div>
@@ -807,10 +844,81 @@
       <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;">Status: <span id="settings-tci-status">—</span></div>
     </div>
     <div class="settings-section">
+      <h4>ITU Region <span style="font-size:9px;color:#8fafc0;font-weight:400;">— band plan · out-of-band VFO alerts</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Sets the ITU band plan used for band auto-detection and out-of-band VFO warnings.
+        Region 1 = Europe / Africa / Middle East / Russia &nbsp;·&nbsp;
+        Region 2 = Americas (default) &nbsp;·&nbsp;
+        Region 3 = Asia-Pacific
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label>ITU Region</label>
+          <select id="cfg-itu-region" style="width:auto;">
+            <option value="1">Region 1 — Europe / Africa / Russia</option>
+            <option value="2" selected>Region 2 — Americas</option>
+            <option value="3">Region 3 — Asia-Pacific</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <h4>flrig <span style="font-size:9px;color:#8fafc0;font-weight:400;">— W1HKJ XML-RPC rig control · all major brands · CW keying</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Connect any flrig-supported rig for frequency/mode following, DX spot tuning, and CW keying. Run <strong style="color:var(--text)">flrig</strong>, select your rig and COM port in its window, then enable here. flrig takes priority after TCI for rig control.
+      </div>
+      <div class="settings-row full">
+        <div class="settings-field">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+            <input type="checkbox" id="cfg-flrig-enabled" style="width:auto;accent-color:#39aaff;cursor:pointer;" onchange="toggleFlrigEnabled(this.checked)">
+            Enable flrig rig control
+          </label>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field"><label>flrig Host</label><input type="text" id="cfg-flrig-host" placeholder="127.0.0.1" spellcheck="false"></div>
+        <div class="settings-field"><label>flrig Port</label><input type="number" id="cfg-flrig-port" placeholder="12345" min="1" max="65535"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field" style="flex:1;">
+          <label>Digital Mode Name
+            <span style="font-size:9px;color:var(--accent);font-weight:400;margin-left:6px;">sent to flrig for FT8 / FT4 / WSPR / JS8 spots</span>
+          </label>
+          <input type="text" id="cfg-flrig-digital-mode" placeholder="e.g. USB-D (Icom) · DATA-U (Kenwood/Yaesu)" spellcheck="false" oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div class="settings-field" style="flex:1;">
+          <label>RTTY Mode Name
+            <span style="font-size:9px;color:var(--accent);font-weight:400;margin-left:6px;">sent to flrig for RTTY spots</span>
+          </label>
+          <input type="text" id="cfg-flrig-rtty-mode" placeholder="blank = RTTY · USB-D for fldigi AFSK" spellcheck="false" oninput="this.value=this.value.toUpperCase()">
+        </div>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px;line-height:1.6;">
+        <strong style="color:var(--text)">Digital:</strong> audio-passthrough modes (FT8, FT4, JS8, WSPR, PSK31).
+        Use <strong style="color:var(--text)">USB-D</strong> for Icom · <strong style="color:var(--text)">DATA-U</strong> for Kenwood/Yaesu · blank to auto-detect.
+        &nbsp;|&nbsp;
+        <strong style="color:var(--text)">RTTY:</strong> leave blank for native FSK (default).
+        Set to <strong style="color:var(--text)">USB-D</strong> if using fldigi or other AFSK software.
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+        <button class="btn-test-qrz" onclick="testFlrig()" id="btn-test-flrig">Test Connection</button>
+        <span id="flrig-test-result" style="font-family:var(--mono);font-size:11px;color:var(--muted);"></span>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6;">
+        Status: <span id="settings-flrig-status">—</span>
+        &nbsp;·&nbsp; <a href="https://w1hkj.com/files/flrig/" target="_blank" style="color:var(--accent);text-decoration:none;">Download flrig ↗</a>
+        &nbsp;·&nbsp; <a href="https://w1hkj.com/FlrigHelp/index.html" target="_blank" style="color:var(--accent);text-decoration:none;">Help ↗</a>
+      </div>
+    </div>
+    <div class="settings-section">
       <h4>HamLib / rigctld <span style="font-size:9px;color:#8fafc0;font-weight:400;">— Yaesu · Icom · Kenwood · 300+ rigs</span></h4>
       <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
-        Connect any HamLib-compatible rig via <code style="font-size:10px;">rigctld</code> for frequency/mode following and DX spot tuning.
-        Run <code style="font-size:10px;">rigctld -m &lt;model&gt; -r &lt;port&gt;</code> from HamLib before enabling. TCI and HamLib can run simultaneously — TCI takes priority for frequency updates when both are connected.
+        SDRLogger+ connects to <strong style="color:var(--text)">rigctld</strong> (the HamLib daemon) via TCP — it does <em>not</em> talk to the radio directly.
+        You must <strong style="color:var(--text)">start rigctld.exe separately first</strong> with your rig model and COM port, then enable HamLib here.<br>
+        Example: <code style="font-size:10px;color:var(--accent2);">rigctld.exe -m 3068 -r COM3 -s 19200</code>&nbsp;
+        (IC-9100 = model 3068 · find yours at the <a href="https://hamlib.sourceforge.net/manuals/hamlib.html#Supported-Rigs" target="_blank" style="color:var(--accent);text-decoration:none;">HamLib rig list ↗</a>)<br>
+        SDRLogger+ then connects to rigctld on the host/port below. TCI and HamLib can run simultaneously.
+        <span style="color:var(--warn);">⚠ rigctld and flrig cannot share the same COM port — disable flrig before starting rigctld on that port.</span>
       </div>
       <div class="settings-row full">
         <div class="settings-field">
@@ -834,11 +942,85 @@
         &nbsp;·&nbsp; <a href="https://github.com/Hamlib/Hamlib/wiki/Supported-Radios" target="_blank" style="color:var(--accent);text-decoration:none;">Supported rigs ↗</a>
       </div>
     </div>
+    <!-- ── WinKeyer ────────────────────────────────────────────────── -->
+    <div class="settings-section">
+      <h4>K1EL WinKeyer <span style="font-size:9px;color:#8fafc0;font-weight:400;">— Hardware CW Keyer</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Connect a <strong style="color:var(--text)">K1EL WinKeyer</strong> (or compatible clone) via USB/serial for hardware CW keying.
+        SDRLogger+ speaks the WinKeyer host protocol at 1200 baud (8-N-2).<br>
+        <strong style="color:var(--text)">CW priority:</strong> TCI → WinKeyer → HamLib.
+        Enable WinKeyer here if you don't have TCI and want dedicated CW keying hardware.
+      </div>
+      <div class="settings-row full">
+        <div class="settings-field">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+            <input type="checkbox" id="cfg-winkeyer-enabled" style="width:auto;accent-color:#f5a623;cursor:pointer;">
+            Enable WinKeyer
+          </label>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label>COM Port</label>
+          <input type="text" id="cfg-winkeyer-port" placeholder="COM2" spellcheck="false" style="text-transform:uppercase;" list="wk-port-list">
+          <datalist id="wk-port-list"></datalist>
+        </div>
+        <div class="settings-field">
+          <label>Default WPM</label>
+          <input type="number" id="cfg-winkeyer-wpm" placeholder="26" min="5" max="99">
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label>Key Output</label>
+          <select id="cfg-winkeyer-key-out" style="background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;">
+            <option value="port1">Key Port 1 (default)</option>
+            <option value="port2">Key Port 2</option>
+            <option value="both">Both Ports</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label>Keyer Mode</label>
+          <select id="cfg-winkeyer-mode" style="background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;">
+            <option value="iambicb">Iambic B (default)</option>
+            <option value="iambica">Iambic A</option>
+            <option value="ultimatic">Ultimatic</option>
+            <option value="bug">Bug</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+            <input type="checkbox" id="cfg-winkeyer-ptt" style="width:auto;accent-color:#f5a623;cursor:pointer;" checked>
+            Enable PTT output
+          </label>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label>PTT Lead-in (ms)</label>
+          <input type="number" id="cfg-winkeyer-ptt-lead" placeholder="0" min="0" max="250" step="10">
+        </div>
+        <div class="settings-field">
+          <label>PTT Tail (ms)</label>
+          <input type="number" id="cfg-winkeyer-ptt-tail" placeholder="0" min="0" max="250" step="10">
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+        <button class="btn-test-qrz" onclick="testWinkeyer()" id="btn-test-winkeyer">Test WinKeyer</button>
+        <span id="winkeyer-test-result" style="font-family:var(--mono);font-size:11px;color:var(--muted);"></span>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6;">
+        Status: <span id="settings-winkeyer-status">—</span>
+        &nbsp;·&nbsp; <a href="https://hamlib.sourceforge.net/manuals/hamlib.html" target="_blank" style="color:var(--accent);text-decoration:none;">K1EL WinKeyer ↗</a>
+      </div>
+    </div>
     <div class="settings-section">
       <h4>QRZ Lookup (XML API)</h4>
       <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:8px;line-height:1.6;">
         Login with your <b style="color:var(--text)">QRZ.com username &amp; password</b>.<br>
-        An active <a href="https://www.qrz.com/i/subscriptions.html" target="_blank" style="color:var(--accent)">XML Data subscription ($35.95/yr)</a> is required for full lookups.
+        An active <a href="https://shop.qrz.com/collections/subscriptions" target="_blank" style="color:var(--accent)">XML Data subscription</a> is required for full lookups.
       </div>
       <div class="settings-row">
         <div class="settings-field">
@@ -926,11 +1108,36 @@
       </div>
     </div>
     <div class="settings-section">
+      <h4>eQSL.cc</h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.7;">
+        Uploads each QSO in real-time to <a href="https://www.eqsl.cc" target="_blank" style="color:var(--accent)">eQSL.cc</a>.<br>
+        Requires a free eQSL.cc account. Enter your eQSL username and password below.
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label>eQSL Username</label>
+          <input type="text" id="cfg-eqsl-user" placeholder="Your eQSL.cc username" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="settings-field">
+          <label>eQSL Password</label>
+          <input type="password" id="cfg-eqsl-pass" placeholder="Your eQSL.cc password" autocomplete="new-password">
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;margin-top:10px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="checkbox" id="cfg-eqsl-enabled" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          Auto-upload QSOs to eQSL.cc
+        </label>
+        <button class="btn-test-qrz" onclick="testEQSL()" style="margin-left:auto;flex-shrink:0;">🔑 Test Credentials</button>
+        <span id="eqsl-test-result" style="font-family:var(--mono);font-size:11px;"></span>
+      </div>
+    </div>
+    <div class="settings-section">
       <h4>Club Log</h4>
       <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.7;">
-        Uploads each QSO in real-time to <a href="https://clublog.org" target="_blank" style="color:var(--accent)">clublog.org</a> via the real-time API (<code>realtime.php</code>).<br>
-        Requires a free Club Log account, an <strong style="color:var(--text)">Application Password</strong> (set in Club Log account settings — <em>not</em> your login password), and a <strong style="color:var(--text)">developer API key</strong> (request at <a href="https://clublog.org/requestapikey.php" target="_blank" style="color:var(--accent)">clublog.org/requestapikey.php</a>).<br>
-        <strong style="color:#ff9944;">⚠ Repeated failed logins will cause Club Log to block your IP address.</strong> Always test credentials before enabling.
+        Uploads QSOs to <a href="https://clublog.org" target="_blank" style="color:var(--accent)">clublog.org</a>. Requires a free Club Log account.<br>
+        For security, generate an <strong style="color:var(--text)">Application Password</strong> at clublog.org → <strong style="color:var(--text)">Settings → App Passwords</strong> and use that below instead of your regular login password.<br>
+        <span style="color:#ff9944;">⚠ If you receive a 403 error, uploads are automatically disabled to prevent IP blocking. Fix your credentials and re-test.</span>
       </div>
       <div class="settings-row">
         <div class="settings-field">
@@ -938,8 +1145,8 @@
           <input type="email" id="cfg-clublog-email" placeholder="Your Club Log account email" spellcheck="false" autocomplete="off">
         </div>
         <div class="settings-field">
-          <label>Application Password <span style="font-size:9px;color:#8fafc0">— not your login password</span></label>
-          <input type="password" id="cfg-clublog-password" placeholder="App password from Club Log account settings" autocomplete="new-password">
+          <label>Password <span style="font-size:9px;color:#8fafc0">— or your App Password from Club Log Settings → App Passwords</span></label>
+          <input type="password" id="cfg-clublog-password" placeholder="Club Log password or App Password" autocomplete="new-password">
         </div>
       </div>
       <div class="settings-row">
@@ -947,9 +1154,11 @@
           <label>Callsign <span style="font-size:9px;color:#8fafc0">— leave blank to use your station callsign</span></label>
           <input type="text" id="cfg-clublog-callsign" placeholder="e.g. W1AW" spellcheck="false" style="text-transform:uppercase;" autocomplete="off">
         </div>
+      </div>
+      <div class="settings-row">
         <div class="settings-field">
-          <label>API Key <span style="font-size:9px;color:#8fafc0">— developer key from clublog.org/requestapikey.php</span></label>
-          <input type="password" id="cfg-clublog-api-key" placeholder="40-character hex key" autocomplete="off">
+          <label>Upload Designator <span style="font-size:9px;color:#8fafc0">— single letter added to uploaded records to prevent re-upload</span></label>
+          <input type="text" id="cfg-clublog-designator" maxlength="1" placeholder="B" style="width:60px;text-transform:uppercase;" autocomplete="off">
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:14px;margin-top:10px;flex-wrap:wrap;">
@@ -1021,8 +1230,8 @@
           <input type="text" id="cfg-spothole-band" placeholder="e.g. 20m,15m,10m" spellcheck="false">
         </div>
         <div class="settings-field">
-          <label>Mode Filter <span style="font-size:9px;color:#8fafc0">(blank = all modes)</span></label>
-          <input type="text" id="cfg-spot-mode-filter" placeholder="e.g. FT8,CW,SSB" spellcheck="false">
+          <label>Mode Filter <span style="font-size:9px;color:#cdd9e5">(blank = all · SSB matches USB &amp; LSB)</span></label>
+          <input type="text" id="cfg-spot-mode-filter" placeholder="e.g. FT8,CW,USB,LSB" spellcheck="false" title="Comma-separated modes to show. SSB automatically includes USB and LSB — cluster spots are almost always tagged USB or LSB, not SSB.">
         </div>
       </div>
       <div class="settings-row">
@@ -1072,6 +1281,73 @@
           <input type="text" id="cfg-hot-calls" placeholder="e.g. DX0DX,VK9XX,ZL9" spellcheck="false" style="margin-top:6px;" title="Comma-separated callsigns to highlight">
           <span style="font-size:9px;color:#8fafc0;margin-top:3px;display:block;">Comma-separated watchlist callsigns</span>
         </div>
+        <div class="settings-field" style="justify-content:flex-start;padding-top:2px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="cfg-hot-tts" style="width:15px;height:15px;accent-color:var(--red);cursor:pointer;">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text);">Announce via speech</span>
+          </label>
+          <span style="font-size:9px;color:#cdd9e5;margin-top:3px;">15-min cooldown per callsign</span>
+        </div>
+      </div>
+      <!-- RBN Band-Opening Alerts -->
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <input type="checkbox" id="cfg-rbn-enabled" style="width:15px;height:15px;accent-color:var(--accent2);cursor:pointer;">
+          <span style="font-family:var(--mono);font-size:11px;color:var(--accent2);font-weight:600;">RBN Band-Opening Alerts</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+          Connects to the Reverse Beacon Network and alerts when VHF/UHF bands open near your location.
+          RBN skimmers have known grid squares — distance is calculated from your grid in Settings.
+          <strong style="color:var(--warn);">Requires your grid square to be set above.</strong>
+        </div>
+        <div class="settings-row">
+          <div class="settings-field"><label>RBN Server</label><input type="text" id="cfg-rbn-server" placeholder="telnet.reversebeacon.net" spellcheck="false"></div>
+          <div class="settings-field"><label>Port</label><input type="number" id="cfg-rbn-port" placeholder="7000"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px;flex-wrap:wrap;">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;">Monitor bands:</span>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="cfg-rbn-10m" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text);">10m</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="cfg-rbn-6m" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text);">6m</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="cfg-rbn-2m" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text);">2m</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="cfg-rbn-70cm" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text);">70cm</span>
+          </label>
+        </div>
+        <div class="settings-row">
+          <div class="settings-field">
+            <label>Alert Distance</label>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" id="cfg-rbn-distance" placeholder="500" min="1" max="5000" style="flex:1;">
+              <select id="cfg-rbn-unit" style="width:70px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 4px;outline:none;">
+                <option value="mi">Miles</option>
+                <option value="km">KM</option>
+              </select>
+            </div>
+            <span style="font-size:9px;color:#8fafc0;margin-top:3px;display:block;">Alert when an RBN skimmer within this distance hears a signal</span>
+          </div>
+          <div class="settings-field">
+            <label>Cooldown (minutes)</label>
+            <input type="number" id="cfg-rbn-cooldown" placeholder="15" min="1" max="120">
+            <span style="font-size:9px;color:#8fafc0;margin-top:3px;display:block;">Suppress repeat alerts per band for this duration</span>
+          </div>
+        </div>
+        <div style="margin-top:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="cfg-rbn-voice" style="width:15px;height:15px;accent-color:var(--accent2);cursor:pointer;">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text);">Voice announce band openings</span>
+          </label>
+        </div>
+        <div id="rbn-status-line" style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--muted);"></div>
       </div>
       <!-- Spot Sending -->
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
@@ -1175,6 +1451,13 @@
             <option value="#ffd700">Yellow</option>
           </select>
         </div>
+      </div>
+      <div style="margin-top:10px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="cfg-update-check" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;" checked>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text);">Check for updates on startup</span>
+        </label>
+        <span style="font-family:var(--mono);font-size:9px;color:#8fafc0;margin-left:23px;">Checks GitHub for a newer release when the app starts. No personal data is sent.</span>
       </div>
     </div>
     <!-- POTA -->
@@ -1286,6 +1569,18 @@
       </div>
     </div>
 
+    <div class="settings-section">
+      <h4>Debug &amp; Diagnostics</h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Download a debug report to attach to a GitHub issue or share with support.
+        The report includes recent error logs, rig status, and sanitized settings (no passwords).
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+        <button class="btn-test-qrz" onclick="downloadDebugReport()">Download Debug Report</button>
+        <span id="debug-report-status" style="font-family:var(--mono);font-size:11px;color:var(--muted);"></span>
+      </div>
+      <div id="debug-log-preview" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;max-height:120px;overflow-y:auto;background:#0a0e14;padding:6px 8px;border-radius:3px;border:1px solid var(--border);display:none;"></div>
+    </div>
     <a href="/help" target="_blank" style="display:block;text-align:center;font-family:var(--mono);font-size:11px;color:var(--accent);padding:10px 0 4px;letter-spacing:1px;text-decoration:none;opacity:.8;transition:opacity .15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.8'">📖 TCILog Quick Start Guide ↗</a>
     <div style="display:flex;gap:10px;align-items:center;">
       <button class="btn-save-settings" onclick="saveSettings()" style="flex:1;">Save Settings</button>
@@ -1299,12 +1594,46 @@
 // ─── STATE ──────────────────────────────────────────────────────────────────
 let allLogs = [];
 let tciConnected = false;
+let ituRegion = 2;   // ITU Region (loaded from settings): 1=EU/AF/RU, 2=Americas, 3=Asia-Pac
+
+// Strict ITU band edges per region — used for out-of-band VFO warnings
+// Format: { bandName: [lo_mhz, hi_mhz] }
+const ITU_BANDS = {
+  1: { // Region 1 — Europe, Africa, Middle East, Russia
+    '160m':[1.810,2.000],'80m':[3.500,3.800],'60m':[5.3515,5.3665],
+    '40m':[7.000,7.200],'30m':[10.100,10.150],'20m':[14.000,14.350],
+    '17m':[18.068,18.168],'15m':[21.000,21.450],'12m':[24.890,24.990],
+    '10m':[28.000,29.700],'6m':[50.000,52.000],'2m':[144.000,146.000],'70cm':[430.000,440.000]
+  },
+  2: { // Region 2 — Americas
+    '160m':[1.800,2.000],'80m':[3.500,4.000],'60m':[5.3305,5.4065],
+    '40m':[7.000,7.300],'30m':[10.100,10.150],'20m':[14.000,14.350],
+    '17m':[18.068,18.168],'15m':[21.000,21.450],'12m':[24.890,24.990],
+    '10m':[28.000,29.700],'6m':[50.000,54.000],'2m':[144.000,148.000],'70cm':[420.000,450.000]
+  },
+  3: { // Region 3 — Asia-Pacific
+    '160m':[1.800,2.000],'80m':[3.500,3.900],'60m':[5.3515,5.3665],
+    '40m':[7.000,7.200],'30m':[10.100,10.150],'20m':[14.000,14.350],
+    '17m':[18.068,18.168],'15m':[21.000,21.450],'12m':[24.890,24.990],
+    '10m':[28.000,29.700],'6m':[50.000,54.000],'2m':[144.000,148.000],'70cm':[420.000,450.000]
+  }
+};
+
+let _lastOOBBand = null;   // track last out-of-band warning to avoid repeating every poll
 let _lastSeenMode = '';   // track mode to avoid spamming updateRST every poll
 let _rstUserEdited = false; // set true when user manually changes RST; cleared on mode change / clearForm
 let logOffset = 0;
 let logTotal  = 0;
 let logSearch = '';
-const LOG_PAGE = 200;
+const LOG_ROW_HEIGHT = 30;   // approx px per table row
+const LOG_PAGE_MIN   = 25;  // minimum rows per load
+const LOG_PAGE_MAX   = 500; // maximum rows per load
+function getLogPageSize() {
+  const wrap = document.getElementById('log-table-wrap');
+  if (!wrap) return LOG_PAGE_MIN;
+  const h = wrap.clientHeight || 400;
+  return Math.max(LOG_PAGE_MIN, Math.min(LOG_PAGE_MAX, Math.ceil(h / LOG_ROW_HEIGHT) + 5));
+}
 let _filterTimer = null;
 // Slots 0-2 = telnet clusters 1-3; slot 3 = Spothole API
 let clusterSockets      = [null, null, null, null];
@@ -1327,6 +1656,12 @@ let potaMode    = 'general';              // 'general' | 'pota'
 let potaMyPark  = '';                     // current activation park ref
 let hotEnabled     = false;
 let hotCalls       = [];                   // uppercase callsign watchlist
+let hotTtsEnabled  = false;               // announce hot spots via speech synthesis
+const _hotTtsCooldown = new Map();        // callsign → last-announced timestamp (15-min gate)
+// ─── RBN Band-Opening Alerts ────────────────────────────────────────────────
+let _rbnSocket       = null;
+let _rbnConnected    = false;
+const _rbnBandCooldown = new Map();       // band → last-alert timestamp
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 // Keepalive heartbeat — tells the server this browser session is still active.
@@ -1335,6 +1670,36 @@ fetch('/api/keepalive', {method:'POST'}).catch(()=>{});
 setInterval(function() {
   fetch('/api/keepalive', {method:'POST'}).catch(()=>{});
 }, 20000);
+
+// ─── Update check (once at startup) ─────────────────────────────────────────
+(function checkForUpdate() {
+  const s = loadSettings();
+  if (s.update_check === false) return;   // user disabled update checks
+  fetch('/api/update_check').then(r => r.json()).then(data => {
+    if (data.has_update && data.latest) {
+      const el = document.getElementById('update-banner');
+      if (el) {
+        el.textContent = `🔔 v${data.latest} Available`;
+        el.href = data.url;
+        el.style.display = 'inline-block';
+        el.title = `SDRLogger+ v${data.latest} is available — click to download`;
+      }
+    }
+  }).catch(() => {});
+})();
+
+// ─── Global JS error capture → send to debug log ─────────────────────────────
+window.onerror = function(msg, src, line, col, err) {
+  fetch('/api/log_js_error', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({message: String(msg), url: String(src), line: line})
+  }).catch(()=>{});
+  return false;
+};
+window.onunhandledrejection = function(evt) {
+  fetch('/api/log_js_error', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({message: 'Unhandled Promise: ' + String(evt.reason), url: location.href, line: 0})
+  }).catch(()=>{});
+};
 
 window.addEventListener('DOMContentLoaded', () => {
   restoreDockLayout();
@@ -1352,6 +1717,13 @@ window.addEventListener('DOMContentLoaded', () => {
   loadLog();
   startClock();
   startTCIPoll();
+  startFlrigPoll();
+  // Init flrig badge visibility from saved settings
+  if (_rs.flrig_enabled) {
+    const flBadge = document.getElementById('flrig-badge');
+    flBadge.classList.add('fl-enabled','fl-offline');
+    flBadge.textContent = 'FLRIG OFFLINE';
+  }
   startHamlibPoll();
   // Init HamLib badge visibility from saved settings
   if (_rs.hamlib_enabled) {
@@ -1364,6 +1736,7 @@ window.addEventListener('DOMContentLoaded', () => {
   // Apply persisted display preferences
   const _s = loadSettings();
   applyFontSize(_s.font_size || 'normal');
+  if (_s.itu_region) ituRegion = parseInt(_s.itu_region);
   spotModeFilter    = _s.spot_mode_filter || '';
   spotMaxCount      = Math.max(1, Math.min(100, parseInt(_s.spot_max || '25') || 25));
   spotDxccFilter    = _s.dxcc_filter     || '';
@@ -1372,6 +1745,7 @@ window.addEventListener('DOMContentLoaded', () => {
   spotSpotterRegion = _s.spotter_region  || '';
   hotEnabled        = _s.hot_enabled === true;
   hotCalls          = _s.hot_calls ? _s.hot_calls.toUpperCase().split(',').map(c=>c.trim()).filter(Boolean) : [];
+  hotTtsEnabled     = _s.hot_tts_enabled === true;
   // Restore POTA mode
   potaMyPark = (_s.pota_my_park || '').toUpperCase();
   if (_s.pota_mode === 'pota') setPotaMode('pota', false);
@@ -1463,13 +1837,110 @@ function setDefaultDateTime() {
     `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
 }
 
+// ─── FLRIG POLL & CONTROL ────────────────────────────────────────────────────
+let flrigConnected = false;
+let tciTuneSuppressUntil   = 0;   // ms timestamp — TCI poller skips freq/band updates until this time
+let flrigTuneSuppressUntil = 0;   // ms timestamp — poller skips form updates until this time
+
+function startFlrigPoll() {
+  setInterval(async () => {
+    try {
+      const res  = await fetch('/api/flrig_data');
+      if (!res.ok) return;
+      const data = await res.json();
+      const badge = document.getElementById('flrig-badge');
+      if (!data.enabled) {
+        badge.classList.remove('fl-enabled','fl-connected','fl-offline');
+        flrigConnected = false;
+        return;
+      }
+      badge.classList.add('fl-enabled');
+      if (data.connected && !flrigConnected) {
+        flrigConnected = true;
+        badge.className = 'fl-enabled fl-connected';
+        badge.textContent = data.rig ? `FLRIG: ${data.rig}` : 'FLRIG LIVE';
+      } else if (!data.connected && flrigConnected) {
+        flrigConnected = false;
+        badge.className = 'fl-enabled fl-offline';
+        badge.textContent = 'FLRIG OFFLINE';
+      } else if (data.enabled && !data.connected) {
+        badge.classList.add('fl-offline');
+      }
+      // Update form fields from flrig ONLY when:
+      //  1. flrig is connected
+      //  2. TCI is not active (TCI has higher priority)
+      //  3. Not within the post-tune suppression window (avoids overwriting just-clicked spots)
+      if (data.connected && !tciConnected && Date.now() > flrigTuneSuppressUntil) {
+        if (data.freq_mhz) {
+          const fEl = document.getElementById('freq_mhz');
+          if (fEl && document.activeElement !== fEl) {
+            fEl.value = data.freq_mhz;
+            autoSelectBand(parseFloat(data.freq_mhz));
+            updateClusterBandFromTCI(parseFloat(data.freq_mhz));
+          }
+        }
+        if (data.mode && data.mode !== _lastSeenMode) {
+          const mEl = document.getElementById('mode');
+          if (mEl && document.activeElement !== mEl) {
+            mEl.value = data.mode;
+            _lastSeenMode = data.mode;
+            updateRST(true);
+          }
+        }
+      }
+    } catch(e) {}
+  }, 2000);
+}
+
+function toggleFlrigEnabled(enabled) {
+  const badge = document.getElementById('flrig-badge');
+  if (!enabled) {
+    badge.classList.remove('fl-enabled','fl-connected','fl-offline');
+    flrigConnected = false;
+  } else {
+    badge.classList.add('fl-enabled','fl-offline');
+    badge.textContent = 'FLRIG OFFLINE';
+  }
+}
+
+async function testFlrig() {
+  const btn    = document.getElementById('btn-test-flrig');
+  const result = document.getElementById('flrig-test-result');
+  if (!document.getElementById('cfg-flrig-enabled').checked) {
+    result.textContent = '⚠ Check "Enable flrig" first';
+    result.style.color = 'var(--warn)'; return;
+  }
+  const host = document.getElementById('cfg-flrig-host').value.trim() || '127.0.0.1';
+  const port = document.getElementById('cfg-flrig-port').value || '12345';
+  await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({flrig_enabled: true, flrig_host: host, flrig_port: parseInt(port)})});
+  btn.disabled = true;
+  result.textContent = 'Testing…'; result.style.color = 'var(--muted)';
+  try {
+    const res  = await fetch('/api/flrig_test', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({host, port: parseInt(port)})});
+    const data = await res.json();
+    if (data.ok) {
+      result.textContent = '✓ ' + data.info;
+      result.style.color = 'var(--green)';
+    } else {
+      result.textContent = '✗ ' + data.error;
+      result.style.color = 'var(--red)';
+    }
+  } catch(e) { result.textContent = '✗ Request failed'; result.style.color = 'var(--red)'; }
+  btn.disabled = false;
+}
+
 // ─── HAMLIB POLL & CONTROL ───────────────────────────────────────────────────
 let hamlibConnected = false;
+let hamlibTuneSuppressUntil = 0;  // ms timestamp — poller skips form updates until this time
 
 function startHamlibPoll() {
   setInterval(async () => {
     try {
       const res  = await fetch('/api/hamlib_data');
+      if (!res.ok) return;
       const data = await res.json();
       const badge = document.getElementById('hamlib-badge');
       if (!data.enabled) {
@@ -1491,9 +1962,11 @@ function startHamlibPoll() {
         badge.className = 'hl-enabled hl-offline';
         badge.textContent = 'RIG OFFLINE';
       }
-      // Only update form fields from HamLib when TCI is NOT connected
-      // (TCI takes priority — it already updates freq/mode in its own poll)
-      if (data.connected && !tciConnected) {
+      // Only update form fields from HamLib when:
+      //  1. HamLib is connected
+      //  2. TCI is not active (TCI has higher priority)
+      //  3. Not within the post-tune suppression window
+      if (data.connected && !tciConnected && Date.now() > hamlibTuneSuppressUntil) {
         if (data.freq_mhz) {
           const fEl = document.getElementById('freq_mhz');
           fEl.value = data.freq_mhz;
@@ -1507,7 +1980,7 @@ function startHamlibPoll() {
         }
       }
     } catch(e) {}
-  }, 1500);
+  }, 750);
 }
 
 function toggleHamlibEnabled(enabled) {
@@ -1549,13 +2022,68 @@ async function testHamlib() {
   btn.disabled = false;
 }
 
+async function testWinkeyer() {
+  const btn    = document.getElementById('btn-test-winkeyer');
+  const result = document.getElementById('winkeyer-test-result');
+  const port   = document.getElementById('cfg-winkeyer-port').value.trim().toUpperCase();
+  if (!port) { result.textContent = '✗ Enter a COM port first'; result.style.color = 'var(--red)'; return; }
+  // Save settings first so backend uses the correct port
+  await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({winkeyer_enabled: true, winkeyer_port: port})});
+  btn.disabled = true;
+  result.textContent = 'Testing…'; result.style.color = 'var(--muted)';
+  try {
+    const res  = await fetch('/api/winkeyer_test', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({port: port})
+    });
+    if (!res.ok) { result.textContent = '✗ Server error (' + res.status + ')'; result.style.color = 'var(--red)'; btn.disabled = false; return; }
+    const data = await res.json();
+    if (data.ok) {
+      result.textContent = '✓ WinKeyer v' + data.version + ' on ' + port;
+      result.style.color = '#f5a623';
+    } else {
+      result.textContent = '✗ ' + data.error;
+      result.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    result.textContent = '✗ ' + e.message;
+    result.style.color = 'var(--red)';
+  }
+  btn.disabled = false;
+}
+
+async function loadComPorts() {
+  try {
+    const res = await fetch('/api/serial_ports');
+    if (!res.ok) return;
+    const data = await res.json();
+    const dl = document.getElementById('wk-port-list');
+    dl.innerHTML = '';
+    (data.ports || []).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.port;
+      opt.textContent = p.port + ' — ' + p.desc;
+      dl.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
 // ─── TCI POLL ────────────────────────────────────────────────────────────────
 function startTCIPoll() {
   setInterval(async () => {
     try {
       const res = await fetch('/api/tci_data');
+      if (!res.ok) return;
       const data = await res.json();
       const badge = document.getElementById('tci-badge');
+      if (!data.enabled) {
+        badge.classList.add('tci-disabled');
+        badge.classList.remove('connected');
+        tciConnected = false;
+        return;
+      }
+      badge.classList.remove('tci-disabled');
       if (data.connected && !tciConnected) {
         tciConnected = true;
         badge.textContent = 'TCI LIVE';
@@ -1565,13 +2093,14 @@ function startTCIPoll() {
         badge.textContent = 'TCI OFFLINE';
         badge.classList.remove('connected');
       }
+      if (!data.connected) return;
       if (data.callsign) {
         const csEl = document.getElementById('callsign');
         csEl.value = data.callsign.toUpperCase();
         highlight(csEl);
         checkWorkedBefore(data.callsign);
       }
-      if (data.freq_mhz) {
+      if (data.freq_mhz && Date.now() > tciTuneSuppressUntil) {
         const fEl = document.getElementById('freq_mhz');
         fEl.value = data.freq_mhz;
         highlight(fEl);
@@ -1580,11 +2109,51 @@ function startTCIPoll() {
         updateClusterBandFromTCI(parseFloat(data.freq_mhz));
       }
       if (data.mode && data.mode !== _lastSeenMode) {
+        _lastSeenMode = data.mode;
         document.getElementById('mode').value = data.mode;
         updateRST();
       }
     } catch(e) {}
   }, 1500);
+}
+
+function toggleTciEnabled(enabled) {
+  const badge = document.getElementById('tci-badge');
+  if (!enabled) {
+    badge.classList.add('tci-disabled');
+    badge.classList.remove('connected');
+    tciConnected = false;
+  } else {
+    badge.classList.remove('tci-disabled');
+    badge.textContent = 'TCI OFFLINE';
+  }
+}
+
+async function downloadDebugReport() {
+  const status = document.getElementById('debug-report-status');
+  status.textContent = 'Generating…'; status.style.color = 'var(--muted)';
+  try {
+    const res  = await fetch('/api/debug_report');
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = res.headers.get('Content-Disposition')?.match(/filename=(.+)/)?.[1] || 'sdrloggerplus_debug.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+    status.textContent = '✓ Report downloaded'; status.style.color = 'var(--green)';
+    // Also show preview of recent log
+    const logRes  = await fetch('/api/debug_log');
+    const logData = await logRes.json();
+    const preview = document.getElementById('debug-log-preview');
+    if (logData.entries && logData.entries.length) {
+      preview.style.display = 'block';
+      preview.textContent   = logData.entries.slice(-20).join('\n');
+      preview.scrollTop     = preview.scrollHeight;
+    }
+  } catch(e) {
+    status.textContent = '✗ ' + e.message; status.style.color = 'var(--red)';
+  }
 }
 
 function highlight(el) {
@@ -1595,13 +2164,100 @@ function highlight(el) {
 }
 
 function autoSelectBand(mhz) {
+  // Wide detection ranges — accommodate rigs that park VFOs just outside strict ITU edges
   const bands = [
-    [1.8,2.0,'160m'],[3.5,4.0,'80m'],[7.0,7.3,'40m'],
-    [14.0,14.35,'20m'],[21.0,21.45,'15m'],[28.0,29.7,'10m'],
-    [50,54,'6m'],[144,148,'2m'],[420,450,'70cm']
+    [1.7,   2.1,   '160m'],
+    [3.4,   4.1,   '80m'],
+    [5.2,   5.5,   '60m'],
+    [6.9,   7.4,   '40m'],
+    [9.9,   10.5,  '30m'],
+    [13.9,  14.4,  '20m'],
+    [18.0,  18.3,  '17m'],
+    [20.9,  21.5,  '15m'],
+    [24.8,  25.1,  '12m'],
+    [27.9,  29.8,  '10m'],
+    [50,    54,    '6m'],
+    [144,   148,   '2m'],
+    [420,   450,   '70cm'],
   ];
   for (const [lo,hi,name] of bands) {
-    if (mhz >= lo && mhz <= hi) { document.getElementById('band').value = name; return; }
+    if (mhz >= lo && mhz <= hi) {
+      document.getElementById('band').value = name;
+      _checkOOB(mhz, name);
+      return;
+    }
+  }
+  document.getElementById('band').value = '';
+  _lastOOBBand = null;
+}
+
+// Check if frequency is outside the strict ITU allocation for this region
+// Shows a one-time toast warning when first detected; clears when back in-band
+function _checkOOB(mhz, band) {
+  const plan = ITU_BANDS[ituRegion] || ITU_BANDS[2];
+  const edges = plan[band];
+  if (!edges) { _lastOOBBand = null; return; }
+  const [lo, hi] = edges;
+  const oobKey = `${band}@${Math.round(mhz * 1000)}`;
+  if (mhz < lo || mhz > hi) {
+    if (_lastOOBBand !== oobKey) {
+      _lastOOBBand = oobKey;
+      toast(`VFO ${mhz.toFixed(4)} MHz is outside the ${band} ITU Region ${ituRegion} allocation (${lo}–${hi} MHz)`, 'warn');
+    }
+  } else {
+    _lastOOBBand = null;   // back in band — clear warning state
+  }
+}
+
+// Band center frequencies used when user manually selects a band to QSY the radio
+const BAND_QSY_FREQ = {
+  '160m':1.900, '80m':3.750, '60m':5.3585, '40m':7.150,
+  '30m':10.125, '20m':14.200, '17m':18.130, '15m':21.300,
+  '12m':24.940, '10m':28.500, '6m':50.150, '2m':144.200, '70cm':432.100
+};
+
+// Called when user manually selects a band — QSYs the radio to the band center
+function onBandChange(band, evt) {
+  if (!evt || !evt.isTrusted) return;   // skip if set programmatically by autoSelectBand
+  const freq = BAND_QSY_FREQ[band];
+  if (!freq) return;
+  const fEl = document.getElementById('freq_mhz');
+  if (fEl) fEl.value = freq;
+  _rigQSY(freq, '');
+}
+
+// Called when user changes the mode dropdown manually
+function onModeChange(mode, evt) {
+  if (!evt || !evt.isTrusted) return;
+  if (!mode) return;
+  _rigQSY(null, mode);
+}
+
+// Push a frequency and/or mode change to the active rig path (TCI → flrig → HamLib)
+// Pass null for freq or mode to skip that field
+function _rigQSY(freq_mhz, mode) {
+  if (tciConnected) {
+    const body = {};
+    if (freq_mhz !== null) body.freq_mhz = parseFloat(freq_mhz);
+    if (mode)              body.mode      = mode;
+    if (freq_mhz !== null) tciTuneSuppressUntil = Date.now() + 3000;
+    fetch('/api/tci_tune', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)}).catch(()=>{});
+  } else if (flrigConnected) {
+    const body = {};
+    if (freq_mhz !== null) body.freq_mhz = parseFloat(freq_mhz);
+    if (mode)              body.mode      = mode;
+    if (freq_mhz !== null) flrigTuneSuppressUntil = Date.now() + 4000;
+    fetch('/api/flrig_tune', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)}).catch(()=>{});
+  } else if (hamlibConnected) {
+    const body = {};
+    if (freq_mhz !== null) body.freq_mhz = parseFloat(freq_mhz);
+    if (mode)              body.mode      = mode;
+    if (freq_mhz !== null) hamlibTuneSuppressUntil = Date.now() + 4000;
+    if (mode)              hamlibTuneSuppressUntil = Date.now() + 4000;
+    fetch('/api/hamlib_tune', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)}).catch(()=>{});
   }
 }
 
@@ -1677,6 +2333,8 @@ async function saveQSO() {
       else if (data.lotw_msg) msg += ` · LoTW: ${data.lotw_msg}`;
       if (data.clublog_ok) msg += ` · ClubLog ✓`;
       else if (data.clublog_msg) msg += ` · ClubLog: ${data.clublog_msg}`;
+      if (data.eqsl_ok) msg += ` · eQSL ✓`;
+      else if (data.eqsl_msg) msg += ` · eQSL: ${data.eqsl_msg}`;
       // Store for post-log spotting (10-min window)
       lastSpot = {callsign: cs, freq_mhz: payload.freq_mhz, mode: payload.mode, timestamp: Date.now()};
       toast(msg,'success'); clearForm(); loadLog();
@@ -1703,38 +2361,54 @@ function clearForm() {
 }
 
 // ─── LOAD LOG ────────────────────────────────────────────────────────────────
-async function loadLog(append = false) {
-  if (!append) { logOffset = 0; allLogs = []; }
+async function loadLog(newOffset) {
+  const pageSize = getLogPageSize();
+  if (typeof newOffset === 'number') logOffset = newOffset;
+  else logOffset = 0;
   try {
-    const params = new URLSearchParams({ limit: LOG_PAGE, offset: logOffset });
+    const params = new URLSearchParams({ limit: pageSize, offset: logOffset });
     if (logSearch) params.set('search', logSearch);
     const res  = await fetch('/api/log?' + params);
     const data = await res.json();
     logTotal = data.total;
-    logOffset = data.offset + data.rows.length;
-    allLogs = append ? allLogs.concat(data.rows) : data.rows;
+    allLogs  = data.rows;
     renderLog();
+    // scroll table back to top on page change
+    const wrap = document.getElementById('log-table-wrap');
+    if (wrap) wrap.scrollTop = 0;
   } catch(e) {}
 }
 
-async function loadMoreLog() {
-  await loadLog(true);
+function loadNextPage() {
+  const pageSize = getLogPageSize();
+  const next = logOffset + pageSize;
+  if (next < logTotal) loadLog(next);
+}
+
+function loadPrevPage() {
+  const pageSize = getLogPageSize();
+  const prev = Math.max(0, logOffset - pageSize);
+  if (logOffset > 0) loadLog(prev);
 }
 
 function renderLog() {
   const tbody = document.getElementById('log-tbody');
-  const showing = allLogs.length;
+  const pageSize = getLogPageSize();
+  const showFrom = logOffset + 1;
+  const showTo   = Math.min(logOffset + allLogs.length, logTotal);
   // qso-count
   document.getElementById('qso-count').textContent = logSearch
-    ? `${showing} of ${logTotal} matching`
+    ? `${logTotal} matching`
     : `${logTotal.toLocaleString()} QSOs`;
-  // log-footer
-  const footer = document.getElementById('log-footer');
-  const moreBtn = document.getElementById('load-more-btn');
+  // log-pager
+  const pager = document.getElementById('log-pager');
+  const prevBtn = document.getElementById('log-prev-btn');
+  const nextBtn = document.getElementById('log-next-btn');
   const showingEl = document.getElementById('log-showing');
-  if (footer) footer.style.display = 'flex';
-  if (showingEl) showingEl.textContent = `Showing ${showing.toLocaleString()} of ${logTotal.toLocaleString()}`;
-  if (moreBtn) moreBtn.style.display = showing < logTotal ? 'block' : 'none';
+  if (pager) pager.style.display = 'flex';
+  if (showingEl) showingEl.textContent = logTotal ? `${showFrom}\u2013${showTo} of ${logTotal.toLocaleString()}` : '';
+  if (prevBtn) prevBtn.style.display = logOffset > 0 ? 'inline-block' : 'none';
+  if (nextBtn) nextBtn.style.display = (logOffset + allLogs.length) < logTotal ? 'inline-block' : 'none';
 
   if (!allLogs.length) {
     tbody.innerHTML = `<tr><td colspan="12" class="empty-state"><div class="es-icon">📻</div>${logSearch ? 'No matching QSOs' : 'No QSOs logged yet'}</td></tr>`;
@@ -2203,12 +2877,14 @@ function applyStoredCallsign() {
   if (s.callsign) document.getElementById('header-call').textContent = `${s.callsign} · SDR Logbook`;
 }
 
-function openSettings() {
+async function openSettings() {
   const s = loadSettings();
   document.getElementById('cfg-callsign').value         = s.callsign||'';
   document.getElementById('cfg-opname').value           = s.opname||'';
   document.getElementById('cfg-grid').value             = s.grid||'';
+  document.getElementById('cfg-tci-enabled').checked    = s.tci_enabled !== false;  // default true
   document.getElementById('cfg-tci-host').value         = s.tci_host||'127.0.0.1';
+  if (s.itu_region) document.getElementById('cfg-itu-region').value = s.itu_region;
   document.getElementById('cfg-tci-port').value         = s.tci_port||'50001';
   document.getElementById('cfg-qrz-user').value         = s.qrz_user||'';
   document.getElementById('cfg-qrz-pass').value         = s.qrz_pass||'';
@@ -2223,7 +2899,7 @@ function openSettings() {
   document.getElementById('cfg-clublog-email').value         = s.clublog_email||'';
   document.getElementById('cfg-clublog-password').value      = s.clublog_password||'';
   document.getElementById('cfg-clublog-callsign').value      = s.clublog_callsign||'';
-  document.getElementById('cfg-clublog-api-key').value       = s.clublog_api_key||'';
+  document.getElementById('cfg-clublog-designator').value    = s.clublog_upload_designator||'B';
   document.getElementById('cfg-clublog-enabled').checked     = s.clublog_upload_enabled === true;
   document.getElementById('clublog-test-result').textContent = '';
   document.getElementById('cfg-c1-enabled').checked    = s.c1_enabled !== false;
@@ -2239,6 +2915,7 @@ function openSettings() {
   document.getElementById('cfg-spothole-age').value      = s.spothole_age    || '600';
   document.getElementById('cfg-spothole-source').value   = s.spothole_source || 'Cluster';
   document.getElementById('cfg-spothole-band').value     = s.spothole_band   || '';
+  document.getElementById('cfg-update-check').checked    = s.update_check !== false;  // default on
   document.getElementById('cfg-font-size').value        = s.font_size        || 'normal';
   document.getElementById('cfg-spot-color').value       = s.spot_color       || '#00e5ff';
   document.getElementById('cfg-spot-mode-filter').value = s.spot_mode_filter || '';
@@ -2248,6 +2925,7 @@ function openSettings() {
   document.getElementById('cfg-cont-filter').value      = s.cont_filter      || '';
   document.getElementById('cfg-hot-enabled').checked    = s.hot_enabled      === true;
   document.getElementById('cfg-hot-calls').value        = s.hot_calls        || '';
+  document.getElementById('cfg-hot-tts').checked        = s.hot_tts_enabled  === true;
   document.getElementById('cfg-digital-udp-enabled').checked = s.digital_udp_enabled === true;
   document.getElementById('cfg-digital-udp-port').value      = s.digital_udp_port  || '2237';
   document.getElementById('cfg-digital-tcp-enabled').checked = s.digital_tcp_enabled === true;
@@ -2256,17 +2934,59 @@ function openSettings() {
   document.getElementById('cfg-rot-protocol').value    = s.rotator_protocol  || 'pstrotator';
   document.getElementById('cfg-rot-host').value        = s.rotator_host      || '127.0.0.1';
   document.getElementById('cfg-rot-port').value        = s.rotator_port      || '12000';
+  document.getElementById('cfg-flrig-enabled').checked  = s.flrig_enabled === true;
+  document.getElementById('cfg-flrig-host').value         = s.flrig_host || '127.0.0.1';
+  document.getElementById('cfg-flrig-port').value         = s.flrig_port || '12345';
+  document.getElementById('cfg-flrig-digital-mode').value = s.flrig_digital_mode || '';
+  document.getElementById('cfg-flrig-rtty-mode').value    = s.flrig_rtty_mode    || '';
+  document.getElementById('flrig-test-result').textContent = '';
+  const flBadge = document.getElementById('flrig-badge');
+  document.getElementById('settings-flrig-status').textContent = flBadge.classList.contains('fl-connected') ? flBadge.textContent : (s.flrig_enabled ? 'Enabled — not connected' : 'Disabled');
+  document.getElementById('settings-flrig-status').style.color = flBadge.classList.contains('fl-connected') ? '#39aaff' : 'var(--muted)';
   document.getElementById('cfg-hamlib-enabled').checked = s.hamlib_enabled === true;
   document.getElementById('cfg-hamlib-host').value      = s.hamlib_host || '127.0.0.1';
   document.getElementById('cfg-hamlib-port').value      = s.hamlib_port || '4532';
   document.getElementById('hamlib-test-result').textContent = '';
+  document.getElementById('cfg-winkeyer-enabled').checked    = s.winkeyer_enabled === true;
+  document.getElementById('cfg-winkeyer-port').value         = s.winkeyer_port || '';
+  document.getElementById('cfg-winkeyer-wpm').value          = s.winkeyer_wpm || 26;
+  document.getElementById('cfg-winkeyer-key-out').value      = s.winkeyer_key_out || 'port1';
+  document.getElementById('cfg-winkeyer-mode').value         = s.winkeyer_mode || 'iambicb';
+  document.getElementById('cfg-winkeyer-ptt').checked        = s.winkeyer_ptt !== false;
+  document.getElementById('cfg-winkeyer-ptt-lead').value     = s.winkeyer_ptt_lead || 0;
+  document.getElementById('cfg-winkeyer-ptt-tail').value     = s.winkeyer_ptt_tail || 0;
+  document.getElementById('winkeyer-test-result').textContent = '';
+  loadComPorts();
+  document.getElementById('cfg-eqsl-user').value    = s.eqsl_user || '';
+  document.getElementById('cfg-eqsl-pass').value    = s.eqsl_pass || '';
+  document.getElementById('cfg-eqsl-enabled').checked = s.eqsl_upload_enabled === true;
+  document.getElementById('eqsl-test-result').textContent = '';
   document.getElementById('cfg-pota-my-park').value     = s.pota_my_park || '';
   document.getElementById('cfg-pota-user').value        = s.pota_user   || '';
   document.getElementById('cfg-pota-pass').value        = s.pota_pass   || '';
   document.getElementById('cfg-spotter-region').value   = s.spotter_region || '';
+  document.getElementById('cfg-rbn-enabled').checked    = s.rbn_enabled === true;
+  document.getElementById('cfg-rbn-server').value       = s.rbn_server || 'telnet.reversebeacon.net';
+  document.getElementById('cfg-rbn-port').value         = s.rbn_port || '7000';
+  document.getElementById('cfg-rbn-10m').checked        = s.rbn_10m === true;
+  document.getElementById('cfg-rbn-6m').checked         = s.rbn_6m === true;
+  document.getElementById('cfg-rbn-2m').checked         = s.rbn_2m === true;
+  document.getElementById('cfg-rbn-70cm').checked       = s.rbn_70cm === true;
+  document.getElementById('cfg-rbn-distance').value     = s.rbn_distance || '500';
+  document.getElementById('cfg-rbn-unit').value         = s.rbn_unit || 'mi';
+  document.getElementById('cfg-rbn-cooldown').value     = s.rbn_cooldown || '15';
+  document.getElementById('cfg-rbn-voice').checked      = s.rbn_voice === true;
   const hlBadge = document.getElementById('hamlib-badge');
   document.getElementById('settings-hamlib-status').textContent = hlBadge.classList.contains('hl-connected') ? 'Connected' : (s.hamlib_enabled ? 'Enabled — not connected' : 'Disabled');
   document.getElementById('settings-hamlib-status').style.color = hlBadge.classList.contains('hl-connected') ? 'var(--accent2)' : 'var(--muted)';
+  // Fetch live WinKeyer connection status from CW status endpoint
+  try {
+    const cwRes = await fetch('/api/cw_status');
+    const cwData = await cwRes.json();
+    var _wkLive = !!cwData.winkeyer;
+  } catch(e) { var _wkLive = false; }
+  document.getElementById('settings-winkeyer-status').textContent = s.winkeyer_enabled ? (_wkLive ? 'Connected' : 'Enabled — not connected') : 'Disabled';
+  document.getElementById('settings-winkeyer-status').style.color = (s.winkeyer_enabled && _wkLive) ? '#f5a623' : 'var(--muted)';
   document.getElementById('cfg-backup-path').value     = s.backup_path       || '';
   document.getElementById('backup-status').textContent = '';
   setSpotDest(s.spot_destination || 'off');
@@ -2285,6 +3005,8 @@ async function saveSettings() {
     callsign:        document.getElementById('cfg-callsign').value.trim().toUpperCase(),
     opname:          document.getElementById('cfg-opname').value.trim(),
     grid:            document.getElementById('cfg-grid').value.trim().toUpperCase(),
+    tci_enabled:     document.getElementById('cfg-tci-enabled').checked,
+    itu_region:      parseInt(document.getElementById('cfg-itu-region').value) || 2,
     tci_host:        document.getElementById('cfg-tci-host').value.trim(),
     tci_port:        document.getElementById('cfg-tci-port').value,
     qrz_user:        document.getElementById('cfg-qrz-user').value.trim().toUpperCase(),
@@ -2296,11 +3018,11 @@ async function saveSettings() {
     lotw_tqsl_path:        document.getElementById('cfg-lotw-tqsl-path').value.trim(),
     lotw_station_location: document.getElementById('cfg-lotw-station-location').value.trim(),
     lotw_upload_enabled:   document.getElementById('cfg-lotw-enabled').checked,
-    clublog_email:         document.getElementById('cfg-clublog-email').value.trim(),
-    clublog_password:      document.getElementById('cfg-clublog-password').value,
-    clublog_callsign:      document.getElementById('cfg-clublog-callsign').value.trim().toUpperCase(),
-    clublog_api_key:       document.getElementById('cfg-clublog-api-key').value.trim(),
-    clublog_upload_enabled: document.getElementById('cfg-clublog-enabled').checked,
+    clublog_email:              document.getElementById('cfg-clublog-email').value.trim(),
+    clublog_password:           document.getElementById('cfg-clublog-password').value,
+    clublog_callsign:           document.getElementById('cfg-clublog-callsign').value.trim().toUpperCase(),
+    clublog_upload_designator:  (document.getElementById('cfg-clublog-designator').value.trim().toUpperCase()||'B'),
+    clublog_upload_enabled:     document.getElementById('cfg-clublog-enabled').checked,
     c1_enabled:      document.getElementById('cfg-c1-enabled').checked,
     c1_server:       document.getElementById('cfg-c1-server').value.trim(),
     c1_port:         document.getElementById('cfg-c1-port').value,
@@ -2317,6 +3039,7 @@ async function saveSettings() {
     // keep telnet_server/port for backend TELNET_SERVER compat (spot announcements)
     telnet_server:   document.getElementById('cfg-c1-server').value.trim() || 've7cc.net',
     telnet_port:     document.getElementById('cfg-c1-port').value || '23',
+    update_check:     document.getElementById('cfg-update-check').checked,
     font_size:        document.getElementById('cfg-font-size').value,
     spot_color:       document.getElementById('cfg-spot-color').value,
     spot_mode_filter: document.getElementById('cfg-spot-mode-filter').value.trim(),
@@ -2326,6 +3049,7 @@ async function saveSettings() {
     cont_filter:      document.getElementById('cfg-cont-filter').value.trim().toUpperCase(),
     hot_enabled:      document.getElementById('cfg-hot-enabled').checked,
     hot_calls:        document.getElementById('cfg-hot-calls').value.trim().toUpperCase(),
+    hot_tts_enabled:  document.getElementById('cfg-hot-tts').checked,
     dist_unit:        document.getElementById('dist-unit')?.value || 'km',
     digital_udp_enabled: document.getElementById('cfg-digital-udp-enabled').checked,
     digital_udp_port:    document.getElementById('cfg-digital-udp-port').value || '2237',
@@ -2335,18 +3059,46 @@ async function saveSettings() {
     rotator_protocol: document.getElementById('cfg-rot-protocol').value,
     rotator_host:     document.getElementById('cfg-rot-host').value.trim() || '127.0.0.1',
     rotator_port:     document.getElementById('cfg-rot-port').value || '12000',
+    flrig_enabled:    document.getElementById('cfg-flrig-enabled').checked,
+    flrig_host:         document.getElementById('cfg-flrig-host').value.trim() || '127.0.0.1',
+    flrig_port:         parseInt(document.getElementById('cfg-flrig-port').value) || 12345,
+    flrig_digital_mode: document.getElementById('cfg-flrig-digital-mode').value.trim().toUpperCase(),
+    flrig_rtty_mode:    document.getElementById('cfg-flrig-rtty-mode').value.trim().toUpperCase(),
     hamlib_enabled:   document.getElementById('cfg-hamlib-enabled').checked,
     hamlib_host:      document.getElementById('cfg-hamlib-host').value.trim() || '127.0.0.1',
     hamlib_port:      document.getElementById('cfg-hamlib-port').value || '4532',
+    winkeyer_enabled:  document.getElementById('cfg-winkeyer-enabled').checked,
+    winkeyer_port:     document.getElementById('cfg-winkeyer-port').value.trim().toUpperCase(),
+    winkeyer_wpm:      parseInt(document.getElementById('cfg-winkeyer-wpm').value) || 26,
+    winkeyer_key_out:  document.getElementById('cfg-winkeyer-key-out').value,
+    winkeyer_mode:     document.getElementById('cfg-winkeyer-mode').value,
+    winkeyer_ptt:      document.getElementById('cfg-winkeyer-ptt').checked,
+    winkeyer_ptt_lead: parseInt(document.getElementById('cfg-winkeyer-ptt-lead').value) || 0,
+    winkeyer_ptt_tail: parseInt(document.getElementById('cfg-winkeyer-ptt-tail').value) || 0,
+    eqsl_user:            document.getElementById('cfg-eqsl-user').value.trim(),
+    eqsl_pass:            document.getElementById('cfg-eqsl-pass').value,
+    eqsl_upload_enabled:  document.getElementById('cfg-eqsl-enabled').checked,
     pota_my_park:     document.getElementById('cfg-pota-my-park').value.trim().toUpperCase(),
     pota_user:        document.getElementById('cfg-pota-user').value.trim(),
     pota_pass:        document.getElementById('cfg-pota-pass').value,
     spotter_region:   document.getElementById('cfg-spotter-region').value,
+    rbn_enabled:      document.getElementById('cfg-rbn-enabled').checked,
+    rbn_server:       document.getElementById('cfg-rbn-server').value.trim() || 'telnet.reversebeacon.net',
+    rbn_port:         document.getElementById('cfg-rbn-port').value || '7000',
+    rbn_10m:          document.getElementById('cfg-rbn-10m').checked,
+    rbn_6m:           document.getElementById('cfg-rbn-6m').checked,
+    rbn_2m:           document.getElementById('cfg-rbn-2m').checked,
+    rbn_70cm:         document.getElementById('cfg-rbn-70cm').checked,
+    rbn_distance:     document.getElementById('cfg-rbn-distance').value || '500',
+    rbn_unit:         document.getElementById('cfg-rbn-unit').value || 'mi',
+    rbn_cooldown:     document.getElementById('cfg-rbn-cooldown').value || '15',
+    rbn_voice:        document.getElementById('cfg-rbn-voice').checked,
     backup_path:      document.getElementById('cfg-backup-path').value.trim(),
     spot_destination: spotDestination,
     spot_confirm:     document.getElementById('cfg-spot-confirm').checked,
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  if (s.itu_region) { ituRegion = parseInt(s.itu_region); _lastOOBBand = null; }
   try { await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(s)}); } catch(e) {}
   if (s.callsign) document.getElementById('header-call').textContent = `${s.callsign} · SDR Logbook`;
   applyFontSize(s.font_size || 'normal');
@@ -2364,6 +3116,7 @@ async function saveSettings() {
   spotSpotterRegion = s.spotter_region || '';
   hotEnabled     = s.hot_enabled === true;
   hotCalls       = s.hot_calls ? s.hot_calls.toUpperCase().split(',').map(c=>c.trim()).filter(Boolean) : [];
+  hotTtsEnabled  = s.hot_tts_enabled === true;
   const _smEl = document.getElementById('spot-max-count');
   if (_smEl) _smEl.value = spotMaxCount;
   renderSpots();
@@ -2379,6 +3132,10 @@ async function saveSettings() {
       hideMapOverlay();
     }
   }
+  // RBN: connect or disconnect based on settings change
+  if (s.rbn_enabled) { connectRbn(s); }
+  else { disconnectRbn(); }
+
   closeModal('settings-modal');
   toast('✓ Settings saved','success');
 }
@@ -2433,27 +3190,56 @@ async function testHamQTHLogin() {
   btn.disabled = false;
 }
 
-async function testClubLogCredentials() {
-  const email    = document.getElementById('cfg-clublog-email').value.trim();
-  const password = document.getElementById('cfg-clublog-password').value;
-  const callsign = document.getElementById('cfg-clublog-callsign').value.trim().toUpperCase();
-  const api_key  = document.getElementById('cfg-clublog-api-key').value.trim();
-  const result   = document.getElementById('clublog-test-result');
-  const btn      = event.target;
-  if (!email || !password || !api_key) {
-    result.textContent = '⚠ Fill in email, password and API key first';
+async function testEQSL() {
+  const user   = document.getElementById('cfg-eqsl-user').value.trim();
+  const pass   = document.getElementById('cfg-eqsl-pass').value;
+  const result = document.getElementById('eqsl-test-result');
+  const btn    = event.target;
+  if (!user || !pass) {
+    result.textContent = '⚠ Enter username and password first';
     result.style.color = 'var(--warn)'; return;
   }
   btn.disabled = true;
   result.textContent = 'Testing…'; result.style.color = 'var(--muted)';
   try {
-    // Push current values to backend first so the test uses them
+    await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({eqsl_user: user, eqsl_pass: pass})});
+    const params = new URLSearchParams({user, pass});
+    const res  = await fetch(`/api/eqsl_test?${params}`);
+    const data = await res.json();
+    if (data.ok) {
+      result.textContent = '✓ ' + data.note;
+      result.style.color = 'var(--green)';
+    } else {
+      result.textContent = '✗ ' + data.error;
+      result.style.color = 'var(--red)';
+    }
+  } catch(e) { result.textContent = '✗ Request failed'; result.style.color = 'var(--red)'; }
+  btn.disabled = false;
+}
+
+async function testClubLogCredentials() {
+  const email    = document.getElementById('cfg-clublog-email').value.trim();
+  const password = document.getElementById('cfg-clublog-password').value;
+  const callsign = document.getElementById('cfg-clublog-callsign').value.trim().toUpperCase()
+                   || document.getElementById('cfg-callsign').value.trim().toUpperCase();
+  const result   = document.getElementById('clublog-test-result');
+  const btn      = event.target;
+  if (!email || !password) {
+    result.textContent = '⚠ Fill in email and password first';
+    result.style.color = 'var(--warn)'; return;
+  }
+  btn.disabled = true;
+  result.textContent = 'Testing…'; result.style.color = 'var(--muted)';
+  try {
+    // Save settings to backend first — the test endpoint reads credentials
+    // directly from saved state, so they never pass through URL encoding.
     await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({clublog_email: email, clublog_password: password,
-                            clublog_callsign: callsign, clublog_api_key: api_key})});
-    const params = new URLSearchParams({email, password, api_key,
-                                        callsign: callsign || document.getElementById('cfg-callsign').value.trim().toUpperCase()});
-    const res  = await fetch(`/api/clublog_test?${params}`);
+                            clublog_callsign: callsign})});
+    // Uses checklog.php (safe credential verification — no IP blocking risk)
+    const res  = await fetch('/api/clublog_test');
+    if (!res.ok) { result.textContent = '✗ Server error (' + res.status + ')'; result.style.color = 'var(--red)'; btn.disabled = false; return; }
     const data = await res.json();
     if (data.ok) {
       result.textContent = `✓ ${data.note}`;
@@ -2516,6 +3302,7 @@ function freqKhzToBand(khz) {
   const f = parseFloat(khz);
   if (f>=1800  && f<=2000)  return '160m';
   if (f>=3500  && f<=4000)  return '80m';
+  if (f>=5330  && f<=5407)  return '60m';
   if (f>=7000  && f<=7300)  return '40m';
   if (f>=10100 && f<=10150) return '30m';
   if (f>=14000 && f<=14350) return '20m';
@@ -2525,6 +3312,7 @@ function freqKhzToBand(khz) {
   if (f>=28000 && f<=29700) return '10m';
   if (f>=50000 && f<=54000) return '6m';
   if (f>=144000&&f<=148000) return '2m';
+  if (f>=420000&&f<=450000) return '70cm';
   return null;
 }
 
@@ -2577,10 +3365,135 @@ function connectAllClusters() {
     connectSpothole(s);
   }
 
-  if (!anyStarted) { toast('No clusters enabled — configure in ⚙ Settings', 'error'); return; }
+  // RBN Band-Opening Alerts (independent of cluster connections)
+  if (s.rbn_enabled) connectRbn(s);
+
+  if (!anyStarted && !s.rbn_enabled) { toast('No clusters enabled — configure in ⚙ Settings', 'error'); return; }
   if (window._clusterPruneTimer) clearInterval(window._clusterPruneTimer);
   window._clusterPruneTimer = setInterval(pruneSpots, 30000);
   updateClusterStatusUI();
+}
+
+// ─── RBN Band-Opening Alert Connection & Processing ─────────────────────────
+function connectRbn(s) {
+  if (_rbnSocket) { try { _rbnSocket.close(); } catch(e){} _rbnSocket = null; }
+  _rbnConnected = false;
+
+  const callsign = s.callsign;
+  const myGrid   = s.grid;
+  if (!callsign) { toast('Set your callsign in Settings for RBN', 'error'); return; }
+  if (!myGrid)   { toast('Set your grid square in Settings for RBN distance alerts', 'error'); return; }
+
+  // Build bands param from checkboxes
+  const bands = [];
+  if (s.rbn_10m)  bands.push('10m');
+  if (s.rbn_6m)   bands.push('6m');
+  if (s.rbn_2m)   bands.push('2m');
+  if (s.rbn_70cm) bands.push('70cm');
+  if (!bands.length) { toast('Select at least one band for RBN alerts', 'error'); return; }
+
+  const rbnServer = s.rbn_server || 'telnet.reversebeacon.net';
+  const rbnPort   = s.rbn_port || '7000';
+  const wsUrl = `ws://${location.host}/api/rbn_ws?callsign=${encodeURIComponent(callsign)}&bands=${encodeURIComponent(bands.join(','))}&server=${encodeURIComponent(rbnServer)}&port=${rbnPort}`;
+  const ws = new WebSocket(wsUrl);
+  _rbnSocket = ws;
+
+  const statusEl = document.getElementById('rbn-status-line');
+
+  ws.onopen = () => {
+    _rbnConnected = true;
+    if (statusEl) statusEl.textContent = `RBN connected — monitoring ${bands.join(', ')}`;
+    if (statusEl) statusEl.style.color = 'var(--accent2)';
+    console.log('RBN: WebSocket connected');
+  };
+
+  ws.onclose = () => {
+    _rbnConnected = false;
+    _rbnSocket = null;
+    if (statusEl) statusEl.textContent = 'RBN disconnected';
+    if (statusEl) statusEl.style.color = 'var(--muted)';
+    // Auto-reconnect after 10s if still enabled
+    const rs = loadSettings();
+    if (rs.rbn_enabled) {
+      setTimeout(() => {
+        const rs2 = loadSettings();
+        if (rs2.rbn_enabled) connectRbn(rs2);
+      }, 10000);
+    }
+  };
+
+  ws.onerror = () => {
+    _rbnConnected = false;
+    if (statusEl) statusEl.textContent = 'RBN connection error';
+    if (statusEl) statusEl.style.color = 'var(--warn)';
+  };
+
+  ws.onmessage = (evt) => {
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'rbn_spot') processRbnSpot(msg, s);
+      else if (msg.type === 'status' && statusEl) statusEl.textContent = msg.msg;
+      else if (msg.type === 'error') { toast(`RBN: ${msg.msg}`, 'error'); }
+    } catch(e) { console.warn('RBN parse error', e); }
+  };
+}
+
+function disconnectRbn() {
+  if (_rbnSocket) { try { _rbnSocket.close(); } catch(e){} _rbnSocket = null; }
+  _rbnConnected = false;
+  const statusEl = document.getElementById('rbn-status-line');
+  if (statusEl) { statusEl.textContent = ''; }
+}
+
+function processRbnSpot(spot, settings) {
+  const s = settings || loadSettings();
+  const myGrid = s.grid;
+  if (!myGrid) return;
+
+  // Check if skimmer grid is available for distance calculation
+  if (!spot.skimmerGrid) return;
+
+  const myPos   = gridToLatLon(myGrid);
+  const skimPos = gridToLatLon(spot.skimmerGrid);
+  if (!myPos || !skimPos) return;
+
+  const distKm = haversineKm(myPos.lat, myPos.lon, skimPos.lat, skimPos.lon);
+  const unit   = s.rbn_unit || 'mi';
+  const dist   = unit === 'mi' ? distKm * 0.621371 : distKm;
+  const maxDist = parseFloat(s.rbn_distance) || 500;
+
+  // Outside range — skip
+  if (dist > maxDist) return;
+
+  // Check per-band cooldown
+  const cooldownMin = parseInt(s.rbn_cooldown) || 15;
+  const now = Date.now();
+  const lastAlert = _rbnBandCooldown.get(spot.band) || 0;
+  if (now - lastAlert < cooldownMin * 60 * 1000) return;
+
+  // Fire alert!
+  _rbnBandCooldown.set(spot.band, now);
+  const distStr = dist < 10 ? dist.toFixed(1) : Math.round(dist);
+  const unitLabel = unit === 'mi' ? 'mi' : 'km';
+  const alertMsg = `Band Opening! ${spot.band.toUpperCase()} — ${spot.dxCall} heard by ${spot.skimmer} (${distStr} ${unitLabel}) ${spot.snr}dB ${spot.mode}`;
+
+  // Visual alert — persistent toast
+  toast(alertMsg, 'success', 15000);
+
+  // Console log for debugging
+  console.log(`RBN ALERT: ${alertMsg}`);
+
+  // Voice announce
+  if (s.rbn_voice) {
+    const bandSpoken = spot.band.replace('m', ' meters').replace('cm', ' centimeters');
+    const callSpoken = spot.dxCall.split('').join(' ');
+    const utt = new SpeechSynthesisUtterance(
+      `Band opening! ${bandSpoken}. ${callSpoken}. ${spot.mode}. ${distStr} ${unitLabel} away. ${spot.snr} dB.`
+    );
+    utt.rate = 0.9;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utt);
+  }
 }
 
 function connectOneCluster(idx, server, port, callsign) {
@@ -2724,7 +3637,7 @@ function parseSpotLine(line) {
   if (!band) return null;
   const rest     = line.slice(m.index + m[0].length).trim().replace(/\d{4}Z.*$/, '').trim().slice(0, 25);
   // Try to extract mode from the comment
-  const modeM    = rest.match(/\b(FT8|FT4|CW|SSB|USB|LSB|RTTY|JS8|AM|FM|DIGI|WSPR|PSK31)\b/i);
+  const modeM    = rest.match(/\b(FT8|FT4|CW|SSB|USB|LSB|RTTY|JS8|AM|FM|DIGI|DATA|WSPR|PSK31)\b/i);
   const mode     = modeM ? modeM[1].toUpperCase() : '';
   const now      = new Date();
   const timeStr  = `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}`;
@@ -2738,6 +3651,25 @@ function addSpot(spot) {
   if (idx >= 0) allSpots[idx] = spot;
   else allSpots.unshift(spot);
   renderSpots();
+
+  // TTS announcement for hot stations — 15-minute cooldown per callsign prevents spam.
+  // isNew check intentionally omitted: if TTS was enabled after the spot arrived, the
+  // next re-spot (within 15 min) will still announce.  Cooldown is the only gate needed.
+  if (hotEnabled && hotTtsEnabled && hotCalls.includes(spot.dxCall.toUpperCase())) {
+    const now = Date.now();
+    const lastAnnounced = _hotTtsCooldown.get(spot.dxCall.toUpperCase()) || 0;
+    if (now - lastAnnounced >= 15 * 60 * 1000) {
+      _hotTtsCooldown.set(spot.dxCall.toUpperCase(), now);
+      // Space out callsign letters so TTS reads them individually (e.g. "D X 0 D X")
+      const spokenCall = spot.dxCall.toUpperCase().split('').join(' ');
+      const mode = spot.mode ? `, ${spot.mode}` : '';
+      const utt = new SpeechSynthesisUtterance(`Hot spot. ${spokenCall}. ${spot.band}${mode}`);
+      utt.rate = 0.95;
+      // Chrome requires cancel() before speak() or it silently drops the request
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utt);
+    }
+  }
 
   // Mirror new spot to Thetis waterfall via TCI — uses user-selected ARGB color
   if (tciConnected) {
@@ -2779,8 +3711,13 @@ function callToContinent(call) {
 function renderSpots() {
   const list        = document.getElementById('spot-list');
   const timeoutMins = Math.round(spotTimeoutMs / 60000);
-  const allowedModes = spotModeFilter
+  // Build mode filter — expand SSB to match USB, LSB, and SSB since cluster spots are
+  // almost always tagged USB or LSB rather than the generic "SSB" abbreviation.
+  const _rawModes = spotModeFilter
     ? spotModeFilter.toUpperCase().split(',').map(m => m.trim()).filter(Boolean)
+    : [];
+  const allowedModes = _rawModes.length
+    ? [...new Set(_rawModes.flatMap(m => m === 'SSB' ? ['SSB','USB','LSB'] : [m]))]
     : [];
 
   const allowedDxcc = spotDxccFilter ? spotDxccFilter.toUpperCase().split(',').map(p=>p.trim()).filter(Boolean) : [];
@@ -2894,12 +3831,24 @@ async function fillFromSpot(callsign, freqKhz, mode) {
     const tciData = await tciRes.json();
     if (tciData.connected) {
       toast(`${callsign} @ ${freqMhz} MHz — TCI tuned`, 'success');
+    } else if (flrigConnected) {
+      const flRes  = await fetch('/api/flrig_tune', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({freq_mhz: parseFloat(freqMhz), mode: mode || ''})
+      });
+      const flData = await flRes.json();
+      // Suppress flrig poller form overwrites for 4 s while radio moves to new freq
+      flrigTuneSuppressUntil = Date.now() + 4000;
+      toast(flData.ok
+        ? `${callsign} @ ${freqMhz} MHz — rig tuned via flrig`
+        : `${callsign} @ ${freqMhz} MHz (flrig error)`, flData.ok ? 'success' : 'warn');
     } else if (hamlibConnected) {
       const hlRes  = await fetch('/api/hamlib_tune', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({freq_mhz: parseFloat(freqMhz), mode: mode || ''})
       });
       const hlData = await hlRes.json();
+      hamlibTuneSuppressUntil = Date.now() + 4000;
       toast(hlData.ok
         ? `${callsign} @ ${freqMhz} MHz — rig tuned via HamLib`
         : `${callsign} @ ${freqMhz} MHz (HamLib error)`, 'success');
@@ -3301,12 +4250,12 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function toast(msg, type='success') {
+function toast(msg, type='success', duration=3500) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = `show ${type}`;
   clearTimeout(el._t);
-  el._t = setTimeout(() => { el.className=''; }, 3500);
+  el._t = setTimeout(() => { el.className=''; }, duration);
 }
 
 setInterval(() => loadLog(false), 30000);
@@ -3416,6 +4365,14 @@ function restoreDockLayout() {
       if (el) el.style.flex = `0 0 ${heights[pid]}px`;
     });
   }
+  // Give panels default heights if none were saved
+  const defaults = { log: 480, cluster: 500, distance: 340 };
+  Object.entries(defaults).forEach(([pid, h]) => {
+    const el = document.getElementById('dp-' + pid);
+    if (el && !el.style.flex) el.style.flex = `0 0 ${h}px`;
+  });
+  // Leaflet needs a kick after the map container gets its height
+  setTimeout(() => { if (typeof _map !== 'undefined' && _map) _map.invalidateSize(); }, 200);
 }
 
 // ─── ROTATOR ──────────────────────────────────────────────────────────────────
@@ -3551,6 +4508,7 @@ function rotatorAutoTurn(sp, lp) {
 async function pollDigitalEvents() {
   try {
     const r = await fetch('/api/digital_events');
+    if (!r.ok) return;
     const d = await r.json();
     if (d.events && d.events.length > 0) {
       d.events.forEach(ev => {
@@ -3650,6 +4608,18 @@ function insertRowHandles() {
       }
     });
   });
+  // Ensure these panels always have a bottom resize handle even if they're
+  // the last panel in their column (the loop above only inserts between panels)
+  ['log', 'cluster', 'distance'].forEach(pid => {
+    const panel = document.getElementById('dp-' + pid);
+    if (panel && !panel.nextElementSibling?.classList?.contains('dock-rh')) {
+      const rh = document.createElement('div');
+      rh.className = 'dock-rh';
+      rh.title = 'Drag to resize panel height';
+      panel.after(rh);
+      initRowResize(rh, panel);
+    }
+  });
 }
 
 function initRowResize(handle, topPanel) {
@@ -3675,6 +4645,15 @@ function initRowResize(handle, topPanel) {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     saveDockLayout();
+    const pid = topPanel.dataset && topPanel.dataset.panelId;
+    // If the log panel was resized, reload with adjusted page size
+    if (pid === 'log') {
+      loadLog(false);
+    }
+    // If the distance/map panel was resized, tell Leaflet to recalculate
+    if (pid === 'distance' && typeof _map !== 'undefined' && _map) {
+      setTimeout(() => _map.invalidateSize(), 100);
+    }
   }
 }
 
