@@ -336,8 +336,8 @@
           <!-- Threshold row -->
           <div class="ctrl-row">
             <label>Thresh:</label>
-            <input type="range" class="cw-range" id="threshold-sl" min="15" max="85" value="27"
-              title="Threshold — how far above the noise floor the signal must be to count as a mark.&#10;Slide LEFT = lower threshold = more sensitive (decodes weaker signals, more noise risk).&#10;Slide RIGHT = higher threshold = more selective (strong signals only, cleaner output).&#10;Default 27%. Range 15–85%. On a noisy band, raise Squelch first, then Threshold — both controls together give the best rejection."
+            <input type="range" class="cw-range" id="threshold-sl" min="15" max="90" value="27"
+              title="Threshold — how far above the noise floor the signal must be to count as a mark.&#10;Slide LEFT = lower threshold = more sensitive (decodes weaker signals, more noise risk).&#10;Slide RIGHT = higher threshold = more selective (strong signals only, cleaner output).&#10;Default 27%. Range 15–90%. On a noisy band, raise Squelch first, then Threshold — both controls together give the best rejection."
               oninput="thresholdChanged(this.value)">
             <span class="val-lbl" id="threshold-val">27%</span>
           </div>
@@ -597,12 +597,15 @@ const PEAK_FALL  = 0.003;
 // any gain factor identically in numerator and denominator.  The SNR gate is the meaningful
 // threshold: it gates the entire decoder off until peakPower ≥ gSquelch × noiseFloor.
 let gSquelch = parseFloat(cfg.squelch) || 1.5;  // live — updated by squelchChanged()
-// Asymmetric hysteresis — CWGET uses two separate thresholds (Treshold=320 ON, CwFilterTreshold=175 OFF,
-// ratio=0.547).  A symmetric ±4% band was too narrow: signals hovering near threshold caused rapid
-// on/off chatter.  Wider asymmetric band: easy to start a mark (small ON addend), hard to lose one
-// (large OFF reduction).  At default threshold=27%: starts at 33%, holds until 15%.
-const HYST_ON  = 0.06;   // norm must reach  gThreshold + 6% to START a mark
-const HYST_OFF = 0.12;   // norm can drop to gThreshold − 12% before mark ENDS (wider hold)
+// Proportional hysteresis — scales with threshold level so both low and high settings work well.
+// At low thresholds (15-30%): smaller hysteresis avoids mark-never-ends stickiness.
+// At high thresholds (70-90%): smaller ON addend avoids pushing trigger above 100%.
+// Minimum floors prevent zero-width hysteresis.
+const HYST_ON_RATIO  = 0.15;   // ON addend = 15% of gThreshold (e.g. 27%→4%, 60%→9%, 85%→13%)
+const HYST_OFF_RATIO = 0.30;   // OFF reduction = 30% of gThreshold (e.g. 27%→8%, 60%→18%, 85%→26%)
+const HYST_ON_MIN    = 0.02;   // minimum ON addend floor (2%)
+const HYST_OFF_MIN   = 0.04;   // minimum OFF reduction floor (4%)
+const HYST_MARK_END_FLOOR = 0.02;  // mark-end threshold never goes below 2% (prevents infinite marks)
 
 // AFC — Automatic Frequency Control
 // Scans ±AFC_RANGE Hz every AFC_PERIOD samples; locks to strongest CW signal.
@@ -1500,14 +1503,13 @@ function processAudioSamples(rawSamples, sampleRate) {
       const norm  = (snrOk && range > 0)
         ? Math.max(0, Math.min(1, (mfVal - noiseFloor) / range)) : 0;
 
-      // Asymmetric hysteresis: easy to start a mark (threshold+HYST_ON),
-      // hard to drop one (threshold-HYST_OFF) — mirrors CWGET two-threshold architecture.
-      // Clamp end condition to a small positive floor: if gThreshold < HYST_OFF (12%)
-      // the raw value goes negative and norm (always ≥ 0) never drops below it —
-      // the mark would never end, locking lastLevel=true forever → no decodes.
+      // Proportional hysteresis: ON/OFF bands scale with threshold so low thresholds
+      // don't stick and high thresholds don't push the trigger above 100%.
+      const hystOn  = Math.max(HYST_ON_MIN,  gThreshold * HYST_ON_RATIO);
+      const hystOff = Math.max(HYST_OFF_MIN, gThreshold * HYST_OFF_RATIO);
       const isMark = lastLevel
-        ? norm >= Math.max(0.02, gThreshold - HYST_OFF)
-        : norm >= gThreshold + HYST_ON;
+        ? norm >= Math.max(HYST_MARK_END_FLOOR, gThreshold - hystOff)
+        : norm >= Math.min(0.98, gThreshold + hystOn);
       const nowMs  = blockStart + i * msPerSample;
 
       if (isMark !== lastLevel) {
