@@ -1,6 +1,21 @@
 TCILogger — Change Log
 ======================
 
+v0.51 Beta  (2026-04-12)
+------------------------
+- Improve: CW Decoder — Threshold slider range extended from 15-85% to 15-90%
+  for operators who need maximum selectivity on strong-signal-only bands.
+- Improve: CW Decoder — Proportional hysteresis replaces fixed constants.
+  HYST_ON and HYST_OFF now scale with the current threshold level (15% and 30%
+  of threshold respectively, with minimum floors). Fixes two long-standing
+  issues: (1) at low thresholds (<20%), the mark-end level was so close to zero
+  that marks never ended, causing decoder lock-up; (2) at high thresholds (>75%),
+  the fixed 6% ON addend pushed the trigger near 100%, making it nearly
+  impossible to start a mark. The new proportional system keeps the hysteresis
+  band well-centered at every setting.
+- Fix: PayPal donation link on GitHub README was broken due to URL-encoded
+  special characters being mangled by GitHub markdown rendering. Simplified URL.
+
 v0.50 Beta  (2026-04-11)
 ------------------------
 - New: RBN (Reverse Beacon Network) Band-Opening Alerts — connects to the

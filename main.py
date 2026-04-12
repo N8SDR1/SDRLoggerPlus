@@ -183,7 +183,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "0.50 Beta"
+VERSION  = "0.51 Beta"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
