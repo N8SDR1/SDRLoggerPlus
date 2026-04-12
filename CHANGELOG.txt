@@ -1,20 +1,61 @@
 TCILogger — Change Log
 ======================
 
-v0.51 Beta  (2026-04-12)
+v0.52 Beta  (2026-04-12)
 ------------------------
-- Improve: CW Decoder — Threshold slider range extended from 15-85% to 15-90%
-  for operators who need maximum selectivity on strong-signal-only bands.
+- Fix: Update notification now detects pre-releases — the /releases/latest
+  GitHub API endpoint skips pre-releases, returning 404 for beta-only repos.
+  Falls back to /releases list and finds the most recent non-draft release.
+- Major: CW Decoder — comprehensive signal chain overhaul for spacing accuracy
+  and decode reliability. Multiple interacting root causes identified and fixed:
+
+  Edge detection: replaced debounce filter (which reset on every threshold
+  flicker and swallowed inter-element spaces) with a one-edge lookback buffer.
+  The buffer examines completed segments: noise-mark blips (<20% of dit) and
+  micro-space flickers (<8% of dit) are merged into surrounding edges. Valid
+  edges are never lost.
+
+  Matched filter: reduced from 0.5× to 0.3× dit (DSP mode: 0.85→0.55×).
+  The 0.5× window caused ~18 ms of systematic space compression at 20 WPM,
+  pushing inter-character spaces toward the inter-element classifier boundary.
+
+  Envelope decay: increased ENV_DKY from 0.06 to 0.09 (half-life 8→5.5 ms)
+  for faster mark→space transitions and cleaner space detection.
+
+  Noise floor holdoff: after each mark→space transition the noise floor is
+  frozen (no upward tracking) for 1.2× dit. This prevents the envelope decay
+  tail from contaminating the floor and compressing normalization for the first
+  element of the next character.
+
+  Peak re-snap: after long spaces (>5× dit), peakPower is snapped instantly
+  to the new signal level instead of relying on slow EMA tracking. Ensures
+  correct normalization at word boundaries.
+
+  Space classifier: widened Gaussian variances (elem 2→3×, char 4→6×,
+  word 8→10× _bDitVar) for smoother crossover between distributions.
+  Separated element/character space clamp ranges (elem max 1.2T, char min 2.0T)
+  to prevent model collapse.
+
+  Bootstrap: reduced BAYES_MIN from 8 to 5 marks so the learned Bayesian
+  model activates sooner — fixed ratio thresholds are less accurate.
+
+  Sample-based timing: replaced performance.now() with monotonic sample
+  counting (_sampleTimeMs). Eliminates 1–5 ms JS event-loop jitter that
+  added noise to edge duration measurements.
+
+- Improve: CW Decoder — Default threshold raised from 27% to 35%.
+- Improve: CW Decoder — Threshold slider range extended to 15–90%.
 - Improve: CW Decoder — Proportional hysteresis replaces fixed constants.
-  HYST_ON and HYST_OFF now scale with the current threshold level (15% and 30%
-  of threshold respectively, with minimum floors). Fixes two long-standing
-  issues: (1) at low thresholds (<20%), the mark-end level was so close to zero
-  that marks never ended, causing decoder lock-up; (2) at high thresholds (>75%),
-  the fixed 6% ON addend pushed the trigger near 100%, making it nearly
-  impossible to start a mark. The new proportional system keeps the hysteresis
-  band well-centered at every setting.
-- Fix: PayPal donation link on GitHub README was broken due to URL-encoded
-  special characters being mangled by GitHub markdown rendering. Simplified URL.
+- Fix: CW Decoder — Morse table: comma ('--..--') and question mark ('..--..')
+  had leading spaces in lookup keys, making them impossible to decode.
+  Added missing characters: close parenthesis, colon, semicolon.
+- Fix: PayPal donation link on GitHub README simplified (URL encoding issue).
+
+v0.51 Beta  (2026-04-11)
+------------------------
+- Improve: CW Decoder — Threshold slider range extended from 15-85% to 15-90%.
+- Improve: CW Decoder — Proportional hysteresis replaces fixed constants.
+- Fix: PayPal donation link on GitHub README.
 
 v0.50 Beta  (2026-04-11)
 ------------------------

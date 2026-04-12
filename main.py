@@ -183,7 +183,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "0.51 Beta"
+VERSION  = "0.52 Beta"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -4004,13 +4004,35 @@ def update_check():
     if _update_cache is not None:
         return jsonify(_update_cache)
     try:
+        # Try /releases/latest first (skips drafts AND pre-releases).
+        # If 404, fall back to /releases list which includes pre-releases.
         resp = requests.get(
             "https://api.github.com/repos/N8SDR1/SDRLoggerPlus/releases/latest",
             timeout=10,
             headers={"Accept": "application/vnd.github.v3+json"}
         )
-        if resp.ok:
-            data = resp.json()
+        if resp.status_code == 404:
+            # No full release found — check all releases (includes pre-releases)
+            resp = requests.get(
+                "https://api.github.com/repos/N8SDR1/SDRLoggerPlus/releases",
+                timeout=10,
+                headers={"Accept": "application/vnd.github.v3+json"}
+            )
+            if resp.ok:
+                releases = [r for r in resp.json() if not r.get("draft")]
+                if releases:
+                    resp_data = releases[0]  # most recent non-draft
+                else:
+                    resp_data = None
+            else:
+                resp_data = None
+        elif resp.ok:
+            resp_data = resp.json()
+        else:
+            resp_data = None
+
+        if resp_data:
+            data = resp_data
             tag = data.get("tag_name", "").lstrip("vV").strip()
             url = data.get("html_url", "https://github.com/N8SDR1/SDRLoggerPlus/releases")
             # Compare version numbers (strip " Beta" etc.)
