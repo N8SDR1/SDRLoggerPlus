@@ -336,10 +336,10 @@
           <!-- Threshold row -->
           <div class="ctrl-row">
             <label>Thresh:</label>
-            <input type="range" class="cw-range" id="threshold-sl" min="15" max="90" value="27"
-              title="Threshold — how far above the noise floor the signal must be to count as a mark.&#10;Slide LEFT = lower threshold = more sensitive (decodes weaker signals, more noise risk).&#10;Slide RIGHT = higher threshold = more selective (strong signals only, cleaner output).&#10;Default 27%. Range 15–90%. On a noisy band, raise Squelch first, then Threshold — both controls together give the best rejection."
+            <input type="range" class="cw-range" id="threshold-sl" min="15" max="90" value="35"
+              title="Threshold — how far above the noise floor the signal must be to count as a mark.&#10;Slide LEFT = lower threshold = more sensitive (decodes weaker signals, more noise risk).&#10;Slide RIGHT = higher threshold = more selective (strong signals only, cleaner output).&#10;Default 35%. Range 15–90%. On a noisy band, raise Squelch first, then Threshold — both controls together give the best rejection."
               oninput="thresholdChanged(this.value)">
-            <span class="val-lbl" id="threshold-val">27%</span>
+            <span class="val-lbl" id="threshold-val">35%</span>
           </div>
 
           <!-- DSP Filter + Noise Blanker row — for conventional rigs -->
@@ -491,7 +491,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 const SETTINGS_KEY = 'cw_settings';
 const SETTINGS_DEFAULTS = {
-  deviceId:'', toneHz:700, squelch:1.5, afcEnabled:true, threshold:27,
+  deviceId:'', toneHz:700, squelch:1.5, afcEnabled:true, threshold:35,
   afcRange:100,     // AFC search range in Hz (±); options: 50/100/150/200
   wpm:20, autoWpm:false, autoWpmMin:8, autoWpmMax:45,
   fontSize:14, cwColor:'#39ff14',
@@ -556,6 +556,14 @@ const AFC_JUMP_HZ  = 40;    // Hz difference to consider a "jump" to different s
 let _qsbLastPeak  = 0;      // peak power at last mark-end
 let _qsbFadeFlag  = false;  // true when deep fade detected
 
+// #6 Noise floor holdoff — after a mark→space transition the envelope decay tail
+// is above true noise.  If we let the floor rise toward the tail, the first element
+// of the next character starts with an elevated floor → delayed detection → compressed
+// inter-character gap.  Freeze the floor (no upward tracking) for FLOOR_HOLDOFF_T × dit
+// after each mark→space edge.
+const FLOOR_HOLDOFF_T = 1.2;   // freeze duration as multiple of dit (1.2T ≈ 72ms at 20WPM)
+let _floorHoldoffEnd  = 0;     // _sampleTimeMs when holdoff expires
+
 // #3 Farnsworth — independent space model
 let _bCharSpaceMu  = 0;     // learned inter-character space (0 = not yet learned)
 let _bWordSpaceMu  = 0;     // learned inter-word space (0 = not yet learned)
@@ -568,11 +576,15 @@ let envVal      = 0;       // smoothed carrier envelope magnitude
 
 // Envelope follower — asymmetric attack/decay (applied per ~0.7 ms IQ window)
 const ENV_ATK  = 0.30;     // fast attack  — half-life ~2.3 IQ windows (~1.7 ms); catches mark leading edge quickly
-const ENV_DKY  = 0.06;     // slow decay   — half-life ~11 IQ windows (~8 ms); holds level during brief element dips
-                            // Confirmed by CWGET binary: attack=0.297, decay=0.0615
+const ENV_DKY  = 0.09;     // decay — half-life ~7.7 IQ windows (~5.5 ms); faster than CWGET's 0.0615 to reduce
+                            // edge smearing.  The MF running average provides noise hold-over; a faster envelope
+                            // decay gives cleaner mark→space transitions so inter-character spaces aren't compressed.
 
-// Matched filter — running average of the envelope over ~0.5 dit duration.
+// Matched filter — running average of the envelope over ~0.3 dit duration.
 // Smooths sub-dit noise spikes while preserving true element edges.
+// Reduced from 0.5× dit to 0.3× dit to cut edge-smearing latency: the 0.5× window
+// caused ~18ms of systematic space compression at 20 WPM, which pushed inter-character
+// spaces toward the inter-element classifier boundary.
 // Window adapts to estimated WPM; ring buffer max 256 IQ windows.
 const MF_MAX   = 256;
 let _mfBuf     = new Float32Array(MF_MAX);
@@ -627,6 +639,21 @@ let lastEdge   = 0;
 let lastLevel  = false;
 let currentChar = '';
 let decodedLine = '';
+
+// ── Edge buffer — one-edge lookback for noise blip merging ─────────────────
+// Without filtering, a 5ms noise spike during a 180ms inter-character space
+// splits it into two ~30ms segments → both classified as inter-element →
+// characters run together.  Instead of a debounce (which resets on every
+// threshold flicker and can swallow short spaces), we buffer one edge and
+// check the NEXT edge before emitting: if the buffered edge is a mark shorter
+// than minMark, it was noise — merge it into the surrounding space.
+let _bufWasMark = null;   // null = no buffered edge; true/false = buffered type
+let _bufDur     = 0;      // duration of buffered edge (ms)
+
+// Sample-based timing — monotonic counter immune to JS event-loop jitter.
+// performance.now()-based timing introduced 1–5ms jitter per audio block
+// boundary, which is 5–25% error on a 20ms inter-element space.
+let _sampleTimeMs = 0;    // accumulated sample time (ms), reset on decoder reset
 const MORSE_TABLE = buildMorseTable();
 
 // ── Bayesian timing classifier ──────────────────────────────────────────────
@@ -655,7 +682,7 @@ let _bMarkN  = 0;       // marks observed so far (bootstrap counter)
 // updates via slow EMA from confirmed inter-element spaces once bootstrapped.
 let _bElemSpaceMu = dotEstMs * 0.85;
 
-const BAYES_MIN   = 8;      // fallback to simple ratio thresholds until this many marks
+const BAYES_MIN   = 5;      // fallback to simple ratio thresholds until this many marks
 const BAYES_ALPHA = 0.15;   // EMA weight per new observation (0.15 = responsive but stable)
 
 // Signal bar update throttle (avoid DOM layout thrash from per-sample updates)
@@ -1402,7 +1429,7 @@ function processAudioSamples(rawSamples, sampleRate) {
   // #1 DSP Filter: when enabled, uses 0.85× dit (tighter BW) for conventional rigs.
   //   When off, uses 0.5× dit (wider — lets SDR handle bandwidth filtering).
   const msMsPerIqWin = (iqWin / sampleRate) * 1000;
-  const mfRatio = gDspFilter ? 0.85 : 0.5;
+  const mfRatio = gDspFilter ? 0.55 : 0.30;
   const _mfWinNew = Math.max(2, Math.min(MF_MAX, Math.round(dotEstMs * mfRatio / msMsPerIqWin)));
   if (_mfWinNew !== _mfWinLast) {
     // Window size changed — must reinitialize ring buffer to prevent _mfSum corruption
@@ -1416,9 +1443,6 @@ function processAudioSamples(rawSamples, sampleRate) {
   const sinDp = Math.sin(dphi);
   let oscCos  = Math.cos(_iqPhaseAcc);
   let oscSin  = Math.sin(_iqPhaseAcc);
-
-  const blockStart  = performance.now();
-  const msPerSample = 1000 / sampleRate;
 
   for (let i = 0; i < samples.length; i++) {
     // Mix sample with quadrature oscillator
@@ -1458,19 +1482,21 @@ function processAudioSamples(rawSamples, sampleRate) {
       _mfPos = (_mfPos + 1) % _mfWin;
       const mfVal = _mfSum / _mfWin;
 
-      // Adaptive noise floor — two-mode update:
-      //  • During spaces (lastLevel=false) or init (=0): full two-way EMA — floor can
-      //    rise toward noise or fall if quiet. This is the normal calibration path.
-      //  • During marks (lastLevel=true, floor>0): one-directional — floor can only FALL
-      //    (track downward if signal dips), never rise (prevents signal contamination).
-      //    Previously the floor was fully frozen during marks; the freeze caused a
-      //    dead-lock: if band noise rose while in a mark, the frozen floor was too low,
-      //    so mfVal (now at noise level) appeared above the threshold — decoder stayed
-      //    stuck in lastLevel=true and could not recover without a full restart.
+      // Adaptive noise floor — three-mode update:
+      //  • During spaces, after holdoff expired: full two-way EMA — floor can rise
+      //    toward noise or fall if quiet. Normal calibration path.
+      //  • During spaces, within holdoff: floor can only FALL. The holdoff prevents
+      //    the envelope decay tail (which is above true noise) from contaminating the
+      //    floor after mark→space transitions. Without this, the elevated floor
+      //    compresses normalization for the first element of the next character.
+      //  • During marks (lastLevel=true, floor>0): one-directional — floor can only FALL.
       if (!lastLevel || noiseFloor === 0) {
-        noiseFloor = mfVal < noiseFloor || noiseFloor === 0
-          ? noiseFloor*(1-FLOOR_FALL) + mfVal*FLOOR_FALL
-          : noiseFloor*(1-FLOOR_RISE) + mfVal*FLOOR_RISE;
+        const inHoldoff = _sampleTimeMs < _floorHoldoffEnd;
+        if (mfVal < noiseFloor || noiseFloor === 0) {
+          noiseFloor = noiseFloor === 0 ? mfVal : noiseFloor*(1-FLOOR_FALL) + mfVal*FLOOR_FALL;
+        } else if (!inHoldoff) {
+          noiseFloor = noiseFloor*(1-FLOOR_RISE) + mfVal*FLOOR_RISE;
+        }
       } else if (mfVal < noiseFloor) {
         // Mark in progress but envelope dipped — allow floor to track downward only
         noiseFloor = noiseFloor*(1-FLOOR_FALL) + mfVal*FLOOR_FALL;
@@ -1484,8 +1510,12 @@ function processAudioSamples(rawSamples, sampleRate) {
       // snap peak immediately so the threshold is correct within one IQ window
       // instead of waiting ~1s for the normal slow decay to catch up.
       if (envVal > peakPower) {
-        // Signal rising — if we were in a fade, snap peak instantly for fast recovery
-        if (_qsbFadeFlag && envVal > noiseFloor * gSquelch) {
+        // Signal rising — snap peak instantly in two cases:
+        //  1. QSB recovery: deep fade detected (peak < 2× noise)
+        //  2. Word-gap recovery: long space (> 5T) has let peak decay significantly;
+        //     the first mark of the next word needs correct normalization immediately.
+        const longSpace = !lastLevel && (_sampleTimeMs - lastEdge) > dotEstMs * 5;
+        if ((_qsbFadeFlag || longSpace) && envVal > noiseFloor * gSquelch) {
           peakPower = envVal;           // instant snap — no EMA lag
           _qsbFadeFlag = false;
         } else {
@@ -1510,16 +1540,36 @@ function processAudioSamples(rawSamples, sampleRate) {
       const isMark = lastLevel
         ? norm >= Math.max(HYST_MARK_END_FLOOR, gThreshold - hystOff)
         : norm >= Math.min(0.98, gThreshold + hystOn);
-      const nowMs  = blockStart + i * msPerSample;
 
+      // Sample-based time — immune to JS event-loop jitter
+      _sampleTimeMs += msMsPerIqWin;
+      const nowMs = _sampleTimeMs;
+
+      // ── Edge detection with one-edge lookback buffer ─────────────────────
+      // On every transition, buffer the ending segment.  Before emitting,
+      // check if the buffered segment is a noise blip (short mark) or
+      // threshold flicker (short space) and merge it into surrounding edges.
       if (isMark !== lastLevel) {
-        processEdge(lastLevel, nowMs - lastEdge);
-        lastEdge = nowMs; lastLevel = isMark;
+        const edgeDur = nowMs - lastEdge;
+        submitEdge(lastLevel, edgeDur);
+        // Set noise floor holdoff on mark→space transitions
+        if (lastLevel && !isMark) {
+          _floorHoldoffEnd = nowMs + dotEstMs * FLOOR_HOLDOFF_T;
+        }
+        lastEdge = nowMs;
+        lastLevel = isMark;
       }
-      if (!isMark) {
+      if (!lastLevel) {
         const sp = nowMs - lastEdge;
-        if (sp > dotEstMs * 5.5 && currentChar.length > 0) flushChar();
-        if (sp > dotEstMs * 8.0 && decodedLine.length > 0 && !decodedLine.endsWith(' '))
+        // Long-space timeout — force flush buffered edge + partial character
+        if (sp > dotEstMs * 5.0) {
+          if (_bufWasMark !== null) {
+            processEdge(_bufWasMark, _bufDur);
+            _bufWasMark = null;
+          }
+          if (currentChar.length > 0) flushChar();
+        }
+        if (sp > dotEstMs * 7.5 && decodedLine.length > 0 && !decodedLine.endsWith(' '))
           appendDecoded(' ');
       }
 
@@ -1584,9 +1634,9 @@ function bayesClassifySpace(ms) {
   // Use learned space centers if available (#3 Farnsworth), else fall back to dit multiples
   const charMu = _bCharSpaceMu > 0 ? _bCharSpaceMu : _bDitMu * 3;
   const wordMu = _bWordSpaceMu > 0 ? _bWordSpaceMu : _bDitMu * 7;
-  const llE1 = logGaussian(ms, _bElemSpaceMu,  _bDitVar * 2);  // inter-element ≈ 0.85T (CWGET empirical)
-  const llE3 = logGaussian(ms, charMu,         _bDitVar * 4);  // inter-char (learned or ≈3T)
-  const llE7 = (ms >= wordMu) ? 0 : logGaussian(ms, wordMu, _bDitVar * 8);  // word (learned or ≈7T)
+  const llE1 = logGaussian(ms, _bElemSpaceMu,  _bDitVar * 3);  // inter-element ≈ 0.85T — wider variance for smoother crossover
+  const llE3 = logGaussian(ms, charMu,         _bDitVar * 6);  // inter-char (learned or ≈3T)
+  const llE7 = (ms >= wordMu) ? 0 : logGaussian(ms, wordMu, _bDitVar * 10); // word (learned or ≈7T)
   if (llE7 >= llE3 && llE7 >= llE1) return 'word';
   if (llE3 >= llE1)                  return 'char';
   return 'elem';
@@ -1628,8 +1678,52 @@ function bayesLearnMark(ms, isDit) {
   if (autoWpmEnabled) applyAutoWpm(rxWpm);
 }
 
+// ── One-edge lookback buffer ──────────────────────────────────────────────
+// Buffers one edge.  On the next edge, checks if the buffered segment was a
+// noise blip (short mark < 20% of dit) or threshold flicker (short space < 8%
+// of dit) and merges it into the surrounding segment instead of emitting it.
+// This avoids the debounce reset-on-flip problem: the debounce approach reset
+// its timer on every threshold flicker during the MF ramp, which could swallow
+// entire inter-element spaces.  The lookback buffer only examines completed
+// segments, so it never loses a valid edge.
+function submitEdge(wasMark, duration) {
+  const minMarkMs  = Math.max(10, _bDitMu * 0.20);  // noise blip threshold
+  const minSpaceMs = Math.max(4,  _bDitMu * 0.08);  // flicker threshold
+
+  if (_bufWasMark !== null) {
+    // Merge noise-mark + space → extended space
+    if (_bufWasMark && _bufDur < minMarkMs && !wasMark) {
+      _bufWasMark = false;
+      _bufDur += duration;
+      return;
+    }
+    // Merge noise-mark + mark → extended mark (shouldn't occur often)
+    if (_bufWasMark && _bufDur < minMarkMs && wasMark) {
+      _bufWasMark = true;
+      _bufDur += duration;
+      return;
+    }
+    // Merge micro-space + mark → extended mark
+    if (!_bufWasMark && _bufDur < minSpaceMs && wasMark) {
+      _bufWasMark = true;
+      _bufDur += duration;
+      return;
+    }
+    // Merge micro-space + space → extended space
+    if (!_bufWasMark && _bufDur < minSpaceMs && !wasMark) {
+      _bufDur += duration;
+      return;
+    }
+    // Buffered edge is valid — emit it
+    processEdge(_bufWasMark, _bufDur);
+  }
+  // Buffer the new edge
+  _bufWasMark = wasMark;
+  _bufDur     = duration;
+}
+
 function processEdge(wasMarkBefore, durationMs) {
-  if (durationMs < 8) return;
+  if (durationMs < Math.max(8, _bDitMu * 0.15)) return;   // safety floor
   if (wasMarkBefore) {
     // Upper guard: during signal fade the SNR range compresses, inflating norm for noise
     // bursts and creating implausibly long "marks".  8× dit ≈ 480ms at 20 WPM — anything
@@ -1648,14 +1742,14 @@ function processEdge(wasMarkBefore, durationMs) {
       if (spType === 'elem') {
         // Learn inter-element space (mirrors CWGET ShortPauseLen tracking).
         const newElem = _bElemSpaceMu * (1 - spAlpha) + durationMs * spAlpha;
-        _bElemSpaceMu = Math.max(_bDitMu * 0.4, Math.min(_bDitMu * 1.5, newElem));
+        _bElemSpaceMu = Math.max(_bDitMu * 0.4, Math.min(_bDitMu * 1.2, newElem));
       } else if (spType === 'char') {
         // #3 Farnsworth: learn inter-character space independently of dit duration.
-        // Clamp to 1.5T–8T to stay plausible (Farnsworth can stretch to ~5-6T).
+        // Clamp to 2.0T–8T to stay plausible (Farnsworth can stretch to ~5-6T).
         const newChar = _bCharSpaceMu > 0
           ? _bCharSpaceMu * (1 - spAlpha) + durationMs * spAlpha
           : durationMs;  // first observation — seed directly
-        _bCharSpaceMu = Math.max(_bDitMu * 1.5, Math.min(_bDitMu * 8, newChar));
+        _bCharSpaceMu = Math.max(_bDitMu * 2.0, Math.min(_bDitMu * 8, newChar));
       } else if (spType === 'word') {
         // #3 Farnsworth: learn word space independently.  Clamp to 4T–20T.
         const newWord = _bWordSpaceMu > 0
@@ -1694,6 +1788,8 @@ function clearTx() {
 function resetDecoder() {
   currentChar = ''; decodedLine = '';
   lastEdge = 0; lastLevel = false;
+  _bufWasMark = null; _bufDur = 0;
+  _sampleTimeMs = 0;
   noiseFloor = 0; peakPower = 0;
   envVal = 0;
   _iqI = 0; _iqQ = 0; _iqCount = 0; _iqPhaseAcc = 0;
@@ -1713,6 +1809,7 @@ function resetDecoder() {
   _afcPrevHz    = null;             // #4 AFC multi-signal rejection
   _afcLockCount = 0;
   _qsbFadeFlag  = false;            // #5 QSB recovery
+  _floorHoldoffEnd = 0;            // #6 noise floor holdoff
   dotEstMs      = _bDitMu;
   const afcEl = document.getElementById('afc-lbl');
   if (afcEl) afcEl.textContent = afcEnabled ? 'AFC —' : 'AFC OFF';
@@ -2038,9 +2135,10 @@ function buildMorseTable() {
    ['--..','Z'],
    ['-----','0'],['.----','1'],['..---','2'],['...--','3'],['....-','4'],
    ['.....','5'],['-....','6'],['--...','7'],['---..','8'],['----.','9'],
-   ['.-.-.-','.'],[' --..--',','],[' ..--..','?'],['.----.','\''],
-   ['-.-.--','!'],['-..-.','/'],['-.--.','('],['-...-','='],
-   ['.-.-.','+'],['-....-','-'],['.-..-.','\"'],['.--.-.','@'],
+   ['.-.-.-','.'],['--..--',','],['..--..','?'],['.----.','\''],
+   ['-.-.--','!'],['-..-.','/'],['-.--.','('],['-.--.-',')'],
+   ['-...-','='],['.-.-.','+'],['-....-','-'],['.-..-.','\"'],['.--.-.','@'],
+   ['---...', ':'],['-.-.-.', ';'],
   ].forEach(([code,ch]) => t[code] = ch);
   return t;
 }
