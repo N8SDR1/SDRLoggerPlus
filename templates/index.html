@@ -41,9 +41,9 @@
   /* ── DOCK LAYOUT ───────────────────────────────────────────────────────── */
   .dock-layout{display:flex;flex-direction:row;padding:14px;max-width:1900px;margin:0 auto;align-items:flex-start;}
   .dock-col{display:flex;flex-direction:column;gap:10px;min-height:40px;}
-  .dock-col-0{flex:0 0 460px;min-width:260px;max-width:720px;}
+  .dock-col-0{flex:0 0 500px;min-width:280px;max-width:780px;}
   .dock-col-1{flex:1 1 0;min-width:280px;overflow:hidden;margin:0 4px;}
-  .dock-col-2{flex:0 0 320px;min-width:210px;max-width:560px;}
+  .dock-col-2{flex:0 0 370px;min-width:230px;max-width:620px;}
   /* Column-resize handles */
   .dock-ch{flex:0 0 6px;cursor:col-resize;align-self:stretch;border-radius:3px;
     background:var(--border);margin:0 2px;transition:background .15s;user-select:none;position:relative;}
@@ -686,8 +686,11 @@
       <h2 id="cluster-title">📡 DX Cluster</h2>
       <span id="cluster-band-label" style="font-family:var(--mono);font-size:11px;color:var(--accent);">—</span>
       <button id="pota-spots-btn" onclick="togglePotaSpots()"
-              title="Toggle POTA Spots — shows live Parks on the Air activator spots from pota.app"
+              title="Show live POTA activator spots from pota.app"
               style="margin-left:6px;font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 8px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;letter-spacing:1px;transition:all .15s;">🏕 POTA</button>
+      <button id="dx-cluster-btn" onclick="togglePotaSpots()"
+              title="Return to DX Cluster spots"
+              style="display:none;margin-left:4px;font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 8px;border-radius:3px;border:1px solid var(--accent);background:rgba(0,229,255,.08);color:var(--accent);cursor:pointer;letter-spacing:1px;transition:all .15s;">📡 DX</button>
       <select id="spot-timeout" onchange="updateSpotTimeout()" title="Spot age limit" style="background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--accent);font-family:var(--mono);font-size:10px;padding:2px 5px;margin-left:auto;outline:none;cursor:pointer;">
         <option value="5">5 min</option>
         <option value="10" selected>10 min</option>
@@ -3757,6 +3760,10 @@ function callToContinent(call) {
 }
 
 function renderSpots() {
+  // When POTA spots are active, don't overwrite the display with cluster spots.
+  // Cluster connections stay live (for self-spotting) — spots are stored in
+  // allSpots[] but not rendered until the user switches back to cluster view.
+  if (_potaSpotsActive) return;
   const list        = document.getElementById('spot-list');
   const timeoutMins = Math.round(spotTimeoutMs / 60000);
   // Build mode filter — expand SSB to match USB, LSB, and SSB since cluster spots are
@@ -3864,9 +3871,12 @@ let _potaPollTimer = null;
 function togglePotaSpots() {
   _potaSpotsActive = !_potaSpotsActive;
   const btn = document.getElementById('pota-spots-btn');
+  const dxBtn = document.getElementById('dx-cluster-btn');
   const title = document.getElementById('cluster-title');
   const head = document.querySelector('.spot-head');
   btn.classList.toggle('active', _potaSpotsActive);
+  btn.style.display = _potaSpotsActive ? 'none' : '';
+  dxBtn.style.display = _potaSpotsActive ? '' : 'none';
   title.textContent = _potaSpotsActive ? '🏕 POTA Spots' : '📡 DX Cluster';
   if (_potaSpotsActive) {
     fetchPotaSpots();
@@ -3946,14 +3956,13 @@ async function fillFromPotaSpot(callsign, freqKhz, mode, parkRef, parkName) {
   // Fill the QSO form
   fillFromSpot(callsign, freqKhz, mode);
   // Auto-fill park reference based on mode
-  if (potaMode === 'pota') {
-    // In POTA mode → fill the P2P field (their park)
+  // Contest/Event/Park always gets the park ref
+  const contestEl = document.getElementById('contest_name');
+  if (contestEl) { contestEl.value = parkRef; highlight(contestEl); }
+  // P2P field only fills when user is activating a park themselves (true P2P)
+  if (potaMode === 'pota' && potaMyPark) {
     const p2pEl = document.getElementById('pota_p2p');
     if (p2pEl) { p2pEl.value = parkRef; highlight(p2pEl); }
-  } else {
-    // In General mode → fill Contest/Event/Park field
-    const contestEl = document.getElementById('contest_name');
-    if (contestEl) { contestEl.value = parkRef; highlight(contestEl); }
   }
   toast(`🏕 ${callsign} @ ${parkRef} — ${parkName}`, 'success', 5000);
 }
@@ -4700,13 +4709,15 @@ function resetDockLayout() {
 
 // ── Column resize handles ─────────────────────────────────────────────────────
 (function() {
-  function initColResize(handleId, leftColId) {
+  function initColResize(handleId, targetColId, invert) {
     const handle = document.getElementById(handleId);
     if (!handle) return;
+    const minW = targetColId === 'dock-col-0' ? 280 : 230;
+    const maxW = targetColId === 'dock-col-0' ? 780 : 620;
     let _drag = false, _startX = 0, _startW = 0;
     handle.addEventListener('mousedown', e => {
       _drag = true; _startX = e.clientX;
-      _startW = document.getElementById(leftColId).offsetWidth;
+      _startW = document.getElementById(targetColId).offsetWidth;
       handle.classList.add('col-dragging');
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
@@ -4715,9 +4726,9 @@ function resetDockLayout() {
     function onMove(e) {
       if (!_drag) return;
       const dx    = e.clientX - _startX;
-      const lc    = document.getElementById(leftColId);
-      const newW  = Math.max(260, Math.min(720, _startW + dx));
-      lc.style.flex = `0 0 ${newW}px`;
+      const tc    = document.getElementById(targetColId);
+      const newW  = Math.max(minW, Math.min(maxW, _startW + (invert ? -dx : dx)));
+      tc.style.flex = `0 0 ${newW}px`;
       if (_map) _map.invalidateSize();
     }
     function onUp() {
@@ -4733,8 +4744,8 @@ function resetDockLayout() {
     }
   }
   window.addEventListener('DOMContentLoaded', () => {
-    initColResize('dock-ch-01', 'dock-col-0');
-    initColResize('dock-ch-12', 'dock-col-1');
+    initColResize('dock-ch-01', 'dock-col-0', false);
+    initColResize('dock-ch-12', 'dock-col-2', true);
     const s = loadSettings();
     if (s._dw_col0) document.getElementById('dock-col-0').style.flex = `0 0 ${s._dw_col0}px`;
     if (s._dw_col2) document.getElementById('dock-col-2').style.flex = `0 0 ${s._dw_col2}px`;

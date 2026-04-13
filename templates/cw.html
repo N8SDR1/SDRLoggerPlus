@@ -121,8 +121,11 @@
     background:var(--muted);border-radius:50%;transition:.2s;}
   .cw-toggle input:checked+.cw-slider{background:rgba(0,229,255,.3);}
   .cw-toggle input:checked+.cw-slider:before{transform:translateX(16px);background:var(--accent);}
+  /* Snap/Exact toggle: always lit cyan, knob always bright */
+  #wf-snap-slider{background:rgba(0,229,255,.3) !important;}
+  #wf-snap-slider:before{background:var(--accent) !important;}
   .toggle-label{color:#8fafc0;font-size:12px;}
-  .wpm-clamp{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);}
+  .wpm-clamp{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);}
   .wpm-clamp input[type=number]{width:40px;background:var(--bg);color:var(--text);
     border:1px solid var(--border);border-radius:3px;padding:2px 4px;text-align:center;
     font-family:var(--mono);font-size:11px;}
@@ -362,13 +365,13 @@
         <div class="rx-wf-snap">
           <canvas id="wf-canvas" height="72"
             title="Waterfall — shows ±400 Hz around the set tone. Click to tune (Snap finds nearest peak; Exact tunes where you click). Red cursor = AFC-locked frequency."></canvas>
-          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;">
-            <span id="wf-snap-label" style="font-family:var(--mono);font-size:8px;color:var(--accent);letter-spacing:1px;font-weight:700;">SNAP</span>
+          <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
+            <span id="wf-exact-label" class="toggle-label" style="font-size:13px;font-weight:600;min-width:36px;text-align:right;">Exact</span>
             <label class="cw-toggle" title="Click-to-tune mode&#10;Snap (ON): locks to the strongest peak within ±60 Hz of your click&#10;Exact (OFF): tunes to precisely where you click">
               <input type="checkbox" id="wf-snap-chk" onchange="wfToggleSnap()" checked>
-              <span class="cw-slider"></span>
+              <span id="wf-snap-slider" class="cw-slider"></span>
             </label>
-            <span style="font-family:var(--mono);font-size:7px;color:var(--muted);letter-spacing:.5px;">EXACT</span>
+            <span id="wf-snap-label" class="toggle-label" style="font-size:13px;font-weight:600;min-width:30px;">Snap</span>
           </div>
         </div><!-- /.rx-wf-snap -->
 
@@ -421,7 +424,7 @@
         <button onclick="nrAdj(-1)" title="Previous serial" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:1px 7px;border-radius:3px;cursor:pointer;font-size:13px;">−</button>
         <button onclick="nrAdj(1)"  title="Next serial"     style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:1px 7px;border-radius:3px;cursor:pointer;font-size:13px;">+</button>
         <button onclick="nrReset()" title="Reset serial to 1" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:1px 8px;border-radius:3px;cursor:pointer;font-size:11px;letter-spacing:1px;">CLR</button>
-        <span id="nr-status-lbl" style="font-size:10px;color:#b8ccd8;">OFF — enable to auto-increment &amp; log to Remarks</span>
+        <span id="nr-status-lbl" style="font-size:12px;color:#b8ccd8;">OFF — enable to auto-increment &amp; log to Remarks</span>
       </div>
     </div>
   </div>
@@ -443,7 +446,7 @@
   <div class="panel" id="macro-panel">
     <div class="panel-head">
       <span>▼ Macros</span>
-      <span style="margin-left:auto;font-size:10px;color:#b0c4d4;font-weight:400;text-transform:none;letter-spacing:0;">
+      <span style="margin-left:auto;font-size:12px;color:#b0c4d4;font-weight:400;text-transform:none;letter-spacing:0;">
         {MYCALL} {MYNAME} {CALL} {NAME} {RST} {NR} — click label to rename &bull; right-click to edit
       </span>
       <button onclick="resetMacros()" title="Reset all macros to factory defaults" style="margin-left:10px;background:var(--surface);border:1px solid var(--red);color:var(--red);padding:1px 7px;border-radius:3px;cursor:pointer;font-size:10px;letter-spacing:1px;flex-shrink:0;">RESET</button>
@@ -1333,11 +1336,11 @@ function wfToggleSnap(){
 function _wfUpdateSnapBtn(){
   const chk = document.getElementById('wf-snap-chk');
   if (chk) chk.checked = _wfSnap;
-  const lbl = document.getElementById('wf-snap-label');
-  if (lbl) {
-    lbl.textContent = _wfSnap ? 'SNAP' : 'EXACT';
-    lbl.style.color = _wfSnap ? 'var(--accent)' : 'var(--accent2)';
-  }
+  const snapLbl = document.getElementById('wf-snap-label');
+  const exactLbl = document.getElementById('wf-exact-label');
+  // Active label = green, inactive = muted
+  if (snapLbl) snapLbl.style.color = _wfSnap ? '#00e676' : 'var(--muted)';
+  if (exactLbl) exactLbl.style.color = _wfSnap ? 'var(--muted)' : '#00e676';
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1957,6 +1960,7 @@ async function sendCwText(text, hasNr) {
     const d = await r.json();
     if (d.ok) {
       setStatus(`Sent via ${d.path} @ ${txWpm} WPM`);
+      document.getElementById('cw-input').value = '';
       if (hasNr) nrIncrement();
       if (autoLog73 && /\b73\b/.test(text)) {
         try {
