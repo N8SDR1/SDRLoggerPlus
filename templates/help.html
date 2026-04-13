@@ -67,6 +67,8 @@
     table{font-size:10pt;} thead th{background:#eee;color:#000;}
     .credits{background:#f9f9f9;border:1px solid #ccc;}
     .credits p,.credits .names,.credits .ai-line{color:#333;}
+    .help-tabs{display:none;}
+    .help-tab-content{display:block!important;}
     pre{background:#f0f0f0!important;border:1px solid #ccc!important;color:#333!important;}
     a{color:#0066cc;}
   }
@@ -75,7 +77,7 @@
 
   h1{font-family:var(--head);font-size:28px;font-weight:700;color:var(--accent);
     letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
-  .subtitle{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:36px;letter-spacing:1px;}
+  .subtitle{font-family:var(--mono);font-size:14px;color:var(--muted);margin-bottom:36px;letter-spacing:1px;}
 
   h2{font-family:var(--head);font-size:18px;font-weight:600;color:var(--accent2);
     letter-spacing:2px;text-transform:uppercase;margin:36px 0 12px;
@@ -96,6 +98,14 @@
 
   .section-card{background:var(--card);border:1px solid var(--border);border-radius:6px;
     padding:20px 24px;margin-bottom:16px;}
+  /* Help Tab Bar */
+  .help-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;flex-wrap:wrap;}
+  .help-tabs::-webkit-scrollbar{display:none;}
+  .help-tab{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.5px;padding:10px 18px;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s;}
+  .help-tab:hover{color:var(--text);}
+  .help-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .help-tab-content{display:none;}
+  .help-tab-content.active{display:block;}
 
   .badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 8px;
     border-radius:3px;margin-right:6px;vertical-align:middle;}
@@ -152,6 +162,17 @@
   <h1>SDR<span style="color:var(--accent2);">Logger+</span> Quick Start Guide</h1>
   <p class="subtitle">v{{ version }} &nbsp;·&nbsp; Ham Radio Logging · DX Cluster · POTA Spots · RBN Band-Opening Alerts · TCI / Thetis SDR Integration · Solar Conditions · Rotator Control · CW Keyer / Decoder</p>
 
+  <div class="help-tabs" id="help-tab-bar">
+    <button class="help-tab active" data-htab="htab-start" onclick="switchHelpTab('htab-start')">🚀 Getting Started</button>
+    <button class="help-tab" data-htab="htab-logging" onclick="switchHelpTab('htab-logging')">📋 Logging &amp; QSO</button>
+    <button class="help-tab" data-htab="htab-cluster" onclick="switchHelpTab('htab-cluster')">📡 Cluster &amp; Features</button>
+    <button class="help-tab" data-htab="htab-cw" onclick="switchHelpTab('htab-cw')">🔑 CW Decoder</button>
+    <button class="help-tab" data-htab="htab-pota" onclick="switchHelpTab('htab-pota')">🏕 POTA &amp; Spotting</button>
+    <button class="help-tab" data-htab="htab-system" onclick="switchHelpTab('htab-system')">⚙ System</button>
+  </div>
+  <p style="font-family:var(--mono);font-size:12px;color:var(--text);opacity:.7;margin:-16px 0 20px 0;letter-spacing:.5px;">▲ Choose a topic above to jump to that section</p>
+
+  <div class="help-tab-content active" id="htab-start">
   <!-- OVERVIEW -->
   <h2>Overview</h2>
   <p>SDRLogger+ is a browser-based ham radio contact logger designed for use with <strong>Expert Electronics TCI/SDR compatible rigs</strong> <em><strong>(EESDR, Anan, Hermes-Lite transceivers)</strong></em> via the TCI (Transceiver Control Interface) protocol, with full waterfall integration. It provides real-time frequency, mode and callsign synchronisation between your radio and the logging form, a live DX cluster display, distance mapping, ADIF import/export, and solar propagation data — all in a single dark-themed interface. SDRLogger+ also supports <strong>flrig</strong> (W1HKJ) for clean XML-RPC rig control with bidirectional frequency/mode control, and any <strong>HamLib-compatible rig</strong> via rigctld — all three rig paths can run simultaneously with TCI taking priority. CW keying is supported via <strong>TCI</strong> (Thetis), <strong>K1EL WinKeyer</strong> (USB/serial), or <strong>HamLib</strong> (rigctld).</p>
@@ -462,6 +483,9 @@
     </table>
   </div>
 
+  </div><!-- /htab-start -->
+
+  <div class="help-tab-content" id="htab-logging">
   <!-- LOGGING A QSO -->
   <h2>Logging a QSO</h2>
   <div class="section-card">
@@ -479,7 +503,15 @@
       </tbody>
     </table>
     <p>Click <strong>▶ Save QSO</strong> to log. The entry is saved locally, optionally uploaded to QRZ Logbook and/or ARRL LoTW, and the form clears for the next contact.</p>
-    <p>The <strong>⚠ Worked Before</strong> banner appears at the top of the form if you have a previous QSO on file with that callsign, showing band and mode of prior contacts.</p>
+    <h3>DXCC Entity Lookup &amp; Worked Before</h3>
+    <p>When you enter a callsign (or click a spot), SDRLogger+ resolves the <strong>DXCC entity</strong> using a built-in country database (cty.dat). The entity name, continent, CQ zone, and ITU zone are displayed below the callsign field.</p>
+    <p>A colour-coded <strong>Worked Before</strong> badge also appears:</p>
+    <ul>
+      <li><strong style="color:#39ff14;">★ NEW ENTITY</strong> — you have never worked any station in this DXCC entity before.</li>
+      <li><strong style="color:#00e5ff;">NEW BAND/MODE</strong> — you have worked this entity, but not on the current band + mode combination.</li>
+      <li>No badge — you have already worked this entity on this band and mode.</li>
+    </ul>
+    <p>The <strong>⚠ Worked Before</strong> banner also appears with a list of previous QSO dates, bands, and modes if you have any prior contacts with that specific callsign.</p>
     <div class="tip">Click <strong>QRZ</strong> to open a detailed lookup popup for the entered callsign.</div>
   </div>
 
@@ -516,13 +548,18 @@
       <li><strong>CQ Zone Filter</strong> — comma-separated zone numbers (e.g. <code>4,5,14</code>). Leave blank for all zones.</li>
       <li><strong>Continent Filter</strong> — comma-separated continent codes (e.g. <code>NA,EU,AS</code>). Uses prefix-based continent lookup. Supported codes: <code>NA</code> North America, <code>SA</code> South America, <code>EU</code> Europe, <code>AF</code> Africa, <code>AS</code> Asia, <code>OC</code> Oceania. Leave blank for all.</li>
     </ul>
+    <h3>Worked-Before Spot Colouring</h3>
+    <p>DX cluster spots and POTA spots are automatically colour-coded based on your log history:</p>
+    <ul>
+      <li><strong style="color:#39ff14;">Green callsign</strong> — New DXCC entity you have never worked before.</li>
+      <li><strong style="color:#00e5ff;">Cyan callsign</strong> — Entity you have worked, but not on this band + mode.</li>
+      <li><strong>Default colour</strong> — Already worked on this band and mode.</li>
+    </ul>
+    <p>Colours update in real time as you log new contacts. Hot-list callsigns always display in red regardless of worked status.</p>
+
     <h3>🏕 POTA Spots</h3>
     <p>Click the <strong>🏕 POTA</strong> button in the DX Cluster panel header to switch to live <strong>Parks on the Air</strong> activator spots. Spots are fetched from the <a href="https://pota.app" target="_blank" style="color:var(--accent)">pota.app</a> API and refreshed every 60 seconds. The spot list shows activator callsign, mode, frequency, park reference, park name, and location.</p>
-    <p><strong>Clicking a POTA spot</strong> fills the QSO entry form and tunes your radio, just like a normal DX cluster spot. The park reference is automatically placed in the correct field:</p>
-    <ul>
-      <li><strong>General mode</strong> — park reference goes into the <em>Contest / Event / Park</em> field</li>
-      <li><strong>POTA mode</strong> — park reference goes into the <em>P2P Park Ref</em> field (for park-to-park contacts)</li>
-    </ul>
+    <p><strong>Clicking a POTA spot</strong> fills the QSO entry form and tunes your radio, just like a normal DX cluster spot. The park reference is automatically placed in the <em>Contest / Event / Park</em> field. If you are in <strong>POTA mode</strong> and have set your own park reference (i.e. you are activating), the reference is also placed in the <em>P2P Park Ref</em> field for true park-to-park contacts.</p>
     <p>Click <strong>🏕 POTA</strong> again to return to the normal DX cluster view. Band filtering still applies — if you are on 20m, only POTA spots on 20m are shown.</p>
 
     <h3>Hot Stations (Watchlist Highlight &amp; Announcement)</h3>
@@ -597,6 +634,9 @@
     </ul>
   </div>
 
+  </div><!-- /htab-logging -->
+
+  <div class="help-tab-content" id="htab-cluster">
   <!-- SOLAR -->
   <h2>Solar Conditions</h2>
   <div class="section-card">
@@ -665,6 +705,26 @@
     <div class="tip">When SDRLogger+ auto-logs a QSO from a digital program, a <strong>📥 QSO logged from Digital-APP</strong> notification appears in the header and the log panel updates automatically. QRZ Logbook upload also fires if configured.</div>
   </div>
 
+  <!-- ADIF FILE MONITOR -->
+  <h2>ADIF File Monitor</h2>
+  <div class="section-card">
+    <p>SDRLogger+ can watch external <strong>.adi files</strong> for new QSOs appended by other programs (VarAC, MSHV, or any application that writes standard ADIF).</p>
+    <h3>How It Works</h3>
+    <ul>
+      <li>Polls configured ADIF files every <strong>5 seconds</strong>.</li>
+      <li>Uses <strong>byte-offset tracking</strong> (not timestamps) — only reads new bytes appended since the last check, so it never re-imports old QSOs.</li>
+      <li>If a monitored file is truncated or replaced (file size shrinks), the offset resets automatically.</li>
+      <li>State is persisted in <code>adif_monitor_state.json</code> so monitoring survives restarts.</li>
+    </ul>
+    <h3>Setup</h3>
+    <ol>
+      <li>Go to <strong>⚙ Settings → Cluster &amp; Integration → ADIF File Monitor</strong></li>
+      <li>Enable a slot and enter a label (e.g. "VarAC") and the full file path to the .adi file.</li>
+      <li>Up to <strong>2 slots</strong> can be configured — e.g. one for VarAC and one for MSHV.</li>
+    </ol>
+    <div class="tip">When a new QSO is detected, a <strong>📥 ADIF Import</strong> toast notification appears and the QSO log refreshes automatically.</div>
+  </div>
+
   <!-- ROTATOR CONTROL -->
   <h2>Rotator Control</h2>
   <div class="section-card">
@@ -707,6 +767,9 @@
     <div class="tip">The <strong>Active</strong> toggle in the panel header lets you quickly disable rotation without going into Settings — useful when you want to use manual control.</div>
   </div>
 
+  </div><!-- /htab-cluster -->
+
+  <div class="help-tab-content" id="htab-cw">
   <!-- CW KEYER / DECODER -->
   <h2>CW Keyer / Decoder</h2>
   <div class="section-card">
@@ -842,6 +905,9 @@
     </ul>
   </div>
 
+  </div><!-- /htab-cw -->
+
+  <div class="help-tab-content" id="htab-pota">
   <!-- DX SPOTTING -->
   <h2>DX Spotting</h2>
   <div class="section-card">
@@ -1030,6 +1096,9 @@
     </table>
   </div>
 
+  </div><!-- /htab-pota -->
+
+  <div class="help-tab-content" id="htab-system">
   <!-- SERVER SETTINGS -->
   <h2>Server Settings &amp; Port</h2>
   <div class="section-card">
@@ -1131,6 +1200,8 @@
     </ul>
   </div>
 
+  </div><!-- /htab-system -->
+
   <!-- CREDITS -->
   <div class="credits" style="padding:20px 24px;">
     <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
@@ -1180,6 +1251,29 @@
 fetch('/api/keepalive', {method:'POST'}).catch(()=>{});
 setInterval(function(){ fetch('/api/keepalive', {method:'POST'}).catch(()=>{}); }, 20000);
 
+// ── Help Tab Switching ───────────────────────────────────────────────────
+function switchHelpTab(tabId) {
+  document.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.help-tab-content').forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector(`.help-tab[data-htab="${tabId}"]`);
+  const panel = document.getElementById(tabId);
+  if (btn) btn.classList.add('active');
+  if (panel) panel.classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function _helpSearchShowAll(show) {
+  document.querySelectorAll('.help-tab-content').forEach(p => {
+    if (show) { p.style.display = 'block'; }
+    else { p.style.display = ''; }  // restore CSS control
+  });
+  if (!show) {
+    // Re-apply active tab
+    const active = document.querySelector('.help-tab.active');
+    if (active) switchHelpTab(active.dataset.htab);
+  }
+}
+
 // ── Help guide keyword search ─────────────────────────────────────────────
 let _hlMarks   = [];   // all <mark> nodes currently in the DOM
 let _hlCurrent = 0;   // index of the highlighted (current) match
@@ -1191,7 +1285,10 @@ function helpSearch(query) {
   const countEl    = document.getElementById('search-count');
   const q = query.trim();
   clearBtn.style.display = q ? 'inline' : 'none';
-  if (!q) { countEl.textContent = ''; return; }
+  if (!q) { countEl.textContent = ''; _helpSearchShowAll(false); return; }
+
+  // Temporarily show all tabs so TreeWalker can find text in hidden tabs
+  _helpSearchShowAll(true);
 
   // Walk all text nodes inside .container, wrap matches
   const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
@@ -1260,7 +1357,12 @@ function jumpToSection(sel) {
   const id = sel.value;
   if (!id) return;
   const el = document.getElementById(id);
-  if (el) { el.scrollIntoView({behavior:'smooth', block:'start'}); }
+  if (el) {
+    // Switch to the tab containing this element
+    const tab = el.closest('.help-tab-content');
+    if (tab) switchHelpTab(tab.id);
+    setTimeout(() => el.scrollIntoView({behavior:'smooth', block:'start'}), 50);
+  }
   setTimeout(() => { sel.value = ''; }, 400);
 }
 
@@ -1291,6 +1393,7 @@ function _clearMarks() {
 
 function helpSearchClear() {
   _clearMarks();
+  _helpSearchShowAll(false);
   document.getElementById('help-search').value = '';
   document.getElementById('search-clear-btn').style.display = 'none';
   document.getElementById('search-count').textContent = '';

@@ -266,6 +266,16 @@
   .btn-test-qrz{font-family:var(--mono);font-size:11px;padding:5px 12px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;white-space:nowrap;transition:all .15s;}
   .btn-test-qrz:hover{background:rgba(0,229,255,.1);}
   .btn-test-qrz:disabled{opacity:.4;cursor:not-allowed;}
+  /* Settings Tab Bar */
+  .settings-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;}
+  .settings-tabs::-webkit-scrollbar{display:none;}
+  .settings-tab{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.5px;padding:10px 18px;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s;}
+  .settings-tab:hover{color:var(--text);}
+  .settings-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .settings-tab-content{display:none;}
+  .settings-tab-content.active{display:block;}
+  .settings-tab-content .settings-section{padding-bottom:24px;margin-bottom:24px;}
+  .settings-tab-content .settings-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0;}
   /* Spot button */
   .btn-spot{background:transparent;color:var(--accent2);border:1px solid var(--accent2);font-size:12px;letter-spacing:1px;padding:7px 12px;}
   .btn-spot:hover{background:rgba(57,255,20,.12);}
@@ -432,6 +442,7 @@
           <div class="field" id="field-callsign">
             <label>Callsign *</label>
             <input type="text" id="callsign" placeholder="e.g. K1ABC" autocomplete="off" spellcheck="false">
+            <div id="dxcc-info" style="font-family:var(--mono);font-size:13px;font-weight:600;margin-top:4px;min-height:18px;line-height:1.4;"></div>
             <span class="err-msg">Callsign is required</span>
           </div>
         </div>
@@ -825,6 +836,15 @@
   <div class="modal" style="min-width:420px;">
     <button class="modal-close" onclick="closeModal('settings-modal')">✕</button>
     <h3>⚙ Settings</h3>
+    <div class="settings-tabs" id="settings-tab-bar">
+      <button class="settings-tab active" data-tab="tab-station" onclick="switchSettingsTab('tab-station')">📻 Station &amp; Rig</button>
+      <button class="settings-tab" data-tab="tab-lookups" onclick="switchSettingsTab('tab-lookups')">🔍 Lookups &amp; Uploads</button>
+      <button class="settings-tab" data-tab="tab-cluster" onclick="switchSettingsTab('tab-cluster')">📡 Cluster &amp; Integrations</button>
+      <button class="settings-tab" data-tab="tab-pota" onclick="switchSettingsTab('tab-pota')">🏕 POTA &amp; Display</button>
+      <button class="settings-tab" data-tab="tab-system" onclick="switchSettingsTab('tab-system')">🛠 System</button>
+    </div>
+    <p style="font-family:var(--mono);font-size:12px;color:var(--text);opacity:.7;margin:-12px 0 16px 0;letter-spacing:.5px;">▲ Choose a section above to view its settings</p>
+    <div class="settings-tab-content active" id="tab-station">
     <div class="settings-section">
       <h4>Station</h4>
       <div class="settings-row full">
@@ -1028,6 +1048,8 @@
         &nbsp;·&nbsp; <a href="https://hamlib.sourceforge.net/manuals/hamlib.html" target="_blank" style="color:var(--accent);text-decoration:none;">K1EL WinKeyer ↗</a>
       </div>
     </div>
+    </div><!-- /tab-station -->
+    <div class="settings-tab-content" id="tab-lookups">
     <div class="settings-section">
       <h4>QRZ Lookup (XML API)</h4>
       <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:8px;line-height:1.6;">
@@ -1182,6 +1204,8 @@
         <span id="clublog-test-result" style="font-family:var(--mono);font-size:11px;"></span>
       </div>
     </div>
+    </div><!-- /tab-lookups -->
+    <div class="settings-tab-content" id="tab-cluster">
     <div class="settings-section">
       <h4>DX Clusters</h4>
       <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">Enable up to 3 simultaneous DX cluster connections. Spots are merged into a single list.</div>
@@ -1410,6 +1434,33 @@
         In VarAC: Settings → Logging → Send log to → Log4OM → IP 127.0.0.1 Port 2237
       </div>
     </div>
+    <!-- ADIF File Monitor -->
+    <div class="settings-section">
+      <h4>ADIF File Monitor <span style="font-size:9px;color:#8fafc0;font-weight:400;">— auto-import QSOs from external .adi files (VarAC, MSHV, JS8Call, etc.)</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Watches external ADIF files for new QSOs and imports them automatically — even if SDRLogger+ was closed when the QSO was logged. Uses byte-offset tracking so only new entries are imported.
+      </div>
+      <div style="margin-bottom:14px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <input type="checkbox" id="cfg-adif-mon-enabled-1" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          <span style="font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:1px;">Slot 1</span>
+        </div>
+        <div class="settings-row">
+          <div class="settings-field"><label>Label</label><input type="text" id="cfg-adif-mon-label-1" placeholder="e.g. VarAC" spellcheck="false"></div>
+          <div class="settings-field"><label>ADIF File Path</label><input type="text" id="cfg-adif-mon-path-1" placeholder="C:\VarAC\log\VarAC_QSO.adi" spellcheck="false" style="font-size:11px;"></div>
+        </div>
+      </div>
+      <div style="padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <input type="checkbox" id="cfg-adif-mon-enabled-2" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          <span style="font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:1px;">Slot 2</span>
+        </div>
+        <div class="settings-row">
+          <div class="settings-field"><label>Label</label><input type="text" id="cfg-adif-mon-label-2" placeholder="e.g. MSHV" spellcheck="false"></div>
+          <div class="settings-field"><label>ADIF File Path</label><input type="text" id="cfg-adif-mon-path-2" placeholder="C:\MSHV\log\mshv_log.adi" spellcheck="false" style="font-size:11px;"></div>
+        </div>
+      </div>
+    </div>
     <!-- Rotator Control -->
     <div class="settings-section">
       <h4>Rotator Control <span style="font-size:9px;color:#8fafc0;font-weight:400;">— PstRotator · GS-232 · EasyComm II</span></h4>
@@ -1440,6 +1491,8 @@
         </div>
       </div>
     </div>
+    </div><!-- /tab-cluster -->
+    <div class="settings-tab-content" id="tab-pota">
     <!-- Display preferences -->
     <div class="settings-section">
       <h4>Display</h4>
@@ -1504,6 +1557,8 @@
         Required for the <strong>Spot Myself</strong> button. Create a free account at <a href="https://pota.app" target="_blank" style="color:var(--accent);">pota.app ↗</a> · Stored locally only — never sent except to the POTA API.
       </div>
     </div>
+    </div><!-- /tab-pota -->
+    <div class="settings-tab-content" id="tab-system">
     <!-- Backup & Restore -->
     <div class="settings-section">
       <h4>Backup &amp; Restore</h4>
@@ -1601,6 +1656,7 @@
       </div>
       <div id="debug-log-preview" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;max-height:120px;overflow-y:auto;background:#0a0e14;padding:6px 8px;border-radius:3px;border:1px solid var(--border);display:none;"></div>
     </div>
+    </div><!-- /tab-system -->
     <a href="/help" target="_blank" style="display:block;text-align:center;font-family:var(--mono);font-size:11px;color:var(--accent);padding:10px 0 4px;letter-spacing:1px;text-decoration:none;opacity:.8;transition:opacity .15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.8'">📖 TCILog Quick Start Guide ↗</a>
     <div style="display:flex;gap:10px;align-items:center;">
       <button class="btn-save-settings" onclick="saveSettings()" style="flex:1;">Save Settings</button>
@@ -2281,17 +2337,42 @@ function _rigQSY(freq_mhz, mode) {
   }
 }
 
-// ─── WORKED BEFORE ───────────────────────────────────────────────────────────
+// ─── WORKED BEFORE (DXCC-based) ─────────────────────────────────────────────
 async function checkWorkedBefore(cs) {
-  document.getElementById('worked-banner').style.display = 'none';
+  const banner = document.getElementById('worked-banner');
+  const dxccEl = document.getElementById('dxcc-info');
+  banner.style.display = 'none';
+  if (dxccEl) dxccEl.innerHTML = '';
   if (!cs) return;
   try {
-    const res = await fetch(`/api/worked_before/${encodeURIComponent(cs.toUpperCase())}`);
-    const rows = await res.json();
-    if (rows.length > 0) {
-      document.getElementById('worked-list').innerHTML =
-        rows.slice(0,8).map(r => `<span>${r.date_worked} · ${r.band||'?'} · ${r.mode||'?'}</span>`).join('');
-      document.getElementById('worked-banner').style.display = 'block';
+    const band = document.getElementById('band').value.trim();
+    const mode = document.getElementById('mode').value.trim();
+    const res = await fetch(`/api/worked_before?call=${encodeURIComponent(cs.toUpperCase())}&band=${encodeURIComponent(band)}&mode=${encodeURIComponent(mode)}`);
+    const d = await res.json();
+    if (!d.ok) return;
+    // Show DXCC entity info below callsign
+    if (dxccEl && d.entity) {
+      let html = `<span style="color:var(--text);">${esc(d.entity)}</span>`;
+      if (d.cont) html += ` <span style="color:var(--accent);margin-left:6px;">${esc(d.cont)}</span>`;
+      if (d.cq)   html += ` <span style="color:var(--text);margin-left:4px;">CQ ${esc(d.cq)}</span>`;
+      if (d.itu)  html += ` <span style="color:var(--text);margin-left:4px;">ITU ${esc(d.itu)}</span>`;
+      // Worked status badge
+      if (!d.worked_entity) {
+        html += ` <span style="background:rgba(57,255,20,.15);color:var(--accent2);border:1px solid var(--accent2);border-radius:3px;padding:1px 6px;margin-left:8px;font-size:10px;font-weight:700;">★ NEW ENTITY</span>`;
+      } else if (!d.worked_band_mode && band && mode) {
+        html += ` <span style="background:rgba(0,229,255,.12);color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:1px 6px;margin-left:8px;font-size:10px;font-weight:700;">NEW BAND/MODE</span>`;
+      }
+      dxccEl.innerHTML = html;
+    }
+    // Also show the classic worked-before banner with previous QSO list
+    if (d.worked_entity) {
+      const rowRes = await fetch(`/api/worked_before/${encodeURIComponent(cs.toUpperCase())}`);
+      const rows = await rowRes.json();
+      if (rows.length > 0) {
+        document.getElementById('worked-list').innerHTML =
+          rows.slice(0,8).map(r => `<span>${r.date_worked} · ${r.band||'?'} · ${r.mode||'?'}</span>`).join('');
+        banner.style.display = 'block';
+      }
     }
   } catch(e) {}
 }
@@ -2357,6 +2438,8 @@ async function saveQSO() {
       else if (data.eqsl_msg) msg += ` · eQSL: ${data.eqsl_msg}`;
       // Store for post-log spotting (10-min window)
       lastSpot = {callsign: cs, freq_mhz: payload.freq_mhz, mode: payload.mode, timestamp: Date.now()};
+      // Invalidate worked-before spot cache so colors update
+      Object.keys(_workedSpotCache).forEach(k => delete _workedSpotCache[k]);
       toast(msg,'success'); clearForm(); loadLog();
       updateSpotButton();
     }
@@ -2373,6 +2456,7 @@ function clearForm() {
   document.getElementById('their_rst_rcvd').value = '59';
   _rstUserEdited = false; _lastSeenMode = '';
   document.getElementById('worked-banner').style.display = 'none';
+  const _dxccEl = document.getElementById('dxcc-info'); if (_dxccEl) _dxccEl.innerHTML = '';
   document.getElementById('field-callsign').classList.remove('has-error');
   _autoTime = true;
   setDefaultDateTime();
@@ -2917,6 +3001,17 @@ async function deleteDatabase(target) {
 // ─── MODALS ──────────────────────────────────────────────────────────────────
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
+// ─── SETTINGS TABS ───────────────────────────────────────────────────────────
+function switchSettingsTab(tabId) {
+  document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.settings-tab-content').forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector(`.settings-tab[data-tab="${tabId}"]`);
+  const panel = document.getElementById(tabId);
+  if (btn) btn.classList.add('active');
+  if (panel) panel.classList.add('active');
+  try { localStorage.setItem('settings_active_tab', tabId); } catch(e) {}
+}
+
 // ─── SETTINGS ────────────────────────────────────────────────────────────────
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY))||{}; }
@@ -2981,6 +3076,13 @@ async function openSettings() {
   document.getElementById('cfg-digital-udp-port').value      = s.digital_udp_port  || '2237';
   document.getElementById('cfg-digital-tcp-enabled').checked = s.digital_tcp_enabled === true;
   document.getElementById('cfg-digital-tcp-port').value      = s.digital_tcp_port  || '52001';
+  // ADIF Monitor
+  document.getElementById('cfg-adif-mon-enabled-1').checked = s.adif_mon_enabled_1 === true;
+  document.getElementById('cfg-adif-mon-label-1').value     = s.adif_mon_label_1 || '';
+  document.getElementById('cfg-adif-mon-path-1').value      = s.adif_mon_path_1 || '';
+  document.getElementById('cfg-adif-mon-enabled-2').checked = s.adif_mon_enabled_2 === true;
+  document.getElementById('cfg-adif-mon-label-2').value     = s.adif_mon_label_2 || '';
+  document.getElementById('cfg-adif-mon-path-2').value      = s.adif_mon_path_2 || '';
   document.getElementById('cfg-rot-enabled').checked   = s.rotator_enabled   === true;
   document.getElementById('cfg-rot-protocol').value    = s.rotator_protocol  || 'pstrotator';
   document.getElementById('cfg-rot-host').value        = s.rotator_host      || '127.0.0.1';
@@ -3048,6 +3150,8 @@ async function openSettings() {
   document.getElementById('settings-tci-status').textContent = badge.textContent;
   document.getElementById('settings-tci-status').style.color = tciConnected?'var(--green)':'var(--red)';
   loadServerConfig();   // populate web port + network access from server
+  // Restore last-viewed settings tab
+  switchSettingsTab(localStorage.getItem('settings_active_tab') || 'tab-station');
   document.getElementById('settings-modal').classList.add('open');
 }
 
@@ -3106,6 +3210,12 @@ async function saveSettings() {
     digital_udp_port:    document.getElementById('cfg-digital-udp-port').value || '2237',
     digital_tcp_enabled: document.getElementById('cfg-digital-tcp-enabled').checked,
     digital_tcp_port:    document.getElementById('cfg-digital-tcp-port').value || '52001',
+    adif_mon_enabled_1:  document.getElementById('cfg-adif-mon-enabled-1').checked,
+    adif_mon_label_1:    document.getElementById('cfg-adif-mon-label-1').value.trim(),
+    adif_mon_path_1:     document.getElementById('cfg-adif-mon-path-1').value.trim(),
+    adif_mon_enabled_2:  document.getElementById('cfg-adif-mon-enabled-2').checked,
+    adif_mon_label_2:    document.getElementById('cfg-adif-mon-label-2').value.trim(),
+    adif_mon_path_2:     document.getElementById('cfg-adif-mon-path-2').value.trim(),
     rotator_enabled:  document.getElementById('cfg-rot-enabled').checked,
     rotator_protocol: document.getElementById('cfg-rot-protocol').value,
     rotator_host:     document.getElementById('cfg-rot-host').value.trim() || '127.0.0.1',
@@ -3759,6 +3869,86 @@ function callToContinent(call) {
   return '';
 }
 
+// ─── Worked-Before Spot Coloring ─────────────────────────────────────────────
+// Cache: { "CALL|BAND|MODE": "new_entity"|"new_band_mode"|"worked"|"unknown" }
+const _workedSpotCache = {};
+let _workedColorPending = false;
+
+async function colorSpotsWorked() {
+  // Gather all visible spot rows and build batch request
+  const rows = document.querySelectorAll('#spot-list .spot-row[data-call]');
+  if (!rows.length) return;
+  const spots = [];
+  const rowMap = {};  // call → [rows]
+  rows.forEach(r => {
+    const callEl = r.querySelector('.spot-call');
+    if (!callEl) return;
+    const call = (r.dataset.call || '').toUpperCase();
+    const band = (r.dataset.band || '').toUpperCase();
+    const mode = (r.dataset.mode || '').toUpperCase();
+    const key = `${call}|${band}|${mode}`;
+    if (!rowMap[call]) rowMap[call] = [];
+    rowMap[call].push({el: r, callEl, band, mode, key});
+    // Only request calls not already cached
+    if (!(key in _workedSpotCache)) {
+      spots.push({call, band, mode});
+    }
+  });
+  // Apply cached results immediately
+  for (const call of Object.keys(rowMap)) {
+    for (const item of rowMap[call]) {
+      const cached = _workedSpotCache[item.key];
+      if (cached) _applySpotColor(item.el, item.callEl, cached);
+    }
+  }
+  // Fetch uncached
+  if (spots.length && !_workedColorPending) {
+    _workedColorPending = true;
+    try {
+      const res = await fetch('/api/worked_before_batch', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({spots})
+      });
+      const data = await res.json();
+      if (data.results) {
+        for (const s of spots) {
+          const r = data.results[s.call];
+          const key = `${s.call}|${s.band}|${s.mode}`;
+          _workedSpotCache[key] = r ? r.status : 'unknown';
+        }
+        // Re-apply colors
+        for (const call of Object.keys(rowMap)) {
+          for (const item of rowMap[call]) {
+            const st = _workedSpotCache[item.key];
+            if (st) _applySpotColor(item.el, item.callEl, st);
+          }
+        }
+      }
+    } catch(e) {}
+    _workedColorPending = false;
+  }
+}
+
+function _applySpotColor(rowEl, callEl, status) {
+  // Hot calls keep their red color — skip coloring
+  if (rowEl.classList.contains('spot-hot')) return;
+  if (status === 'new_entity') {
+    callEl.style.color = 'var(--accent2)';       // green
+    callEl.style.fontWeight = '700';
+    callEl.title = '★ New DXCC Entity';
+  } else if (status === 'new_band_mode') {
+    callEl.style.color = 'var(--accent)';         // cyan
+    callEl.style.fontWeight = '700';
+    callEl.title = 'New Band/Mode for this entity';
+  } else {
+    // Already worked — default styling (no change)
+    callEl.style.color = '';
+    callEl.style.fontWeight = '';
+    callEl.title = '';
+  }
+}
+
 function renderSpots() {
   // When POTA spots are active, don't overwrite the display with cluster spots.
   // Cluster connections stay live (for self-spotting) — spots are stored in
@@ -3819,6 +4009,7 @@ function renderSpots() {
     const isHot = hotEnabled && hotCalls.includes(s.dxCall.toUpperCase());
     return `
     <div class="spot-row${isHot ? ' spot-hot' : ''}"
+         data-call="${esc(s.dxCall)}" data-band="${esc(s.band)}" data-mode="${esc(s.mode||'')}"
          onclick="fillFromSpot('${esc(s.dxCall)}','${s.freqKhz}','${esc(s.mode||'')}')"
          title="${esc(s.comment||'')} — click to tune radio &amp; fill form">
       <span class="spot-call" style="${isHot ? 'color:var(--red);' : ''}">${esc(s.dxCall)}</span>
@@ -3828,6 +4019,8 @@ function renderSpots() {
       <span class="spot-de">${esc(s.spotter)} ${s.time}</span>
     </div>`;
   }).join('');
+  // Color-code spots by worked DXCC status
+  colorSpotsWorked();
 }
 
 function setSpotSort(key) {
@@ -3930,9 +4123,11 @@ function renderPotaSpots() {
     const parkName = s.name || '';
     const loc = s.locationDesc || '';
     const mode = s.mode || '';
+    const band = freqKhzToBand(parseFloat(s.frequency)) || '';
     const age = s.spotTime ? timeSince(s.spotTime) : '';
     return `
     <div class="spot-row pota-spot"
+         data-call="${esc(s.activator)}" data-band="${esc(band)}" data-mode="${esc(mode)}"
          onclick="fillFromPotaSpot('${esc(s.activator)}','${freqKhz}','${esc(mode)}','${esc(parkRef)}','${esc(parkName)}')"
          title="${esc(parkName)} (${esc(loc)})&#10;${esc(s.comments||'')}&#10;Spotter: ${esc(s.spotter||'')} ${age}">
       <span class="spot-call">${esc(s.activator)}</span>
@@ -3942,6 +4137,8 @@ function renderPotaSpots() {
       <span class="pota-park-name">${esc(parkName)}${loc ? ' · '+esc(loc) : ''}</span>
     </div>`;
   }).join('');
+  // Color-code spots by worked DXCC status
+  colorSpotsWorked();
 }
 
 function timeSince(isoStr) {
@@ -4687,6 +4884,22 @@ async function pollDigitalEvents() {
 
 // Start polling for digital app events every 3 seconds
 setInterval(pollDigitalEvents, 3000);
+
+// ── ADIF Monitor event polling ───────────────────────────────────────────────
+async function pollAdifMonitorEvents() {
+  try {
+    const r = await fetch('/api/adif_monitor_events');
+    if (!r.ok) return;
+    const events = await r.json();
+    if (events.length > 0) {
+      events.forEach(ev => {
+        toast(`📥 ADIF Import (${esc(ev.source)}): ${esc(ev.callsign)} ${esc(ev.mode)} ${esc(ev.freq)} MHz`, 'success', 6000);
+      });
+      loadLog(); // refresh log panel
+    }
+  } catch(e) {}
+}
+setInterval(pollAdifMonitorEvents, 5000);
 
 function resetDockLayout() {
   const s = loadSettings();
