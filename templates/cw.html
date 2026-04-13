@@ -362,8 +362,14 @@
         <div class="rx-wf-snap">
           <canvas id="wf-canvas" height="72"
             title="Waterfall — shows ±400 Hz around the set tone. Click to tune (Snap finds nearest peak; Exact tunes where you click). Red cursor = AFC-locked frequency."></canvas>
-          <button class="btn-sm" id="wf-snap-btn" onclick="wfToggleSnap()"
-            title="Click-to-tune mode&#10;Snap: locks to the strongest peak within ±60 Hz of your click&#10;Exact: tunes to precisely where you click">⌖ Snap</button>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;">
+            <span id="wf-snap-label" style="font-family:var(--mono);font-size:8px;color:var(--accent);letter-spacing:1px;font-weight:700;">SNAP</span>
+            <label class="cw-toggle" title="Click-to-tune mode&#10;Snap (ON): locks to the strongest peak within ±60 Hz of your click&#10;Exact (OFF): tunes to precisely where you click">
+              <input type="checkbox" id="wf-snap-chk" onchange="wfToggleSnap()" checked>
+              <span class="cw-slider"></span>
+            </label>
+            <span style="font-family:var(--mono);font-size:7px;color:var(--muted);letter-spacing:.5px;">EXACT</span>
+          </div>
         </div><!-- /.rx-wf-snap -->
 
       </div><!-- /.rx-split-row -->
@@ -1318,19 +1324,20 @@ function _wfHandleClick(evt){
 }
 
 function wfToggleSnap(){
-  _wfSnap=!_wfSnap;
+  const chk = document.getElementById('wf-snap-chk');
+  _wfSnap = chk ? chk.checked : !_wfSnap;
   cfg.wfSnapToPeak=_wfSnap; saveSettings();
   _wfUpdateSnapBtn();
 }
 
 function _wfUpdateSnapBtn(){
-  const btn=document.getElementById('wf-snap-btn');
-  if(!btn) return;
-  btn.textContent=_wfSnap?'⌖ Snap':'⌖ Exact';
-  btn.classList.toggle('active',_wfSnap);
-  btn.title=_wfSnap
-    ?'Click-to-tune: Snap — locks to the strongest peak within ±60 Hz of your click'
-    :'Click-to-tune: Exact — tunes to precisely where you click on the waterfall';
+  const chk = document.getElementById('wf-snap-chk');
+  if (chk) chk.checked = _wfSnap;
+  const lbl = document.getElementById('wf-snap-label');
+  if (lbl) {
+    lbl.textContent = _wfSnap ? 'SNAP' : 'EXACT';
+    lbl.style.color = _wfSnap ? 'var(--accent)' : 'var(--accent2)';
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -218,6 +218,12 @@
   .spot-de{font-family:var(--mono);font-size:10px;color:#8ab0c4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .spot-empty{text-align:center;padding:30px 10px;font-family:var(--mono);font-size:11px;color:var(--muted);}
   #cluster-band-label{font-family:var(--mono);font-size:11px;color:var(--accent);margin-left:auto;}
+  /* POTA spots mode */
+  #pota-spots-btn.active{border-color:var(--accent2);color:var(--accent2);background:rgba(57,255,20,.08);}
+  .spot-head.pota-mode{grid-template-columns:76px 38px 68px 60px 1fr;}
+  .spot-row.pota-spot{grid-template-columns:76px 38px 68px 60px 1fr;}
+  .pota-park{font-family:var(--mono);font-size:10px;color:var(--accent2);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pota-park-name{font-size:9px;color:#8fafc0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
   /* UPDATE OVERLAY */
   #update-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:2000;
@@ -511,7 +517,7 @@
             <input type="text" id="freq_mhz" placeholder="14.074" inputmode="decimal" autocomplete="off" spellcheck="false">
           </div>
           <div class="field">
-            <label>Contest / Event</label>
+            <label>Contest / Event / Park</label>
             <input type="text" id="contest_name" placeholder="Optional">
           </div>
         </div>
@@ -651,7 +657,7 @@
             <tr>
               <th>Callsign</th><th>Name</th><th>QTH</th><th>Date</th>
               <th>Time UTC</th><th>Band</th><th>Mode</th><th>Freq MHz</th>
-              <th>RST S/R</th><th>Remarks</th><th>Contest/Event</th><th></th>
+              <th>RST S/R</th><th>Remarks</th><th>Contest/Event/Park</th><th></th>
             </tr>
           </thead>
           <tbody id="log-tbody">
@@ -677,8 +683,11 @@
     <div class="dock-panel-hdr" draggable="true"
          ondragstart="panelDragStart(event,'cluster')" ondragend="panelDragEnd()">
       <span class="dock-grip" title="Drag to reposition">⠿</span>
-      <h2>📡 DX Cluster</h2>
+      <h2 id="cluster-title">📡 DX Cluster</h2>
       <span id="cluster-band-label" style="font-family:var(--mono);font-size:11px;color:var(--accent);">—</span>
+      <button id="pota-spots-btn" onclick="togglePotaSpots()"
+              title="Toggle POTA Spots — shows live Parks on the Air activator spots from pota.app"
+              style="margin-left:6px;font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 8px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;letter-spacing:1px;transition:all .15s;">🏕 POTA</button>
       <select id="spot-timeout" onchange="updateSpotTimeout()" title="Spot age limit" style="background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--accent);font-family:var(--mono);font-size:10px;padding:2px 5px;margin-left:auto;outline:none;cursor:pointer;">
         <option value="5">5 min</option>
         <option value="10" selected>10 min</option>
@@ -1521,6 +1530,14 @@
         </label>
       </div>
       <div id="backup-status" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;min-height:14px;line-height:1.4;"></div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+        <span style="font-family:var(--mono);font-size:9px;color:var(--red);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:6px;">⚠ Danger Zone</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button onclick="deleteDatabase('general')" style="font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:4px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;transition:all .15s;font-weight:600;" onmouseover="this.style.background='rgba(255,68,68,.15)'" onmouseout="this.style.background='transparent'">Delete General DB</button>
+          <button onclick="deleteDatabase('pota')" style="font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:4px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;transition:all .15s;font-weight:600;" onmouseover="this.style.background='rgba(255,68,68,.15)'" onmouseout="this.style.background='transparent'">Delete POTA DB</button>
+          <span style="font-family:var(--mono);font-size:9px;color:#8fafc0;">A safety backup is always created before deletion</span>
+        </div>
+      </div>
     </div>
 
     <!-- Server Settings & Software Update -->
@@ -2863,6 +2880,37 @@ async function importSettings(input) {
   input.value = '';
 }
 
+async function deleteDatabase(target) {
+  const label = target === 'pota' ? 'POTA' : 'General';
+  if (!confirm(`⚠ DELETE the ${label} database?\n\nAll QSOs in the ${label} log will be permanently removed.\nA safety backup will be saved to the backups folder.\n\nAre you sure?`)) return;
+  if (!confirm(`FINAL CONFIRMATION — This cannot be undone.\n\nDelete ALL ${label} QSO records?`)) return;
+  const status = document.getElementById('backup-status');
+  status.textContent = `Deleting ${label} database…`;
+  status.style.color = 'var(--warn)';
+  try {
+    const resp = await fetch('/api/delete_db', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({target: target})
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      status.textContent = data.msg;
+      status.style.color = 'var(--accent)';
+      toast(`${label} database deleted — backup: ${data.backup}`, 'success', 6000);
+      loadLog(0);  // refresh the QSO log display
+    } else {
+      status.textContent = 'Error: ' + data.error;
+      status.style.color = '#ff4444';
+      toast('Delete failed: ' + data.error, 'error');
+    }
+  } catch(e) {
+    status.textContent = 'Delete failed: ' + e.message;
+    status.style.color = '#ff4444';
+    toast('Delete failed', 'error');
+  }
+}
+
 // ─── MODALS ──────────────────────────────────────────────────────────────────
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
@@ -3806,6 +3854,108 @@ function khzToMhz(khzStr) {
     ? digits.slice(ins)
     : digits.slice(ins).replace(/0+$/, '');
   return fracMhz ? digits.slice(0, ins) + '.' + fracMhz : digits.slice(0, ins);
+}
+
+// ── POTA Spots ──────────────────────────────────────────────────────────────
+let _potaSpotsActive = false;
+let _potaSpots = [];
+let _potaPollTimer = null;
+
+function togglePotaSpots() {
+  _potaSpotsActive = !_potaSpotsActive;
+  const btn = document.getElementById('pota-spots-btn');
+  const title = document.getElementById('cluster-title');
+  const head = document.querySelector('.spot-head');
+  btn.classList.toggle('active', _potaSpotsActive);
+  title.textContent = _potaSpotsActive ? '🏕 POTA Spots' : '📡 DX Cluster';
+  if (_potaSpotsActive) {
+    fetchPotaSpots();
+    _potaPollTimer = setInterval(fetchPotaSpots, 60000);
+    // Switch header to POTA layout
+    if (head) {
+      head.classList.add('pota-mode');
+      head.innerHTML = '<span>Activator</span><span>Mode</span><span>Freq kHz</span><span>Park</span><span>Park Name / Location</span>';
+    }
+  } else {
+    if (_potaPollTimer) { clearInterval(_potaPollTimer); _potaPollTimer = null; }
+    // Restore normal cluster header
+    if (head) {
+      head.classList.remove('pota-mode');
+      head.innerHTML = '<span class="spot-sort-hdr" onclick="setSpotSort(\'call\')">DX Call<span class="sort-arrow" id="sa-call"></span></span>' +
+        '<span class="spot-sort-hdr" onclick="setSpotSort(\'mode\')">Mode<span class="sort-arrow" id="sa-mode"></span></span>' +
+        '<span class="spot-sort-hdr" onclick="setSpotSort(\'freq\')">Freq kHz<span class="sort-arrow" id="sa-freq">▲</span></span>' +
+        '<span>Band</span><span>Spotter</span>';
+    }
+    renderSpots();  // show normal DX spots again
+  }
+}
+
+async function fetchPotaSpots() {
+  try {
+    const resp = await fetch('/api/pota_spots');
+    if (!resp.ok) return;
+    _potaSpots = await resp.json();
+    if (_potaSpotsActive) renderPotaSpots();
+  } catch(e) {}
+}
+
+function renderPotaSpots() {
+  const list = document.getElementById('spot-list');
+  if (!_potaSpots.length) {
+    list.innerHTML = '<div class="spot-empty">No active POTA spots</div>';
+    return;
+  }
+  // Apply band filter if set
+  const band = currentClusterBand;
+  let spots = _potaSpots;
+  if (band) {
+    spots = spots.filter(s => {
+      const f = parseFloat(s.frequency);
+      return freqKhzToBand(f) === band;
+    });
+  }
+  list.innerHTML = spots.map(s => {
+    const freqKhz = parseFloat(s.frequency).toFixed(1);
+    const parkRef = s.reference || '';
+    const parkName = s.name || '';
+    const loc = s.locationDesc || '';
+    const mode = s.mode || '';
+    const age = s.spotTime ? timeSince(s.spotTime) : '';
+    return `
+    <div class="spot-row pota-spot"
+         onclick="fillFromPotaSpot('${esc(s.activator)}','${freqKhz}','${esc(mode)}','${esc(parkRef)}','${esc(parkName)}')"
+         title="${esc(parkName)} (${esc(loc)})&#10;${esc(s.comments||'')}&#10;Spotter: ${esc(s.spotter||'')} ${age}">
+      <span class="spot-call">${esc(s.activator)}</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--accent2);">${esc(mode)}</span>
+      <span class="spot-freq">${freqKhz}</span>
+      <span class="pota-park">${esc(parkRef)}</span>
+      <span class="pota-park-name">${esc(parkName)}${loc ? ' · '+esc(loc) : ''}</span>
+    </div>`;
+  }).join('');
+}
+
+function timeSince(isoStr) {
+  const d = new Date(isoStr + 'Z');
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return mins + 'm ago';
+  return Math.floor(mins/60) + 'h ago';
+}
+
+async function fillFromPotaSpot(callsign, freqKhz, mode, parkRef, parkName) {
+  // Fill the QSO form
+  fillFromSpot(callsign, freqKhz, mode);
+  // Auto-fill park reference based on mode
+  if (potaMode === 'pota') {
+    // In POTA mode → fill the P2P field (their park)
+    const p2pEl = document.getElementById('pota_p2p');
+    if (p2pEl) { p2pEl.value = parkRef; highlight(p2pEl); }
+  } else {
+    // In General mode → fill Contest/Event/Park field
+    const contestEl = document.getElementById('contest_name');
+    if (contestEl) { contestEl.value = parkRef; highlight(contestEl); }
+  }
+  toast(`🏕 ${callsign} @ ${parkRef} — ${parkName}`, 'success', 5000);
 }
 
 // ── Click a spot: fill form AND tune radio via TCI ───────────────────────────

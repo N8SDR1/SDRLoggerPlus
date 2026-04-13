@@ -150,7 +150,7 @@
 <div class="container">
 
   <h1>SDR<span style="color:var(--accent2);">Logger+</span> Quick Start Guide</h1>
-  <p class="subtitle">v{{ version }} &nbsp;·&nbsp; Ham Radio Logging · DX Cluster · RBN Band-Opening Alerts · TCI / Thetis SDR Integration · Solar Conditions · Rotator Control · CW Keyer / Decoder</p>
+  <p class="subtitle">v{{ version }} &nbsp;·&nbsp; Ham Radio Logging · DX Cluster · POTA Spots · RBN Band-Opening Alerts · TCI / Thetis SDR Integration · Solar Conditions · Rotator Control · CW Keyer / Decoder</p>
 
   <!-- OVERVIEW -->
   <h2>Overview</h2>
@@ -474,7 +474,7 @@
         <tr><td><code>Band / Mode</code></td><td>Auto-set from TCI or flrig frequency and mode. Changing the band or mode manually pushes the change to the radio (bidirectional). Mode also sets default RST values (59 / 559 / −10 dB).</td></tr>
         <tr><td><code>Frequency</code></td><td>Auto-filled from TCI or flrig in MHz. WARC bands (60m, 30m, 17m, 12m) are fully supported.</td></tr>
         <tr><td><code>RST Sent / Rcvd</code></td><td>Defaults to 59 (SSB), 559 (CW), or −10 dB (digital) based on the current mode. You can type over these values at any time — once edited, they are preserved for the rest of that QSO and will not revert. RST only resets automatically when the mode actually changes or the form is cleared for a new QSO.</td></tr>
-        <tr><td><code>Contest / Event</code></td><td>Optional label stored with the QSO.</td></tr>
+        <tr><td><code>Contest / Event / Park</code></td><td>Optional label stored with the QSO. POTA park references from clicked spots are auto-filled here in General mode.</td></tr>
         <tr><td><code>Remarks</code></td><td>Free-text notes, antenna info, exchange data, etc.</td></tr>
       </tbody>
     </table>
@@ -516,6 +516,15 @@
       <li><strong>CQ Zone Filter</strong> — comma-separated zone numbers (e.g. <code>4,5,14</code>). Leave blank for all zones.</li>
       <li><strong>Continent Filter</strong> — comma-separated continent codes (e.g. <code>NA,EU,AS</code>). Uses prefix-based continent lookup. Supported codes: <code>NA</code> North America, <code>SA</code> South America, <code>EU</code> Europe, <code>AF</code> Africa, <code>AS</code> Asia, <code>OC</code> Oceania. Leave blank for all.</li>
     </ul>
+    <h3>🏕 POTA Spots</h3>
+    <p>Click the <strong>🏕 POTA</strong> button in the DX Cluster panel header to switch to live <strong>Parks on the Air</strong> activator spots. Spots are fetched from the <a href="https://pota.app" target="_blank" style="color:var(--accent)">pota.app</a> API and refreshed every 60 seconds. The spot list shows activator callsign, mode, frequency, park reference, park name, and location.</p>
+    <p><strong>Clicking a POTA spot</strong> fills the QSO entry form and tunes your radio, just like a normal DX cluster spot. The park reference is automatically placed in the correct field:</p>
+    <ul>
+      <li><strong>General mode</strong> — park reference goes into the <em>Contest / Event / Park</em> field</li>
+      <li><strong>POTA mode</strong> — park reference goes into the <em>P2P Park Ref</em> field (for park-to-park contacts)</li>
+    </ul>
+    <p>Click <strong>🏕 POTA</strong> again to return to the normal DX cluster view. Band filtering still applies — if you are on 20m, only POTA spots on 20m are shown.</p>
+
     <h3>Hot Stations (Watchlist Highlight &amp; Announcement)</h3>
     <p>Enable <strong>Highlight Hot Stations</strong> in Settings → DX Clusters and enter a comma-separated watchlist of callsigns (e.g. <code>DX0DX,VK9XX,ZL9HR</code>). When a watched callsign appears in the spot list, it is highlighted with a <strong style="color:#ff4444">red callsign</strong> and a red left border — making it easy to spot rare DX at a glance. Toggle the checkbox to turn highlighting on or off without clearing the watchlist.</p>
     <p>Enable <strong>Announce via speech</strong> to also hear a voice alert when a watchlist callsign is spotted — for example: <em>"Hot spot. D X zero D X. 20m, USB."</em> Announcements use your system's built-in text-to-speech and repeat at most once every 15 minutes per callsign, so a heavily-worked DXpedition won't trigger continuous alerts.</p>
@@ -906,6 +915,10 @@
     <h3>Database Restore</h3>
     <p>Click <strong>Restore DB</strong> and pick a previously backed-up <code>.db</code> file. Before overwriting anything, SDRLogger+ automatically saves a safety copy of the current database (<code>hamlog_pre_restore_YYYYMMDD_HHMMSS.db</code> or <code>pota_pre_restore_...</code> in POTA mode) to your backup folder (or alongside the active database if no folder is configured). A <strong>✅ Restore complete</strong> confirmation appears and the log panel reloads automatically.</p>
     <div class="warn">Restore replaces your entire active QSO database. The automatic safety backup means you can always undo — but verify you are in the correct mode (General vs POTA) before restoring.</div>
+
+    <h3>Delete Database</h3>
+    <p>The <strong>⚠ Danger Zone</strong> at the bottom of Backup &amp; Restore provides separate <strong>Delete General DB</strong> and <strong>Delete POTA DB</strong> buttons. Clicking either requires <em>two confirmation dialogs</em> to prevent accidents. Before deletion, a timestamped safety backup is automatically saved to the <code>backups</code> folder (e.g. <code>general_pre_delete_20260412_143000.db</code>). After deletion, a fresh empty database is created in its place.</p>
+    <div class="warn">This permanently removes all QSO records from the selected database. The safety backup can be restored using <strong>Restore DB</strong> if needed.</div>
 
     <h3>Settings Export &amp; Import</h3>
     <p>Your SDRLogger+ configuration (callsign, QRZ credentials, cluster servers, rotator settings, display preferences, etc.) is stored in your browser's local storage. To back it up or move it to a different browser or machine:</p>
