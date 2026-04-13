@@ -1,20 +1,34 @@
 TCILogger — Change Log
 ======================
 
-v0.53 Beta  (2026-04-12)
-------------------------
+v1.01  (2026-04-13)   — First full release!
+------------------------------------------
+- Milestone: SDRLogger+ exits beta — thank you to all beta testers!
 - New: POTA Spots — 🏕 POTA toggle in the DX Cluster panel header fetches
   live activator spots from pota.app API (60-second refresh). Shows activator
-  callsign, mode, frequency, park reference, park name, and location. Clicking
-  a POTA spot fills the QSO form and tunes the radio; in General mode the park
-  reference goes to Contest/Event/Park, in POTA mode it goes to the P2P field.
+  callsign, mode, frequency, park reference, park name, and location.
+- New: 📡 DX button appears when in POTA Spots mode for easy return to
+  standard DX Cluster view.
+- New: Click-to-fill from POTA spots — fills callsign, frequency, mode, and
+  park reference. Contest/Event/Park always filled; P2P field only fills when
+  you are activating a park yourself (true Park-to-Park contact).
 - New: Delete Database — Danger Zone in Backup & Restore settings lets you
   wipe the General or POTA database for a fresh start. A timestamped safety
   backup is always created before deletion.
-- Change: "Contest / Event" field and column renamed to "Contest / Event / Park"
-  to reflect park reference usage for POTA contacts in general mode.
-- Change: CW Decoder — Snap/Exact button replaced with a toggle switch for
-  clearer visual state indication.
+- Change: "Contest / Event" field and column renamed to "Contest / Event / Park".
+- Change: CW Decoder — Snap/Exact toggle switch with always-lit cyan slider,
+  green active label, larger text for clarity.
+- Change: CW Send input auto-clears after successful send (typed text and macros).
+- Change: Bumped text size for macro hint bar, min/max WPM clamp, NR status label.
+- Fix: Column resize between QSO Log and Cluster panels — dragging no longer
+  snaps to the left; col-2 resizes properly while col-1 stays flexible.
+- Fix: POTA spots no longer revert to cluster display when cluster messages arrive.
+- Change: Default column widths slightly wider for left and right panels.
+- Updated credits — Murray VK2LAT added.
+
+v0.53 Beta  (2026-04-12)
+------------------------
+- (Rolled into v1.01 release)
 
 v0.52 Beta  (2026-04-12)
 ------------------------

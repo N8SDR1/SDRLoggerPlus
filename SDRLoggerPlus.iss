@@ -16,7 +16,7 @@
 ; ============================================================
 
 #define AppName      "SDRLogger+"
-#define AppVersion   "0.53"
+#define AppVersion   "1.01"
 #define AppPublisher "Rick N8SDR"
 #define AppURL       "https://www.qrz.com/db/N8SDR"
 #define AppExeName   "SDRLoggerPlus.exe"
@@ -112,7 +112,7 @@ Type: dirifempty; Name: "{app}"
 procedure InitializeWizard();
 begin
   WizardForm.WelcomeLabel2.Caption :=
-    'This will install SDRLogger+ ' + '{#AppVersion}' + ' Beta on your computer.' + #13#10 + #13#10 +
+    'This will install SDRLogger+ v' + '{#AppVersion}' + ' on your computer.' + #13#10 + #13#10 +
     'SDRLogger+ is a Ham Radio contact logger designed for use with' + #13#10 +
     'Expert Electronics Thetis SDR, EESDR, or any HamLib-compatible' + #13#10 +
     'transceiver. Includes CW decoder, logbook uploads, DX cluster,' + #13#10 +
