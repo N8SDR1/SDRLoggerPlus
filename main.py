@@ -183,7 +183,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "0.52 Beta"
+VERSION  = "0.53 Beta"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -3992,6 +3992,67 @@ def rbn_ws(ws):
     except Exception:
         pass
     print("RBN: session ended")
+
+
+# ─── POTA Spots API ───────────────────────────────────────────────────────────
+_pota_spots_cache = {"data": [], "ts": 0}
+
+@app.route("/api/pota_spots")
+def pota_spots():
+    """Proxy POTA activator spots with 60-second cache."""
+    import time
+    now = time.time()
+    if now - _pota_spots_cache["ts"] < 60 and _pota_spots_cache["data"]:
+        return jsonify(_pota_spots_cache["data"])
+    try:
+        resp = requests.get("https://api.pota.app/spot/activator", timeout=10)
+        if resp.ok:
+            spots = resp.json()
+            _pota_spots_cache["data"] = spots
+            _pota_spots_cache["ts"] = now
+            return jsonify(spots)
+    except Exception as e:
+        _log(f"POTA spots fetch failed: {e}")
+    return jsonify(_pota_spots_cache["data"])  # return stale cache on error
+
+
+# ─── Delete Database ──────────────────────────────────────────────────────────
+@app.route("/api/delete_db", methods=["POST"])
+def delete_db():
+    """Delete (wipe) the active database. Creates a safety backup first."""
+    target = request.json.get("target", "active")  # "general" | "pota" | "active"
+    if target == "pota":
+        db_path = POTA_DATABASE
+        label = "pota"
+    elif target == "general":
+        db_path = DATABASE
+        label = "general"
+    else:
+        db_path = POTA_DATABASE if ACTIVE_MODE == "pota" else DATABASE
+        label = ACTIVE_MODE
+
+    if not os.path.exists(db_path):
+        return jsonify({"ok": False, "error": f"Database {label} not found"}), 404
+
+    # Safety backup before deletion
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safety_dir = os.path.join(os.path.dirname(db_path) or ".", "backups")
+    os.makedirs(safety_dir, exist_ok=True)
+    safety_name = f"{label}_pre_delete_{ts}.db"
+    safety_path = os.path.join(safety_dir, safety_name)
+    try:
+        shutil.copy2(db_path, safety_path)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Safety backup failed: {e}"}), 500
+
+    # Delete and reinitialise
+    try:
+        os.remove(db_path)
+        _init_one_db(db_path)
+        return jsonify({"ok": True, "backup": safety_name,
+                        "msg": f"{label} database wiped. Safety backup saved as {safety_name}."})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Delete failed: {e}"}), 500
 
 
 # ─── Update Check ─────────────────────────────────────────────────────────────

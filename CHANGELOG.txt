@@ -1,6 +1,21 @@
 TCILogger — Change Log
 ======================
 
+v0.53 Beta  (2026-04-12)
+------------------------
+- New: POTA Spots — 🏕 POTA toggle in the DX Cluster panel header fetches
+  live activator spots from pota.app API (60-second refresh). Shows activator
+  callsign, mode, frequency, park reference, park name, and location. Clicking
+  a POTA spot fills the QSO form and tunes the radio; in General mode the park
+  reference goes to Contest/Event/Park, in POTA mode it goes to the P2P field.
+- New: Delete Database — Danger Zone in Backup & Restore settings lets you
+  wipe the General or POTA database for a fresh start. A timestamped safety
+  backup is always created before deletion.
+- Change: "Contest / Event" field and column renamed to "Contest / Event / Park"
+  to reflect park reference usage for POTA contacts in general mode.
+- Change: CW Decoder — Snap/Exact button replaced with a toggle switch for
+  clearer visual state indication.
+
 v0.52 Beta  (2026-04-12)
 ------------------------
 - Fix: Update notification now detects pre-releases — the /releases/latest
