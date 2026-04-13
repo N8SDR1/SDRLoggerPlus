@@ -4,7 +4,7 @@
   # SDR**Logger+**
   ### Ham Radio SDR Logbook — Built by Hams, for Hams
 
-  ![Version](https://img.shields.io/badge/version-1.01-00e5ff?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-1.02-00e5ff?style=flat-square)
   ![Platform](https://img.shields.io/badge/platform-Windows-39ff14?style=flat-square)
   ![License](https://img.shields.io/badge/license-MIT-00e5ff?style=flat-square)
   ![Status](https://img.shields.io/badge/status-Release-39ff14?style=flat-square)
@@ -42,6 +42,8 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 - 🟢 QRZ · HamQTH Callsign Lookup
 - 🟢 Auto-Upload: QRZ · LoTW · Club Log · eQSL
 - 🟢 Auto-Log from WSJT-X · JTDX · MSHV · VarAC
+- 🟢 DXCC Entity Lookup (cty.dat) + Worked-Before Indicators
+- 🟢 ADIF File Monitor — watch VarAC/MSHV logs for new QSOs
 - 🟢 POTA & P2P Activation Mode (separate databases)
 - 🟢 Live POTA Spots from pota.app (click-to-fill + tune)
 - 🟢 ADIF Export & Searchable Log
@@ -57,7 +59,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ## 📥 Download
 
-> **[⬇ Download SDRLoggerPlus-Setup-1.01.exe](https://github.com/N8SDR1/SDRLoggerPlus/releases/latest)**
+> **[⬇ Download SDRLoggerPlus-Setup-1.02.exe](https://github.com/N8SDR1/SDRLoggerPlus/releases/latest)**
 >
 > Windows · Free · No subscription · No cloud
 
@@ -70,7 +72,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ## 🚀 Quick Start
 
-1. Download and run `SDRLoggerPlus-Setup-1.01.exe`
+1. Download and run `SDRLoggerPlus-Setup-1.02.exe`
 2. Accept defaults — installs to `C:\SDRLoggerPlus`
 3. SDRLogger+ launches automatically and opens your browser to `http://127.0.0.1:5000`
 4. Go to **Settings** and enter your callsign, QRZ credentials, and TCI/HamLib connection details
@@ -102,6 +104,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 | **Club Log** | Real-time QSO upload |
 | **WSJT-X / JTDX / MSHV** | Digital mode auto-logging |
 | **VarAC / Log4OM** | Digital mode auto-logging |
+| **ADIF File Monitor** | Watch external .adi files (VarAC, MSHV, etc.) |
 | **DX Cluster** | Live Telnet spotting |
 | **PstRotator / HamLib** | Rotator control |
 | **Expert Electronics TCI** | Full SDR integration |
@@ -149,6 +152,6 @@ With development assistance by **Claude AI** (Anthropic)
 ---
 
 <div align="center">
-  <sub>SDRLogger+ v1.01 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
+  <sub>SDRLogger+ v1.02 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
   <sub>73 de N8SDR — good DX and happy logging!</sub>
 </div>

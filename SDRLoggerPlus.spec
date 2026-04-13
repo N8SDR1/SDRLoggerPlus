@@ -5,7 +5,7 @@ a = Analysis(
     ['launcher.py'],
     pathex=[],
     binaries=[],
-    datas=[('templates', 'templates'), ('static', 'static'), ('clublog_key.py', '.'), ('main.py', '.')],
+    datas=[('templates', 'templates'), ('static', 'static'), ('clublog_key.py', '.'), ('main.py', '.'), ('cty.dat', '.')],
     hiddenimports=['engineio.async_drivers.threading', 'serial.tools.list_ports', 'pystray', 'PIL', 'PIL._tkinter_finder'],
     hookspath=[],
     hooksconfig={},

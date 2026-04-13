@@ -16,7 +16,7 @@
 ; ============================================================
 
 #define AppName      "SDRLogger+"
-#define AppVersion   "1.01"
+#define AppVersion   "1.02"
 #define AppPublisher "Rick N8SDR"
 #define AppURL       "https://www.qrz.com/db/N8SDR"
 #define AppExeName   "SDRLoggerPlus.exe"

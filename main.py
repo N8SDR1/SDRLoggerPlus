@@ -183,7 +183,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.01"
+VERSION  = "1.02"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -1939,6 +1939,9 @@ def save_qso():
     conn.commit()
     conn.close()
 
+    # Update worked DXCC cache
+    _worked_cache_add(callsign, data.get("band", ""), data.get("mode", ""))
+
     # Optional telnet spot
     if TELNET_ENABLED:
         threading.Thread(target=send_telnet_spot,
@@ -3343,6 +3346,7 @@ def delete_qso(qso_id):
     conn.execute("DELETE FROM qso_log WHERE id=?", (qso_id,))
     conn.commit()
     conn.close()
+    threading.Thread(target=_rebuild_worked_cache, daemon=True).start()
     return jsonify({"ok": True})
 
 
@@ -3373,6 +3377,7 @@ def update_qso(qso_id):
     ))
     conn.commit()
     conn.close()
+    _worked_cache_add(data.get("callsign",""), data.get("band",""), data.get("mode",""))
     return jsonify({"ok": True})
 
 
@@ -3498,6 +3503,8 @@ def import_adif():
         imported += 1
     conn.commit()
     conn.close()
+    # Rebuild worked DXCC cache after bulk import
+    threading.Thread(target=_rebuild_worked_cache, daemon=True).start()
     return jsonify({"ok": True, "imported": imported, "skipped": skipped, "replaced": replaced})
 
 
@@ -4178,10 +4185,366 @@ def send_telnet_spot(callsign, freq_mhz, mode):
         print(f"Telnet spot failed: {e}")
 
 
+# ─── DXCC Entity Lookup (cty.dat) ─────────────────────────────────────────────
+# Parses the Big CTY file from country-files.com for callsign → DXCC entity mapping.
+_dxcc_prefixes = {}   # prefix → {entity, cq, itu, cont, lat, lon}
+_dxcc_exact    = {}   # exact callsign → entity info (= prefix entries)
+
+def _load_cty_dat():
+    """Parse cty.dat into prefix and exact-match lookup tables."""
+    global _dxcc_prefixes, _dxcc_exact
+    cty_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cty.dat")
+    if not os.path.exists(cty_path):
+        print("DXCC: cty.dat not found — entity lookup disabled")
+        return
+    prefixes = {}
+    exact = {}
+    try:
+        with open(cty_path, "r", errors="replace") as f:
+            lines = f.readlines()
+        i = 0
+        while i < len(lines):
+            line = lines[i].rstrip()
+            if not line or line.startswith(" "):
+                i += 1
+                continue
+            # Entity header line
+            parts = line.split(":")
+            if len(parts) < 8:
+                i += 1
+                continue
+            entity = parts[0].strip()
+            cq_zone = parts[1].strip()
+            itu_zone = parts[2].strip()
+            cont = parts[3].strip()
+            lat = parts[4].strip()
+            lon = parts[5].strip()
+            info = {"entity": entity, "cq": cq_zone, "itu": itu_zone,
+                    "cont": cont, "lat": lat, "lon": lon}
+            # Read prefix lines until semicolon
+            i += 1
+            prefix_text = ""
+            while i < len(lines):
+                pline = lines[i].strip()
+                prefix_text += pline
+                i += 1
+                if pline.endswith(";"):
+                    break
+            # Parse prefixes
+            for token in prefix_text.rstrip(";").split(","):
+                token = token.strip()
+                if not token:
+                    continue
+                # Strip override markers like (xx) [xx] /x
+                clean = re.sub(r'\([^)]*\)|\[[^\]]*\]', '', token).strip()
+                # Remove trailing /x modifiers
+                clean = re.split(r'/', clean)[0] if '/' in clean and not clean.startswith('=') else clean
+                if clean.startswith("="):
+                    # Exact callsign match
+                    exact[clean[1:].upper()] = info
+                else:
+                    prefixes[clean.upper()] = info
+        _dxcc_prefixes = prefixes
+        _dxcc_exact = exact
+        print(f"DXCC: loaded {len(prefixes)} prefixes + {len(exact)} exact calls from cty.dat")
+    except Exception as e:
+        print(f"DXCC: failed to parse cty.dat: {e}")
+
+def dxcc_lookup(callsign):
+    """Look up DXCC entity for a callsign. Returns info dict or None."""
+    call = callsign.upper().strip()
+    if not call:
+        return None
+    # Strip portable suffixes (W1ABC/P, W1ABC/QRP, W1ABC/M)
+    base = call.split("/")[0] if "/" in call else call
+    # Check exact match first
+    if base in _dxcc_exact:
+        return _dxcc_exact[base]
+    if call in _dxcc_exact:
+        return _dxcc_exact[call]
+    # Longest prefix match
+    best = None
+    best_len = 0
+    for pfx, info in _dxcc_prefixes.items():
+        if base.startswith(pfx) and len(pfx) > best_len:
+            best = info
+            best_len = len(pfx)
+    return best
+
+@app.route("/api/dxcc_lookup")
+def api_dxcc_lookup():
+    call = request.args.get("call", "").strip().upper()
+    if not call:
+        return jsonify({"ok": False, "error": "No callsign"})
+    info = dxcc_lookup(call)
+    if info:
+        return jsonify({"ok": True, **info})
+    return jsonify({"ok": False, "error": "Not found"})
+
+
+# ─── Worked DXCC Cache ────────────────────────────────────────────────────────
+# In-memory cache: _worked_entities = {entity_name: set of (band_upper, mode_upper)}
+# Rebuilt from DB on startup; updated incrementally when QSOs are saved/imported.
+_worked_entities = {}        # {entity_str: set((band,mode), ...)}
+_worked_cache_lock = threading.Lock()
+
+def _rebuild_worked_cache():
+    """Scan qso_log and build a dict of worked DXCC entities → set of (band, mode)."""
+    cache = {}
+    try:
+        conn = get_db()
+        rows = conn.execute("SELECT callsign, band, mode FROM qso_log").fetchall()
+        conn.close()
+    except Exception:
+        return
+    for row in rows:
+        info = dxcc_lookup(row["callsign"])
+        if info:
+            ent = info["entity"]
+            bm = (str(row["band"]).strip().upper(), str(row["mode"]).strip().upper())
+            cache.setdefault(ent, set()).add(bm)
+    with _worked_cache_lock:
+        global _worked_entities
+        _worked_entities = cache
+
+def _worked_cache_add(callsign, band, mode):
+    """Incrementally add a QSO to the worked cache."""
+    info = dxcc_lookup(callsign)
+    if info:
+        bm = (str(band).strip().upper(), str(mode).strip().upper())
+        with _worked_cache_lock:
+            _worked_entities.setdefault(info["entity"], set()).add(bm)
+
+
+# ─── Worked Before ────────────────────────────────────────────────────────────
+@app.route("/api/worked_before")
+def api_worked_before():
+    """Check if a DXCC entity has been worked before, optionally on a specific band/mode."""
+    call = request.args.get("call", "").strip().upper()
+    band = request.args.get("band", "").strip().upper()
+    mode = request.args.get("mode", "").strip().upper()
+    if not call:
+        return jsonify({"ok": False})
+    info = dxcc_lookup(call)
+    if not info:
+        return jsonify({"ok": True, "entity": None, "worked_entity": False, "worked_band_mode": False})
+    entity = info["entity"]
+    with _worked_cache_lock:
+        band_modes = _worked_entities.get(entity, set())
+        worked_entity = len(band_modes) > 0
+        worked_band_mode = (band, mode) in band_modes if (band and mode) else False
+    return jsonify({
+        "ok": True, "entity": entity, "cont": info.get("cont", ""),
+        "cq": info.get("cq", ""), "itu": info.get("itu", ""),
+        "worked_entity": worked_entity,
+        "worked_band_mode": worked_band_mode
+    })
+
+
+@app.route("/api/worked_before_batch", methods=["POST"])
+def api_worked_before_batch():
+    """Batch check worked-before for multiple callsigns (used by spot coloring).
+    Input: {"spots": [{"call":"W1ABC","band":"20M","mode":"SSB"}, ...]}
+    Output: {"results": {"W1ABC": {"entity":"United States","status":"new_entity"|"new_band_mode"|"worked"}, ...}}
+    """
+    data = request.json or {}
+    spots = data.get("spots", [])
+    results = {}
+    with _worked_cache_lock:
+        for s in spots:
+            call = s.get("call", "").strip().upper()
+            if not call or call in results:
+                continue
+            band = s.get("band", "").strip().upper()
+            mode = s.get("mode", "").strip().upper()
+            info = dxcc_lookup(call)
+            if not info:
+                results[call] = {"entity": None, "status": "unknown"}
+                continue
+            entity = info["entity"]
+            band_modes = _worked_entities.get(entity, set())
+            if not band_modes:
+                results[call] = {"entity": entity, "cont": info.get("cont", ""), "status": "new_entity"}
+            elif band and mode and (band, mode) not in band_modes:
+                results[call] = {"entity": entity, "cont": info.get("cont", ""), "status": "new_band_mode"}
+            else:
+                results[call] = {"entity": entity, "cont": info.get("cont", ""), "status": "worked"}
+    return jsonify({"results": results})
+
+
+# ─── ADIF File Monitor ────────────────────────────────────────────────────────
+# Watches up to 2 external ADIF files (e.g. VarAC, MSHV) for new QSOs.
+# Uses byte-offset tracking — only reads bytes appended since last check.
+# State persisted in adif_monitor_state.json alongside the database.
+
+ADIF_MONITOR_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adif_monitor_state.json")
+_adif_monitor_events = collections.deque(maxlen=50)  # recent imports for UI toasts
+
+def _load_adif_monitor_state():
+    try:
+        with open(ADIF_MONITOR_STATE_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_adif_monitor_state(state):
+    try:
+        with open(ADIF_MONITOR_STATE_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception as e:
+        print(f"ADIF Monitor: failed to save state: {e}")
+
+def _parse_adif_records(text):
+    """Parse ADIF text into a list of dicts. Handles standard ADIF tag format."""
+    records = []
+    # Split on <eor> (end of record)
+    parts = re.split(r'<eor>', text, flags=re.IGNORECASE)
+    tag_re = re.compile(r'<(\w+):(\d+)(?::[^>]*)?>([^<]*)', re.IGNORECASE)
+    for part in parts:
+        fields = {}
+        for m in tag_re.finditer(part):
+            name = m.group(1).upper()
+            length = int(m.group(2))
+            value = m.group(3)[:length]
+            fields[name] = value.strip()
+        if fields.get("CALL"):
+            records.append(fields)
+    return records
+
+def _adif_to_qso(rec):
+    """Map ADIF field names to our database columns."""
+    call = rec.get("CALL", "").upper()
+    if not call:
+        return None
+    # Frequency: ADIF uses MHz
+    freq = ""
+    if rec.get("FREQ"):
+        try: freq = str(float(rec["FREQ"]))
+        except: freq = rec["FREQ"]
+    # Date: ADIF uses YYYYMMDD
+    dt = rec.get("QSO_DATE", "")
+    if len(dt) == 8:
+        dt = f"{dt[:4]}-{dt[4:6]}-{dt[6:8]}"
+    elif not dt:
+        dt = date.today().isoformat()
+    # Time: ADIF uses HHMMSS or HHMM
+    tm = rec.get("TIME_ON", rec.get("TIME_OFF", ""))
+    if len(tm) >= 4:
+        tm = f"{tm[:2]}:{tm[2:4]}:{tm[4:6]}" if len(tm) >= 6 else f"{tm[:2]}:{tm[2:4]}:00"
+    elif not tm:
+        tm = datetime.utcnow().strftime("%H:%M:%S")
+    return {
+        "callsign": call,
+        "name": rec.get("NAME", ""),
+        "qth": rec.get("QTH", rec.get("GRIDSQUARE", "")),
+        "date_worked": dt,
+        "time_worked": tm,
+        "band": rec.get("BAND", ""),
+        "mode": rec.get("MODE", ""),
+        "freq_mhz": freq,
+        "my_rst_sent": rec.get("RST_SENT", "59"),
+        "their_rst_rcvd": rec.get("RST_RCVD", "59"),
+        "remarks": rec.get("COMMENT", rec.get("NOTES", "")),
+        "contest_name": rec.get("CONTEST_ID", ""),
+        "pota_ref": rec.get("MY_POTA_REF", ""),
+        "pota_p2p": rec.get("POTA_REF", ""),
+    }
+
+def _adif_monitor_insert(qso):
+    """Insert a QSO from ADIF monitor into the active database."""
+    try:
+        conn = get_db()
+        conn.execute("""
+            INSERT INTO qso_log
+                (callsign, name, qth, date_worked, time_worked, band, mode,
+                 freq_mhz, my_rst_sent, their_rst_rcvd, remarks, contest_name,
+                 pota_ref, pota_p2p)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            qso["callsign"], qso["name"], qso["qth"],
+            qso["date_worked"], qso["time_worked"],
+            qso["band"], qso["mode"],
+            float(qso["freq_mhz"]) if qso["freq_mhz"] else None,
+            qso["my_rst_sent"], qso["their_rst_rcvd"],
+            qso["remarks"], qso["contest_name"],
+            qso["pota_ref"], qso["pota_p2p"],
+        ))
+        conn.commit()
+        conn.close()
+        # Update worked DXCC cache
+        _worked_cache_add(qso["callsign"], qso["band"], qso["mode"])
+        return True
+    except Exception as e:
+        print(f"ADIF Monitor: insert failed: {e}")
+        return False
+
+def adif_monitor_thread():
+    """Background thread: poll configured ADIF files every 5 seconds."""
+    import time
+    while True:
+        try:
+            s = runtime_settings
+            slots = []
+            for i in [1, 2]:
+                path = s.get(f"adif_mon_path_{i}", "").strip()
+                enabled = s.get(f"adif_mon_enabled_{i}", False)
+                label = s.get(f"adif_mon_label_{i}", f"Slot {i}")
+                if path and enabled:
+                    slots.append((i, path, label))
+            if slots:
+                state = _load_adif_monitor_state()
+                changed = False
+                for idx, filepath, label in slots:
+                    key = filepath.replace("\\", "/")
+                    try:
+                        fsize = os.path.getsize(filepath)
+                    except OSError:
+                        continue
+                    offset = state.get(key, 0)
+                    if fsize < offset:
+                        # File was truncated/rewritten — reset
+                        offset = 0
+                    if fsize <= offset:
+                        continue
+                    try:
+                        with open(filepath, "r", errors="replace") as f:
+                            f.seek(offset)
+                            new_data = f.read()
+                            new_offset = f.tell()
+                    except Exception as e:
+                        print(f"ADIF Monitor [{label}]: read error: {e}")
+                        continue
+                    records = _parse_adif_records(new_data)
+                    for rec in records:
+                        qso = _adif_to_qso(rec)
+                        if qso and _adif_monitor_insert(qso):
+                            evt = {"callsign": qso["callsign"], "mode": qso["mode"],
+                                   "freq": qso["freq_mhz"], "source": label,
+                                   "time": datetime.utcnow().strftime("%H:%M:%S")}
+                            _adif_monitor_events.append(evt)
+                            print(f"ADIF Monitor [{label}]: imported {qso['callsign']} {qso['mode']} {qso['freq_mhz']}")
+                    state[key] = new_offset
+                    changed = True
+                if changed:
+                    _save_adif_monitor_state(state)
+        except Exception as e:
+            print(f"ADIF Monitor error: {e}")
+        time.sleep(5)
+
+@app.route("/api/adif_monitor_events")
+def adif_monitor_events():
+    """Return recent ADIF monitor import events for UI toast notifications."""
+    events = list(_adif_monitor_events)
+    _adif_monitor_events.clear()
+    return jsonify(events)
+
+
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     os.makedirs("templates", exist_ok=True)
     init_db()
+    _load_cty_dat()
+    _rebuild_worked_cache()
     _load_app_settings()
     _load_cw_serial()
     # Start TCI WebSocket client in background thread
@@ -4196,6 +4559,8 @@ if __name__ == "__main__":
     threading.Thread(target=hamlib_poller, daemon=True).start()
     # Start WinKeyer manager (always running; activates when WINKEYER_ENABLED is True)
     threading.Thread(target=winkeyer_manager, daemon=True).start()
+    # Start ADIF file monitor
+    threading.Thread(target=adif_monitor_thread, daemon=True).start()
     print("\n  SDRLogger+ starting...")
     print(f"  TCI    : ws://{TCI_HOST}:{TCI_PORT}")
     print(f"  flrig  : XML-RPC poller ready (enable in Settings)")

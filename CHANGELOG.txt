@@ -1,5 +1,32 @@
-TCILogger — Change Log
-======================
+SDRLogger+ — Change Log
+=======================
+
+v1.02  (2026-04-13)
+------------------------------------------
+- New: DXCC Entity Lookup — callsign-to-country resolution using built-in
+  cty.dat database (country-files.com). Entity name, continent, CQ zone, and
+  ITU zone display below the callsign field on every lookup.
+- New: Worked-Before Indicators — colour-coded badges below the callsign:
+  green "NEW ENTITY" if the DXCC entity has never been worked; cyan
+  "NEW BAND/MODE" if the entity is worked but not on the current band+mode.
+- New: DX Cluster & POTA Spot Colouring — spot callsigns are colour-coded
+  in real time: green = new DXCC entity, cyan = new band/mode for that entity,
+  default = already worked. Hot-list calls stay red. Powered by a server-side
+  worked-DXCC cache with batch lookups for performance.
+- New: ADIF File Monitor — watches up to 2 external .adi files (e.g. VarAC,
+  MSHV) for new QSOs using byte-offset tracking (reads only newly appended
+  bytes, never re-imports). State persisted across restarts. Configurable in
+  Settings → Cluster & Integrations with label + file path per slot.
+- New: Tabbed Settings page — 20+ settings sections reorganised into 5 tabs
+  (Station & Rig, Lookups & Uploads, Cluster & Integrations, POTA & Display,
+  System). Tab state saved in localStorage. No more endless scrolling.
+- New: Tabbed Help guide — 6 organised tabs (Getting Started, Logging & QSO,
+  Cluster & Features, CW Decoder, POTA & Spotting, System). Search works
+  across all tabs. Print shows all content expanded.
+- Fix: P2P field only fills when user is activating a park (true park-to-park).
+  Contest/Event/Park field always receives the park reference.
+- Internal: Worked DXCC cache built at startup from log, updated incrementally
+  on QSO save/edit/import, full rebuild on delete and bulk ADIF import.
 
 v1.01  (2026-04-13)   — First full release!
 ------------------------------------------
