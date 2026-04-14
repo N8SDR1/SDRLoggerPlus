@@ -722,7 +722,9 @@
       <li>Enable a slot and enter a label (e.g. "VarAC") and the full file path to the .adi file.</li>
       <li>Up to <strong>2 slots</strong> can be configured — e.g. one for VarAC and one for MSHV.</li>
     </ol>
-    <div class="tip">When a new QSO is detected, a <strong>📥 ADIF Import</strong> toast notification appears and the QSO log refreshes automatically.</div>
+    <div class="tip">When new QSOs are detected, a <strong>confirmation dialog</strong> appears showing the callsigns and source. You can choose to <strong>Import</strong> or <strong>Dismiss</strong> the QSOs. Dismissed QSOs are skipped (the file offset advances so they are not re-detected).</div>
+    <div class="tip">Use the <strong>Browse</strong> button next to the file path field to locate .adi files using a native file picker dialog.</div>
+    <div class="tip">Extra ADIF fields from apps like MSHV (STATION_CALLSIGN, MY_GRIDSQUARE, DISTANCE, etc.) are automatically stripped — only standard QSO fields are imported.</div>
   </div>
 
   <!-- ROTATOR CONTROL -->
@@ -765,6 +767,42 @@
     </ul>
     <div class="tip">Use the <strong>Test</strong> button in the Rotator panel to verify the connection before operating. The status dot turns green on a successful command.</div>
     <div class="tip">The <strong>Active</strong> toggle in the panel header lets you quickly disable rotation without going into Settings — useful when you want to use manual control.</div>
+  </div>
+
+  <h2>Lightning Detection</h2>
+  <div class="section-card">
+    <h3>Overview</h3>
+    <p>SDRLogger+ can alert you when lightning is detected near your QTH. A flashing <strong>⚡</strong> bolt appears in the banner bar with distance and direction. Useful for HF band noise awareness and as a reminder to disconnect antennas during storms.</p>
+    <h3>Three Data Sources</h3>
+    <ul>
+      <li><strong>Blitzortung.org</strong> — community-driven, real-time global lightning detection network. Free, no API key required. Provides individual strike locations with distance and compass direction from your QTH.</li>
+      <li><strong>NOAA / NWS</strong> — U.S. National Weather Service severe thunderstorm warnings for your area. Free, no API key. US coverage only. <strong>Note:</strong> NOAA provides alert-only notifications (Watch / Warning) — no distance or direction information is available from this source.</li>
+      <li><strong>Ambient Weather</strong> — if you have a compatible personal weather station with a lightning sensor (e.g. WS-2000, WS-5000), SDRLogger+ can pull lightning data directly from your station via the Ambient Weather REST API. Hyper-local accuracy (~40 km / 25 mi range). <strong>Requires two separate keys</strong> — see setup below.</li>
+    </ul>
+    <h3>Banner Colours</h3>
+    <ul>
+      <li><span style="color:#ffd700;font-weight:700;">Yellow</span> — distant lightning (beyond 25 miles)</li>
+      <li><span style="color:#ff8c00;font-weight:700;">Orange</span> — moderate distance (10–25 miles), or NOAA warning active</li>
+      <li><span style="color:#ff4444;font-weight:700;">Red (flashing)</span> — close lightning (under 10 miles) — consider disconnecting antennas</li>
+    </ul>
+    <p>Hover over the banner to see the last update time (UTC) and any active NOAA warning text.</p>
+    <h3>Setup</h3>
+    <p>Go to <strong>⚙ Settings → Cluster &amp; Integrations → Lightning Detection</strong>:</p>
+    <ul>
+      <li>Read and accept the disclaimer checkbox — this is required before the feature can be enabled</li>
+      <li>Enable Lightning Alerts</li>
+      <li>Set your alert range (default 50 miles)</li>
+      <li>Choose which data sources to enable — you can use any combination</li>
+    </ul>
+    <h3>Ambient Weather API Keys</h3>
+    <p>Ambient Weather requires <strong>two separate API keys</strong>, both created at <code>ambientweather.net/account/keys</code>:</p>
+    <ol>
+      <li><strong>API Key</strong> — your standard account API key. Create one under your account if you haven't already.</li>
+      <li><strong>Application Key</strong> — a separate developer key. On the same keys page, look for <em>"Developers: Click here to create one"</em> and provide a short app description (e.g. "SDRLogger+"). This is a different key from your API Key.</li>
+    </ol>
+    <p>Both keys must be entered in the settings for Ambient Weather data to work.</p>
+    <div class="tip">Your <strong>Grid Square</strong> (set in Station settings) is used to calculate distances. Make sure it is set correctly for accurate lightning alerts.</div>
+    <div class="warn"><strong>Disclaimer:</strong> Lightning detection in SDRLogger+ is a <strong>convenience feature only</strong> and must not be relied upon for personal safety. Data from third-party sources may be delayed, incomplete, or unavailable. The absence of an alert does not mean conditions are safe. Always monitor official weather services independently.</div>
   </div>
 
   </div><!-- /htab-cluster -->

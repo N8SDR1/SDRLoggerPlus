@@ -20,6 +20,13 @@
   /* HEADER */
   header{background:var(--surface);border-bottom:1px solid var(--border);padding:5px 20px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;min-height:70px;}
   @keyframes updatePulse{0%,100%{opacity:1;}50%{opacity:.6;}}
+  @keyframes lightningFlash{0%,100%{opacity:1;}50%{opacity:.3;}}
+  #lightning-banner.ltng-far{background:rgba(255,215,0,.12);border-color:#ffd700;color:#ffd700;}
+  #lightning-banner.ltng-mid{background:rgba(255,140,0,.15);border-color:#ff8c00;color:#ff8c00;}
+  #lightning-banner.ltng-close{background:rgba(255,50,50,.15);border-color:#ff4444;color:#ff4444;}
+  #lightning-banner.ltng-close #lightning-bolt{animation:lightningFlash 2s ease-in-out infinite;}
+  #lightning-banner.ltng-mid #lightning-bolt{animation:lightningFlash 3s ease-in-out infinite;}
+  #lightning-banner.ltng-far #lightning-bolt{animation:lightningFlash 4s ease-in-out infinite;}
   .logo{font-family:var(--head);font-size:22px;font-weight:700;color:var(--accent);letter-spacing:3px;text-transform:uppercase;}
   .logo span{color:var(--accent2);}
   .header-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
@@ -372,6 +379,10 @@
   <div class="logo">SDR<span>Logger+</span><span style="font-size:11px;font-weight:400;color:#a8b8c8;letter-spacing:1px;margin-left:10px;font-family:var(--mono);">v{{ version }}</span></div>
   <div id="header-call" style="font-family:var(--mono);font-size:16px;color:#d0dce8;white-space:nowrap;letter-spacing:.5px;">SDR Logbook</div>
   <a id="update-banner" href="#" target="_blank" style="display:none;font-family:var(--mono);font-size:11px;color:var(--bg);background:var(--accent2);padding:3px 12px;border-radius:12px;text-decoration:none;white-space:nowrap;letter-spacing:.5px;font-weight:600;animation:updatePulse 2s ease-in-out 3;">🔔 Update Available</a>
+  <div id="lightning-banner" style="display:none;font-family:var(--mono);font-size:12px;padding:4px 12px;border-radius:12px;white-space:nowrap;letter-spacing:.5px;font-weight:700;cursor:default;border:1px solid;transition:all .3s;" title="Lightning detected nearby">
+    <span id="lightning-bolt" style="font-size:14px;">⚡</span>
+    <span id="lightning-text">—</span>
+  </div>
   <div class="solar-hdr" id="solar-hdr">
     <span title="Solar Flux Index">SFI<span class="sh-val" id="hdr-sfi">—</span></span>
     <span title="Sunspot Number">SSN<span class="sh-val" id="hdr-ssn">—</span></span>
@@ -390,7 +401,7 @@
       <div id="local-clock" style="font-family:var(--mono);font-size:13px;color:#d0dce8;letter-spacing:1px;">—</div>
     </div>
     <button class="btn-settings" onclick="window.open('/cw','cwKeyer','width=680,height=720,resizable=yes,scrollbars=yes')" title="CW Keyer / Decoder" style="font-size:12px;font-family:var(--mono);font-weight:700;width:auto;padding:0 9px;letter-spacing:1px;">CW</button>
-    <a href="/help" target="_blank" class="btn-settings" title="Quick Start Guide" style="display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;">📖</a>
+    <a href="/help" target="_blank" class="btn-settings" title="Quick Start Guide" style="display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;font-family:var(--head);font-weight:700;color:var(--muted);">?</a>
     <button class="btn-settings" onclick="openSettings()" title="Settings">⚙</button>
   </div>
 </header>
@@ -1121,7 +1132,10 @@
       <div class="settings-row">
         <div class="settings-field">
           <label>Path to tqsl.exe <span style="font-size:9px;color:#8fafc0">— full path, or just <code>tqsl</code> if TQSL is on your system PATH</span></label>
-          <input type="text" id="cfg-lotw-tqsl-path" placeholder="C:\Program Files (x86)\TrustedQSL\bin\tqsl.exe" spellcheck="false" autocomplete="off">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="text" id="cfg-lotw-tqsl-path" placeholder="C:\Program Files (x86)\TrustedQSL\bin\tqsl.exe" spellcheck="false" autocomplete="off" style="flex:1;">
+            <button type="button" class="btn-test-qrz" onclick="browseFile('cfg-lotw-tqsl-path','Executables:*.exe')" style="flex-shrink:0;padding:5px 10px;">Browse</button>
+          </div>
         </div>
         <div class="settings-field">
           <label>Station Location <span style="font-size:9px;color:#8fafc0">— name from TQSL (optional; uses callsign if blank)</span></label>
@@ -1447,7 +1461,7 @@
         </div>
         <div class="settings-row">
           <div class="settings-field"><label>Label</label><input type="text" id="cfg-adif-mon-label-1" placeholder="e.g. VarAC" spellcheck="false"></div>
-          <div class="settings-field"><label>ADIF File Path</label><input type="text" id="cfg-adif-mon-path-1" placeholder="C:\VarAC\log\VarAC_QSO.adi" spellcheck="false" style="font-size:11px;"></div>
+          <div class="settings-field"><label>ADIF File Path</label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="cfg-adif-mon-path-1" placeholder="C:\VarAC\log\VarAC_QSO.adi" spellcheck="false" style="font-size:11px;flex:1;"><button type="button" class="btn-test-qrz" onclick="browseFile('cfg-adif-mon-path-1','ADIF Files:*.adi')" style="flex-shrink:0;padding:5px 10px;">Browse</button></div></div>
         </div>
       </div>
       <div style="padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
@@ -1457,7 +1471,7 @@
         </div>
         <div class="settings-row">
           <div class="settings-field"><label>Label</label><input type="text" id="cfg-adif-mon-label-2" placeholder="e.g. MSHV" spellcheck="false"></div>
-          <div class="settings-field"><label>ADIF File Path</label><input type="text" id="cfg-adif-mon-path-2" placeholder="C:\MSHV\log\mshv_log.adi" spellcheck="false" style="font-size:11px;"></div>
+          <div class="settings-field"><label>ADIF File Path</label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="cfg-adif-mon-path-2" placeholder="C:\MSHV\log\mshv_log.adi" spellcheck="false" style="font-size:11px;flex:1;"><button type="button" class="btn-test-qrz" onclick="browseFile('cfg-adif-mon-path-2','ADIF Files:*.adi')" style="flex-shrink:0;padding:5px 10px;">Browse</button></div></div>
         </div>
       </div>
     </div>
@@ -1488,6 +1502,75 @@
         <div class="settings-field">
           <label>Port</label>
           <input type="number" id="cfg-rot-port" placeholder="12000" min="1" max="65535">
+        </div>
+      </div>
+    </div>
+    <!-- Lightning Detection -->
+    <div class="settings-section">
+      <h4>Lightning Detection <span style="font-size:9px;color:#8fafc0;font-weight:400;">— ⚡ banner alert when lightning is detected near your QTH</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Polls lightning data sources and shows a flashing ⚡ alert in the banner when strikes are detected within your configured range. Useful for HF noise awareness and antenna safety.
+      </div>
+      <div style="margin-bottom:12px;padding:10px 12px;border:1px solid rgba(255,140,0,.3);border-radius:6px;background:rgba(255,140,0,.06);">
+        <div style="font-family:var(--mono);font-size:10px;color:#ff8c00;font-weight:700;margin-bottom:6px;">⚠ DISCLAIMER</div>
+        <div style="font-family:var(--mono);font-size:9px;color:#b0bec5;line-height:1.6;">
+          Lightning detection in SDRLogger+ is provided as a <b>convenience feature only</b> and must not be relied upon for personal safety. Data from third-party sources (Blitzortung, NOAA, Ambient Weather) may be delayed, incomplete, or unavailable. The absence of an alert does <b>not</b> mean conditions are safe. Always monitor official weather services independently. The developers of SDRLogger+ accept no liability for damage, injury, or loss arising from use of or reliance on this feature.
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:10px;color:var(--text);margin-top:8px;">
+          <input type="checkbox" id="cfg-lightning-accepted" style="width:auto;accent-color:#ff8c00;cursor:pointer;" onchange="document.getElementById('cfg-lightning-enabled').disabled=!this.checked; if(!this.checked) document.getElementById('cfg-lightning-enabled').checked=false;">
+          I understand — this is a convenience feature, not a safety system
+        </label>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+            <input type="checkbox" id="cfg-lightning-enabled" style="width:auto;accent-color:var(--accent2);cursor:pointer;" disabled>
+            Enable Lightning Alerts
+          </label>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label>Alert Range</label>
+          <input type="number" id="cfg-lightning-range" placeholder="50" min="1" max="500" style="width:100px;">
+        </div>
+        <div class="settings-field">
+          <label>Unit</label>
+          <select id="cfg-lightning-unit" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 8px;outline:none;width:100px;">
+            <option value="mi">Miles</option>
+            <option value="km">Kilometres</option>
+          </select>
+        </div>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--accent);margin:10px 0 6px;letter-spacing:1px;text-transform:uppercase;">Data Sources</div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="checkbox" id="cfg-lightning-blitzortung" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          Blitzortung.org <span style="font-size:9px;color:#8fafc0;">— real-time global lightning strikes (free, no key)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="checkbox" id="cfg-lightning-noaa" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          NOAA / NWS <span style="font-size:9px;color:#8fafc0;">— severe thunderstorm warnings for your area (US only, free, no distance — alert only)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="checkbox" id="cfg-lightning-ambient" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          Ambient Weather <span style="font-size:9px;color:#8fafc0;">— personal weather station with lightning sensor (requires both API keys below)</span>
+        </label>
+      </div>
+      <div style="margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--accent);margin-bottom:8px;letter-spacing:1px;">AMBIENT WEATHER API KEYS <span style="color:#8fafc0;letter-spacing:0;">— from <a href="https://ambientweather.net/account/keys" target="_blank" style="color:var(--accent);">ambientweather.net/account/keys</a></span></div>
+        <div style="font-family:var(--mono);font-size:9px;color:#8fafc0;margin-bottom:8px;line-height:1.5;">
+          Two keys are required: your <b style="color:var(--text);">API Key</b> (created under your account) and a separate <b style="color:var(--text);">Application Key</b> (click "Developers: Click here to create one" on the same page and provide an app description). They are different keys.
+        </div>
+        <div class="settings-row">
+          <div class="settings-field">
+            <label>API Key</label>
+            <input type="password" id="cfg-lightning-ambient-api-key" placeholder="Your Ambient Weather API Key" autocomplete="off">
+          </div>
+          <div class="settings-field">
+            <label>Application Key</label>
+            <input type="password" id="cfg-lightning-ambient-app-key" placeholder="Your Ambient Weather App Key" autocomplete="off">
+          </div>
         </div>
       </div>
     </div>
@@ -1568,7 +1651,10 @@
       <div class="settings-row full">
         <div class="settings-field">
           <label>Database Backup Folder <span style="font-size:9px;color:#8fafc0">— leave blank to download directly</span></label>
-          <input type="text" id="cfg-backup-path" placeholder="e.g. C:\Radio\Backups  or  D:\Ham\Backups" spellcheck="false">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="text" id="cfg-backup-path" placeholder="e.g. C:\Radio\Backups  or  D:\Ham\Backups" spellcheck="false" style="flex:1;">
+            <button type="button" class="btn-test-qrz" onclick="browseDir('cfg-backup-path')" style="flex-shrink:0;padding:5px 10px;">Browse</button>
+          </div>
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
@@ -1657,7 +1743,7 @@
       <div id="debug-log-preview" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;max-height:120px;overflow-y:auto;background:#0a0e14;padding:6px 8px;border-radius:3px;border:1px solid var(--border);display:none;"></div>
     </div>
     </div><!-- /tab-system -->
-    <a href="/help" target="_blank" style="display:block;text-align:center;font-family:var(--mono);font-size:11px;color:var(--accent);padding:10px 0 4px;letter-spacing:1px;text-decoration:none;opacity:.8;transition:opacity .15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.8'">📖 TCILog Quick Start Guide ↗</a>
+    <a href="/help" target="_blank" style="display:block;text-align:center;font-family:var(--mono);font-size:11px;color:var(--accent);padding:10px 0 4px;letter-spacing:1px;text-decoration:none;opacity:.8;transition:opacity .15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.8'">? SDRLogger+ Quick Start Guide ↗</a>
     <div style="display:flex;gap:10px;align-items:center;">
       <button class="btn-save-settings" onclick="saveSettings()" style="flex:1;">Save Settings</button>
       <button class="btn-save-settings" onclick="resetDockLayout()" style="background:var(--surface);border-color:var(--border);color:var(--muted);flex:0 0 auto;font-size:10px;padding:8px 10px;letter-spacing:.5px;" title="Restore all panels to their default column positions">↺ Reset Layout</button>
@@ -3087,6 +3173,17 @@ async function openSettings() {
   document.getElementById('cfg-rot-protocol').value    = s.rotator_protocol  || 'pstrotator';
   document.getElementById('cfg-rot-host').value        = s.rotator_host      || '127.0.0.1';
   document.getElementById('cfg-rot-port').value        = s.rotator_port      || '12000';
+  // Lightning settings
+  document.getElementById('cfg-lightning-accepted').checked     = s.lightning_accepted === true;
+  document.getElementById('cfg-lightning-enabled').disabled     = !s.lightning_accepted;
+  document.getElementById('cfg-lightning-enabled').checked      = s.lightning_enabled === true;
+  document.getElementById('cfg-lightning-range').value          = s.lightning_range || '50';
+  document.getElementById('cfg-lightning-unit').value           = s.lightning_unit || 'mi';
+  document.getElementById('cfg-lightning-blitzortung').checked  = s.lightning_blitzortung !== false;
+  document.getElementById('cfg-lightning-noaa').checked         = s.lightning_noaa !== false;
+  document.getElementById('cfg-lightning-ambient').checked      = s.lightning_ambient === true;
+  document.getElementById('cfg-lightning-ambient-api-key').value = s.lightning_ambient_api_key || '';
+  document.getElementById('cfg-lightning-ambient-app-key').value = s.lightning_ambient_app_key || '';
   document.getElementById('cfg-flrig-enabled').checked  = s.flrig_enabled === true;
   document.getElementById('cfg-flrig-host').value         = s.flrig_host || '127.0.0.1';
   document.getElementById('cfg-flrig-port').value         = s.flrig_port || '12345';
@@ -3220,6 +3317,16 @@ async function saveSettings() {
     rotator_protocol: document.getElementById('cfg-rot-protocol').value,
     rotator_host:     document.getElementById('cfg-rot-host').value.trim() || '127.0.0.1',
     rotator_port:     document.getElementById('cfg-rot-port').value || '12000',
+    // Lightning settings
+    lightning_accepted:        document.getElementById('cfg-lightning-accepted').checked,
+    lightning_enabled:         document.getElementById('cfg-lightning-enabled').checked,
+    lightning_range:           parseInt(document.getElementById('cfg-lightning-range').value) || 50,
+    lightning_unit:            document.getElementById('cfg-lightning-unit').value,
+    lightning_blitzortung:     document.getElementById('cfg-lightning-blitzortung').checked,
+    lightning_noaa:            document.getElementById('cfg-lightning-noaa').checked,
+    lightning_ambient:         document.getElementById('cfg-lightning-ambient').checked,
+    lightning_ambient_api_key: document.getElementById('cfg-lightning-ambient-api-key').value.trim(),
+    lightning_ambient_app_key: document.getElementById('cfg-lightning-ambient-app-key').value.trim(),
     flrig_enabled:    document.getElementById('cfg-flrig-enabled').checked,
     flrig_host:         document.getElementById('cfg-flrig-host').value.trim() || '127.0.0.1',
     flrig_port:         parseInt(document.getElementById('cfg-flrig-port').value) || 12345,
@@ -3411,6 +3518,23 @@ async function testClubLogCredentials() {
     }
   } catch(e) { result.textContent = '✗ Request failed'; result.style.color = 'var(--red)'; }
   btn.disabled = false;
+}
+
+// ── Browse file / directory helpers ──────────────────────────────────────────
+async function browseFile(inputId, filetypes) {
+  try {
+    const url = filetypes ? `/api/browse_file?filetypes=${encodeURIComponent(filetypes)}` : '/api/browse_file';
+    const r = await fetch(url);
+    const data = await r.json();
+    if (data.path) document.getElementById(inputId).value = data.path;
+  } catch(e) { console.error('Browse file error:', e); }
+}
+async function browseDir(inputId) {
+  try {
+    const r = await fetch('/api/browse_dir');
+    const data = await r.json();
+    if (data.path) document.getElementById(inputId).value = data.path;
+  } catch(e) { console.error('Browse dir error:', e); }
 }
 
 async function testLotwPath() {
@@ -4031,7 +4155,8 @@ function setSpotSort(key) {
     if (!el) return;
     el.textContent = spotSortKey === k ? (spotSortAsc ? '▲' : '▼') : '';
   });
-  renderSpots();
+  if (_potaSpotsActive) renderPotaSpots();
+  else renderSpots();
 }
 
 // Pure string kHz→MHz conversion — avoids all floating-point precision loss
@@ -4077,7 +4202,10 @@ function togglePotaSpots() {
     // Switch header to POTA layout
     if (head) {
       head.classList.add('pota-mode');
-      head.innerHTML = '<span>Activator</span><span>Mode</span><span>Freq kHz</span><span>Park</span><span>Park Name / Location</span>';
+      head.innerHTML = '<span class="spot-sort-hdr" onclick="setSpotSort(\'call\')">Activator<span class="sort-arrow" id="sa-call"></span></span>' +
+        '<span class="spot-sort-hdr" onclick="setSpotSort(\'mode\')">Mode<span class="sort-arrow" id="sa-mode"></span></span>' +
+        '<span class="spot-sort-hdr" onclick="setSpotSort(\'freq\')">Freq kHz<span class="sort-arrow" id="sa-freq">▲</span></span>' +
+        '<span>Park</span><span>Park Name / Location</span>';
     }
   } else {
     if (_potaPollTimer) { clearInterval(_potaPollTimer); _potaPollTimer = null; }
@@ -4110,13 +4238,23 @@ function renderPotaSpots() {
   }
   // Apply band filter if set
   const band = currentClusterBand;
-  let spots = _potaSpots;
+  let spots = _potaSpots.slice();
   if (band) {
     spots = spots.filter(s => {
       const f = parseFloat(s.frequency);
       return freqKhzToBand(f) === band;
     });
   }
+  // Sort using same keys as cluster spots
+  spots.sort((a, b) => {
+    let va, vb;
+    if (spotSortKey === 'freq')      { va = parseFloat(a.frequency); vb = parseFloat(b.frequency); }
+    else if (spotSortKey === 'mode') { va = (a.mode||'').toUpperCase(); vb = (b.mode||'').toUpperCase(); }
+    else                             { va = a.activator||''; vb = b.activator||''; }
+    if (va < vb) return spotSortAsc ? -1 : 1;
+    if (va > vb) return spotSortAsc ?  1 : -1;
+    return 0;
+  });
   list.innerHTML = spots.map(s => {
     const freqKhz = parseFloat(s.frequency).toFixed(1);
     const parkRef = s.reference || '';
@@ -4218,12 +4356,32 @@ async function fillFromSpot(callsign, freqKhz, mode) {
 
 // Silent callsign lookup — fires on callsign blur, fills name/QTH, updates map
 // Uses unified /api/callsign_lookup which tries QRZ first then HamQTH
+// For stroke callsigns (e.g. IQ3VO/IAS, A60MBZ/5) — tries the full call first,
+// then falls back to the base callsign (before /) so the map/distance still works.
 async function autoQRZ(callsign) {
   document.getElementById('name').value = '';
   document.getElementById('qth').value  = '';
   try {
+    let data = {};
     const res = await fetch(`/api/callsign_lookup/${encodeURIComponent(callsign)}`);
-    const data = await res.json();
+    if (res.ok) data = await res.json();
+    else data = {error: 'lookup failed'};
+    // If lookup failed OR grid missing, and callsign has a stroke — retry with base callsign
+    // This ensures map/distance works even when QRZ has no record for the full stroke call
+    if ((data.error || !data.grid) && callsign.includes('/')) {
+      const parts = callsign.split('/');
+      // Use the longest part as the base call (handles both W1ABC/P and VE2/W1ABC)
+      const base = parts.reduce((a, b) => a.length >= b.length ? a : b);
+      const res2 = await fetch(`/api/callsign_lookup/${encodeURIComponent(base)}`);
+      if (res2.ok) {
+        const data2 = await res2.json();
+        // Merge: keep original name/QTH if base lookup lacks them, but grab grid
+        if (data2.grid) data.grid = data2.grid;
+        if (data2.name && !data.name) data.name = data2.name;
+        if (data2.qth && !data.qth) data.qth = data2.qth;
+        delete data.error;
+      }
+    }
     if (data.error) return;
     if (data.name) {
       document.getElementById('name').value = data.name;
@@ -4900,6 +5058,96 @@ async function pollAdifMonitorEvents() {
   } catch(e) {}
 }
 setInterval(pollAdifMonitorEvents, 5000);
+
+// ── ADIF Monitor pending confirmation ───────────────────────────────────────
+let _adifConfirmShown = false;
+async function pollAdifMonitorPending() {
+  if (_adifConfirmShown) return;
+  try {
+    const r = await fetch('/api/adif_monitor_pending');
+    if (!r.ok) return;
+    const pending = await r.json();
+    if (pending.length === 0) return;
+    _adifConfirmShown = true;
+    let totalCount = 0;
+    let details = '';
+    pending.forEach(b => {
+      totalCount += b.count;
+      details += `<div style="margin:6px 0;font-family:var(--mono);font-size:12px;color:var(--text);">` +
+        `<span style="color:var(--accent);font-weight:700;">${esc(b.source)}</span> — ${b.count} QSO${b.count>1?'s':''}: ` +
+        `<span style="color:#fff;">${b.calls.map(c=>esc(c)).join(', ')}</span></div>`;
+    });
+    const overlay = document.createElement('div');
+    overlay.id = 'adif-confirm-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2000;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `<div style="background:var(--surface);border:2px solid var(--accent2);border-radius:8px;padding:28px 32px;max-width:520px;width:90%;font-family:var(--mono);">
+      <h2 style="font-family:var(--head);font-size:18px;color:var(--accent2);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">📥 ADIF Monitor — New QSOs Detected</h2>
+      <div style="font-size:13px;color:var(--text);margin-bottom:12px;">${totalCount} new QSO${totalCount>1?'s':''} found:</div>
+      ${details}
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button id="adif-confirm-yes" style="flex:1;font-family:var(--head);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:10px;border:none;border-radius:4px;background:var(--green);color:#000;cursor:pointer;transition:all .15s;">Import</button>
+        <button id="adif-confirm-no" style="flex:1;font-family:var(--head);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:10px;border:none;border-radius:4px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .15s;">Dismiss</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('adif-confirm-yes').onclick = async () => {
+      await fetch('/api/adif_monitor_confirm', {method:'POST'});
+      overlay.remove();
+      _adifConfirmShown = false;
+      loadLog();
+      toast(`📥 Imported ${totalCount} QSO${totalCount>1?'s':''} from ADIF Monitor`, 'success', 5000);
+    };
+    document.getElementById('adif-confirm-no').onclick = async () => {
+      await fetch('/api/adif_monitor_dismiss', {method:'POST'});
+      overlay.remove();
+      _adifConfirmShown = false;
+      toast('ADIF Monitor: QSOs dismissed', 'error', 3000);
+    };
+  } catch(e) {}
+}
+setInterval(pollAdifMonitorPending, 5000);
+
+// ── Lightning Detection polling ─────────────────────────────────────────────
+async function pollLightningStatus() {
+  try {
+    const r = await fetch('/api/lightning_status');
+    if (!r.ok) return;
+    const ls = await r.json();
+    const banner = document.getElementById('lightning-banner');
+    if (!ls.active) {
+      banner.style.display = 'none';
+      return;
+    }
+    banner.style.display = '';
+    // Determine distance text and color class
+    const unit = ls.closest_mi !== null ? (ls.closest_km !== null ? 'mi' : '') : '';
+    let distText = '';
+    let cls = 'ltng-far';
+    if (ls.closest_mi !== null) {
+      const mi = ls.closest_mi;
+      distText = `${mi} mi`;
+      if (mi <= 10) cls = 'ltng-close';
+      else if (mi <= 25) cls = 'ltng-mid';
+    } else if (ls.noaa_warning) {
+      distText = 'Warning';
+      cls = 'ltng-mid';
+    }
+    banner.className = cls;
+    let txt = '';
+    if (distText) txt += distText;
+    if (ls.direction) txt += ' ' + ls.direction;
+    let tip = 'Lightning detected nearby — consider disconnecting antennas';
+    if (ls.noaa_warning) {
+      tip = ls.noaa_warning;
+      if (!distText) txt = 'NOAA Warning';
+    }
+    if (ls.last_update) tip += `\nUpdated ${ls.last_update} UTC`;
+    banner.title = tip;
+    document.getElementById('lightning-text').textContent = txt || 'Nearby';
+  } catch(e) {}
+}
+setInterval(pollLightningStatus, 45000);
+setTimeout(pollLightningStatus, 5000);
 
 function resetDockLayout() {
   const s = loadSettings();
