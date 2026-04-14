@@ -104,6 +104,8 @@ if __name__ == "__main__":
 
     # ── Initialise DB, restore settings, and start background threads ─────────
     _app_module.init_db()
+    _app_module._load_cty_dat()
+    _app_module._rebuild_worked_cache()
     _app_module._load_app_settings()
     _app_module._load_cw_serial()
     threading.Thread(target=_app_module.tci_ws_client,          daemon=True).start()
@@ -112,6 +114,8 @@ if __name__ == "__main__":
     threading.Thread(target=_app_module.flrig_poller,           daemon=True).start()
     threading.Thread(target=_app_module.hamlib_poller,          daemon=True).start()
     threading.Thread(target=_app_module.winkeyer_manager,       daemon=True).start()
+    threading.Thread(target=_app_module.adif_monitor_thread,    daemon=True).start()
+    threading.Thread(target=_app_module.lightning_thread,       daemon=True).start()
 
     # ── Start Flask in a background thread ────────────────────────────────────
     def _run_flask():

@@ -78,6 +78,8 @@ def _load_app_settings():
     global WINKEYER_ENABLED, WINKEYER_PORT, WINKEYER_WPM, WINKEYER_KEY_OUT, WINKEYER_MODE, WINKEYER_PTT, WINKEYER_PTT_LEAD, WINKEYER_PTT_TAIL
     global EQSL_USER, EQSL_PASS, EQSL_UPLOAD_ENABLED
     global POTA_MY_PARK, POTA_USER, POTA_PASS
+    global LIGHTNING_ACCEPTED, LIGHTNING_ENABLED, LIGHTNING_RANGE, LIGHTNING_UNIT, LIGHTNING_BLITZORTUNG, LIGHTNING_NOAA
+    global LIGHTNING_AMBIENT, LIGHTNING_AMBIENT_API_KEY, LIGHTNING_AMBIENT_APP_KEY
     try:
         with open(_APP_SETTINGS_FILE) as _f:
             data = json.load(_f)
@@ -137,6 +139,16 @@ def _load_app_settings():
         if data.get("pota_my_park"):            POTA_MY_PARK              = data["pota_my_park"].strip().upper()
         if "pota_user" in data:                 POTA_USER                 = data["pota_user"].strip()
         if "pota_pass" in data:                 POTA_PASS                 = data["pota_pass"].strip()
+        # Lightning settings
+        if "lightning_accepted"        in data: LIGHTNING_ACCEPTED        = bool(data["lightning_accepted"])
+        if "lightning_enabled"         in data: LIGHTNING_ENABLED         = bool(data["lightning_enabled"]) and LIGHTNING_ACCEPTED
+        if "lightning_range"           in data: LIGHTNING_RANGE           = int(data["lightning_range"])
+        if "lightning_unit"            in data: LIGHTNING_UNIT            = data["lightning_unit"]
+        if "lightning_blitzortung"     in data: LIGHTNING_BLITZORTUNG     = bool(data["lightning_blitzortung"])
+        if "lightning_noaa"            in data: LIGHTNING_NOAA            = bool(data["lightning_noaa"])
+        if "lightning_ambient"         in data: LIGHTNING_AMBIENT         = bool(data["lightning_ambient"])
+        if data.get("lightning_ambient_api_key"): LIGHTNING_AMBIENT_API_KEY = data["lightning_ambient_api_key"].strip()
+        if data.get("lightning_ambient_app_key"): LIGHTNING_AMBIENT_APP_KEY = data["lightning_ambient_app_key"].strip()
         print(f"Settings restored from {_APP_SETTINGS_FILE}")
     except FileNotFoundError:
         pass  # First run — no saved settings yet, defaults stand
@@ -183,7 +195,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.02"
+VERSION  = "1.03"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -238,6 +250,29 @@ _wk_is_open        = False      # True when host-mode session is active
 _wk_version        = 0          # firmware version returned by Admin:Open
 # ──────────────────────────────────────────────────────────────────────────────
 
+
+# ─── Lightning Detection ─────────────────────────────────────────────────────
+LIGHTNING_ACCEPTED         = False  # User accepted the liability disclaimer
+LIGHTNING_ENABLED          = False
+LIGHTNING_RANGE            = 50     # Alert range
+LIGHTNING_UNIT             = "mi"   # "mi" or "km"
+LIGHTNING_BLITZORTUNG      = True   # Blitzortung.org real-time strikes
+LIGHTNING_NOAA             = True   # NOAA/NWS severe thunderstorm warnings
+LIGHTNING_AMBIENT          = False  # Ambient Weather personal station
+LIGHTNING_AMBIENT_API_KEY  = ""
+LIGHTNING_AMBIENT_APP_KEY  = ""
+_lightning_status = {
+    "active": False,
+    "closest_mi": None,
+    "closest_km": None,
+    "direction": "",
+    "strikes_1hr": 0,
+    "sources": [],        # which sources are reporting
+    "noaa_warning": "",   # active NOAA warning text
+    "last_update": "",
+}
+_lightning_lock = threading.Lock()
+# ──────────────────────────────────────────────────────────────────────────────
 
 # ─── POTA (Parks on the Air) ──────────────────────────────────────────────────
 POTA_DATABASE   = "pota.db"     # Separate DB for POTA activations
@@ -2464,7 +2499,7 @@ def lotw_test():
         return jsonify({"ok": False, "error": str(e)})
 
 
-@app.route("/api/callsign_lookup/<callsign>")
+@app.route("/api/callsign_lookup/<path:callsign>")
 def callsign_lookup_route(callsign):
     """
     Unified callsign lookup: tries QRZ first, falls back to HamQTH.
@@ -2500,6 +2535,8 @@ def update_settings():
     global WINKEYER_ENABLED, WINKEYER_PORT, WINKEYER_WPM, WINKEYER_KEY_OUT, WINKEYER_MODE, WINKEYER_PTT, WINKEYER_PTT_LEAD, WINKEYER_PTT_TAIL
     global EQSL_USER, EQSL_PASS, EQSL_UPLOAD_ENABLED
     global POTA_MY_PARK, POTA_USER, POTA_PASS
+    global LIGHTNING_ACCEPTED, LIGHTNING_ENABLED, LIGHTNING_RANGE, LIGHTNING_UNIT, LIGHTNING_BLITZORTUNG, LIGHTNING_NOAA
+    global LIGHTNING_AMBIENT, LIGHTNING_AMBIENT_API_KEY, LIGHTNING_AMBIENT_APP_KEY
     data = request.json or {}
     runtime_settings.update(data)
     if data.get("qrz_user"):
@@ -2594,6 +2631,16 @@ def update_settings():
     if data.get("pota_my_park"):   POTA_MY_PARK      = data["pota_my_park"].strip().upper()
     if "pota_user"        in data: POTA_USER         = data["pota_user"].strip()
     if "pota_pass"        in data: POTA_PASS         = data["pota_pass"].strip()
+    # Lightning settings
+    if "lightning_accepted"        in data: LIGHTNING_ACCEPTED        = bool(data["lightning_accepted"])
+    if "lightning_enabled"         in data: LIGHTNING_ENABLED         = bool(data["lightning_enabled"]) and LIGHTNING_ACCEPTED
+    if "lightning_range"           in data: LIGHTNING_RANGE           = int(data["lightning_range"])
+    if "lightning_unit"            in data: LIGHTNING_UNIT            = data["lightning_unit"]
+    if "lightning_blitzortung"     in data: LIGHTNING_BLITZORTUNG     = bool(data["lightning_blitzortung"])
+    if "lightning_noaa"            in data: LIGHTNING_NOAA            = bool(data["lightning_noaa"])
+    if "lightning_ambient"         in data: LIGHTNING_AMBIENT         = bool(data["lightning_ambient"])
+    if data.get("lightning_ambient_api_key"): LIGHTNING_AMBIENT_API_KEY = data["lightning_ambient_api_key"].strip()
+    if data.get("lightning_ambient_app_key"): LIGHTNING_AMBIENT_APP_KEY = data["lightning_ambient_app_key"].strip()
     _save_app_settings()
     return jsonify({"ok": True})
 
@@ -2606,6 +2653,47 @@ def get_settings():
         "clublog_upload_designator":  CLUBLOG_UPLOAD_DESIGNATOR,
     }
     return jsonify({**defaults, **runtime_settings})
+
+
+# ─── File / Directory Browse Dialogs ─────────────────────────────────────────
+@app.route("/api/browse_file")
+def browse_file():
+    """Open a native OS file picker dialog and return the selected path."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        # Parse optional filetypes param: "ADIF Files:*.adi|Executables:*.exe"
+        ft_param = request.args.get('filetypes', '')
+        ft = []
+        if ft_param:
+            for pair in ft_param.split('|'):
+                parts = pair.split(':')
+                if len(parts) == 2:
+                    ft.append((parts[0].strip(), parts[1].strip()))
+        ft.append(("All Files", "*.*"))
+        path = filedialog.askopenfilename(filetypes=ft)
+        root.destroy()
+        return jsonify({"path": path or ""})
+    except Exception as e:
+        return jsonify({"path": "", "error": str(e)})
+
+@app.route("/api/browse_dir")
+def browse_dir():
+    """Open a native OS directory picker dialog and return the selected path."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        path = filedialog.askdirectory()
+        root.destroy()
+        return jsonify({"path": path or ""})
+    except Exception as e:
+        return jsonify({"path": "", "error": str(e)})
 
 
 @app.route("/api/backup_db", methods=["GET", "POST"])
@@ -3431,6 +3519,11 @@ def import_adif():
     dup_mode = request.form.get("dup_mode", "skip")  # skip | replace | keep_both
 
     import re
+    # Strip ADIF header (everything before <EOH>) to avoid picking up
+    # header fields (ADIF_VER, PROGRAMID, etc.) as QSO data
+    eoh_pos = content.find("<EOH>")
+    if eoh_pos >= 0:
+        content = content[eoh_pos + 5:]
     records = content.split("<EOR>")
     imported = 0
     skipped  = 0
@@ -4372,6 +4465,212 @@ def api_worked_before_batch():
     return jsonify({"results": results})
 
 
+# ─── Lightning Detection ────────────────────────────────────────────────────
+# Three sources: Blitzortung.org (websocket), NOAA/NWS (REST), Ambient Weather (REST)
+
+import math as _math
+
+def _grid_to_latlon(grid):
+    """Convert Maidenhead grid square to (lat, lon) tuple."""
+    if not grid or len(grid) < 4:
+        return None, None
+    grid = grid.upper()
+    try:
+        lon = (ord(grid[0]) - 65) * 20 - 180 + int(grid[2]) * 2
+        lat = (ord(grid[1]) - 65) * 10 - 90 + int(grid[3])
+        if len(grid) >= 6:
+            lon += (ord(grid[4]) - 65) * (2 / 24) + (1 / 24)
+            lat += (ord(grid[5]) - 65) * (1 / 24) + (1 / 48)
+        else:
+            lon += 1
+            lat += 0.5
+        return lat, lon
+    except Exception:
+        return None, None
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    """Great-circle distance in km between two lat/lon points."""
+    R = 6371.0
+    to_r = _math.radians
+    d_lat = to_r(lat2 - lat1)
+    d_lon = to_r(lon2 - lon1)
+    a = _math.sin(d_lat / 2) ** 2 + _math.cos(to_r(lat1)) * _math.cos(to_r(lat2)) * _math.sin(d_lon / 2) ** 2
+    return R * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(1 - a))
+
+def _bearing_deg(lat1, lon1, lat2, lon2):
+    """Initial bearing in degrees from point 1 to point 2."""
+    to_r = _math.radians
+    d_lon = to_r(lon2 - lon1)
+    y = _math.sin(d_lon) * _math.cos(to_r(lat2))
+    x = _math.cos(to_r(lat1)) * _math.sin(to_r(lat2)) - _math.sin(to_r(lat1)) * _math.cos(to_r(lat2)) * _math.cos(d_lon)
+    return (_math.degrees(_math.atan2(y, x)) + 360) % 360
+
+def _bearing_to_compass(deg):
+    """Convert bearing degrees to compass direction string."""
+    dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+            "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    return dirs[int((deg + 11.25) / 22.5) % 16]
+
+def _fetch_blitzortung(my_lat, my_lon, range_km):
+    """Fetch recent strikes from Blitzortung.org via their public JSON API.
+    Returns list of (distance_km, bearing_deg) for strikes within range.
+    Uses the getjson.php endpoint which returns flat arrays:
+      [lon, lat, timestamp_str, ?, ?, ?, ?]
+    Regions: 07=Central Americas, 12=East Americas, 13=West Americas."""
+    strikes = []
+    # Regions covering the Americas — fetch all three to get full coverage
+    regions = [7, 12, 13]
+    headers = {
+        "Referer": "https://map.blitzortung.org/",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) SDRLogger+"
+    }
+    for region in regions:
+        try:
+            url = f"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={region:02d}"
+            resp = requests.get(url, timeout=15, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                # Response is a flat list of arrays: [[lon, lat, ts, ...], ...]
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, list) and len(item) >= 2:
+                            try:
+                                s_lon = float(item[0])
+                                s_lat = float(item[1])
+                            except (ValueError, TypeError):
+                                continue
+                            dist = _haversine_km(my_lat, my_lon, s_lat, s_lon)
+                            if dist <= range_km:
+                                brg = _bearing_deg(my_lat, my_lon, s_lat, s_lon)
+                                strikes.append((dist, brg))
+                    print(f"Lightning: Blitzortung region {region:02d} — {len(data)} strikes fetched")
+            else:
+                print(f"Lightning: Blitzortung region {region:02d} HTTP {resp.status_code}")
+        except Exception as e:
+            print(f"Lightning: Blitzortung region {region:02d} error: {e}")
+    if strikes:
+        closest = min(strikes, key=lambda x: x[0])
+        print(f"Lightning: Blitzortung total {len(strikes)} strikes in range, closest {closest[0]:.1f} km @ {closest[1]:.0f}°")
+    else:
+        print(f"Lightning: Blitzortung — no strikes within {range_km:.0f} km")
+    return strikes
+
+def _fetch_noaa_warnings(my_lat, my_lon):
+    """Fetch active severe thunderstorm warnings from NOAA/NWS for user's location."""
+    warning = ""
+    try:
+        url = f"https://api.weather.gov/alerts/active?point={my_lat:.4f},{my_lon:.4f}"
+        print(f"Lightning: NOAA checking {my_lat:.4f},{my_lon:.4f}")
+        resp = requests.get(url, timeout=10, headers={"User-Agent": "SDRLogger+ Ham Radio Logger (contact: n8sdr@arrl.net)"})
+        if resp.status_code == 200:
+            data = resp.json()
+            for feat in data.get("features", []):
+                props = feat.get("properties", {})
+                event = props.get("event", "")
+                if "thunderstorm" in event.lower() or "lightning" in event.lower():
+                    warning = event
+                    break
+    except Exception as e:
+        print(f"Lightning: NOAA error: {e}")
+    return warning
+
+def _fetch_ambient_weather():
+    """Fetch lightning data from Ambient Weather station REST API.
+    Returns (distance_km, strikes_per_hour) or (None, 0)."""
+    if not LIGHTNING_AMBIENT_API_KEY or not LIGHTNING_AMBIENT_APP_KEY:
+        print("Lightning: Ambient Weather — API keys not configured")
+        return None, 0
+    try:
+        url = (f"https://rt.ambientweather.net/v1/devices"
+               f"?apiKey={LIGHTNING_AMBIENT_API_KEY}"
+               f"&applicationKey={LIGHTNING_AMBIENT_APP_KEY}")
+        print("Lightning: Ambient Weather polling...")
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            devices = resp.json()
+            if devices and isinstance(devices, list):
+                last = devices[0].get("lastData", {})
+                dist_mi = last.get("lightning_distance")
+                hour_count = last.get("lightning_hour", 0)
+                print(f"Lightning: Ambient Weather data — lightning_distance={dist_mi}, lightning_hour={hour_count}")
+                if dist_mi is not None and hour_count and hour_count > 0:
+                    dist_km = float(dist_mi) * 1.60934
+                    return dist_km, int(hour_count)
+        elif resp.status_code == 429:
+            print("Lightning: Ambient Weather rate limited")
+    except Exception as e:
+        print(f"Lightning: Ambient Weather error: {e}")
+    return None, 0
+
+def lightning_thread():
+    """Background thread: poll lightning sources every 60 seconds."""
+    import time
+    time.sleep(10)  # initial delay to let settings load
+    while True:
+        try:
+            if not LIGHTNING_ENABLED:
+                with _lightning_lock:
+                    _lightning_status["active"] = False
+                time.sleep(30)
+                continue
+            grid = runtime_settings.get("grid", "")
+            my_lat, my_lon = _grid_to_latlon(grid)
+            if my_lat is None:
+                print(f"Lightning: no valid grid square configured (grid='{grid}') — skipping")
+                time.sleep(30)
+                continue
+            range_km = LIGHTNING_RANGE * 1.60934 if LIGHTNING_UNIT == "mi" else float(LIGHTNING_RANGE)
+            print(f"Lightning: polling — grid={grid} lat={my_lat:.2f} lon={my_lon:.2f} range={range_km:.0f}km")
+            closest_km = None
+            closest_brg = None
+            total_strikes = 0
+            sources = []
+            noaa_warn = ""
+            # Source 1: Blitzortung
+            if LIGHTNING_BLITZORTUNG:
+                strikes = _fetch_blitzortung(my_lat, my_lon, range_km)
+                if strikes:
+                    sources.append("blitzortung")
+                    total_strikes += len(strikes)
+                    for dist, brg in strikes:
+                        if closest_km is None or dist < closest_km:
+                            closest_km = dist
+                            closest_brg = brg
+            # Source 2: NOAA/NWS
+            if LIGHTNING_NOAA:
+                noaa_warn = _fetch_noaa_warnings(my_lat, my_lon)
+                if noaa_warn:
+                    sources.append("noaa")
+            # Source 3: Ambient Weather
+            if LIGHTNING_AMBIENT:
+                amb_dist, amb_count = _fetch_ambient_weather()
+                if amb_dist is not None and amb_count > 0:
+                    sources.append("ambient")
+                    total_strikes += amb_count
+                    if closest_km is None or amb_dist < closest_km:
+                        closest_km = amb_dist
+                        # Ambient Weather doesn't provide bearing
+            direction = _bearing_to_compass(closest_brg) if closest_brg is not None else ""
+            with _lightning_lock:
+                _lightning_status["active"] = (closest_km is not None and closest_km <= range_km) or bool(noaa_warn)
+                _lightning_status["closest_km"] = round(closest_km, 1) if closest_km is not None else None
+                _lightning_status["closest_mi"] = round(closest_km / 1.60934, 1) if closest_km is not None else None
+                _lightning_status["direction"] = direction
+                _lightning_status["strikes_1hr"] = total_strikes
+                _lightning_status["sources"] = sources
+                _lightning_status["noaa_warning"] = noaa_warn
+                _lightning_status["last_update"] = datetime.utcnow().strftime("%H:%M:%S")
+        except Exception as e:
+            print(f"Lightning thread error: {e}")
+        time.sleep(90)
+
+@app.route("/api/lightning_status")
+def lightning_status():
+    """Return current lightning detection status for the banner."""
+    with _lightning_lock:
+        return jsonify(dict(_lightning_status))
+
+
 # ─── ADIF File Monitor ────────────────────────────────────────────────────────
 # Watches up to 2 external ADIF files (e.g. VarAC, MSHV) for new QSOs.
 # Uses byte-offset tracking — only reads bytes appended since last check.
@@ -4379,6 +4678,10 @@ def api_worked_before_batch():
 
 ADIF_MONITOR_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adif_monitor_state.json")
 _adif_monitor_events = collections.deque(maxlen=50)  # recent imports for UI toasts
+
+# Pending ADIF records — monitor detects new QSOs but holds them until user confirms
+_adif_monitor_pending = []       # list of {source, qsos, filepath, new_offset}
+_adif_monitor_pending_lock = threading.Lock()
 
 def _load_adif_monitor_state():
     try:
@@ -4395,15 +4698,29 @@ def _save_adif_monitor_state(state):
         print(f"ADIF Monitor: failed to save state: {e}")
 
 def _parse_adif_records(text):
-    """Parse ADIF text into a list of dicts. Handles standard ADIF tag format."""
+    """Parse ADIF text into a list of dicts. Handles standard ADIF tag format.
+    Strips ADIF header (before <EOH>) and only keeps recognised QSO fields
+    to avoid extra fields from apps like MSHV (STATION_CALLSIGN,
+    MY_GRIDSQUARE, DISTANCE, QSO_DATE_OFF, TIME_OFF) bloating records."""
+    # Strip header if present (everything before <EOH>)
+    eoh_match = re.search(r'<EOH>', text, flags=re.IGNORECASE)
+    if eoh_match:
+        text = text[eoh_match.end():]
+    # Fields we actually use — anything else is discarded
+    _KNOWN_FIELDS = {
+        "CALL", "NAME", "QTH", "GRIDSQUARE", "QSO_DATE", "TIME_ON",
+        "BAND", "MODE", "FREQ", "RST_SENT", "RST_RCVD",
+        "COMMENT", "NOTES", "CONTEST_ID", "MY_POTA_REF", "POTA_REF",
+    }
     records = []
-    # Split on <eor> (end of record)
     parts = re.split(r'<eor>', text, flags=re.IGNORECASE)
     tag_re = re.compile(r'<(\w+):(\d+)(?::[^>]*)?>([^<]*)', re.IGNORECASE)
     for part in parts:
         fields = {}
         for m in tag_re.finditer(part):
             name = m.group(1).upper()
+            if name not in _KNOWN_FIELDS:
+                continue
             length = int(m.group(2))
             value = m.group(3)[:length]
             fields[name] = value.strip()
@@ -4479,10 +4796,17 @@ def _adif_monitor_insert(qso):
         return False
 
 def adif_monitor_thread():
-    """Background thread: poll configured ADIF files every 5 seconds."""
+    """Background thread: poll configured ADIF files every 5 seconds.
+    Detected QSOs are queued as pending — user must confirm before import."""
     import time
     while True:
         try:
+            # Skip scan if there are already pending records awaiting confirmation
+            with _adif_monitor_pending_lock:
+                has_pending = len(_adif_monitor_pending) > 0
+            if has_pending:
+                time.sleep(5)
+                continue
             s = runtime_settings
             slots = []
             for i in [1, 2]:
@@ -4493,7 +4817,6 @@ def adif_monitor_thread():
                     slots.append((i, path, label))
             if slots:
                 state = _load_adif_monitor_state()
-                changed = False
                 for idx, filepath, label in slots:
                     key = filepath.replace("\\", "/")
                     try:
@@ -4502,7 +4825,6 @@ def adif_monitor_thread():
                         continue
                     offset = state.get(key, 0)
                     if fsize < offset:
-                        # File was truncated/rewritten — reset
                         offset = 0
                     if fsize <= offset:
                         continue
@@ -4515,18 +4837,20 @@ def adif_monitor_thread():
                         print(f"ADIF Monitor [{label}]: read error: {e}")
                         continue
                     records = _parse_adif_records(new_data)
+                    qsos = []
                     for rec in records:
                         qso = _adif_to_qso(rec)
-                        if qso and _adif_monitor_insert(qso):
-                            evt = {"callsign": qso["callsign"], "mode": qso["mode"],
-                                   "freq": qso["freq_mhz"], "source": label,
-                                   "time": datetime.utcnow().strftime("%H:%M:%S")}
-                            _adif_monitor_events.append(evt)
-                            print(f"ADIF Monitor [{label}]: imported {qso['callsign']} {qso['mode']} {qso['freq_mhz']}")
-                    state[key] = new_offset
-                    changed = True
-                if changed:
-                    _save_adif_monitor_state(state)
+                        if qso:
+                            qsos.append(qso)
+                    if qsos:
+                        with _adif_monitor_pending_lock:
+                            _adif_monitor_pending.append({
+                                "source": label,
+                                "qsos": qsos,
+                                "filepath": key,
+                                "new_offset": new_offset,
+                            })
+                        print(f"ADIF Monitor [{label}]: {len(qsos)} QSO(s) pending confirmation")
         except Exception as e:
             print(f"ADIF Monitor error: {e}")
         time.sleep(5)
@@ -4537,6 +4861,51 @@ def adif_monitor_events():
     events = list(_adif_monitor_events)
     _adif_monitor_events.clear()
     return jsonify(events)
+
+@app.route("/api/adif_monitor_pending")
+def adif_monitor_pending():
+    """Return pending ADIF records awaiting user confirmation."""
+    with _adif_monitor_pending_lock:
+        pending = []
+        for batch in _adif_monitor_pending:
+            pending.append({
+                "source": batch["source"],
+                "count": len(batch["qsos"]),
+                "calls": [q["callsign"] for q in batch["qsos"]],
+            })
+    return jsonify(pending)
+
+@app.route("/api/adif_monitor_confirm", methods=["POST"])
+def adif_monitor_confirm():
+    """Import all pending ADIF records and advance file offsets."""
+    with _adif_monitor_pending_lock:
+        batches = list(_adif_monitor_pending)
+        _adif_monitor_pending.clear()
+    imported = 0
+    state = _load_adif_monitor_state()
+    for batch in batches:
+        for qso in batch["qsos"]:
+            if _adif_monitor_insert(qso):
+                evt = {"callsign": qso["callsign"], "mode": qso["mode"],
+                       "freq": qso["freq_mhz"], "source": batch["source"],
+                       "time": datetime.utcnow().strftime("%H:%M:%S")}
+                _adif_monitor_events.append(evt)
+                imported += 1
+        state[batch["filepath"]] = batch["new_offset"]
+    _save_adif_monitor_state(state)
+    return jsonify({"ok": True, "imported": imported})
+
+@app.route("/api/adif_monitor_dismiss", methods=["POST"])
+def adif_monitor_dismiss():
+    """Discard pending ADIF records but still advance file offsets (so they aren't re-detected)."""
+    with _adif_monitor_pending_lock:
+        batches = list(_adif_monitor_pending)
+        _adif_monitor_pending.clear()
+    state = _load_adif_monitor_state()
+    for batch in batches:
+        state[batch["filepath"]] = batch["new_offset"]
+    _save_adif_monitor_state(state)
+    return jsonify({"ok": True, "dismissed": sum(len(b["qsos"]) for b in batches)})
 
 
 # ─── Entry Point ──────────────────────────────────────────────────────────────
@@ -4561,6 +4930,8 @@ if __name__ == "__main__":
     threading.Thread(target=winkeyer_manager, daemon=True).start()
     # Start ADIF file monitor
     threading.Thread(target=adif_monitor_thread, daemon=True).start()
+    # Start lightning detection thread
+    threading.Thread(target=lightning_thread, daemon=True).start()
     print("\n  SDRLogger+ starting...")
     print(f"  TCI    : ws://{TCI_HOST}:{TCI_PORT}")
     print(f"  flrig  : XML-RPC poller ready (enable in Settings)")

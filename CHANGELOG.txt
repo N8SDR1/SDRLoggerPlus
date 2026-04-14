@@ -1,6 +1,43 @@
 SDRLogger+ — Change Log
 =======================
 
+v1.03  (2026-04-15)
+------------------------------------------
+- New: Lightning Detection — three-layer lightning alert system with a
+  flashing ⚡ bolt in the banner bar. Colour-coded by proximity:
+    • Yellow  — distant lightning (> 25 mi), slow 4-second pulse
+    • Orange  — moderate distance (10–25 mi) or NOAA warning, 3-second pulse
+    • Red     — close lightning (< 10 mi), fast 2-second pulse
+  Three data sources (use any combination):
+    • Blitzortung.org — real-time global lightning strikes with distance and
+      compass direction from your QTH (free, no API key)
+    • NOAA / NWS — severe thunderstorm warnings for your area (US only,
+      free, alert-only — no distance data)
+    • Ambient Weather — personal weather station lightning sensor (WS-2000,
+      WS-5000, and compatible models) via REST API. Requires both an API
+      Key and a separate Application Key from ambientweather.net/account/keys
+  Configurable range (miles/km) and per-source enable/disable toggles in
+  Settings → Cluster & Integrations → Lightning Detection.
+  Includes liability disclaimer and acceptance checkbox — users must
+  acknowledge the convenience-only nature of the feature before enabling.
+  Hover over the ⚡ banner to see last update time and any active NOAA
+  warning text. Backend polls every 90 seconds.
+- New: Browse Buttons — native file/directory picker dialogs for TQSL path,
+  ADIF monitor file paths, and database backup folder settings fields.
+- New: ADIF Import Confirmation — the ADIF File Monitor now shows a
+  confirmation dialog ("Import X QSOs?") before writing detected QSOs to
+  the database. Dismiss advances the file offset without importing.
+- New: MSHV Field Stripping — ADIF imports now whitelist only recognised QSO
+  fields, automatically discarding extra fields from apps like MSHV
+  (STATION_CALLSIGN, MY_GRIDSQUARE, DISTANCE, QSO_DATE_OFF, TIME_OFF).
+  ADIF headers (<EOH>) are also stripped before parsing.
+- Change: Help icon in banner changed from 📖 book to ? for cleaner appearance.
+- Fix: POTA spot sorting — clickable sort headers (Activator, Mode, Freq)
+  now work in POTA spots view, matching DX Cluster behaviour.
+- Fix: Stroke callsign map/distance — callsigns containing "/" (e.g.
+  IQ3VO/IAS, VE2/W1ABC) now retry lookup with the base callsign if the
+  full call fails.
+
 v1.02  (2026-04-13)
 ------------------------------------------
 - New: DXCC Entity Lookup — callsign-to-country resolution using built-in
