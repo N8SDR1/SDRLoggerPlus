@@ -21,15 +21,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ---
+---
 
 SDRLogger+ — Ham Radio SDR Logbook
-Version 0.43 Beta and any version after.
+All versions, past and future.
 Author: Rick Langford, N8SDR
 
-SDRLogger+ is not affiliated with QRZ.com, Expert Electronics (Thetis SDR),
-WSJT-X, JTDX, MSHV, VarAC, PstRotator, or any DX cluster operator.
+SDRLogger+ is an independent project and is not affiliated with, endorsed by,
+or sponsored by any third-party service, hardware manufacturer, or software
+project integrated within the application.
 
-QRZ.com integration requires your own active QRZ.com account and subscription.
+Third-party integrations (including but not limited to QRZ.com, ARRL Logbook
+of The World, Club Log, eQSL.cc, Blitzortung.org, NOAA/NWS, Ambient Weather,
+WSJT-X, JTDX, MSHV, VarAC, PstRotator, HamLib, flrig, K1EL WinKeyer, CSN
+Technologies, and Expert Electronics) may require the user's own accounts,
+subscriptions, or API keys. All trademarks remain the property of their
+respective owners.
 
 The user is solely responsible for operating in accordance with their amateur
 radio licence and all applicable regulations.
+
