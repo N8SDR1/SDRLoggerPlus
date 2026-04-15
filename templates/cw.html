@@ -2170,6 +2170,16 @@ wfInit();
   const sel=document.getElementById('afc-range-sel');
   if(sel) sel.value=String(gAfcRange);
 })();
+
+// ── CW window position/size persistence ─────────────────────────────────────
+function _saveCwWindowState() {
+  try {
+    const state = { x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight };
+    localStorage.setItem('_cwWindowState', JSON.stringify(state));
+  } catch(e) {}
+}
+window.addEventListener('beforeunload', _saveCwWindowState);
+window.addEventListener('resize', () => { clearTimeout(window._cwResizeTimer); window._cwResizeTimer = setTimeout(_saveCwWindowState, 500); });
 </script>
 </body>
 </html>
