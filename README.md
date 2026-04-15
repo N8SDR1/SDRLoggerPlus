@@ -4,7 +4,7 @@
   # SDR**Logger+**
   ### Ham Radio SDR Logbook — Built by Hams, for Hams
 
-  ![Version](https://img.shields.io/badge/version-1.03-00e5ff?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-1.04-00e5ff?style=flat-square)
   ![Platform](https://img.shields.io/badge/platform-Windows-39ff14?style=flat-square)
   ![License](https://img.shields.io/badge/license-MIT-00e5ff?style=flat-square)
   ![Status](https://img.shields.io/badge/status-Release-39ff14?style=flat-square)
@@ -60,7 +60,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ## 📥 Download
 
-> **[⬇ Download SDRLoggerPlus-Setup-1.03.exe](https://github.com/N8SDR1/SDRLoggerPlus/releases/latest)**
+> **[⬇ Download SDRLoggerPlus-Setup-1.04.exe](https://github.com/N8SDR1/SDRLoggerPlus/releases/latest)**
 >
 > Windows · Free · No subscription · No cloud
 
@@ -73,7 +73,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ## 🚀 Quick Start
 
-1. Download and run `SDRLoggerPlus-Setup-1.03.exe`
+1. Download and run `SDRLoggerPlus-Setup-1.04.exe`
 2. Accept defaults — installs to `C:\SDRLoggerPlus`
 3. SDRLogger+ launches automatically and opens your browser to `http://127.0.0.1:5000`
 4. Go to **Settings** and enter your callsign, QRZ credentials, and TCI/HamLib connection details
@@ -153,6 +153,6 @@ With development assistance by **Claude AI** (Anthropic)
 ---
 
 <div align="center">
-  <sub>SDRLogger+ v1.03 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
+  <sub>SDRLogger+ v1.04 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
   <sub>73 de N8SDR — good DX and happy logging!</sub>
 </div>

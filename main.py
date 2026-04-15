@@ -195,7 +195,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.03"
+VERSION  = "1.04"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -256,8 +256,8 @@ LIGHTNING_ACCEPTED         = False  # User accepted the liability disclaimer
 LIGHTNING_ENABLED          = False
 LIGHTNING_RANGE            = 50     # Alert range
 LIGHTNING_UNIT             = "mi"   # "mi" or "km"
-LIGHTNING_BLITZORTUNG      = True   # Blitzortung.org real-time strikes
-LIGHTNING_NOAA             = True   # NOAA/NWS severe thunderstorm warnings
+LIGHTNING_BLITZORTUNG      = False  # Blitzortung.org real-time strikes
+LIGHTNING_NOAA             = False  # NOAA/NWS severe thunderstorm warnings
 LIGHTNING_AMBIENT          = False  # Ambient Weather personal station
 LIGHTNING_AMBIENT_API_KEY  = ""
 LIGHTNING_AMBIENT_APP_KEY  = ""
@@ -1983,55 +1983,24 @@ def save_qso():
                          args=(callsign, data.get("freq_mhz"), data.get("mode")),
                          daemon=True).start()
 
-    # Auto-upload to QRZ Logbook if key is configured
-    qrz_logid = None
-    qrz_msg = None
-    if QRZ_LOGBOOK_KEY and QRZ_LOGBOOK_UPLOAD_ENABLED:
-        qrz_logid, qrz_err = qrz_logbook_upload(data | {"callsign": callsign})
-        if qrz_err:
-            print(f"QRZ Logbook upload failed: {qrz_err}")
-            qrz_msg = qrz_err
-        else:
-            print(f"QRZ Logbook upload OK — LOGID {qrz_logid}")
+    # Auto-upload to all configured services in background (non-blocking)
+    qso_data = data | {"callsign": callsign}
+    def _bg_uploads(qd):
+        if QRZ_LOGBOOK_KEY and QRZ_LOGBOOK_UPLOAD_ENABLED:
+            _, err = qrz_logbook_upload(qd)
+            print(f"QRZ Logbook upload {'failed: '+err if err else 'OK — '+qd['callsign']}")
+        if LOTW_TQSL_PATH and LOTW_UPLOAD_ENABLED:
+            _, err = lotw_upload(qd)
+            print(f"LoTW upload {'failed: '+err if err else 'OK — '+qd['callsign']}")
+        if CLUBLOG_UPLOAD_ENABLED and not _clublog_blocked:
+            _, err = clublog_upload(qd)
+            print(f"Club Log upload {'failed: '+err if err else 'OK — '+qd['callsign']}")
+        if EQSL_UPLOAD_ENABLED:
+            _, err = eqsl_upload(qd)
+            print(f"eQSL upload {'failed: '+err if err else 'OK — '+qd['callsign']}")
+    threading.Thread(target=_bg_uploads, args=(qso_data,), daemon=True).start()
 
-    # Auto-upload to LoTW via TQSL if configured
-    lotw_ok = None
-    lotw_msg = None
-    if LOTW_TQSL_PATH and LOTW_UPLOAD_ENABLED:
-        lotw_ok, lotw_err = lotw_upload(data | {"callsign": callsign})
-        if lotw_err:
-            print(f"LoTW upload failed: {lotw_err}")
-            lotw_msg = lotw_err
-        else:
-            print(f"LoTW upload OK — {callsign}")
-
-    # Auto-upload to Club Log realtime API if configured
-    clublog_ok = None
-    clublog_msg = None
-    if CLUBLOG_UPLOAD_ENABLED and not _clublog_blocked:
-        clublog_ok, clublog_err = clublog_upload(data | {"callsign": callsign})
-        if clublog_err:
-            print(f"Club Log upload failed: {clublog_err}")
-            clublog_msg = clublog_err
-        else:
-            print(f"Club Log upload OK — {callsign}")
-
-    # Auto-upload to eQSL.cc if configured
-    eqsl_ok = None
-    eqsl_msg = None
-    if EQSL_UPLOAD_ENABLED:
-        eqsl_ok, eqsl_err = eqsl_upload(data | {"callsign": callsign})
-        if eqsl_err:
-            print(f"eQSL upload failed: {eqsl_err}")
-            eqsl_msg = eqsl_err
-        else:
-            print(f"eQSL upload OK — {callsign}")
-
-    return jsonify({"ok": True, "callsign": callsign,
-                    "qrz_logid": qrz_logid, "qrz_msg": qrz_msg,
-                    "lotw_ok": lotw_ok, "lotw_msg": lotw_msg,
-                    "clublog_ok": clublog_ok, "clublog_msg": clublog_msg,
-                    "eqsl_ok": eqsl_ok, "eqsl_msg": eqsl_msg})
+    return jsonify({"ok": True, "callsign": callsign})
 
 
 @app.route("/api/worked_before/<callsign>")
@@ -2157,7 +2126,7 @@ def _qrz_login(username, password):
         resp = requests.get(
             QRZ_XML_URL,
             params={"username": username, "password": password, "agent": QRZ_AGENT},
-            timeout=8
+            timeout=5
         )
         root, session, err = _qrz_parse_xml(resp.text)
         if err:
@@ -2180,7 +2149,7 @@ def _qrz_lookup_with_key(session_key, callsign):
         resp = requests.get(
             QRZ_XML_URL,
             params={"s": session_key, "callsign": callsign.upper(), "agent": QRZ_AGENT},
-            timeout=8
+            timeout=5
         )
         root, session, err = _qrz_parse_xml(resp.text)
         ns = {"q": "http://xmldata.qrz.com"}
@@ -2304,7 +2273,7 @@ def _hamqth_login(username, password):
     try:
         resp = requests.get(_HAMQTH_URL,
                             params={"u": username, "p": password},
-                            timeout=8)
+                            timeout=5)
         root = ET.fromstring(resp.text)
         ns   = {"h": "https://www.hamqth.com"}
         sid  = root.find(".//h:session_id", ns)
@@ -2325,7 +2294,7 @@ def _hamqth_lookup_with_key(session_id, callsign):
         resp = requests.get(_HAMQTH_URL,
                             params={"id": session_id, "callsign": callsign.upper(),
                                     "prg": "SDRLogger+"},
-                            timeout=8)
+                            timeout=5)
         root = ET.fromstring(resp.text)
         ns   = {"h": "https://www.hamqth.com"}
 
@@ -2463,7 +2432,7 @@ def clublog_test():
                 "callsign": callsign,
             },
             headers={"User-Agent": f"SDRLoggerPlus/{VERSION}"},
-            timeout=15
+            timeout=8
         )
         body = resp.text.strip()[:400]
         is_nginx = "nginx" in body.lower() and "<html" in body.lower()
@@ -2641,6 +2610,16 @@ def update_settings():
     if "lightning_ambient"         in data: LIGHTNING_AMBIENT         = bool(data["lightning_ambient"])
     if data.get("lightning_ambient_api_key"): LIGHTNING_AMBIENT_API_KEY = data["lightning_ambient_api_key"].strip()
     if data.get("lightning_ambient_app_key"): LIGHTNING_AMBIENT_APP_KEY = data["lightning_ambient_app_key"].strip()
+    # Immediately clear lightning status so banner hides when sources change
+    if any(k in data for k in ("lightning_enabled", "lightning_blitzortung", "lightning_noaa", "lightning_ambient")):
+        with _lightning_lock:
+            _lightning_status["active"] = False
+            _lightning_status["closest_km"] = None
+            _lightning_status["closest_mi"] = None
+            _lightning_status["direction"] = ""
+            _lightning_status["strikes_1hr"] = 0
+            _lightning_status["sources"] = []
+            _lightning_status["noaa_warning"] = ""
     _save_app_settings()
     return jsonify({"ok": True})
 
@@ -3372,7 +3351,7 @@ def qrz_test_logbook():
                 "Content-Type": "application/x-www-form-urlencoded",
                 "User-Agent": f"HamLog/1.0 ({MY_CALLSIGN})"
             },
-            timeout=8
+            timeout=5
         )
         result = {}
         for part in resp.text.strip().split("&"):
@@ -4527,7 +4506,7 @@ def _fetch_blitzortung(my_lat, my_lon, range_km):
     for region in regions:
         try:
             url = f"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={region:02d}"
-            resp = requests.get(url, timeout=15, headers=headers)
+            resp = requests.get(url, timeout=8, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 # Response is a flat list of arrays: [[lon, lat, ts, ...], ...]

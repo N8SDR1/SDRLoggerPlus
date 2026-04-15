@@ -1,6 +1,26 @@
 SDRLogger+ — Change Log
 =======================
 
+v1.04 Beta  (2026-04-15)
+------------------------------------------
+- Performance: QSO save uploads (QRZ Logbook, LoTW, Club Log, eQSL) now run
+  in a background thread — eliminates up to 35-second UI freeze after logging
+  a contact. The save response returns immediately.
+- Performance: HTTP timeouts reduced across all credential tests and API
+  calls — credential tests 8→5s, Club Log test 15→8s, Blitzortung 15→8s per
+  region.
+- Fix: Lightning source toggles (Blitzortung, NOAA, Ambient Weather) now
+  properly disable when unchecked and saved. Frontend checkbox load changed
+  from `!== false` to `=== true` to prevent undefined values being treated
+  as enabled.
+- Fix: Lightning status banner now clears immediately when any lightning
+  setting is changed — no longer waits for the next 90-second poll cycle.
+- Fix: Dock panel vertical heights now persist correctly across application
+  restarts. Added beforeunload save handler, offsetHeight fallback for
+  auto-sized panels, and rotator panel default height.
+- Fix: CW Keyer window position and size now persist across opens. Saved to
+  localStorage on close and resize, restored when reopened.
+
 v1.03  (2026-04-15)
 ------------------------------------------
 - New: Lightning Detection — three-layer lightning alert system with a
