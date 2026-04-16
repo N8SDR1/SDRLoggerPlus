@@ -201,7 +201,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.05"
+VERSION  = "1.06"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -5288,7 +5288,10 @@ def sat_udp_listener():
     Parses comma-separated SAT protocol messages and updates _sat_state."""
     import time as _t
     while True:
-        if not SAT_UDP_ENABLED:
+        # Only listen when SAT integration is enabled AND user is in SAT mode.
+        # When the user switches away from SAT mode, the listener releases the
+        # socket so port 9932 is free for other tools.
+        if not (SAT_UDP_ENABLED and ACTIVE_MODE == "sat"):
             _t.sleep(2)
             continue
         s = None
@@ -5297,8 +5300,8 @@ def sat_udp_listener():
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind(("0.0.0.0", SAT_UDP_PORT))
             s.settimeout(2.0)
-            _log(f"SAT: UDP listener active on port {SAT_UDP_PORT}")
-            while SAT_UDP_ENABLED:
+            _log(f"SAT: UDP listener active on port {SAT_UDP_PORT} (SAT mode)")
+            while SAT_UDP_ENABLED and ACTIVE_MODE == "sat":
                 try:
                     data, addr = s.recvfrom(4096)
                     if not data:
@@ -5488,7 +5491,10 @@ def sat_adif_listener():
     IP:PORT when a QSO is logged on the device (ACLog, N1MM, Log4OM, etc.)."""
     import socket, time
     while True:
-        if not SAT_UDP_ENABLED:
+        # Only listen when SAT integration is enabled AND user is in SAT mode.
+        # When the user switches away from SAT mode, the listener releases
+        # port 1100 so it's free for other applications.
+        if not (SAT_UDP_ENABLED and ACTIVE_MODE == "sat"):
             time.sleep(2)
             continue
         try:
@@ -5496,8 +5502,8 @@ def sat_adif_listener():
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.settimeout(3)
             s.bind(("0.0.0.0", SAT_ADIF_PORT))
-            _log(f"SAT-ADIF: Listener active on port {SAT_ADIF_PORT}")
-            while SAT_UDP_ENABLED:
+            _log(f"SAT-ADIF: Listener active on port {SAT_ADIF_PORT} (SAT mode)")
+            while SAT_UDP_ENABLED and ACTIVE_MODE == "sat":
                 try:
                     data, addr = s.recvfrom(8192)
                 except socket.timeout:
@@ -5577,6 +5583,15 @@ def _sat_process_adif_record(text):
         dn_mode = _sat_state.get("downlink_mode", mode)
         aos_az = _sat_state.get("aos_az", "")
         los_az = _sat_state.get("los_az", "")
+
+    # Fast in-memory dedup check (no DB query) — same callsign + date +
+    # sat_name within ±5 minutes is treated as a duplicate. Prevents the
+    # same QSO being inserted twice when both the UDP push and the /adif
+    # background poll deliver it (the S.A.T. typically reports them ~60s
+    # apart due to firmware QRZ-lookup / CSN-report delay).
+    if _sat_dedup_check_and_record(call, dt, sat_name, tm):
+        _log(f"SAT-ADIF: Duplicate skipped → {call} on {sat_name} at {tm} (already logged within 5min window)")
+        return
 
     try:
         conn = get_db(DATABASE)
@@ -5678,7 +5693,9 @@ def api_sat_status():
     enriched with live /track data from the S.A.T. controller."""
     # Poll live data from S.A.T.
     track = None
-    if SAT_UDP_ENABLED and SAT_CONTROLLER_IP:
+    # Only poll the S.A.T.'s /track endpoint when the user is in SAT mode —
+    # avoids hitting the device unnecessarily when it's not being used.
+    if SAT_UDP_ENABLED and SAT_CONTROLLER_IP and ACTIVE_MODE == "sat":
         track = _sat_poll_track()
 
     with _sat_state_lock:
@@ -5767,38 +5784,141 @@ def api_sat_status():
     return jsonify(state)
 
 
+# ─── SAT QSO Counter (fast polling endpoint for new-QSO detection) ──────────
+@app.route("/api/sat/qso_count")
+def api_sat_qso_count():
+    """Lightweight endpoint that just returns the SAT QSO counter.
+    The frontend polls this faster than the full /api/sat/status to detect
+    incoming QSOs with minimal latency, without making an HTTP call to the S.A.T."""
+    return jsonify({"qso_counter": _sat_qso_counter})
+
+
 # ─── SAT Log Fetch (pull ADIF from S.A.T. device) ───────────────────────────
-@app.route("/api/sat/fetch_log", methods=["POST"])
-def api_sat_fetch_log():
-    """Fetch the QSO log from the S.A.T. device via its /adif endpoint,
-    parse it, and import new QSOs with duplicate detection."""
+def _time_to_minutes(time_str):
+    """Convert HH:MM:SS or HH:MM string to minutes since midnight (int).
+    Returns None on parse failure."""
+    try:
+        parts = time_str.strip().split(":")
+        if len(parts) >= 2:
+            return int(parts[0]) * 60 + int(parts[1])
+    except (ValueError, AttributeError):
+        pass
+    return None
+
+
+def _sat_is_duplicate(call, date, sat_name, time_str, existing_index, window_min=5):
+    """Check if a SAT QSO is a duplicate by (callsign + date + sat_name) within
+    a ±window_min minute time window. The S.A.T. can deliver the same QSO via
+    multiple paths (UDP push at button-press time, /adif poll ~60s later after
+    QRZ lookup / CSN submission), so a wider time window catches these reliably
+    while still allowing legitimate later-pass contacts (typically minutes apart)."""
+    key = (call.upper().strip(), date.strip(), (sat_name or "").upper().strip())
+    if key not in existing_index:
+        return False
+    qso_min = _time_to_minutes(time_str)
+    if qso_min is None:
+        # Can't parse time — fall back to exact callsign+date+sat match
+        return True
+    for existing_min in existing_index[key]:
+        if abs(existing_min - qso_min) <= window_min:
+            return True
+    return False
+
+
+# In-memory dedup index — seeded once from the DB (last 7 days only),
+# then updated incrementally as new SAT QSOs arrive. Avoids a full-table
+# scan on every QSO arrival, which was causing significant lag (~5-7s)
+# on databases with thousands of QSOs.
+_sat_dedup_index  = {}                # (call, date, sat) -> [minutes_since_midnight, ...]
+_sat_dedup_lock   = threading.Lock()
+_sat_dedup_seeded = False
+
+def _seed_sat_dedup_index():
+    """One-time seed of the in-memory SAT dedup index from the DB.
+    Only loads QSOs from the last 7 days — the dedup window is only 5
+    minutes, so older QSOs can't conflict with new arrivals."""
+    global _sat_dedup_seeded
+    with _sat_dedup_lock:
+        if _sat_dedup_seeded:
+            return
+        _sat_dedup_index.clear()
+        try:
+            from datetime import timedelta
+            cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+            conn = get_db(DATABASE)
+            rows = conn.execute(
+                "SELECT callsign, date_worked, time_worked, sat_name "
+                "FROM qso_log WHERE prop_mode='SAT' AND date_worked >= ?",
+                (cutoff,)
+            ).fetchall()
+            conn.close()
+            for row in rows:
+                call = (row[0] or "").upper().strip()
+                dt   = (row[1] or "").strip()
+                tm   = (row[2] or "").strip()
+                sat  = (row[3] or "").upper().strip()
+                mins = _time_to_minutes(tm)
+                if mins is None:
+                    continue
+                _sat_dedup_index.setdefault((call, dt, sat), []).append(mins)
+            _sat_dedup_seeded = True
+            _log(f"SAT-DEDUP: Index seeded with {len(_sat_dedup_index)} keys (last 7 days)")
+        except Exception as e:
+            _log(f"SAT-DEDUP: Seed error: {e}")
+            _sat_dedup_seeded = True  # don't keep retrying
+
+
+def _sat_dedup_check_and_record(call, date_str, sat_name, time_str, window_min=5):
+    """Atomic check-and-record using the in-memory dedup index. Returns
+    True if the QSO is a duplicate (caller should skip insert). Returns
+    False if it's new — and the record is added to the index so subsequent
+    checks (within the next few seconds) will catch it."""
+    if not _sat_dedup_seeded:
+        _seed_sat_dedup_index()
+    qso_min = _time_to_minutes(time_str)
+    if qso_min is None:
+        return False  # can't reason about it — let it through
+    key = ((call or "").upper().strip(),
+           (date_str or "").strip(),
+           (sat_name or "").upper().strip())
+    with _sat_dedup_lock:
+        existing = _sat_dedup_index.get(key, [])
+        for em in existing:
+            if abs(em - qso_min) <= window_min:
+                return True
+        existing.append(qso_min)
+        _sat_dedup_index[key] = existing
+        return False
+
+
+def _sat_dedup_invalidate():
+    """Force a full reseed of the dedup index from the DB. Called after
+    the manual Dedupe button removes rows."""
+    global _sat_dedup_seeded
+    with _sat_dedup_lock:
+        _sat_dedup_seeded = False
+    _seed_sat_dedup_index()
+
+
+def _sat_fetch_and_import(quiet=False):
+    """Pull /adif from the S.A.T., parse it, and import new QSOs with dedupe.
+    Returns (ok, imported, skipped, error). When quiet=True, suppresses log
+    output for routine background polls (only logs when QSOs are imported)."""
     global _sat_qso_counter
     sat_ip = SAT_CONTROLLER_IP or "192.168.200.194"
     try:
         resp = requests.get(f"http://{sat_ip}/adif", timeout=5)
         if not resp.ok:
-            return jsonify({"ok": False, "error": f"S.A.T. returned HTTP {resp.status_code}"})
+            return (False, 0, 0, f"S.A.T. returned HTTP {resp.status_code}")
         adif_text = resp.text
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Cannot reach S.A.T. at {sat_ip}: {e}"})
+        return (False, 0, 0, f"Cannot reach S.A.T. at {sat_ip}: {e}")
 
-    # Parse ADIF records
     records = _parse_adif_records(adif_text)
     if not records:
-        return jsonify({"ok": True, "imported": 0, "skipped": 0,
-                        "msg": "No QSO records found in S.A.T. log"})
+        return (True, 0, 0, None)
 
-    # Build set of existing SAT QSOs for duplicate detection (call+date+time)
     conn = get_db(DATABASE)
-    existing = set()
-    try:
-        rows = conn.execute(
-            "SELECT callsign, date_worked, time_worked FROM qso_log WHERE prop_mode='SAT'"
-        ).fetchall()
-        for row in rows:
-            existing.add((row[0].upper().strip(), row[1].strip(), row[2].strip()[:5]))
-    except Exception:
-        pass
 
     imported = 0
     skipped = 0
@@ -5806,17 +5926,14 @@ def api_sat_fetch_log():
         qso = _adif_to_qso(rec)
         if not qso:
             continue
-        # Force SAT prop_mode
         if not qso.get("prop_mode"):
             qso["prop_mode"] = "SAT"
-        # Duplicate check: call + date + time (to minute)
-        dup_key = (qso["callsign"].upper().strip(),
-                   qso["date_worked"].strip(),
-                   qso["time_worked"].strip()[:5])
-        if dup_key in existing:
+        # Fast in-memory dedup (no DB query) — check_and_record is atomic
+        if _sat_dedup_check_and_record(qso["callsign"], qso["date_worked"],
+                                       qso.get("sat_name", ""),
+                                       qso["time_worked"]):
             skipped += 1
             continue
-        # Insert
         try:
             conn.execute("""
                 INSERT INTO qso_log
@@ -5837,7 +5954,6 @@ def api_sat_fetch_log():
                 qso.get("gridsquare", ""),
                 qso["prop_mode"], qso.get("sat_name", ""),
             ))
-            existing.add(dup_key)
             imported += 1
             _worked_cache_add(qso["callsign"], qso["band"], qso["mode"])
         except Exception as e:
@@ -5847,7 +5963,96 @@ def api_sat_fetch_log():
     conn.close()
     if imported:
         _sat_qso_counter += imported
-    _log(f"SAT-FETCH: Imported {imported}, skipped {skipped} duplicates from S.A.T. at {sat_ip}")
+        _log(f"SAT-FETCH: Imported {imported}, skipped {skipped} duplicates from S.A.T. at {sat_ip}")
+    elif not quiet:
+        _log(f"SAT-FETCH: Imported {imported}, skipped {skipped} duplicates from S.A.T. at {sat_ip}")
+    return (True, imported, skipped, None)
+
+
+def sat_log_poller():
+    """Background thread: polls the S.A.T.'s /adif endpoint every 2.5 seconds
+    and auto-imports any new QSOs. Acts as a fast-path complement to the
+    UDP ADIF push — many S.A.T. firmwares delay the UDP push by several
+    seconds (waiting for QRZ lookup / CSN report), but /adif is updated
+    immediately. Polling here typically delivers QSOs to SDRLogger+ within
+    2-3 seconds of pressing ADD ENTRY on the S.A.T."""
+    import time
+    # Wait a few seconds at startup so settings are loaded
+    time.sleep(5)
+    while True:
+        # Only poll when SAT integration is enabled AND user is in SAT mode.
+        # Stops the periodic /adif HTTP requests when the user switches to
+        # General or POTA mode — no traffic to the S.A.T. unless needed.
+        if not (SAT_UDP_ENABLED and SAT_CONTROLLER_IP and ACTIVE_MODE == "sat"):
+            time.sleep(3)
+            continue
+        try:
+            _sat_fetch_and_import(quiet=True)
+        except Exception as e:
+            _log(f"SAT-POLLER: Error: {e}")
+        time.sleep(2.5)
+
+
+@app.route("/api/sat/dedupe", methods=["POST"])
+def api_sat_dedupe():
+    """One-shot cleanup: find SAT QSOs that are duplicates of one another
+    (same callsign + date + sat_name within ±5 minutes) and delete the LATER
+    one (which is typically the /adif-poll copy that arrived ~60s after the
+    UDP push and lacks band/freq data). Returns a count of removed rows."""
+    try:
+        conn = get_db(DATABASE)
+        # Pull all SAT QSOs ordered by date+time so the FIRST (earliest) one
+        # in any duplicate cluster is kept.
+        rows = conn.execute(
+            "SELECT id, callsign, date_worked, time_worked, sat_name, band, freq_mhz "
+            "FROM qso_log WHERE prop_mode='SAT' "
+            "ORDER BY date_worked ASC, time_worked ASC"
+        ).fetchall()
+
+        # Group by (call, date, sat) — within each group, keep first within
+        # 5min window, mark the rest as duplicates
+        seen = {}    # (call, date, sat) -> [(time_min, id), ...]
+        to_delete = []
+        for row in rows:
+            qid = row[0]
+            call = (row[1] or "").upper().strip()
+            dt   = (row[2] or "").strip()
+            tm   = (row[3] or "").strip()
+            sat  = (row[4] or "").upper().strip()
+            mins = _time_to_minutes(tm)
+            if mins is None:
+                continue
+            key = (call, dt, sat)
+            kept = seen.get(key, [])
+            is_dup = any(abs(km - mins) <= 5 for km, _ in kept)
+            if is_dup:
+                to_delete.append(qid)
+            else:
+                kept.append((mins, qid))
+                seen[key] = kept
+
+        if to_delete:
+            placeholders = ",".join("?" * len(to_delete))
+            conn.execute(f"DELETE FROM qso_log WHERE id IN ({placeholders})", to_delete)
+            conn.commit()
+        conn.close()
+        # Reseed the in-memory dedup index since we deleted rows from the DB
+        _sat_dedup_invalidate()
+        _log(f"SAT-DEDUPE: Removed {len(to_delete)} duplicate SAT QSOs")
+        return jsonify({"ok": True, "removed": len(to_delete),
+                        "msg": f"Removed {len(to_delete)} duplicate SAT QSO{'s' if len(to_delete) != 1 else ''}"})
+    except Exception as e:
+        _log(f"SAT-DEDUPE: Error: {e}")
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/sat/fetch_log", methods=["POST"])
+def api_sat_fetch_log():
+    """Manual trigger of the S.A.T. /adif fetch + import (used by the
+    'Fetch S.A.T. Log' button). Returns a user-facing message."""
+    ok, imported, skipped, err = _sat_fetch_and_import(quiet=False)
+    if not ok:
+        return jsonify({"ok": False, "error": err})
     return jsonify({"ok": True, "imported": imported, "skipped": skipped,
                     "msg": f"Imported {imported} QSO{'s' if imported != 1 else ''}, "
                            f"skipped {skipped} duplicate{'s' if skipped != 1 else ''}"})
@@ -5871,6 +6076,8 @@ if __name__ == "__main__":
     threading.Thread(target=sat_udp_listener, daemon=True).start()
     # Start S.A.T. ADIF-over-UDP listener (QSO LOG TYPE — port 1100 default)
     threading.Thread(target=sat_adif_listener, daemon=True).start()
+    # Start S.A.T. /adif log poller (fast-path for QSO import — bypasses any UDP delay)
+    threading.Thread(target=sat_log_poller, daemon=True).start()
     # Start flrig poller (always running; activates when FLRIG_ENABLED is True)
     threading.Thread(target=flrig_poller, daemon=True).start()
     # Start HamLib poller (always running; activates when HAMLIB_ENABLED is True)

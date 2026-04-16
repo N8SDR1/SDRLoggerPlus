@@ -1,6 +1,60 @@
 SDRLogger+ — Change Log
 =======================
 
+v1.06  (2026-04-16)
+------------------------------------------
+SAT performance & polish release. Pre-release for testing alongside v1.05.
+
+  ── 🛰 SAT IMPROVEMENTS ──────────────────────────────────────────────────
+- New: Mode-Gated SAT Listeners — SDRLogger+ now only listens to and polls
+  the S.A.T. while in 🛰 SAT mode. Switching to General or POTA stops the
+  UDP listeners (ports 9932 + 1100), the /track polling, and the /adif
+  log poller. Ports are freed for other applications. The S.A.T. badge
+  remains hidden outside SAT mode (unchanged from v1.05). This is ideal
+  for operators who leave the S.A.T. powered on continuously but only
+  want SDRLogger+ to interact with it during active satellite sessions.
+- New: /adif Background Poller — a third QSO-import path that polls the
+  S.A.T.'s /adif endpoint every 2.5 seconds while in SAT mode. Bypasses
+  any firmware-side delay in the UDP push (some QSO LOG TYPE formats
+  send the UDP push only after QRZ-lookup / CSN-report completes,
+  introducing 5-10s of lag). With this poller, QSOs typically appear in
+  SDRLogger+ within ~3 seconds of pressing ADD ENTRY on the S.A.T.,
+  regardless of which QSO LOG TYPE is selected.
+- New: 🧹 Dedupe Button — appears in the SAT status panel connection bar
+  next to ⬇ Fetch S.A.T. Log. Scans all SAT QSOs and removes copies that
+  match the same callsign + date + sat name within ±5 minutes. Always
+  keeps the earliest copy (which has band/freq/transponder data from
+  the original UDP push). Used to clean up any legacy duplicates from
+  v1.05 — under v1.06, duplicates can no longer occur.
+- New: Smarter SAT Dedup Logic — the dedup key now uses (callsign +
+  date + sat_name) within a ±5-minute time window, instead of exact-
+  minute time matching. Catches the case where the same QSO arrives via
+  the UDP push and the /adif poll with timestamps ~60 seconds apart
+  (a S.A.T. firmware behaviour where /adif reports the QSO ~60s after
+  the original LOG ENTRY press). No more visible duplicates from
+  multi-path arrivals.
+- Fix: SAT dedup performance — replaced per-QSO full table scan with
+  an in-memory dedup index seeded once at startup (last 7 days only).
+  Eliminates the 5-7 second lag between pressing ADD ENTRY on the S.A.T.
+  and the QSO appearing in SDRLogger+ that some users saw on databases
+  with thousands of QSOs.
+- Fix: Launcher missing SAT thread starts — sat_udp_listener,
+  sat_adif_listener, and sat_log_poller are now correctly started by
+  launcher.py in the installed (PyInstaller) build. Previously these
+  threads only ran when launching main.py directly during development,
+  meaning the installed v1.05 silently failed to bind UDP ports
+  9932 / 1100.
+- Doc: Recommended QSO LOG TYPE updated from "ACLog" to "N1MM" — testing
+  showed N1MM produces the fastest end-to-end response (typically &lt;3s),
+  ACLog is noticeably slower, Log4OM is in between. All formats still
+  work — N1MM is just the fastest.
+- New: GET /api/sat/qso_count — lightweight endpoint that returns just
+  the SAT QSO counter (no S.A.T. HTTP call). Frontend polls this every
+  500ms in SAT mode for instant new-QSO detection without slamming
+  the S.A.T.'s web server.
+- New: POST /api/sat/dedupe — backend endpoint behind the 🧹 Dedupe
+  button.
+
 v1.05  (2026-04-16)
 ------------------------------------------
 The biggest single release yet — full CSN Technologies S.A.T. controller
