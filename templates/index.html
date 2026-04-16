@@ -41,6 +41,10 @@
   #flrig-badge.fl-enabled{display:inline-block;}
   #flrig-badge.fl-connected{background:#0d1520;color:#39aaff;border-color:#39aaff;}
   #flrig-badge.fl-offline{background:#1a0d0d;color:var(--red);border-color:var(--red);}
+  #sat-badge{font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:3px;background:#0d0d1a;color:var(--muted);border:1px solid var(--border);transition:all .3s;display:none;}
+  #sat-badge.sat-enabled{display:inline-block;}
+  #sat-badge.sat-connected{background:#1a1800;color:#ffd700;border-color:#ffd700;}
+  #sat-badge.sat-offline{background:#1a0d0d;color:var(--red);border-color:var(--red);}
   #utc-clock{font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:1px;}
   .btn-settings{background:transparent;border:1px solid var(--border);color:var(--muted);width:32px;height:32px;border-radius:4px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .2s;}
   .btn-settings:hover{border-color:var(--accent);color:var(--accent);transform:rotate(45deg);}
@@ -224,12 +228,37 @@
   .spot-freq{font-family:var(--mono);font-size:11px;color:var(--accent);}
   .spot-de{font-family:var(--mono);font-size:10px;color:#8ab0c4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .spot-empty{text-align:center;padding:30px 10px;font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .spot-row.spot-new-entity{background:rgba(255,215,0,.08);border-left:2px solid #ffd700;}
+  .spot-row.spot-new-entity:hover{background:rgba(255,215,0,.14);}
+  .spot-row.spot-new-zone{background:rgba(255,107,53,.08);border-left:2px solid #ff6b35;}
+  .spot-row.spot-new-zone:hover{background:rgba(255,107,53,.14);}
+  .spot-row.spot-new-both{background:rgba(255,215,0,.10);border-left:2px solid #ffd700;}
+  .spot-row.spot-new-both:hover{background:rgba(255,215,0,.16);}
   #cluster-band-label{font-family:var(--mono);font-size:11px;color:var(--accent);margin-left:auto;}
   /* POTA spots mode */
   #pota-spots-btn.active{border-color:var(--accent2);color:var(--accent2);background:rgba(57,255,20,.08);}
   .spot-head.pota-mode{grid-template-columns:76px 38px 68px 60px 1fr;}
   .spot-row.pota-spot{grid-template-columns:76px 38px 68px 60px 1fr;}
   .pota-park{font-family:var(--mono);font-size:10px;color:var(--accent2);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* ── SAT Mode ── */
+  .sat-status-panel{font-family:var(--mono);font-size:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;height:100%;overflow-y:auto;}
+  .sat-status-section{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px 12px;}
+  .sat-status-section h3{font-family:var(--head);font-size:13px;font-weight:700;color:var(--accent);letter-spacing:1px;margin:0 0 6px 0;text-transform:uppercase;}
+  .sat-field{display:flex;justify-content:space-between;padding:2px 0;}
+  .sat-field-label{color:var(--muted);font-size:11px;}
+  .sat-field-value{color:var(--text);font-size:11px;font-weight:600;text-align:right;}
+  .sat-status-indicator{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+  .sat-status-idle{background:#5a7080;}
+  .sat-status-tracking{background:#ffd700;animation:satPulse 2s infinite;}
+  .sat-status-aos{background:#39ff14;animation:satPulse 1s infinite;}
+  .sat-status-los{background:#ff6b35;}
+  @keyframes satPulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+  .sat-pass-log{max-height:200px;overflow-y:auto;}
+  .sat-pass-log table{width:100%;border-collapse:collapse;font-size:11px;}
+  .sat-pass-log th{color:var(--muted);font-weight:600;text-align:left;padding:3px 6px;border-bottom:1px solid var(--border);}
+  .sat-pass-log td{padding:3px 6px;color:var(--text);}
+  .sat-event-log{max-height:120px;overflow-y:auto;font-size:10px;color:var(--muted);line-height:1.6;}
+  .sat-conn-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface);border-radius:4px;border:1px solid var(--border);font-size:10px;color:var(--muted);}
   .pota-park-name{font-size:9px;color:#8fafc0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
   /* UPDATE OVERLAY */
@@ -396,6 +425,7 @@
     <span id="tci-badge">TCI OFFLINE</span>
     <span id="flrig-badge">FLRIG OFFLINE</span>
     <span id="hamlib-badge">RIG OFFLINE</span>
+    <span id="sat-badge">S.A.T. OFFLINE</span>
     <div style="text-align:right;line-height:1.35;">
       <div id="utc-clock" style="font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:1px;">00:00:00 UTC</div>
       <div id="local-clock" style="font-family:var(--mono);font-size:13px;color:#d0dce8;letter-spacing:1px;">—</div>
@@ -419,13 +449,16 @@
          ondragstart="panelDragStart(event,'qso')" ondragend="panelDragEnd()">
       <span class="dock-grip" title="Drag to reposition">⠿</span>
       <h2 id="qso-panel-title">📡 New QSO Entry</h2>
-      <div id="pota-mode-toggle" title="Switch between General logging and POTA activation mode"
+      <div id="pota-mode-toggle" title="Switch between General, POTA, and SAT logging modes"
            style="display:flex;align-items:center;margin-left:auto;margin-right:6px;border:1px solid var(--border);border-radius:4px;overflow:hidden;cursor:pointer;flex-shrink:0;">
         <button id="pota-btn-gen" onclick="setPotaMode('general')"
                 style="padding:2px 8px;border:none;background:var(--accent);color:#000;font-family:var(--mono);font-size:9px;font-weight:700;cursor:pointer;transition:all .15s;">General</button>
         <span style="color:#e07070;font-family:var(--mono);font-size:10px;font-weight:700;padding:0 3px;background:var(--surface);align-self:stretch;display:flex;align-items:center;">/</span>
         <button id="pota-btn-pota" onclick="setPotaMode('pota')"
                 style="padding:2px 8px;border:none;background:var(--surface);color:var(--muted);font-family:var(--mono);font-size:9px;font-weight:700;cursor:pointer;transition:all .15s;">🏕 POTA</button>
+        <span style="color:#e07070;font-family:var(--mono);font-size:10px;font-weight:700;padding:0 3px;background:var(--surface);align-self:stretch;display:flex;align-items:center;">/</span>
+        <button id="pota-btn-sat" onclick="setPotaMode('sat')"
+                style="padding:2px 8px;border:none;background:var(--surface);color:var(--muted);font-family:var(--mono);font-size:9px;font-weight:700;cursor:pointer;transition:all .15s;">🛰 SAT</button>
       </div>
       <button class="dock-collapse-btn" style="margin-left:0;" onclick="togglePanel('qso')" title="Collapse">—</button>
     </div>
@@ -498,7 +531,7 @@
             </select>
           </div>
           <div class="field">
-            <label>Mode <span style="color:#8fafc0;font-size:9px">(auto from rig)</span></label>
+            <label>Mode <span id="mode-hint" style="color:#8fafc0;font-size:9px">(auto from rig)</span></label>
             <select id="mode" onchange="onModeChange(this.value, event)">
               <option value="">-- select --</option>
               <optgroup label="SSB">
@@ -552,6 +585,45 @@
           </div>
           <div class="field" style="align-self:flex-end;padding-bottom:4px;">
             <span style="font-family:var(--mono);font-size:9px;color:#8fafc0;line-height:1.5;">Fill only when the<br>contact is also activating a park</span>
+          </div>
+        </div>
+        <!-- SAT fields — shown only in SAT mode -->
+        <div id="sat-fields-row" style="display:none;">
+          <div class="form-row">
+            <div class="field">
+              <label style="color:#ffd700;">🛰 Satellite</label>
+              <input type="text" id="sat_name" placeholder="e.g. ISS, SO-50" autocomplete="off" spellcheck="false"
+                     style="font-family:var(--mono);letter-spacing:1px;color:#ffd700;font-weight:700;">
+            </div>
+            <div class="field">
+              <label>Grid Square</label>
+              <input type="text" id="sat_grid" placeholder="e.g. FN30ha" maxlength="8" autocomplete="off" spellcheck="false"
+                     style="font-family:var(--mono);letter-spacing:1px;">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Uplink Freq (MHz)</label>
+              <input type="text" id="sat_uplink_freq" placeholder="435.310" inputmode="decimal" autocomplete="off"
+                     style="font-family:var(--mono);font-size:12px;">
+            </div>
+            <div class="field">
+              <label>Downlink Freq (MHz)</label>
+              <input type="text" id="sat_downlink_freq" placeholder="435.190" inputmode="decimal" autocomplete="off"
+                     style="font-family:var(--mono);font-size:12px;">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Up Mode</label>
+              <input type="text" id="sat_uplink_mode" placeholder="USB" autocomplete="off"
+                     style="font-family:var(--mono);font-size:11px;width:80px;" readonly>
+            </div>
+            <div class="field">
+              <label>Down Mode</label>
+              <input type="text" id="sat_downlink_mode" placeholder="USB" autocomplete="off"
+                     style="font-family:var(--mono);font-size:11px;width:80px;" readonly>
+            </div>
           </div>
         </div>
         <div class="form-row">
@@ -675,7 +747,7 @@
     <div class="dock-panel-body" id="dpb-log" style="display:flex;flex-direction:column;overflow:hidden;">
       <div class="table-wrap" id="log-table-wrap" style="flex:1;overflow-y:auto;overflow-x:auto;min-height:0;">
         <table>
-          <thead>
+          <thead id="log-thead">
             <tr>
               <th>Callsign</th><th>Name</th><th>QTH</th><th>Date</th>
               <th>Time UTC</th><th>Band</th><th>Mode</th><th>Freq MHz</th>
@@ -742,6 +814,41 @@
       </div>
       <div class="spot-list" id="spot-list">
         <div class="spot-empty">Connect to see DX spots</div>
+      </div>
+      <!-- SAT Status Panel — replaces cluster content in SAT mode -->
+      <div id="sat-status-panel" class="sat-status-panel" style="display:none;">
+        <div class="sat-status-section">
+          <h3>🛰 Satellite</h3>
+          <div class="sat-field"><span class="sat-field-label">Satellite</span><span class="sat-field-value" id="sat-disp-name">—</span></div>
+          <div class="sat-field"><span class="sat-field-label">Catalog #</span><span class="sat-field-value" id="sat-disp-catno">—</span></div>
+          <div class="sat-field"><span class="sat-field-label">Status</span><span class="sat-field-value" id="sat-disp-status"><span class="sat-status-indicator sat-status-idle"></span>IDLE</span></div>
+          <div class="sat-field"><span class="sat-field-label">AZ / EL</span><span class="sat-field-value" id="sat-disp-azel">—</span></div>
+          <div class="sat-field"><span class="sat-field-label">Max EL</span><span class="sat-field-value" id="sat-disp-maxel">—</span></div>
+          <div class="sat-field"><span class="sat-field-label">Range</span><span class="sat-field-value" id="sat-disp-range">—</span></div>
+          <div class="sat-field"><span class="sat-field-label">AOS Az</span><span class="sat-field-value" id="sat-disp-aos-az">—</span></div>
+          <div class="sat-field"><span class="sat-field-label">LOS Az</span><span class="sat-field-value" id="sat-disp-los-az">—</span></div>
+          <div class="sat-field"><span class="sat-field-label">Time to LOS</span><span class="sat-field-value" id="sat-disp-ttlos">—</span></div>
+          <div class="sat-field"><span class="sat-field-label">Elapsed</span><span class="sat-field-value" id="sat-disp-elapsed">—</span></div>
+        </div>
+        <div class="sat-status-section">
+          <h3>📡 Transponder</h3>
+          <div class="sat-field"><span class="sat-field-label">Name</span><span class="sat-field-value" id="sat-disp-transponder">—</span></div>
+          <div class="sat-field"><span class="sat-field-label">Uplink</span><span class="sat-field-value" id="sat-disp-uplink">—</span></div>
+          <div class="sat-field"><span class="sat-field-label">Downlink</span><span class="sat-field-value" id="sat-disp-downlink">—</span></div>
+          <div id="sat-transponder-list" style="margin-top:6px;"></div>
+        </div>
+        <div class="sat-status-section">
+          <h3>📋 Pass Log</h3>
+          <div class="sat-pass-log" id="sat-pass-log-table">
+            <div style="color:var(--muted);font-size:11px;padding:8px;">No QSOs this pass</div>
+          </div>
+        </div>
+        <div class="sat-conn-bar">
+          <span id="sat-conn-status">S.A.T. Not Connected</span>
+          <button onclick="fetchSatLog()" title="Pull QSO log from S.A.T. device (with duplicate detection)"
+                  style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--accent);cursor:pointer;">⬇ Fetch S.A.T. Log</button>
+          <span id="sat-last-heard">Grid: — | GPS: —</span>
+        </div>
       </div>
     </div>
   </div><!-- dp-cluster -->
@@ -852,7 +959,9 @@
       <button class="settings-tab" data-tab="tab-lookups" onclick="switchSettingsTab('tab-lookups')">🔍 Lookups &amp; Uploads</button>
       <button class="settings-tab" data-tab="tab-cluster" onclick="switchSettingsTab('tab-cluster')">📡 Cluster &amp; Integrations</button>
       <button class="settings-tab" data-tab="tab-pota" onclick="switchSettingsTab('tab-pota')">🏕 POTA &amp; Display</button>
+      <button class="settings-tab" data-tab="tab-sat" onclick="switchSettingsTab('tab-sat')">🛰 Satellite</button>
       <button class="settings-tab" data-tab="tab-system" onclick="switchSettingsTab('tab-system')">🛠 System</button>
+      <button class="settings-tab" data-tab="tab-awards" onclick="switchSettingsTab('tab-awards')">🏆 Awards</button>
     </div>
     <p style="font-family:var(--mono);font-size:12px;color:var(--text);opacity:.7;margin:-12px 0 16px 0;letter-spacing:.5px;">▲ Choose a section above to view its settings</p>
     <div class="settings-tab-content active" id="tab-station">
@@ -1641,6 +1750,53 @@
       </div>
     </div>
     </div><!-- /tab-pota -->
+    <div class="settings-tab-content" id="tab-sat">
+    <div class="settings-section">
+      <h4>🛰 S.A.T. Controller <span style="font-size:9px;color:#8fafc0;font-weight:400;">— CSN Technologies satellite controller by K. Bush AC2MI</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Switch to SAT mode using the <strong>GENERAL / 🛰 SAT</strong> toggle in the header. Satellite contacts are stored in <code style="font-size:10px;">hamlog.db</code> with <code style="font-size:10px;">PROP_MODE=SAT</code>.<br>
+        The S.A.T. broadcasts live tracking data (AZ/EL, Doppler, transponders) and can send QSOs via its QSO LOG TYPE feature.
+      </div>
+      <div class="settings-group">
+        <div class="settings-row">
+          <label class="settings-label"><input type="checkbox" id="cfg-sat-udp-enabled"> Enable S.A.T. Integration</label>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">S.A.T. IP Address</label>
+          <input type="text" class="settings-input" id="cfg-sat-ip" placeholder="192.168.200.194">
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">UDP Broadcast Port</label>
+          <input type="number" class="settings-input" id="cfg-sat-udp-port" value="9932" min="1" max="65535">
+          <span style="font-size:9px;color:#8fafc0;margin-left:6px;">S.A.T. event broadcasts (START TRACK, AOS, LOS, etc.)</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">QSO Log Port (ADIF)</label>
+          <input type="number" class="settings-input" id="cfg-sat-adif-port" value="1100" min="1" max="65535">
+          <span style="font-size:9px;color:#8fafc0;margin-left:6px;">Receives ADIF records from S.A.T. QSO LOG TYPE</span>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <h4>S.A.T. QSO Log Setup <span style="font-size:9px;color:#8fafc0;font-weight:400;">— configure on the S.A.T. device under LOCATION settings</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;line-height:1.8;">
+        On the S.A.T. web UI → <strong>LOCATION</strong> section, configure:<br>
+        &nbsp;&nbsp;• <strong>QSO LOG TYPE:</strong> ACLog (or N1MM, Log4OM, etc.)<br>
+        &nbsp;&nbsp;• <strong>QSO LOG IP:</strong> Your PC's IP address<br>
+        &nbsp;&nbsp;• <strong>QSO LOG PORT:</strong> Must match the "QSO Log Port" above (default 1100)<br><br>
+        When you log a QSO on the S.A.T., it sends an ADIF record over UDP to SDRLogger+.
+        The QSO appears in the SAT log automatically with satellite, transponder, and Doppler data.
+      </div>
+    </div>
+    <div class="settings-section">
+      <h4>Windows Firewall <span style="font-size:9px;color:#8fafc0;font-weight:400;">— required for UDP reception</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;line-height:1.8;">
+        If not receiving data, open an <strong>Administrator</strong> command prompt and run:<br>
+        <code style="font-size:10px;color:var(--accent);user-select:all;">netsh advfirewall firewall add rule name="SDRLogger+ SAT UDP" dir=in action=allow protocol=UDP localport=9932</code><br>
+        <code style="font-size:10px;color:var(--accent);user-select:all;">netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=allow protocol=UDP localport=1100</code>
+      </div>
+    </div>
+    </div><!-- /tab-sat -->
     <div class="settings-tab-content" id="tab-system">
     <!-- Backup & Restore -->
     <div class="settings-section">
@@ -1718,14 +1874,21 @@
       <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
         <div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Software Update</div>
         <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
-          Download the update zip, then upload it here — SDRLogger+ extracts and applies the files automatically.<br>
-          <strong style="color:var(--warn);">Your QSO databases (.db files) are never touched by an update.</strong>
+          SDRLogger+ checks GitHub for new releases on startup and shows a banner when an update is available.<br>
+          To update, download the latest installer and run it — your QSO databases are never touched.
         </div>
-        <label style="font-family:var(--mono);font-size:11px;padding:6px 16px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-weight:600;transition:all .15s;display:inline-block;"
-               onmouseover="this.style.background='rgba(0,229,255,.12)'" onmouseout="this.style.background='transparent'">
-          📦 Apply Update (upload zip)
-          <input type="file" accept=".zip" style="display:none;" onchange="applyUpdate(this)">
-        </label>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <button onclick="manualUpdateCheck()"
+                  style="font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-weight:600;transition:all .15s;"
+                  onmouseover="this.style.background='rgba(0,229,255,.12)'" onmouseout="this.style.background='transparent'">
+            Check for Updates
+          </button>
+          <a href="https://github.com/N8SDR1/SDRLoggerPlus/releases/latest" target="_blank"
+             style="font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:4px;border:1px solid var(--accent2);background:transparent;color:var(--accent2);text-decoration:none;font-weight:600;transition:all .15s;"
+             onmouseover="this.style.background='rgba(57,255,20,.12)'" onmouseout="this.style.background='transparent'">
+            GitHub Releases ↗
+          </a>
+        </div>
         <div id="update-status" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;min-height:14px;line-height:1.5;"></div>
       </div>
     </div>
@@ -1743,6 +1906,53 @@
       <div id="debug-log-preview" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;max-height:120px;overflow-y:auto;background:#0a0e14;padding:6px 8px;border-radius:3px;border:1px solid var(--border);display:none;"></div>
     </div>
     </div><!-- /tab-system -->
+    <div class="settings-tab-content" id="tab-awards">
+    <div class="settings-section">
+      <h4>Awards & Statistics <span style="font-size:9px;color:#8fafc0;font-weight:400;">-- track your award progress</span></h4>
+      <div style="font-family:var(--mono);font-size:11px;color:#8fafc0;margin-bottom:16px;line-height:1.7;">
+        Track your progress toward major amateur radio awards. Each dashboard shows
+        entities, states, or zones worked with band/mode breakdowns and visual progress indicators.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 18px;">
+          <span style="font-size:22px;">🌍</span>
+          <div style="flex:1;">
+            <div style="font-family:var(--head);font-size:14px;font-weight:700;color:var(--accent);letter-spacing:1px;">DXCC — DX Century Club</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;">Work 100+ DXCC entities worldwide. Tracks entities by band and mode.</div>
+          </div>
+          <button class="btn-test-qrz" onclick="window.open('/awards','_blank')">Open Dashboard</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 18px;">
+          <span style="font-size:22px;">🇺🇸</span>
+          <div style="flex:1;">
+            <div style="font-family:var(--head);font-size:14px;font-weight:700;color:var(--accent);letter-spacing:1px;">WAS — Worked All States</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;">Work all 50 US states. Based on QTH field — include state abbreviation in your logs.</div>
+          </div>
+          <button class="btn-test-qrz" onclick="window.open('/awards','_blank')">Open Dashboard</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 18px;">
+          <span style="font-size:22px;">🗺</span>
+          <div style="flex:1;">
+            <div style="font-family:var(--head);font-size:14px;font-weight:700;color:var(--accent);letter-spacing:1px;">WAZ — Worked All Zones</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;">Work all 40 CQ zones. Zone data derived from cty.dat callsign prefix mapping.</div>
+          </div>
+          <button class="btn-test-qrz" onclick="window.open('/awards','_blank')">Open Dashboard</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 18px;">
+          <span style="font-size:22px;">📡</span>
+          <div style="flex:1;">
+            <div style="font-family:var(--head);font-size:14px;font-weight:700;color:var(--accent);letter-spacing:1px;">WPX — Worked All Prefixes</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;">Track unique callsign prefixes worked (e.g., N8, VK3, ZL1). No fixed target — collect them all!</div>
+          </div>
+          <button class="btn-test-qrz" onclick="window.open('/awards','_blank')">Open Dashboard</button>
+        </div>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:14px;line-height:1.6;border-top:1px solid var(--border);padding-top:12px;">
+        More awards coming soon — VUCC, IOTA, and more.<br>
+        All award tracking is calculated from your QSO log in real time using cty.dat entity data.
+      </div>
+    </div>
+    </div><!-- /tab-awards -->
     <a href="/help" target="_blank" style="display:block;text-align:center;font-family:var(--mono);font-size:11px;color:var(--accent);padding:10px 0 4px;letter-spacing:1px;text-decoration:none;opacity:.8;transition:opacity .15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.8'">? SDRLogger+ Quick Start Guide ↗</a>
     <div style="display:flex;gap:10px;align-items:center;">
       <button class="btn-save-settings" onclick="saveSettings()" style="flex:1;">Save Settings</button>
@@ -1892,6 +2102,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const hlBadge = document.getElementById('hamlib-badge');
     hlBadge.classList.add('hl-enabled', 'hl-offline');
     hlBadge.textContent = 'RIG OFFLINE';
+  }
+  // Init S.A.T. badge — only visible in SAT mode
+  if (_rs.sat_udp_enabled && potaMode === 'sat') {
+    const sBadge = document.getElementById('sat-badge');
+    sBadge.classList.add('sat-enabled', 'sat-offline');
+    sBadge.textContent = 'S.A.T. OFFLINE';
   }
   applyStoredCallsign();
   initSolar();
@@ -2508,6 +2724,18 @@ async function saveQSO() {
     contest_name: document.getElementById('contest_name').value,
     pota_ref: potaMode === 'pota' ? potaMyPark : '',
     pota_p2p: potaMode === 'pota' ? (document.getElementById('pota_p2p')?.value.trim().toUpperCase() || '') : '',
+    // SAT fields
+    prop_mode: potaMode === 'sat' ? 'SAT' : '',
+    sat_name: potaMode === 'sat' ? (document.getElementById('sat_name')?.value.trim() || '') : '',
+    sat_catno: potaMode === 'sat' ? (_satState.catno || '') : '',
+    transponder_name: potaMode === 'sat' ? (_satState.transponder || '') : '',
+    uplink_freq: potaMode === 'sat' ? (document.getElementById('sat_uplink_freq')?.value.trim() || '') : '',
+    downlink_freq: potaMode === 'sat' ? (document.getElementById('sat_downlink_freq')?.value.trim() || '') : '',
+    uplink_mode: potaMode === 'sat' ? (document.getElementById('sat_uplink_mode')?.value.trim() || '') : '',
+    downlink_mode: potaMode === 'sat' ? (document.getElementById('sat_downlink_mode')?.value.trim() || '') : '',
+    gridsquare: potaMode === 'sat' ? (document.getElementById('sat_grid')?.value.trim() || '') : (document.getElementById('gridsquare')?.value.trim() || ''),
+    aos_az: potaMode === 'sat' ? (_satState.aos_az || '') : '',
+    los_az: potaMode === 'sat' ? (_satState.los_az || '') : '',
   };
   try {
     const res = await fetch('/api/save_qso',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -2537,6 +2765,7 @@ async function saveQSO() {
 function clearForm() {
   ['callsign','name','qth','freq_mhz','remarks','contest_name'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   const p2pEl = document.getElementById('pota_p2p'); if (p2pEl) p2pEl.value = '';
+  ['sat_name','sat_grid','sat_uplink_freq','sat_downlink_freq','sat_uplink_mode','sat_downlink_mode'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('mode').value = '';
   document.getElementById('my_rst_sent').value = '59';
   document.getElementById('their_rst_rcvd').value = '59';
@@ -2604,8 +2833,29 @@ function renderLog() {
     tbody.innerHTML = `<tr><td colspan="12" class="empty-state"><div class="es-icon">📻</div>${logSearch ? 'No matching QSOs' : 'No QSOs logged yet'}</td></tr>`;
     return;
   }
-  tbody.innerHTML = allLogs.map(r => `
-    <tr oncontextmenu="return logRowContextMenu(event,'${esc(r.callsign)}','${esc(r.freq_mhz||'')}','${esc(r.mode||'')}','${esc(r.date_worked||'')}','${esc(r.time_worked||'')}')">
+  tbody.innerHTML = allLogs.map(r => {
+    if (potaMode === 'sat') {
+      const upDn = [r.uplink_freq, r.downlink_freq].filter(Boolean).map(f => {
+        try { return parseFloat(f).toFixed(3); } catch(e) { return f; }
+      });
+      const freqDisp = upDn.length === 2 ? `${upDn[0]}↑ ${upDn[1]}↓` : upDn.join(' ') || '';
+      return `<tr oncontextmenu="return logRowContextMenu(event,'${esc(r.callsign)}','${esc(r.freq_mhz||'')}','${esc(r.mode||'')}','${esc(r.date_worked||'')}','${esc(r.time_worked||'')}')">
+        <td class="call-cell">${esc(r.callsign)}</td>
+        <td>${esc(r.sat_name||'')}</td>
+        <td>${esc(r.gridsquare||r.qth||'')}</td>
+        <td>${esc(r.date_worked||'')}</td>
+        <td>${esc(r.time_worked||'')}</td>
+        <td>${r.mode?`<span class="mode-badge">${esc(r.mode)}</span>`:''}</td>
+        <td style="font-size:10px;" title="Up: ${esc(r.uplink_freq||'')} / Dn: ${esc(r.downlink_freq||'')}">${freqDisp}</td>
+        <td>${esc(r.my_rst_sent||'')} / ${esc(r.their_rst_rcvd||'')}</td>
+        <td title="${esc(r.remarks||'')}">${esc((r.remarks||'').substring(0,20))}</td>
+        <td style="white-space:nowrap;">
+          <button class="action-btn edit" onclick="openEdit(${r.id})" title="Edit">✏</button>
+          <button class="action-btn del" onclick="deleteQSO(${r.id},'${esc(r.callsign)}')" title="Delete">🗑</button>
+        </td>
+      </tr>`;
+    }
+    return `<tr oncontextmenu="return logRowContextMenu(event,'${esc(r.callsign)}','${esc(r.freq_mhz||'')}','${esc(r.mode||'')}','${esc(r.date_worked||'')}','${esc(r.time_worked||'')}')">
       <td class="call-cell">${esc(r.callsign)}</td>
       <td>${esc(r.name||'')}</td>
       <td>${esc(r.qth||'')}</td>
@@ -2621,8 +2871,8 @@ function renderLog() {
         <button class="action-btn edit" onclick="openEdit(${r.id})" title="Edit">✏</button>
         <button class="action-btn del" onclick="deleteQSO(${r.id},'${esc(r.callsign)}')" title="Delete">🗑</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 function filterLog() {
@@ -2907,38 +3157,27 @@ async function saveServerConfig() {
   }
 }
 
-async function applyUpdate(input) {
-  const file = input.files[0];
-  if (!file) return;
+async function manualUpdateCheck() {
   const status = document.getElementById('update-status');
-  if (!confirm(`Apply update from "${file.name}"?\n\nYour QSO databases will NOT be touched.\nYou will need to restart SDRLogger+ after the update.`)) {
-    input.value = ''; return;
-  }
-  status.textContent = '⏳ Uploading and extracting…';
+  status.textContent = '⏳ Checking for updates…';
   status.style.color = 'var(--muted)';
   try {
-    const form = new FormData();
-    form.append('file', file);
-    const res  = await fetch('/api/apply_update', { method: 'POST', body: form });
+    const res  = await fetch('/api/update_check?force=1');
     const data = await res.json();
-    if (data.ok) {
-      status.textContent = `✓ ${data.count} file(s) updated.${data.skipped.length ? ' Skipped (protected): ' + data.skipped.join(', ') : ''}`;
+    if (data.has_update) {
+      status.innerHTML = `🆕 v${data.latest} available! <a href="${data.url}" target="_blank" style="color:var(--accent);">View Release</a>  (you have v${data.current})`;
+      status.style.color = '#ffd700';
+    } else if (data.latest) {
+      status.textContent = `✓ You're up to date — v${data.current}`;
       status.style.color = 'var(--accent2)';
-      // Show the full-screen restart overlay
-      const vLine = document.getElementById('update-version-line');
-      if (vLine) vLine.textContent = `${data.count} file(s) extracted: ${data.extracted.join(', ')}`;
-      document.getElementById('update-overlay').classList.add('show');
     } else {
-      status.textContent = `Error: ${data.error}`;
-      status.style.color = '#ff4444';
-      toast(`Update failed: ${data.error}`, 'error');
+      status.textContent = '⚠ Could not reach GitHub. Check your connection.';
+      status.style.color = '#ff8800';
     }
   } catch(e) {
-    status.textContent = 'Update failed: ' + e.message;
+    status.textContent = 'Update check failed: ' + e.message;
     status.style.color = '#ff4444';
-    toast('Update failed: ' + e.message, 'error');
   }
-  input.value = '';
 }
 
 // ─── BACKUP & RESTORE ────────────────────────────────────────────────────────
@@ -2977,19 +3216,47 @@ async function backupDatabase() {
   }
 }
 
-function exportSettings() {
-  const s    = loadSettings();
-  const json = JSON.stringify(s, null, 2);
-  const ts   = new Date().toISOString().replace(/[-T:]/g,'').slice(0,13);
-  const blob = new Blob([json], {type: 'application/json'});
-  const a    = document.createElement('a');
-  a.href     = URL.createObjectURL(blob);
-  a.download = `hamlog_settings_${ts}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+async function exportSettings() {
+  const path   = document.getElementById('cfg-backup-path').value.trim();
   const status = document.getElementById('backup-status');
-  status.textContent = 'Settings exported.';
-  status.style.color = 'var(--accent)';
+  if (!path) {
+    // No folder set — browser download of localStorage settings
+    const s    = loadSettings();
+    const json = JSON.stringify(s, null, 2);
+    const ts   = new Date().toISOString().replace(/[-T:]/g,'').slice(0,13);
+    const blob = new Blob([json], {type: 'application/json'});
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = `hamlog_settings_${ts}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    status.textContent = 'Settings downloaded.';
+    status.style.color = 'var(--accent)';
+    return;
+  }
+  // Save to backup folder
+  status.textContent = 'Saving settings…';
+  status.style.color = 'var(--muted)';
+  try {
+    const res  = await fetch('/api/export_settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({backup_path: path})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      status.textContent = `Saved: ${data.path}`;
+      status.style.color = 'var(--accent)';
+      toast('Settings exported to backup folder', 'success');
+    } else {
+      status.textContent = `Error: ${data.error}`;
+      status.style.color = '#ff4444';
+      toast('Settings export failed: ' + data.error, 'error');
+    }
+  } catch(e) {
+    status.textContent = `Error: ${e.message}`;
+    status.style.color = '#ff4444';
+  }
 }
 
 async function restoreDatabase(input) {
@@ -3222,6 +3489,10 @@ async function openSettings() {
   document.getElementById('cfg-pota-my-park').value     = s.pota_my_park || '';
   document.getElementById('cfg-pota-user').value        = s.pota_user   || '';
   document.getElementById('cfg-pota-pass').value        = s.pota_pass   || '';
+  document.getElementById('cfg-sat-udp-enabled').checked = s.sat_udp_enabled === true;
+  document.getElementById('cfg-sat-udp-port').value      = s.sat_udp_port || '9932';
+  document.getElementById('cfg-sat-adif-port').value     = s.sat_adif_port || '1100';
+  document.getElementById('cfg-sat-ip').value            = s.sat_controller_ip || '';
   document.getElementById('cfg-spotter-region').value   = s.spotter_region || '';
   document.getElementById('cfg-rbn-enabled').checked    = s.rbn_enabled === true;
   document.getElementById('cfg-rbn-server').value       = s.rbn_server || 'telnet.reversebeacon.net';
@@ -3357,6 +3628,10 @@ async function saveSettings() {
     pota_my_park:     document.getElementById('cfg-pota-my-park').value.trim().toUpperCase(),
     pota_user:        document.getElementById('cfg-pota-user').value.trim(),
     pota_pass:        document.getElementById('cfg-pota-pass').value,
+    sat_udp_enabled:  document.getElementById('cfg-sat-udp-enabled').checked,
+    sat_udp_port:     document.getElementById('cfg-sat-udp-port').value || '9932',
+    sat_adif_port:    document.getElementById('cfg-sat-adif-port').value || '1100',
+    sat_controller_ip: document.getElementById('cfg-sat-ip').value.trim(),
     spotter_region:   document.getElementById('cfg-spotter-region').value,
     rbn_enabled:      document.getElementById('cfg-rbn-enabled').checked,
     rbn_server:       document.getElementById('cfg-rbn-server').value.trim() || 'telnet.reversebeacon.net',
@@ -4002,7 +4277,7 @@ function callToContinent(call) {
 }
 
 // ─── Worked-Before Spot Coloring ─────────────────────────────────────────────
-// Cache: { "CALL|BAND|MODE": "new_entity"|"new_band_mode"|"worked"|"unknown" }
+// Cache: { "CALL|BAND|MODE": {status, needs_zone, cq} }
 const _workedSpotCache = {};
 let _workedColorPending = false;
 
@@ -4047,13 +4322,13 @@ async function colorSpotsWorked() {
         for (const s of spots) {
           const r = data.results[s.call];
           const key = `${s.call}|${s.band}|${s.mode}`;
-          _workedSpotCache[key] = r ? r.status : 'unknown';
+          _workedSpotCache[key] = r || {status:'unknown', needs_zone:false};
         }
         // Re-apply colors
         for (const call of Object.keys(rowMap)) {
           for (const item of rowMap[call]) {
-            const st = _workedSpotCache[item.key];
-            if (st) _applySpotColor(item.el, item.callEl, st);
+            const info = _workedSpotCache[item.key];
+            if (info) _applySpotColor(item.el, item.callEl, info);
           }
         }
       }
@@ -4062,22 +4337,38 @@ async function colorSpotsWorked() {
   }
 }
 
-function _applySpotColor(rowEl, callEl, status) {
+function _applySpotColor(rowEl, callEl, info) {
   // Hot calls keep their red color — skip coloring
   if (rowEl.classList.contains('spot-hot')) return;
-  if (status === 'new_entity') {
-    callEl.style.color = 'var(--accent2)';       // green
+  const status = typeof info === 'string' ? info : info.status;
+  const needsZone = typeof info === 'object' && info.needs_zone;
+  // Clear previous award classes
+  rowEl.classList.remove('spot-new-entity', 'spot-new-zone', 'spot-new-both');
+  if (status === 'new_entity' && needsZone) {
+    // New entity AND new zone — gold highlight
+    callEl.style.color = '#ffd700';
     callEl.style.fontWeight = '700';
-    callEl.title = '★ New DXCC Entity';
+    rowEl.classList.add('spot-new-both');
+    rowEl.title = 'New DXCC Entity + New CQ Zone' + (info.cq ? ' ' + info.cq : '');
+  } else if (status === 'new_entity') {
+    callEl.style.color = '#ffd700';
+    callEl.style.fontWeight = '700';
+    rowEl.classList.add('spot-new-entity');
+    rowEl.title = 'New DXCC Entity';
+  } else if (needsZone) {
+    // Worked entity but new zone — orange highlight
+    callEl.style.color = '#ff6b35';
+    callEl.style.fontWeight = '700';
+    rowEl.classList.add('spot-new-zone');
+    rowEl.title = 'New CQ Zone' + (info.cq ? ' ' + info.cq : '');
   } else if (status === 'new_band_mode') {
     callEl.style.color = 'var(--accent)';         // cyan
     callEl.style.fontWeight = '700';
-    callEl.title = 'New Band/Mode for this entity';
+    rowEl.title = 'New Band/Mode for this entity';
   } else {
-    // Already worked — default styling (no change)
     callEl.style.color = '';
     callEl.style.fontWeight = '';
-    callEl.title = '';
+    rowEl.title = '';
   }
 }
 
@@ -4479,18 +4770,90 @@ function initSolar() {
 // ─── POTA MODE ────────────────────────────────────────────────────────────────
 function applyPotaModeUI(mode) {
   const isP = mode === 'pota';
+  const isS = mode === 'sat';
   const genBtn  = document.getElementById('pota-btn-gen');
   const potaBtn = document.getElementById('pota-btn-pota');
+  const satBtn  = document.getElementById('pota-btn-sat');
   const banner  = document.getElementById('pota-banner');
   const p2pRow  = document.getElementById('pota-p2p-row');
+  const satRow  = document.getElementById('sat-fields-row');
   const title   = document.getElementById('qso-panel-title');
-  if (genBtn)  { genBtn.style.background  = isP ? 'var(--surface)' : 'var(--accent)';
-                 genBtn.style.color        = isP ? 'var(--muted)'   : '#000'; }
+
+  // Toggle button styles
+  if (genBtn)  { genBtn.style.background  = (!isP && !isS) ? 'var(--accent)' : 'var(--surface)';
+                 genBtn.style.color        = (!isP && !isS) ? '#000'          : 'var(--muted)'; }
   if (potaBtn) { potaBtn.style.background = isP ? '#39ff14'        : 'var(--surface)';
                  potaBtn.style.color       = isP ? '#000'           : 'var(--muted)'; }
+  if (satBtn)  { satBtn.style.background  = isS ? '#ffd700'        : 'var(--surface)';
+                 satBtn.style.color        = isS ? '#000'           : 'var(--muted)'; }
+
+  // Toggle S.A.T. badge visibility — only in SAT mode
+  const satBadgeMode = document.getElementById('sat-badge');
+  if (satBadgeMode) {
+    if (isS) {
+      const _rs = loadSettings();
+      if (_rs.sat_udp_enabled) {
+        satBadgeMode.classList.add('sat-enabled', 'sat-offline');
+        satBadgeMode.textContent = 'S.A.T. OFFLINE';
+      }
+    } else {
+      satBadgeMode.className = '';
+      satBadgeMode.id = 'sat-badge';
+    }
+  }
+
+  // Toggle POTA elements
   if (banner)  { banner.style.display     = isP ? 'flex'           : 'none'; }
   if (p2pRow)  { p2pRow.style.display     = isP ? 'flex'           : 'none'; }
-  if (title)   { title.textContent        = isP ? '🏕 POTA QSO Entry' : '📡 New QSO Entry'; }
+
+  // Toggle SAT elements
+  if (satRow)  { satRow.style.display     = isS ? 'block'          : 'none'; }
+
+  // Panel title
+  if (title) {
+    if (isS)      title.textContent = '🛰 SAT QSO Entry';
+    else if (isP) title.textContent = '🏕 POTA QSO Entry';
+    else          title.textContent = '📡 New QSO Entry';
+  }
+
+  // Toggle cluster panel content vs SAT status panel
+  const clusterContent = document.querySelectorAll('#dpb-cluster > :not(#sat-status-panel)');
+  const satPanel = document.getElementById('sat-status-panel');
+  const clusterTitle = document.getElementById('cluster-title');
+  if (isS) {
+    clusterContent.forEach(el => el.style.display = 'none');
+    if (satPanel) satPanel.style.display = 'flex';
+    if (clusterTitle) clusterTitle.textContent = '🛰 Satellite Status';
+  } else {
+    clusterContent.forEach(el => el.style.display = '');
+    if (satPanel) satPanel.style.display = 'none';
+    if (clusterTitle) clusterTitle.textContent = _potaSpotsActive ? '🏕 POTA Spots' : '📡 DX Cluster';
+  }
+
+  // Hide/show general form fields that don't apply in SAT mode
+  const bandField = document.getElementById('band')?.closest('.field');
+  const freqField = document.getElementById('freq_mhz')?.closest('.field');
+  const qthField  = document.getElementById('qth')?.closest('.field');
+  const contestField = document.getElementById('contest_name')?.closest('.field');
+  if (bandField)    bandField.style.display    = isS ? 'none' : '';
+  if (freqField)    freqField.style.display    = isS ? 'none' : '';
+  if (qthField)     qthField.style.display     = isS ? 'none' : '';
+  if (contestField) contestField.style.display = isS ? 'none' : '';
+
+  // Mode label hint — SAT controls the rig, not TCI/flrig/HamLib
+  const modeHint = document.getElementById('mode-hint');
+  if (modeHint) modeHint.textContent = isS ? '(auto from S.A.T.)' : '(auto from rig)';
+
+  // Swap QSO log table header for mode-specific columns
+  const thead = document.getElementById('log-thead');
+  if (thead) {
+    if (isS) {
+      thead.innerHTML = '<tr><th>Callsign</th><th>Satellite</th><th>Grid</th><th>Date</th><th>Time UTC</th><th>Mode</th><th>Up↑ / Dn↓ MHz</th><th>RST S/R</th><th>Remarks</th><th></th></tr>';
+    } else {
+      thead.innerHTML = '<tr><th>Callsign</th><th>Name</th><th>QTH</th><th>Date</th><th>Time UTC</th><th>Band</th><th>Mode</th><th>Freq MHz</th><th>RST S/R</th><th>Remarks</th><th>Contest/Event/Park</th><th></th></tr>';
+    }
+  }
+
   // Update park banner field
   if (isP && potaMyPark) {
     const bannerInput = document.getElementById('pota-my-park-banner');
@@ -4513,9 +4876,13 @@ async function setPotaMode(mode, notify=true) {
     });
   } catch(e) {}
   if (notify) {
-    if (mode === 'pota') toast('🏕 POTA mode active — logging to pota.db', 'success');
-    else                 toast('General logging mode active — logging to hamlog.db', 'success');
+    if (mode === 'sat')       toast('🛰 SAT mode active — satellite QSOs logged to hamlog.db', 'success');
+    else if (mode === 'pota') toast('🏕 POTA mode active — logging to pota.db', 'success');
+    else                      toast('General logging mode active — logging to hamlog.db', 'success');
   }
+  // Start/stop SAT polling
+  if (mode === 'sat') _startSatPolling();
+  else _stopSatPolling();
   loadLog();
 }
 
@@ -4526,6 +4893,227 @@ function updatePotaMyPark(val) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   try { fetch('/api/set_mode', {method:'POST',headers:{'Content-Type':'application/json'},
              body:JSON.stringify({mode:'pota', pota_my_park: potaMyPark})}); } catch(e) {}
+}
+
+// ─── SAT STATUS POLLING ─────────────────────────────────────────────────────
+let _satPollTimer = null;
+let _satState = {};
+let _satLastQsoCounter = 0;
+
+function _startSatPolling() {
+  _stopSatPolling();
+  _pollSatStatus();
+  _satPollTimer = setInterval(_pollSatStatus, 2000);
+}
+
+function _stopSatPolling() {
+  if (_satPollTimer) { clearInterval(_satPollTimer); _satPollTimer = null; }
+}
+
+async function fetchSatLog() {
+  toast('Fetching QSO log from S.A.T...', 'info', 2000);
+  try {
+    const res = await fetch('/api/sat/fetch_log', {method: 'POST'});
+    const data = await res.json();
+    if (data.ok) {
+      if (data.imported > 0) {
+        toast(`🛰 ${data.msg}`, 'success', 5000);
+        loadLog();
+      } else {
+        toast(data.msg || 'No new QSOs to import', 'info', 3000);
+      }
+    } else {
+      toast(`S.A.T. fetch failed: ${data.error}`, 'error', 5000);
+    }
+  } catch(e) {
+    toast('Cannot reach S.A.T. — check IP and connection', 'error', 4000);
+  }
+}
+
+async function _pollSatStatus() {
+  try {
+    const res = await fetch('/api/sat/status');
+    const data = await res.json();
+    _satState = data;
+    _renderSatStatus(data);
+    // Auto-refresh QSO log when a new SAT QSO arrives (from S.A.T. ADIF or UDP)
+    const qc = data.qso_counter || 0;
+    if (_satLastQsoCounter === 0) {
+      _satLastQsoCounter = qc;  // seed on first poll — no false trigger
+    } else if (qc > _satLastQsoCounter) {
+      _satLastQsoCounter = qc;
+      loadLog();
+      toast('🛰 SAT QSO received from S.A.T.', 'success', 3000);
+    }
+  } catch(e) {}
+}
+
+function _renderSatStatus(s) {
+  const _hz2mhz = (hz) => { try { return (parseFloat(hz)/1e6).toFixed(3); } catch(e) { return '—'; } };
+
+  // Satellite info
+  const nameEl = document.getElementById('sat-disp-name');
+  const catnoEl = document.getElementById('sat-disp-catno');
+  const statusEl = document.getElementById('sat-disp-status');
+  const aosEl = document.getElementById('sat-disp-aos-az');
+  const losAzEl = document.getElementById('sat-disp-los-az');
+  const elapsedEl = document.getElementById('sat-disp-elapsed');
+  const azelEl = document.getElementById('sat-disp-azel');
+  const maxelEl = document.getElementById('sat-disp-maxel');
+  const rangeEl = document.getElementById('sat-disp-range');
+  const ttlosEl = document.getElementById('sat-disp-ttlos');
+
+  if (nameEl) nameEl.textContent = s.satellite || '—';
+  if (catnoEl) catnoEl.textContent = s.catno || '—';
+  if (statusEl) {
+    const st = (s.status || 'idle').toLowerCase();
+    const labels = {idle:'IDLE', tracking:'TRACKING', aos:'AOS — PASS ACTIVE', los:'LOS'};
+    const cls = {idle:'sat-status-idle', tracking:'sat-status-tracking', aos:'sat-status-aos', los:'sat-status-los'};
+    statusEl.innerHTML = `<span class="sat-status-indicator ${cls[st]||cls.idle}"></span>${labels[st]||st.toUpperCase()}`;
+  }
+
+  // Live AZ/EL, range, max el, timing
+  if (s.live) {
+    if (azelEl) azelEl.innerHTML = `<span style="color:var(--accent);">${s.sat_az||0}°</span> / <span style="color:${(s.sat_el||0)>0?'var(--accent2)':'var(--muted)'}">${s.sat_el||0}°</span>`;
+    if (maxelEl) maxelEl.textContent = s.max_el ? s.max_el + '°' : '—';
+    if (rangeEl) rangeEl.textContent = s.range_km ? s.range_km.toLocaleString() + ' km' : '—';
+    if (ttlosEl) {
+      if (s.ttlos > 0 && s.status === 'aos') {
+        const m = Math.floor(s.ttlos / 60), sec = s.ttlos % 60;
+        ttlosEl.innerHTML = `<span style="color:${s.ttlos<60?'#ff4444':'var(--accent2)'};">${m}:${String(sec).padStart(2,'0')}</span>`;
+      } else if (s.ttaos > 0) {
+        const m = Math.floor(s.ttaos / 60), sec = s.ttaos % 60;
+        ttlosEl.textContent = `AOS in ${m}:${String(sec).padStart(2,'0')}`;
+      } else {
+        ttlosEl.textContent = '—';
+      }
+    }
+  } else {
+    if (azelEl) azelEl.textContent = '—';
+    if (maxelEl) maxelEl.textContent = '—';
+    if (rangeEl) rangeEl.textContent = '—';
+    if (ttlosEl) ttlosEl.textContent = '—';
+  }
+  if (aosEl) aosEl.textContent = s.aos_az ? s.aos_az + '°' : '—';
+  if (losAzEl) losAzEl.textContent = s.los_az ? s.los_az + '°' : '—';
+  if (elapsedEl) elapsedEl.textContent = s.elapsed || '—';
+
+  // Active transponder (Doppler-corrected)
+  const transpEl = document.getElementById('sat-disp-transponder');
+  const upEl = document.getElementById('sat-disp-uplink');
+  const dnEl = document.getElementById('sat-disp-downlink');
+  if (transpEl) transpEl.textContent = s.transponder || '—';
+  if (upEl) {
+    if (s.uplink_freq && parseFloat(s.uplink_freq) > 0) {
+      upEl.innerHTML = `<span style="color:var(--accent);">${_hz2mhz(s.uplink_freq)}</span> MHz ${s.uplink_mode||''}`;
+    } else { upEl.textContent = '—'; }
+  }
+  if (dnEl) {
+    if (s.downlink_freq && parseFloat(s.downlink_freq) > 0) {
+      dnEl.innerHTML = `<span style="color:var(--accent2);">${_hz2mhz(s.downlink_freq)}</span> MHz ${s.downlink_mode||''}`;
+    } else { dnEl.textContent = '—'; }
+  }
+
+  // Transponder list (all available)
+  const tListEl = document.getElementById('sat-transponder-list');
+  if (tListEl && s.transponders && s.transponders.length > 1) {
+    let html = '<div style="font-size:10px;color:var(--muted);border-top:1px solid var(--border);padding-top:4px;margin-top:2px;">';
+    s.transponders.forEach(t => {
+      if (!t.name) return;
+      const up = t.up_corrected > 0 ? _hz2mhz(t.up_corrected) : '—';
+      const dn = t.dn_corrected > 0 ? _hz2mhz(t.dn_corrected) : _hz2mhz(t.dn_freq);
+      html += `<div style="padding:1px 0;"><span style="color:var(--text);">${t.name}</span> ↑${up} ↓${dn}</div>`;
+    });
+    html += '</div>';
+    tListEl.innerHTML = html;
+  } else if (tListEl) { tListEl.innerHTML = ''; }
+
+  // Auto-fill SAT QSO form fields from state (Doppler-corrected)
+  if (potaMode === 'sat') {
+    const satNameInput = document.getElementById('sat_name');
+    if (satNameInput && s.satellite && !satNameInput.dataset.userEdited) satNameInput.value = s.satellite;
+    const upFreqInput = document.getElementById('sat_uplink_freq');
+    const dnFreqInput = document.getElementById('sat_downlink_freq');
+    const upModeInput = document.getElementById('sat_uplink_mode');
+    const dnModeInput = document.getElementById('sat_downlink_mode');
+    if (s.uplink_freq && parseFloat(s.uplink_freq) > 0 && upFreqInput && !upFreqInput.dataset.userEdited) {
+      upFreqInput.value = _hz2mhz(s.uplink_freq);
+    }
+    if (s.downlink_freq && parseFloat(s.downlink_freq) > 0 && dnFreqInput && !dnFreqInput.dataset.userEdited) {
+      dnFreqInput.value = _hz2mhz(s.downlink_freq);
+    }
+    if (s.uplink_mode && upModeInput) upModeInput.value = s.uplink_mode;
+    if (s.downlink_mode && dnModeInput) dnModeInput.value = s.downlink_mode;
+    // Auto-fill the main Mode dropdown from downlink mode
+    if (s.downlink_mode) {
+      const modeSelect = document.getElementById('mode');
+      if (modeSelect && !modeSelect.dataset.userEdited) {
+        // Map S.A.T. mode names to our dropdown values
+        const modeMap = {'USB':'USB','LSB':'LSB','FM':'FM','CW':'CWU','CW-R':'CWL',
+                         'AM':'AM','USB-D':'DIGU','USB-DATA':'DIGU','LSB-D':'DIGL',
+                         'LSB-DATA':'DIGL','DV':'FM','PKT':'DIGU','RTTY':'RTTY'};
+        const mapped = modeMap[s.downlink_mode.toUpperCase()] || s.downlink_mode.toUpperCase();
+        // Only set if value exists in dropdown
+        const opt = Array.from(modeSelect.options).find(o => o.value === mapped);
+        if (opt) modeSelect.value = mapped;
+      }
+    }
+  }
+
+  // Pass log
+  const passLogEl = document.getElementById('sat-pass-log-table');
+  if (passLogEl) {
+    if (s.pass_qsos && s.pass_qsos.length) {
+      let html = '<table><tr><th>Call</th><th>Grid</th><th>RST</th><th>Mode</th><th>Time</th></tr>';
+      s.pass_qsos.forEach(q => {
+        const t = q.time ? q.time.split('T')[1]?.substring(0,8) || '' : '';
+        html += `<tr><td style="color:var(--accent);font-weight:700;">${q.callsign||''}</td><td>${q.grid||''}</td><td>${q.rst_sent||''}/${q.rst_recv||''}</td><td>${q.mode||''}</td><td>${t}</td></tr>`;
+      });
+      html += '</table>';
+      passLogEl.innerHTML = html;
+    } else {
+      passLogEl.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:8px;">No QSOs this pass</div>';
+    }
+  }
+
+  // Connection bar — show grid + GPS status
+  const connEl = document.getElementById('sat-conn-status');
+  const heardEl = document.getElementById('sat-last-heard');
+  if (connEl) {
+    if (!s.enabled) connEl.innerHTML = '<span style="color:var(--muted);">SAT Disabled</span>';
+    else if (s.live) connEl.innerHTML = '<span style="color:var(--accent2);">● S.A.T. Live</span>';
+    else if (s.last_heard) connEl.innerHTML = '<span style="color:var(--accent2);">● S.A.T. Connected</span>';
+    else connEl.innerHTML = '<span style="color:var(--warn);">● Waiting for S.A.T...</span>';
+  }
+
+  // S.A.T. badge in header — only visible in SAT mode
+  const satBadge = document.getElementById('sat-badge');
+  if (satBadge && potaMode === 'sat') {
+    if (!s.enabled) {
+      satBadge.className = '';
+      satBadge.id = 'sat-badge';
+    } else if (s.live) {
+      satBadge.className = 'sat-enabled sat-connected';
+      satBadge.id = 'sat-badge';
+      satBadge.textContent = s.satellite ? `S.A.T. ${s.satellite}` : 'S.A.T. LIVE';
+    } else if (s.last_heard) {
+      satBadge.className = 'sat-enabled sat-connected';
+      satBadge.id = 'sat-badge';
+      satBadge.textContent = 'S.A.T. CONNECTED';
+    } else {
+      satBadge.className = 'sat-enabled sat-offline';
+      satBadge.id = 'sat-badge';
+      satBadge.textContent = 'S.A.T. OFFLINE';
+    }
+  }
+  if (heardEl) {
+    let info = [];
+    if (s.my_grid) info.push(`Grid: ${s.my_grid}`);
+    if (s.gps_lock) info.push(`GPS: ${s.gps_sats||0} sats`);
+    else if (s.enabled) info.push('GPS: no lock');
+    if (s.adif_port) info.push(`ADIF:${s.adif_port}`);
+    heardEl.textContent = info.join(' | ') || '—';
+  }
 }
 
 async function clickPotaSelfSpot() {

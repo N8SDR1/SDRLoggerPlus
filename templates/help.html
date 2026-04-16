@@ -168,6 +168,8 @@
     <button class="help-tab" data-htab="htab-cluster" onclick="switchHelpTab('htab-cluster')">📡 Cluster &amp; Features</button>
     <button class="help-tab" data-htab="htab-cw" onclick="switchHelpTab('htab-cw')">🔑 CW Decoder</button>
     <button class="help-tab" data-htab="htab-pota" onclick="switchHelpTab('htab-pota')">🏕 POTA &amp; Spotting</button>
+    <button class="help-tab" data-htab="htab-sat" onclick="switchHelpTab('htab-sat')">🛰 SAT Mode</button>
+    <button class="help-tab" data-htab="htab-awards" onclick="switchHelpTab('htab-awards')">🏆 Awards</button>
     <button class="help-tab" data-htab="htab-system" onclick="switchHelpTab('htab-system')">⚙ System</button>
   </div>
   <p style="font-family:var(--mono);font-size:12px;color:var(--text);opacity:.7;margin:-16px 0 20px 0;letter-spacing:.5px;">▲ Choose a topic above to jump to that section</p>
@@ -1135,6 +1137,288 @@
   </div>
 
   </div><!-- /htab-pota -->
+
+  <div class="help-tab-content" id="htab-sat">
+  <!-- SAT MODE OVERVIEW -->
+  <h2>🛰 SAT Mode — CSN Technologies S.A.T. Integration</h2>
+  <div class="section-card">
+    <p>SDRLogger+ provides deep, real-time integration with the <strong>CSN Technologies S.A.T. satellite controller</strong> (firmware by K. Bush AC2MI). When running alongside the S.A.T., SDRLogger+ becomes a complete satellite logging environment with live tracking, Doppler-corrected frequencies, and seamless QSO push — all over your local network with zero additional hardware.</p>
+    <div class="tip">SAT mode is a third option on the <strong>General / 🏕 POTA / 🛰 SAT</strong> mode toggle in the header. Switch to SAT mode to transform the entire UI for satellite operating.</div>
+  </div>
+
+  <h2>How It Works</h2>
+  <div class="section-card">
+    <p>SDRLogger+ communicates with the S.A.T. controller over four complementary network channels — all standards-based:</p>
+    <table>
+      <thead><tr><th>Channel</th><th>Protocol</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><strong>/track API</strong></td><td>HTTP GET (polled every 2s)</td><td>Live AZ/EL, Doppler frequencies, transponders, GPS, timing</td></tr>
+        <tr><td><strong>UDP 9932</strong></td><td>UDP broadcast</td><td>Event notifications: AOS, LOS, START TRACK, TRANSPONDER, QSO, STOP</td></tr>
+        <tr><td><strong>QSO LOG TYPE</strong></td><td>ADIF over UDP (port 1100)</td><td>Real-time QSO records pushed when you log on the S.A.T.</td></tr>
+        <tr><td><strong>/adif endpoint</strong></td><td>HTTP GET (on demand)</td><td>Bulk fetch of stored QSO log with duplicate detection</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Setup</h2>
+  <div class="section-card">
+    <h3>1. Configure SDRLogger+</h3>
+    <p>Open <strong>⚙ Settings → 🛰 Satellite</strong> tab and enter:</p>
+    <table>
+      <thead><tr><th>Field</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Enable S.A.T. Integration</strong></td><td>✅ checked</td></tr>
+        <tr><td><strong>S.A.T. IP Address</strong></td><td>Your S.A.T.'s IP (e.g. <code>192.168.200.194</code>)</td></tr>
+        <tr><td><strong>UDP Broadcast Port</strong></td><td><code>9932</code> (default)</td></tr>
+        <tr><td><strong>QSO Log Port (ADIF)</strong></td><td><code>1100</code> (default)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2. Configure the S.A.T.</h3>
+    <p>On the S.A.T. web UI → <strong>LOCATION</strong> section, set:</p>
+    <ul>
+      <li><strong>QSO LOG TYPE:</strong> <code>ACLog</code> (or N1MM, Log4OM, HRD — all send standard ADIF)</li>
+      <li><strong>QSO LOG IP:</strong> Your PC's IP address</li>
+      <li><strong>QSO LOG PORT:</strong> <code>1100</code> (must match SDRLogger+ "QSO Log Port")</li>
+    </ul>
+
+    <h3>3. Open Windows Firewall</h3>
+    <p>In an <strong>Administrator</strong> command prompt, run these two commands:</p>
+    <pre style="background:var(--card);padding:8px 12px;border-radius:4px;font-family:var(--mono);font-size:11px;color:var(--accent);overflow-x:auto;">netsh advfirewall firewall add rule name="SDRLogger+ SAT UDP" dir=in action=allow protocol=UDP localport=9932
+netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=allow protocol=UDP localport=1100</pre>
+
+    <h3>4. Switch to SAT Mode</h3>
+    <p>Click the <strong>🛰 SAT</strong> button in the General / 🏕 POTA / 🛰 SAT toggle at the top of SDRLogger+. The Satellite Status panel appears in place of the DX Cluster, and live data populates within seconds once the S.A.T. is tracking a bird.</p>
+  </div>
+
+  <h2>The Satellite Status Panel</h2>
+  <div class="section-card">
+    <p>Replaces the DX Cluster panel when in SAT mode. Refreshes every 2 seconds from the S.A.T.'s <code>/track</code> API.</p>
+
+    <h3>Satellite Section</h3>
+    <ul>
+      <li><strong>Satellite name</strong> and NORAD catalog number</li>
+      <li><strong>Status:</strong> IDLE / TRACKING / AOS — PASS ACTIVE / LOS</li>
+      <li><strong>AZ / EL:</strong> real-time azimuth and elevation (green when above horizon)</li>
+      <li><strong>Max EL:</strong> peak elevation for the current pass</li>
+      <li><strong>Range:</strong> distance to the satellite in kilometers</li>
+      <li><strong>AOS Az / LOS Az:</strong> azimuth at acquisition and loss of signal</li>
+      <li><strong>Time to LOS:</strong> live countdown (turns red under 60 seconds)</li>
+      <li><strong>Elapsed:</strong> time since AOS</li>
+    </ul>
+
+    <h3>Transponder Section</h3>
+    <ul>
+      <li><strong>Active transponder name</strong> and mode</li>
+      <li><strong>Uplink / Downlink</strong> in MHz, Doppler-corrected from the S.A.T.</li>
+      <li><strong>Full transponder list</strong> showing every available transponder for the tracked satellite</li>
+    </ul>
+
+    <h3>Pass QSO Log</h3>
+    <p>Real-time list of QSOs logged during the current pass — from any source (SDRLogger+ form or S.A.T. device).</p>
+
+    <h3>Connection Bar</h3>
+    <ul>
+      <li><strong>S.A.T. Live</strong> indicator with grid square, GPS sat count, and ADIF port</li>
+      <li><strong>⬇ Fetch S.A.T. Log</strong> button — pulls the entire stored QSO log from the S.A.T. with duplicate detection</li>
+    </ul>
+  </div>
+
+  <h2>SAT QSO Entry Form</h2>
+  <div class="section-card">
+    <p>In SAT mode, the QSO entry form is streamlined for satellite operating. Fields marked with ★ are auto-populated from the S.A.T.'s live data:</p>
+    <table>
+      <thead><tr><th>Field</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Callsign</strong></td><td>Manual (with QRZ lookup)</td></tr>
+        <tr><td><strong>Name</strong></td><td>Manual</td></tr>
+        <tr><td><strong>Date / Time UTC</strong></td><td>★ Auto</td></tr>
+        <tr><td><strong>Mode</strong></td><td>★ Auto from S.A.T. downlink mode (label reads "auto from S.A.T.")</td></tr>
+        <tr><td><strong>🛰 Satellite</strong></td><td>★ Auto from S.A.T.</td></tr>
+        <tr><td><strong>Grid Square</strong></td><td>Manual (contact's Maidenhead grid)</td></tr>
+        <tr><td><strong>Uplink Freq (MHz)</strong></td><td>★ Auto, Doppler-corrected</td></tr>
+        <tr><td><strong>Downlink Freq (MHz)</strong></td><td>★ Auto, Doppler-corrected</td></tr>
+        <tr><td><strong>Up Mode / Down Mode</strong></td><td>★ Auto</td></tr>
+        <tr><td><strong>RST Sent / Rcvd</strong></td><td>Manual</td></tr>
+        <tr><td><strong>Remarks</strong></td><td>Manual</td></tr>
+      </tbody>
+    </table>
+    <p>Fields hidden in SAT mode (vs General mode): Band, Frequency, QTH, Contest/Event/Park.</p>
+  </div>
+
+  <h2>Real-Time QSO Push</h2>
+  <div class="section-card">
+    <p>When you log a QSO <strong>on the S.A.T. device itself</strong> (using its built-in LOG ENTRY screen), the S.A.T. broadcasts an ADIF record over UDP to SDRLogger+. The QSO appears in your log within <strong>~2 seconds</strong> with a toast notification: <em>🛰 SAT QSO received from S.A.T.</em></p>
+    <p>This works with any of the S.A.T.'s QSO LOG TYPE options (N1MM, DXKeeper, HRD, Log4OM, ACLog, MacLogger) — they all send standard ADIF over UDP.</p>
+  </div>
+
+  <h2>"⬇ Fetch S.A.T. Log" Button</h2>
+  <div class="section-card">
+    <p>The S.A.T. controller stores up to <strong>100 QSO log entries</strong> internally. The <strong>⬇ Fetch S.A.T. Log</strong> button (in the connection bar of the Satellite Status panel) pulls the entire stored log directly from the S.A.T. via its <code>/adif</code> endpoint.</p>
+    <p>Smart <strong>duplicate detection</strong> (callsign + date + time-to-the-minute) ensures no double entries — you can hit the button anytime without worry.</p>
+    <h3>Use this when:</h3>
+    <ul>
+      <li>SDRLogger+ wasn't running during a session and QSOs are sitting on the S.A.T.</li>
+      <li>You want to verify nothing was missed after a pass</li>
+      <li>Before clearing the S.A.T.'s internal log</li>
+    </ul>
+  </div>
+
+  <h2>ADIF Export &amp; LoTW</h2>
+  <div class="section-card">
+    <p>SAT QSOs are exported with full ADIF 3.1 satellite fields for LoTW, Club Log, eQSL, and other services:</p>
+    <ul>
+      <li><code>PROP_MODE: SAT</code> — required for satellite DXCC credit</li>
+      <li><code>SAT_NAME</code> — satellite name (e.g. <code>SO-50</code>, <code>ISS</code>, <code>RS-44</code>)</li>
+      <li><code>FREQ</code> — uplink frequency</li>
+      <li><code>FREQ_RX</code> — downlink frequency (LoTW satellite credit)</li>
+      <li><code>BAND</code> / <code>BAND_RX</code> — derived from frequencies</li>
+      <li>All standard QSO fields: CALL, GRIDSQUARE, MODE, RST_SENT, RST_RCVD, QSO_DATE, TIME_ON, COMMENT</li>
+    </ul>
+  </div>
+
+  <h2>Troubleshooting SAT Mode</h2>
+  <div class="section-card">
+    <h3>No data appears in the Satellite Status panel</h3>
+    <ul>
+      <li>Verify the S.A.T. IP address in <strong>⚙ Settings → 🛰 Satellite</strong> is reachable from your PC (try opening <code>http://&lt;sat-ip&gt;</code> in a browser)</li>
+      <li>Confirm the S.A.T. is powered on and tracking a satellite</li>
+      <li>Make sure the firewall rules above are in place</li>
+    </ul>
+
+    <h3>QSOs logged on the S.A.T. don't appear in SDRLogger+</h3>
+    <ul>
+      <li>Confirm <strong>QSO LOG IP</strong> on the S.A.T. matches your PC's IP</li>
+      <li>Confirm <strong>QSO LOG PORT</strong> matches the SDRLogger+ "QSO Log Port" (default 1100)</li>
+      <li>Add the firewall rule for port 1100 (see Setup step 3)</li>
+      <li>As a fallback, click <strong>⬇ Fetch S.A.T. Log</strong> to pull QSOs manually</li>
+    </ul>
+
+    <h3>The S.A.T. badge isn't showing</h3>
+    <ul>
+      <li>The gold S.A.T. badge only appears in <strong>SAT mode</strong> (it stays hidden in General and POTA modes by design)</li>
+      <li>Confirm "Enable S.A.T. Integration" is checked in Settings</li>
+    </ul>
+  </div>
+  </div><!-- /htab-sat -->
+
+  <div class="help-tab-content" id="htab-awards">
+  <!-- AWARDS OVERVIEW -->
+  <h2>🏆 Awards Dashboard</h2>
+  <div class="section-card">
+    <p>The Awards Dashboard is a complete award-tracking system built into SDRLogger+. It analyses your QSO log to show progress against four major operating awards, all powered by the same DXCC entity / CQ zone / prefix lookups used elsewhere in the application.</p>
+    <p>Open the dashboard from the <strong>🏆 Awards</strong> link in the navigation bar, or by navigating to <code>/awards</code> in your browser.</p>
+  </div>
+
+  <h2>The Four Trackers</h2>
+  <div class="section-card">
+    <p>Each tab is independent — switching between them is instant, and your selected filter and sort options are preserved.</p>
+    <table>
+      <thead><tr><th>Tab</th><th>Tracks</th><th>Total</th></tr></thead>
+      <tbody>
+        <tr><td>🌍 <strong>DXCC</strong></td><td>DXCC entities worked</td><td>340 entities</td></tr>
+        <tr><td>🇺🇸 <strong>WAS</strong></td><td>US states worked (Worked All States)</td><td>50 states</td></tr>
+        <tr><td>🌐 <strong>WAZ</strong></td><td>CQ Zones worked (Worked All Zones)</td><td>40 zones</td></tr>
+        <tr><td>📞 <strong>WPX</strong></td><td>Unique callsign prefixes worked</td><td>Unlimited</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Color Coding</h2>
+  <div class="section-card">
+    <p>All four trackers use the same colour-coded card system:</p>
+    <table>
+      <thead><tr><th>Card State</th><th>Color</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Completed</strong></td><td>🟡 Gold border + gold text</td><td>All bands worked (or fully completed for that award)</td></tr>
+        <tr><td><strong>Worked</strong></td><td>🔵 Cyan border + cyan tint</td><td>At least one QSO logged for this entity/state/zone/prefix</td></tr>
+        <tr><td><strong>Not Worked</strong></td><td>Dim grey</td><td>Never worked</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>DXCC Tracker</h2>
+  <div class="section-card">
+    <p>Tracks all <strong>340 DXCC entities</strong> worldwide. Each entity card shows:</p>
+    <ul>
+      <li>Entity name and prefix</li>
+      <li>Continent (AF, AN, AS, EU, NA, OC, SA)</li>
+      <li>Bands worked (badges showing 160m through 70cm)</li>
+      <li>Mode breakdown</li>
+    </ul>
+    <h3>Filter &amp; Sort</h3>
+    <ul>
+      <li><strong>Continent filter</strong> — show only entities from a specific continent</li>
+      <li><strong>Status filter</strong> — Worked, Not Worked, Completed, or All</li>
+      <li><strong>Sort</strong> — by entity name (A→Z), worked count, or continent</li>
+    </ul>
+    <div class="tip">DXCC entities are resolved using the bundled <code>cty.dat</code> database (from country-files.com). Every QSO callsign is parsed and the entity is identified at log-time and cached for instant dashboard lookups.</div>
+  </div>
+
+  <h2>WAS Tracker (Worked All States)</h2>
+  <div class="section-card">
+    <p>Tracks all <strong>50 US states</strong> for the ARRL Worked All States award. Displays both a US map view and a card grid.</p>
+    <h3>Filters</h3>
+    <ul>
+      <li><strong>Band</strong> — show progress for a specific band only (or All)</li>
+      <li><strong>Mode</strong> — show progress for a specific mode only (or All)</li>
+    </ul>
+    <h3>What Counts</h3>
+    <p>A QSO with a US station counts toward WAS only if the <strong>STATE</strong> field is populated in the QSO record. SDRLogger+ pulls the STATE field from:</p>
+    <ul>
+      <li>Manual entry in the QSO form</li>
+      <li>QRZ.com lookup (auto-fills state when available)</li>
+      <li>ADIF imports (STATE or CNTY fields)</li>
+    </ul>
+    <div class="tip">If your WAS tracker shows fewer states than expected, you can re-import your ADIF with "Replace Duplicates" to populate state fields from your existing QSOs.</div>
+  </div>
+
+  <h2>WAZ Tracker (Worked All Zones)</h2>
+  <div class="section-card">
+    <p>Tracks all <strong>40 CQ Zones</strong> for the CQ Worked All Zones award. Each zone card shows:</p>
+    <ul>
+      <li>Zone number (1–40)</li>
+      <li>Zone description (e.g. Zone 5: Eastern North America)</li>
+      <li>Countries within the zone</li>
+      <li>Worked status</li>
+    </ul>
+    <h3>Filters</h3>
+    <ul>
+      <li><strong>Status filter</strong> — Worked, Not Worked, or All</li>
+    </ul>
+    <p>CQ Zones are derived from the cty.dat lookup at log-time and cached for fast dashboard queries.</p>
+  </div>
+
+  <h2>WPX Tracker (Worked All Prefixes)</h2>
+  <div class="section-card">
+    <p>Tracks unique callsign <strong>prefixes</strong> worked using the <strong>CQ WPX prefix extraction algorithm</strong>. A prefix is the part of the callsign before the last numeric digit (with handling for portable indicators, special prefixes, etc.).</p>
+    <h3>Examples</h3>
+    <ul>
+      <li><code>K1ABC</code> → prefix <code>K1</code></li>
+      <li><code>N8SDR</code> → prefix <code>N8</code></li>
+      <li><code>VK3ANT</code> → prefix <code>VK3</code></li>
+      <li><code>W1ABC/4</code> → prefix <code>W4</code> (portable indicator changes the prefix)</li>
+      <li><code>KH6/W1ABC</code> → prefix <code>KH6</code> (DX-side prefix)</li>
+    </ul>
+    <h3>Filter &amp; Sort</h3>
+    <ul>
+      <li>Sort by prefix (alphabetical)</li>
+      <li>Sort by date worked (newest first)</li>
+      <li>Sort by worked count</li>
+    </ul>
+  </div>
+
+  <h2>Performance &amp; What's Counted</h2>
+  <div class="section-card">
+    <p>All four trackers are powered by <strong>server-side worked caches</strong> built once at application startup and incrementally updated as new QSOs are logged. This means:</p>
+    <ul>
+      <li>Opening the Awards Dashboard is <strong>instant</strong>, even with thousands of QSOs</li>
+      <li>Filtering and sorting happens <strong>in the browser</strong> with no server round-trips</li>
+      <li>New QSOs appear in the dashboard the next time you reload it</li>
+    </ul>
+    <p>All four trackers count QSOs from your <strong>General log database</strong> (<code>hamlog.db</code>). POTA contacts (in <code>pota.db</code>) and SAT contacts (in <code>hamlog.db</code> with <code>prop_mode='SAT'</code>) are also counted toward DXCC, WAS, WAZ, and WPX awards — they're just regular QSOs as far as the awards are concerned.</p>
+  </div>
+  </div><!-- /htab-awards -->
 
   <div class="help-tab-content" id="htab-system">
   <!-- SERVER SETTINGS -->

@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDRLogger+ — Awards & Statistics</title>
+<link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600&display=swap');
+  :root{--bg:#0a0d12;--surface:#111620;--card:#161c28;--border:#1e2a3a;
+    --accent:#00e5ff;--accent2:#39ff14;--warn:#ff6b35;--text:#cdd9e5;
+    --muted:#5a7080;--green:#00c851;--red:#ff4444;--gold:#ffd700;
+    --mono:'Share Tech Mono',monospace;--head:'Rajdhani',sans-serif;--body:'Exo 2',sans-serif;}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.6;padding:0;}
+  body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px);pointer-events:none;z-index:9999;}
+
+  header{background:var(--surface);border-bottom:2px solid var(--accent);padding:14px 28px;
+    display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;}
+  .logo{font-family:var(--head);font-size:22px;font-weight:700;color:var(--accent);letter-spacing:3px;text-transform:uppercase;}
+  .logo span{color:var(--accent2);}
+  .logo-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:6px;letter-spacing:2px;}
+  .back-btn{margin-left:auto;font-family:var(--mono);font-size:12px;padding:6px 16px;border-radius:3px;
+    border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;
+    text-decoration:none;transition:all .15s;}
+  .back-btn:hover{background:rgba(0,229,255,.1);}
+
+  /* ── Tab Bar ── */
+  .award-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin:0;padding:0 28px;background:var(--surface);}
+  .award-tab{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:1px;padding:12px 28px;
+    background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;
+    color:var(--muted);cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s;}
+  .award-tab:hover{color:var(--text);}
+  .award-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .tab-content{display:none;padding:28px 32px;}
+  .tab-content.active{display:block;}
+
+  /* ── Filters ── */
+  .filter-bar{display:flex;gap:14px;align-items:center;margin-bottom:22px;flex-wrap:wrap;}
+  .filter-bar label{font-family:var(--mono);font-size:13px;color:#8fafc0;letter-spacing:1px;text-transform:uppercase;font-weight:600;}
+  .filter-bar select{background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);
+    font-family:var(--mono);font-size:14px;padding:6px 12px;outline:none;min-width:120px;}
+  .filter-bar select:focus{border-color:var(--accent);}
+
+  /* ── Progress Bar ── */
+  .progress-wrap{margin-bottom:24px;}
+  .progress-bar-bg{height:24px;background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+  .progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;transition:width .6s ease;min-width:0;}
+  .progress-bar-fill.complete{background:linear-gradient(90deg,var(--gold),#ffaa00);}
+
+  /* ── Grid: Entity/State/Zone Cards ── */
+  .award-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:8px;margin-top:16px;}
+  .award-card{background:var(--card);border:1px solid var(--border);border-radius:5px;padding:12px 14px;
+    transition:border-color .2s, background .2s;}
+  .award-card.worked{border-color:var(--accent);background:rgba(0,229,255,.06);}
+  .award-card.completed{border-color:var(--gold);background:rgba(255,215,0,.08);}
+  .award-card.not-worked{opacity:.35;}
+  .award-card-name{font-family:var(--mono);font-size:13px;color:var(--text);font-weight:600;letter-spacing:.5px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .award-card.completed .award-card-name{color:var(--gold);}
+  .award-card-detail{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5;}
+  .award-card-bands{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px;}
+  .band-chip{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;
+    background:rgba(0,229,255,.12);color:var(--accent);border:1px solid rgba(0,229,255,.2);}
+
+  /* ── Stats Summary ── */
+  .stats-row{display:flex;gap:16px;margin-bottom:22px;flex-wrap:wrap;}
+  .stat-box{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:16px 24px;min-width:140px;text-align:center;}
+  .stat-box .stat-num{font-family:var(--head);font-size:32px;font-weight:700;color:var(--accent);line-height:1;}
+  .stat-box .stat-label{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:6px;}
+  .stat-box.complete .stat-num{color:var(--gold);}
+  .stat-box.complete{border-color:var(--gold);}
+
+  /* ── Continent breakdown ── */
+  .cont-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+  .cont-chip{font-family:var(--mono);font-size:13px;padding:5px 14px;border-radius:4px;
+    background:var(--surface);border:1px solid var(--border);color:var(--text);cursor:pointer;transition:all .15s;}
+  .cont-chip:hover,.cont-chip.active{border-color:var(--accent);color:var(--accent);background:rgba(0,229,255,.08);}
+  .cont-chip .cnt{color:var(--accent);font-weight:700;margin-left:4px;}
+
+  /* ── WAS Map (CSS grid) ── */
+  .was-grid{display:grid;grid-template-columns:repeat(10, 1fr);gap:5px;max-width:680px;margin:20px auto;}
+  .was-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:13px;font-weight:700;border-radius:5px;
+    background:var(--surface);border:1px solid var(--border);color:var(--muted);transition:all .2s;cursor:default;}
+  .was-cell.worked{background:rgba(0,229,255,.15);border-color:var(--accent);color:var(--accent);}
+  .was-cell.not-worked{opacity:.3;}
+
+  /* ── WAZ Zone Grid ── */
+  .waz-grid{display:grid;grid-template-columns:repeat(10, 1fr);gap:6px;max-width:650px;margin:20px auto;}
+  .waz-cell{aspect-ratio:1.2;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:16px;font-weight:700;border-radius:6px;
+    background:var(--surface);border:1px solid var(--border);color:var(--muted);transition:all .2s;cursor:default;}
+  .waz-cell.worked{background:rgba(0,229,255,.15);border-color:var(--accent);color:var(--accent);}
+  .waz-cell.not-worked{opacity:.3;}
+  .waz-cell .zone-entities{font-size:9px;color:var(--muted);margin-top:2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* ── Sort controls ── */
+  .sort-controls{display:flex;gap:8px;align-items:center;margin-bottom:14px;}
+  .sort-controls label{font-family:var(--mono);font-size:12px;color:#8fafc0;letter-spacing:1px;text-transform:uppercase;}
+  .sort-btn{font-family:var(--mono);font-size:12px;padding:4px 12px;border-radius:3px;
+    border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .15s;}
+  .sort-btn:hover,.sort-btn.active{border-color:var(--accent);color:var(--accent);}
+
+  /* ── Loading / Info ── */
+  .loading{text-align:center;padding:40px;font-family:var(--mono);font-size:14px;color:var(--muted);}
+  .info-note{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7;
+    background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:12px 16px;}
+  .info-note strong{color:var(--warn);}
+
+  /* ── Completed award banner ── */
+  .award-complete-banner{background:rgba(255,215,0,.1);border:1px solid var(--gold);border-radius:6px;
+    padding:12px 20px;margin-bottom:20px;display:none;text-align:center;
+    font-family:var(--head);font-size:18px;font-weight:700;color:var(--gold);letter-spacing:2px;}
+  .award-complete-banner.show{display:block;}
+
+  @media print {
+    body::after{display:none;}
+    header{position:static;background:#fff;border-bottom:2px solid #000;}
+    .logo{color:#000;}.logo span{color:#333;}
+    .back-btn,.filter-bar{display:none;}
+    body{background:#fff;color:#000;}
+    .award-card{break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SDR<span>Logger+</span></div>
+  <span class="logo-sub">AWARDS & STATISTICS</span>
+  <a href="/" class="back-btn">Back to Logger</a>
+</header>
+
+<div class="award-tabs" id="award-tab-bar">
+  <button class="award-tab active" data-tab="tab-dxcc" onclick="switchAwardTab('tab-dxcc')">DXCC</button>
+  <button class="award-tab" data-tab="tab-was" onclick="switchAwardTab('tab-was')">WAS</button>
+  <button class="award-tab" data-tab="tab-waz" onclick="switchAwardTab('tab-waz')">WAZ</button>
+  <button class="award-tab" data-tab="tab-wpx" onclick="switchAwardTab('tab-wpx')">WPX</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- DXCC TAB                                                                   -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content active" id="tab-dxcc">
+  <div class="filter-bar">
+    <label>Band:</label>
+    <select id="dxcc-band-filter" onchange="loadDXCC()">
+      <option value="">All Bands</option>
+      <option>160M</option><option>80M</option><option>60M</option><option>40M</option>
+      <option>30M</option><option>20M</option><option>17M</option><option>15M</option>
+      <option>12M</option><option>10M</option><option>6M</option><option>2M</option>
+      <option>70CM</option>
+    </select>
+    <label>Mode:</label>
+    <select id="dxcc-mode-filter" onchange="loadDXCC()">
+      <option value="">All Modes</option>
+      <option>SSB</option><option>CW</option><option>FT8</option><option>FT4</option>
+      <option>RTTY</option><option>AM</option><option>FM</option><option>JS8</option>
+      <option>PSK31</option><option>DIGI</option>
+    </select>
+    <label>Show:</label>
+    <select id="dxcc-show-filter" onchange="renderDXCC()">
+      <option value="all">All Entities</option>
+      <option value="worked">Worked Only</option>
+      <option value="needed">Needed Only</option>
+    </select>
+  </div>
+
+  <div class="award-complete-banner" id="dxcc-complete-banner">DXCC ACHIEVED — 100+ Entities Worked!</div>
+
+  <div class="stats-row" id="dxcc-stats">
+    <div class="stat-box" id="dxcc-stat-worked"><div class="stat-num" id="dxcc-worked-num">—</div><div class="stat-label">Entities Worked</div></div>
+    <div class="stat-box" id="dxcc-stat-needed"><div class="stat-num" id="dxcc-needed-num">—</div><div class="stat-label">Needed for DXCC</div></div>
+    <div class="stat-box"><div class="stat-num" id="dxcc-pct-num">—</div><div class="stat-label">of 340 Entities</div></div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="dxcc-progress" style="width:0;"></div></div>
+  </div>
+
+  <div class="cont-row" id="dxcc-cont-row">
+    <span class="cont-chip active" data-cont="ALL" onclick="filterDXCCCont('ALL')">ALL<span class="cnt" id="cnt-all"></span></span>
+    <span class="cont-chip" data-cont="NA" onclick="filterDXCCCont('NA')">NA<span class="cnt" id="cnt-NA"></span></span>
+    <span class="cont-chip" data-cont="SA" onclick="filterDXCCCont('SA')">SA<span class="cnt" id="cnt-SA"></span></span>
+    <span class="cont-chip" data-cont="EU" onclick="filterDXCCCont('EU')">EU<span class="cnt" id="cnt-EU"></span></span>
+    <span class="cont-chip" data-cont="AF" onclick="filterDXCCCont('AF')">AF<span class="cnt" id="cnt-AF"></span></span>
+    <span class="cont-chip" data-cont="AS" onclick="filterDXCCCont('AS')">AS<span class="cnt" id="cnt-AS"></span></span>
+    <span class="cont-chip" data-cont="OC" onclick="filterDXCCCont('OC')">OC<span class="cnt" id="cnt-OC"></span></span>
+  </div>
+
+  <div class="sort-controls">
+    <label>Sort:</label>
+    <button class="sort-btn active" data-sort="alpha" onclick="sortDXCC('alpha')">A-Z</button>
+    <button class="sort-btn" data-sort="bands" onclick="sortDXCC('bands')">Most Bands</button>
+    <button class="sort-btn" data-sort="cont" onclick="sortDXCC('cont')">Continent</button>
+  </div>
+
+  <div id="dxcc-grid" class="award-grid">
+    <div class="loading">Loading DXCC data...</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- WAS TAB                                                                    -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-was">
+  <div class="filter-bar">
+    <label>Band:</label>
+    <select id="was-band-filter" onchange="loadWAS()">
+      <option value="">All Bands</option>
+      <option>160M</option><option>80M</option><option>60M</option><option>40M</option>
+      <option>30M</option><option>20M</option><option>17M</option><option>15M</option>
+      <option>12M</option><option>10M</option><option>6M</option><option>2M</option>
+    </select>
+    <label>Mode:</label>
+    <select id="was-mode-filter" onchange="loadWAS()">
+      <option value="">All Modes</option>
+      <option>SSB</option><option>CW</option><option>FT8</option><option>FT4</option>
+      <option>RTTY</option><option>AM</option><option>FM</option>
+    </select>
+  </div>
+
+  <div class="award-complete-banner" id="was-complete-banner">WAS ACHIEVED — All 50 States Worked!</div>
+
+  <div class="stats-row" id="was-stats">
+    <div class="stat-box" id="was-stat-worked"><div class="stat-num" id="was-worked-num">—</div><div class="stat-label">States Worked</div></div>
+    <div class="stat-box" id="was-stat-needed"><div class="stat-num" id="was-needed-num">—</div><div class="stat-label">Needed</div></div>
+    <div class="stat-box"><div class="stat-num" id="was-pct-num">—</div><div class="stat-label">of 50 States</div></div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="was-progress" style="width:0;"></div></div>
+  </div>
+
+  <div class="info-note" id="was-info">
+    WAS tracking uses the <strong>STATE</strong> field from your ADIF imports (e.g., ACLog, HRD, Log4OM exports include state data).
+    If states show as 0, re-import your ADIF file using <strong>Replace Duplicates</strong> mode to populate state data.<br>
+    Alaska and Hawaii are automatically detected from DXCC entity lookup even without a state field.
+  </div>
+
+  <div id="was-map" class="was-grid"></div>
+
+  <h4 style="font-family:var(--mono);font-size:13px;color:#8fafc0;letter-spacing:2px;text-transform:uppercase;margin:24px 0 12px;">States Detail</h4>
+  <div id="was-grid" class="award-grid"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- WAZ TAB                                                                    -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-waz">
+  <div class="filter-bar">
+    <label>Band:</label>
+    <select id="waz-band-filter" onchange="loadWAZ()">
+      <option value="">All Bands</option>
+      <option>160M</option><option>80M</option><option>60M</option><option>40M</option>
+      <option>30M</option><option>20M</option><option>17M</option><option>15M</option>
+      <option>12M</option><option>10M</option><option>6M</option><option>2M</option>
+    </select>
+    <label>Mode:</label>
+    <select id="waz-mode-filter" onchange="loadWAZ()">
+      <option value="">All Modes</option>
+      <option>SSB</option><option>CW</option><option>FT8</option><option>FT4</option>
+      <option>RTTY</option><option>AM</option><option>FM</option>
+    </select>
+  </div>
+
+  <div class="award-complete-banner" id="waz-complete-banner">WAZ ACHIEVED — All 40 CQ Zones Worked!</div>
+
+  <div class="stats-row" id="waz-stats">
+    <div class="stat-box" id="waz-stat-worked"><div class="stat-num" id="waz-worked-num">—</div><div class="stat-label">Zones Worked</div></div>
+    <div class="stat-box" id="waz-stat-needed"><div class="stat-num" id="waz-needed-num">—</div><div class="stat-label">Needed</div></div>
+    <div class="stat-box"><div class="stat-num" id="waz-pct-num">—</div><div class="stat-label">of 40 Zones</div></div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="waz-progress" style="width:0;"></div></div>
+  </div>
+
+  <div id="waz-zone-grid" class="waz-grid"></div>
+
+  <h4 style="font-family:var(--mono);font-size:13px;color:#8fafc0;letter-spacing:2px;text-transform:uppercase;margin:24px 0 12px;">Zone Detail</h4>
+  <div id="waz-grid" class="award-grid"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- WPX TAB                                                                    -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-wpx">
+  <div class="filter-bar">
+    <label>Band:</label>
+    <select id="wpx-band-filter" onchange="loadWPX()">
+      <option value="">All Bands</option>
+      <option>160M</option><option>80M</option><option>60M</option><option>40M</option>
+      <option>30M</option><option>20M</option><option>17M</option><option>15M</option>
+      <option>12M</option><option>10M</option><option>6M</option><option>2M</option>
+    </select>
+    <label>Mode:</label>
+    <select id="wpx-mode-filter" onchange="loadWPX()">
+      <option value="">All Modes</option>
+      <option>SSB</option><option>CW</option><option>FT8</option><option>FT4</option>
+      <option>RTTY</option><option>AM</option><option>FM</option>
+    </select>
+    <label>Show:</label>
+    <select id="wpx-show-filter" onchange="renderWPX()">
+      <option value="all">All</option>
+      <option value="worked">Worked Only</option>
+    </select>
+  </div>
+
+  <div class="stats-row" id="wpx-stats">
+    <div class="stat-box"><div class="stat-num" id="wpx-worked-num">—</div><div class="stat-label">Prefixes Worked</div></div>
+    <div class="stat-box"><div class="stat-num" id="wpx-bands-num">—</div><div class="stat-label">Unique Bands</div></div>
+    <div class="stat-box"><div class="stat-num" id="wpx-top-num">—</div><div class="stat-label">Top Prefix</div></div>
+  </div>
+
+  <div class="info-note">
+    WPX tracks unique callsign prefixes worked (e.g., N8, VK3, ZL1). The prefix is the letter/digit portion before the suffix letters.
+    There is no fixed target — the more prefixes, the better!
+  </div>
+
+  <div class="sort-controls" id="wpx-sort-controls">
+    <label>Sort:</label>
+    <button class="sort-btn active" data-sort="alpha" onclick="sortWPX('alpha')">A-Z</button>
+    <button class="sort-btn" data-sort="bands" onclick="sortWPX('bands')">Most Bands</button>
+    <button class="sort-btn" data-sort="entities" onclick="sortWPX('entities')">By Entity Count</button>
+  </div>
+
+  <div id="wpx-grid" class="award-grid">
+    <div class="loading">Loading WPX data...</div>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+let dxccData = null;
+let dxccContFilter = 'ALL';
+let dxccSortMode = 'alpha';
+
+const ALL_STATES = [
+  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA',
+  'HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
+  'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
+  'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'
+];
+
+const STATE_NAMES = {
+  AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',
+  CO:'Colorado',CT:'Connecticut',DE:'Delaware',FL:'Florida',GA:'Georgia',
+  HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',IA:'Iowa',
+  KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',
+  MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',MO:'Missouri',
+  MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',
+  NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',
+  OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',
+  SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',
+  VA:'Virginia',WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming'
+};
+
+const DXCC_TOTAL = 340;
+const DXCC_AWARD = 100;  // minimum for DXCC award
+
+// ─── Tab Switching ───────────────────────────────────────────────────────────
+function switchAwardTab(tabId) {
+  document.querySelectorAll('.award-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.award-tab[data-tab="${tabId}"]`).classList.add('active');
+  document.getElementById(tabId).classList.add('active');
+  if (tabId === 'tab-dxcc' && !dxccData) loadDXCC();
+  if (tabId === 'tab-was') loadWAS();
+  if (tabId === 'tab-waz') loadWAZ();
+  if (tabId === 'tab-wpx') loadWPX();
+}
+
+// ─── DXCC ────────────────────────────────────────────────────────────────────
+async function loadDXCC() {
+  const band = document.getElementById('dxcc-band-filter').value;
+  const mode = document.getElementById('dxcc-mode-filter').value;
+  let url = '/api/awards/dxcc?';
+  if (band) url += `band=${encodeURIComponent(band)}&`;
+  if (mode) url += `mode=${encodeURIComponent(mode)}&`;
+  try {
+    const resp = await fetch(url);
+    dxccData = await resp.json();
+    renderDXCC();
+  } catch(e) {
+    document.getElementById('dxcc-grid').innerHTML = '<div class="loading">Error loading DXCC data</div>';
+  }
+}
+
+function renderDXCC() {
+  if (!dxccData || !dxccData.ok) return;
+  const entities = dxccData.entities;
+  const info = dxccData.entity_info;
+  const worked = dxccData.total_worked;
+  const needed = Math.max(0, DXCC_AWARD - worked);
+  const pct = DXCC_TOTAL > 0 ? ((worked / DXCC_TOTAL) * 100).toFixed(1) : 0;
+  const achieved = worked >= DXCC_AWARD;
+
+  document.getElementById('dxcc-worked-num').textContent = worked;
+  document.getElementById('dxcc-needed-num').textContent = achieved ? '0' : needed;
+  document.getElementById('dxcc-pct-num').textContent = pct + '%';
+  document.getElementById('dxcc-progress').style.width = pct + '%';
+
+  // Gold styling when achieved
+  const banner = document.getElementById('dxcc-complete-banner');
+  const progressFill = document.getElementById('dxcc-progress');
+  if (achieved) {
+    banner.classList.add('show');
+    progressFill.classList.add('complete');
+    document.getElementById('dxcc-stat-worked').classList.add('complete');
+  } else {
+    banner.classList.remove('show');
+    progressFill.classList.remove('complete');
+    document.getElementById('dxcc-stat-worked').classList.remove('complete');
+  }
+
+  // Continent counts
+  const contCounts = {ALL: worked, NA:0, SA:0, EU:0, AF:0, AS:0, OC:0};
+  for (const ent in entities) {
+    const c = (info[ent] && info[ent].cont) || '';
+    if (contCounts[c] !== undefined) contCounts[c]++;
+  }
+  for (const c in contCounts) {
+    const el = document.getElementById('cnt-' + (c === 'ALL' ? 'all' : c));
+    if (el) el.textContent = ' ' + contCounts[c];
+  }
+
+  // Build card list
+  const showFilter = document.getElementById('dxcc-show-filter').value;
+  let cards = [];
+
+  if (showFilter === 'needed') {
+    document.getElementById('dxcc-grid').innerHTML =
+      `<div class="loading">${achieved ? 'DXCC achieved!' : needed + ' entities needed for DXCC award.'} ${DXCC_TOTAL - worked} total un-worked entities.</div>`;
+    return;
+  }
+
+  for (const ent in entities) {
+    const eInfo = info[ent] || {};
+    const cont = eInfo.cont || '??';
+    if (dxccContFilter !== 'ALL' && cont !== dxccContFilter) continue;
+    const bands = Object.keys(entities[ent].bands);
+    cards.push({ name: ent, cont, bands, bandCount: bands.length, worked: true });
+  }
+
+  // Sort
+  if (dxccSortMode === 'alpha') cards.sort((a,b) => a.name.localeCompare(b.name));
+  else if (dxccSortMode === 'bands') cards.sort((a,b) => b.bandCount - a.bandCount);
+  else if (dxccSortMode === 'cont') cards.sort((a,b) => a.cont.localeCompare(b.cont) || a.name.localeCompare(b.name));
+
+  let html = '';
+  for (const c of cards) {
+    const bandChips = c.bands.map(b => `<span class="band-chip">${b}</span>`).join('');
+    html += `<div class="award-card worked" title="${c.name} — ${c.cont} — ${c.bandCount} band(s)">
+      <div class="award-card-name">${c.name}</div>
+      <div class="award-card-detail">${c.cont} — ${c.bandCount} band(s)</div>
+      <div class="award-card-bands">${bandChips}</div>
+    </div>`;
+  }
+  if (!html) html = '<div class="loading">No entities match current filters</div>';
+  document.getElementById('dxcc-grid').innerHTML = html;
+}
+
+function filterDXCCCont(cont) {
+  dxccContFilter = cont;
+  document.querySelectorAll('#dxcc-cont-row .cont-chip').forEach(c => c.classList.remove('active'));
+  document.querySelector(`#dxcc-cont-row .cont-chip[data-cont="${cont}"]`).classList.add('active');
+  renderDXCC();
+}
+
+function sortDXCC(mode) {
+  dxccSortMode = mode;
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.sort-btn[data-sort="${mode}"]`).classList.add('active');
+  renderDXCC();
+}
+
+// ─── WAS ─────────────────────────────────────────────────────────────────────
+async function loadWAS() {
+  const band = document.getElementById('was-band-filter').value;
+  const mode = document.getElementById('was-mode-filter').value;
+  let url = '/api/awards/was?';
+  if (band) url += `band=${encodeURIComponent(band)}&`;
+  if (mode) url += `mode=${encodeURIComponent(mode)}&`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!data.ok) return;
+    renderWAS(data);
+  } catch(e) {
+    document.getElementById('was-grid').innerHTML = '<div class="loading">Error loading WAS data</div>';
+  }
+}
+
+function renderWAS(data) {
+  const worked = data.total_worked;
+  const needed = 50 - worked;
+  const pct = ((worked / 50) * 100).toFixed(1);
+  const achieved = worked >= 50;
+
+  document.getElementById('was-worked-num').textContent = worked;
+  document.getElementById('was-needed-num').textContent = needed;
+  document.getElementById('was-pct-num').textContent = pct + '%';
+  document.getElementById('was-progress').style.width = pct + '%';
+
+  // Gold styling when achieved
+  const banner = document.getElementById('was-complete-banner');
+  const progressFill = document.getElementById('was-progress');
+  if (achieved) {
+    banner.classList.add('show');
+    progressFill.classList.add('complete');
+    document.getElementById('was-stat-worked').classList.add('complete');
+  } else {
+    banner.classList.remove('show');
+    progressFill.classList.remove('complete');
+    document.getElementById('was-stat-worked').classList.remove('complete');
+  }
+
+  // Hide info note if states are found
+  document.getElementById('was-info').style.display = worked > 0 ? 'none' : 'block';
+
+  // Map grid
+  let mapHtml = '';
+  for (const st of ALL_STATES) {
+    const isWorked = !!data.states[st];
+    const cls = isWorked ? 'worked' : 'not-worked';
+    const tip = isWorked
+      ? `${st} — ${STATE_NAMES[st]} — ${Object.keys(data.states[st].bands).length} band(s)`
+      : `${st} — ${STATE_NAMES[st]} — NOT WORKED`;
+    mapHtml += `<div class="was-cell ${cls}" title="${tip}">${st}</div>`;
+  }
+  document.getElementById('was-map').innerHTML = mapHtml;
+
+  // Detail cards — worked first, then not worked
+  let detailHtml = '';
+  const sorted = ALL_STATES.slice().sort((a,b) => {
+    const aw = data.states[a] ? 1 : 0;
+    const bw = data.states[b] ? 1 : 0;
+    return bw - aw || a.localeCompare(b);
+  });
+  for (const st of sorted) {
+    const sd = data.states[st];
+    if (sd) {
+      const bands = Object.keys(sd.bands);
+      const bandChips = bands.map(b => `<span class="band-chip">${b}</span>`).join('');
+      const calls = sd.calls ? sd.calls.join(', ') : '';
+      detailHtml += `<div class="award-card worked" title="${STATE_NAMES[st]}">
+        <div class="award-card-name">${st} — ${STATE_NAMES[st]}</div>
+        <div class="award-card-detail">${calls}</div>
+        <div class="award-card-bands">${bandChips}</div>
+      </div>`;
+    } else {
+      detailHtml += `<div class="award-card not-worked" title="${STATE_NAMES[st]} — NOT WORKED">
+        <div class="award-card-name">${st} — ${STATE_NAMES[st]}</div>
+        <div class="award-card-detail">Not worked</div>
+      </div>`;
+    }
+  }
+  document.getElementById('was-grid').innerHTML = detailHtml;
+}
+
+// ─── WAZ ─────────────────────────────────────────────────────────────────────
+async function loadWAZ() {
+  const band = document.getElementById('waz-band-filter').value;
+  const mode = document.getElementById('waz-mode-filter').value;
+  let url = '/api/awards/waz?';
+  if (band) url += `band=${encodeURIComponent(band)}&`;
+  if (mode) url += `mode=${encodeURIComponent(mode)}&`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!data.ok) return;
+    renderWAZ(data);
+  } catch(e) {
+    document.getElementById('waz-grid').innerHTML = '<div class="loading">Error loading WAZ data</div>';
+  }
+}
+
+function renderWAZ(data) {
+  const worked = data.total_worked;
+  const needed = 40 - worked;
+  const pct = ((worked / 40) * 100).toFixed(1);
+  const achieved = worked >= 40;
+
+  document.getElementById('waz-worked-num').textContent = worked;
+  document.getElementById('waz-needed-num').textContent = needed;
+  document.getElementById('waz-pct-num').textContent = pct + '%';
+  document.getElementById('waz-progress').style.width = pct + '%';
+
+  // Gold styling when achieved
+  const banner = document.getElementById('waz-complete-banner');
+  const progressFill = document.getElementById('waz-progress');
+  if (achieved) {
+    banner.classList.add('show');
+    progressFill.classList.add('complete');
+    document.getElementById('waz-stat-worked').classList.add('complete');
+  } else {
+    banner.classList.remove('show');
+    progressFill.classList.remove('complete');
+    document.getElementById('waz-stat-worked').classList.remove('complete');
+  }
+
+  // Zone grid (1-40)
+  let zoneHtml = '';
+  for (let z = 1; z <= 40; z++) {
+    const zStr = String(z);
+    const zd = data.zones[zStr];
+    const isWorked = !!zd;
+    const cls = isWorked ? 'worked' : 'not-worked';
+    const entities = isWorked ? zd.entities.slice(0,3).join(', ') : '';
+    const bands = isWorked ? Object.keys(zd.bands).length + ' band(s)' : 'NOT WORKED';
+    zoneHtml += `<div class="waz-cell ${cls}" title="CQ Zone ${z} — ${bands}${entities ? ' — ' + entities : ''}">
+      ${z}
+      <div class="zone-entities">${isWorked ? Object.keys(zd.bands).length + 'B' : ''}</div>
+    </div>`;
+  }
+  document.getElementById('waz-zone-grid').innerHTML = zoneHtml;
+
+  // Detail cards
+  let detailHtml = '';
+  for (let z = 1; z <= 40; z++) {
+    const zStr = String(z);
+    const zd = data.zones[zStr];
+    if (zd) {
+      const bands = Object.keys(zd.bands);
+      const bandChips = bands.map(b => `<span class="band-chip">${b}</span>`).join('');
+      const entities = zd.entities.join(', ');
+      detailHtml += `<div class="award-card worked" title="CQ Zone ${z}">
+        <div class="award-card-name">Zone ${z}</div>
+        <div class="award-card-detail">${entities}</div>
+        <div class="award-card-bands">${bandChips}</div>
+      </div>`;
+    } else {
+      detailHtml += `<div class="award-card not-worked" title="CQ Zone ${z} — NOT WORKED">
+        <div class="award-card-name">Zone ${z}</div>
+        <div class="award-card-detail">Not worked</div>
+      </div>`;
+    }
+  }
+  document.getElementById('waz-grid').innerHTML = detailHtml;
+}
+
+// ─── WPX ─────────────────────────────────────────────────────────────────────
+let wpxData = null;
+let wpxSortMode = 'alpha';
+
+async function loadWPX() {
+  const band = document.getElementById('wpx-band-filter').value;
+  const mode = document.getElementById('wpx-mode-filter').value;
+  let url = '/api/awards/wpx?';
+  if (band) url += `band=${encodeURIComponent(band)}&`;
+  if (mode) url += `mode=${encodeURIComponent(mode)}&`;
+  try {
+    const resp = await fetch(url);
+    wpxData = await resp.json();
+    renderWPX();
+  } catch(e) {
+    document.getElementById('wpx-grid').innerHTML = '<div class="loading">Error loading WPX data</div>';
+  }
+}
+
+function renderWPX() {
+  if (!wpxData || !wpxData.ok) return;
+  const prefixes = wpxData.prefixes;
+  const totalWorked = wpxData.total_worked;
+
+  document.getElementById('wpx-worked-num').textContent = totalWorked;
+
+  // Count unique bands across all prefixes
+  const allBands = new Set();
+  let topPfx = '', topCount = 0;
+  for (const pfx in prefixes) {
+    const bandCount = prefixes[pfx].band_count || Object.keys(prefixes[pfx].bands).length;
+    Object.keys(prefixes[pfx].bands).forEach(b => allBands.add(b));
+    if (bandCount > topCount) { topCount = bandCount; topPfx = pfx; }
+  }
+  document.getElementById('wpx-bands-num').textContent = allBands.size;
+  document.getElementById('wpx-top-num').textContent = topPfx || '—';
+
+  // Build card list
+  const showFilter = document.getElementById('wpx-show-filter').value;
+  let cards = [];
+  for (const pfx in prefixes) {
+    const pd = prefixes[pfx];
+    const bands = Object.keys(pd.bands);
+    const entities = pd.entities || [];
+    const calls = pd.calls || [];
+    cards.push({ prefix: pfx, bands, bandCount: bands.length, entities, calls, entityCount: entities.length });
+  }
+
+  // Sort
+  if (wpxSortMode === 'alpha') cards.sort((a,b) => a.prefix.localeCompare(b.prefix));
+  else if (wpxSortMode === 'bands') cards.sort((a,b) => b.bandCount - a.bandCount || a.prefix.localeCompare(b.prefix));
+  else if (wpxSortMode === 'entities') cards.sort((a,b) => b.entityCount - a.entityCount || a.prefix.localeCompare(b.prefix));
+
+  let html = '';
+  for (const c of cards) {
+    const bandChips = c.bands.map(b => `<span class="band-chip">${b}</span>`).join('');
+    const entText = c.entities.length ? c.entities.join(', ') : '';
+    const callText = c.calls.length ? c.calls.slice(0,3).join(', ') : '';
+    html += `<div class="award-card worked" title="${c.prefix} — ${c.bandCount} band(s)${entText ? ' — ' + entText : ''}">
+      <div class="award-card-name">${c.prefix}</div>
+      <div class="award-card-detail">${entText}${callText ? (entText ? ' · ' : '') + callText : ''}</div>
+      <div class="award-card-bands">${bandChips}</div>
+    </div>`;
+  }
+  if (!html) html = '<div class="loading">No prefixes match current filters</div>';
+  document.getElementById('wpx-grid').innerHTML = html;
+}
+
+function sortWPX(mode) {
+  wpxSortMode = mode;
+  document.querySelectorAll('#wpx-sort-controls .sort-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`#wpx-sort-controls .sort-btn[data-sort="${mode}"]`).classList.add('active');
+  renderWPX();
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+loadDXCC();
+</script>
+</body>
+</html>
