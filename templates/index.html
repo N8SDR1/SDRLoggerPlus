@@ -847,6 +847,8 @@
           <span id="sat-conn-status">S.A.T. Not Connected</span>
           <button onclick="fetchSatLog()" title="Pull QSO log from S.A.T. device (with duplicate detection)"
                   style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--accent);cursor:pointer;">⬇ Fetch S.A.T. Log</button>
+          <button onclick="dedupeSatQsos()" title="Remove duplicate SAT QSOs (same call+date+sat within 5min) — keeps the earliest copy"
+                  style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:3px;border:1px solid var(--border);background:transparent;color:#ffaa00;cursor:pointer;margin-left:4px;">🧹 Dedupe</button>
           <span id="sat-last-heard">Grid: — | GPS: —</span>
         </div>
       </div>
@@ -1781,11 +1783,11 @@
       <h4>S.A.T. QSO Log Setup <span style="font-size:9px;color:#8fafc0;font-weight:400;">— configure on the S.A.T. device under LOCATION settings</span></h4>
       <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;line-height:1.8;">
         On the S.A.T. web UI → <strong>LOCATION</strong> section, configure:<br>
-        &nbsp;&nbsp;• <strong>QSO LOG TYPE:</strong> ACLog (or N1MM, Log4OM, etc.)<br>
+        &nbsp;&nbsp;• <strong>QSO LOG TYPE:</strong> <span style="color:#ffd700;font-weight:700;">N1MM ⭐ recommended</span> (fastest QSO push). Other formats also work — ACLog is noticeably slower, Log4OM is in between.<br>
         &nbsp;&nbsp;• <strong>QSO LOG IP:</strong> Your PC's IP address<br>
         &nbsp;&nbsp;• <strong>QSO LOG PORT:</strong> Must match the "QSO Log Port" above (default 1100)<br><br>
-        When you log a QSO on the S.A.T., it sends an ADIF record over UDP to SDRLogger+.
-        The QSO appears in the SAT log automatically with satellite, transponder, and Doppler data.
+        When you log a QSO on the S.A.T. (and you're in 🛰 SAT mode in SDRLogger+), the QSO appears in the SAT log within ~3 seconds with satellite, transponder, and Doppler data.<br><br>
+        <strong style="color:#ffd700;">Note:</strong> SDRLogger+ only listens to the S.A.T. while you're in <strong>🛰 SAT mode</strong>. Switching to General or POTA stops the listeners and frees the UDP ports.
       </div>
     </div>
     <div class="settings-section">
@@ -4896,7 +4898,8 @@ function updatePotaMyPark(val) {
 }
 
 // ─── SAT STATUS POLLING ─────────────────────────────────────────────────────
-let _satPollTimer = null;
+let _satPollTimer = null;        // full /api/sat/status poll (slow, 2s)
+let _satCounterTimer = null;     // lightweight /api/sat/qso_count poll (fast, 500ms)
 let _satState = {};
 let _satLastQsoCounter = 0;
 
@@ -4904,10 +4907,49 @@ function _startSatPolling() {
   _stopSatPolling();
   _pollSatStatus();
   _satPollTimer = setInterval(_pollSatStatus, 2000);
+  // Fast 500ms QSO-counter poll for instant new-QSO detection
+  _satCounterTimer = setInterval(_pollSatQsoCount, 500);
 }
 
 function _stopSatPolling() {
   if (_satPollTimer) { clearInterval(_satPollTimer); _satPollTimer = null; }
+  if (_satCounterTimer) { clearInterval(_satCounterTimer); _satCounterTimer = null; }
+}
+
+async function _pollSatQsoCount() {
+  try {
+    const res = await fetch('/api/sat/qso_count');
+    const data = await res.json();
+    const qc = data.qso_counter || 0;
+    if (_satLastQsoCounter === 0) {
+      _satLastQsoCounter = qc;  // seed on first poll
+    } else if (qc > _satLastQsoCounter) {
+      _satLastQsoCounter = qc;
+      loadLog();
+      toast('🛰 SAT QSO received from S.A.T.', 'success', 3000);
+    }
+  } catch(e) {}
+}
+
+async function dedupeSatQsos() {
+  if (!confirm('Remove duplicate SAT QSOs?\n\nThis finds SAT contacts with the same callsign + date + satellite within a 5-minute window and removes the LATER copy (keeps the earliest one which usually has more complete data).\n\nThis only affects SAT QSOs (prop_mode=SAT). Continue?')) return;
+  toast('Scanning for duplicate SAT QSOs...', 'info', 2000);
+  try {
+    const res = await fetch('/api/sat/dedupe', {method: 'POST'});
+    const data = await res.json();
+    if (data.ok) {
+      if (data.removed > 0) {
+        toast(`🧹 ${data.msg}`, 'success', 5000);
+        loadLog();
+      } else {
+        toast('No duplicate SAT QSOs found', 'info', 3000);
+      }
+    } else {
+      toast(`Dedupe failed: ${data.error}`, 'error', 5000);
+    }
+  } catch(e) {
+    toast('Dedupe request failed', 'error', 4000);
+  }
 }
 
 async function fetchSatLog() {
@@ -4936,15 +4978,7 @@ async function _pollSatStatus() {
     const data = await res.json();
     _satState = data;
     _renderSatStatus(data);
-    // Auto-refresh QSO log when a new SAT QSO arrives (from S.A.T. ADIF or UDP)
-    const qc = data.qso_counter || 0;
-    if (_satLastQsoCounter === 0) {
-      _satLastQsoCounter = qc;  // seed on first poll — no false trigger
-    } else if (qc > _satLastQsoCounter) {
-      _satLastQsoCounter = qc;
-      loadLog();
-      toast('🛰 SAT QSO received from S.A.T.', 'success', 3000);
-    }
+    // Note: QSO-counter check moved to _pollSatQsoCount (500ms poll) for lower latency
   } catch(e) {}
 }
 

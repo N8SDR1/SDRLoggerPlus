@@ -1146,6 +1146,20 @@
     <div class="tip">SAT mode is a third option on the <strong>General / 🏕 POTA / 🛰 SAT</strong> mode toggle in the header. Switch to SAT mode to transform the entire UI for satellite operating.</div>
   </div>
 
+  <h2>When SDRLogger+ Talks to the S.A.T.</h2>
+  <div class="section-card">
+    <p>SDRLogger+ <strong>only listens to and polls the S.A.T. while you are in SAT mode.</strong> This is intentional — many operators leave their S.A.T. powered on continuously, but only want SDRLogger+ to interact with it during active satellite sessions.</p>
+    <table>
+      <thead><tr><th>Mode</th><th>SAT Listeners</th><th>Badge</th></tr></thead>
+      <tbody>
+        <tr><td>General</td><td>❌ All listeners stopped, port 1100 + 9932 free</td><td>Hidden</td></tr>
+        <tr><td>🏕 POTA</td><td>❌ All listeners stopped, port 1100 + 9932 free</td><td>Hidden</td></tr>
+        <tr><td>🛰 SAT</td><td>✅ UDP, ADIF, /track poll, /adif poll all active</td><td>Visible — gold when connected, red when offline</td></tr>
+      </tbody>
+    </table>
+    <p>The gold <strong>S.A.T.</strong> badge in the header bar is your confirmation that SDRLogger+ is actively talking to the S.A.T. If you're in SAT mode and the badge stays red ("S.A.T. OFFLINE"), check your S.A.T. IP address and that the device is powered on / reachable.</p>
+  </div>
+
   <h2>How It Works</h2>
   <div class="section-card">
     <p>SDRLogger+ communicates with the S.A.T. controller over four complementary network channels — all standards-based:</p>
@@ -1177,10 +1191,11 @@
     <h3>2. Configure the S.A.T.</h3>
     <p>On the S.A.T. web UI → <strong>LOCATION</strong> section, set:</p>
     <ul>
-      <li><strong>QSO LOG TYPE:</strong> <code>ACLog</code> (or N1MM, Log4OM, HRD — all send standard ADIF)</li>
+      <li><strong>QSO LOG TYPE:</strong> <code>N1MM</code> ⭐ <em>recommended</em> — gives the fastest QSO push to SDRLogger+. Other formats (ACLog, Log4OM, HRD, DXKeeper, MacLogger) all work but ACLog is noticeably slower and Log4OM is somewhere in the middle.</li>
       <li><strong>QSO LOG IP:</strong> Your PC's IP address</li>
       <li><strong>QSO LOG PORT:</strong> <code>1100</code> (must match SDRLogger+ "QSO Log Port")</li>
     </ul>
+    <div class="tip">N1MM format produces the quickest end-to-end response — typically &lt;3 seconds from pressing ADD ENTRY on the S.A.T. to the QSO appearing in SDRLogger+.</div>
 
     <h3>3. Open Windows Firewall</h3>
     <p>In an <strong>Administrator</strong> command prompt, run these two commands:</p>
@@ -1255,13 +1270,20 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
   <h2>"⬇ Fetch S.A.T. Log" Button</h2>
   <div class="section-card">
     <p>The S.A.T. controller stores up to <strong>100 QSO log entries</strong> internally. The <strong>⬇ Fetch S.A.T. Log</strong> button (in the connection bar of the Satellite Status panel) pulls the entire stored log directly from the S.A.T. via its <code>/adif</code> endpoint.</p>
-    <p>Smart <strong>duplicate detection</strong> (callsign + date + time-to-the-minute) ensures no double entries — you can hit the button anytime without worry.</p>
+    <p>Smart <strong>duplicate detection</strong> (callsign + date + sat name within a ±5 minute window) ensures no double entries — you can hit the button anytime without worry.</p>
     <h3>Use this when:</h3>
     <ul>
       <li>SDRLogger+ wasn't running during a session and QSOs are sitting on the S.A.T.</li>
       <li>You want to verify nothing was missed after a pass</li>
       <li>Before clearing the S.A.T.'s internal log</li>
     </ul>
+  </div>
+
+  <h2>"🧹 Dedupe" Button</h2>
+  <div class="section-card">
+    <p>The orange <strong>🧹 Dedupe</strong> button (next to ⬇ Fetch in the connection bar) cleans up duplicate SAT QSOs already in your log. It scans all QSOs with <code>prop_mode=SAT</code> and removes copies where the callsign, date, and satellite name match within a ±5-minute window.</p>
+    <p>The <strong>earliest copy is kept</strong> — that one usually has the most complete data (band, frequency, transponder) from the original UDP push. You'll be asked to confirm before any rows are deleted.</p>
+    <div class="tip">In normal use (v1.06+) you should never need this button — the dedup logic prevents duplicates from being inserted in the first place. It exists for cleaning up legacy duplicates from older versions or unusual edge cases.</div>
   </div>
 
   <h2>ADIF Export &amp; LoTW</h2>
