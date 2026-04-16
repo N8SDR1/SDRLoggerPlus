@@ -78,6 +78,7 @@ def _load_app_settings():
     global WINKEYER_ENABLED, WINKEYER_PORT, WINKEYER_WPM, WINKEYER_KEY_OUT, WINKEYER_MODE, WINKEYER_PTT, WINKEYER_PTT_LEAD, WINKEYER_PTT_TAIL
     global EQSL_USER, EQSL_PASS, EQSL_UPLOAD_ENABLED
     global POTA_MY_PARK, POTA_USER, POTA_PASS
+    global SAT_UDP_ENABLED, SAT_UDP_PORT, SAT_ADIF_PORT, SAT_CONTROLLER_IP
     global LIGHTNING_ACCEPTED, LIGHTNING_ENABLED, LIGHTNING_RANGE, LIGHTNING_UNIT, LIGHTNING_BLITZORTUNG, LIGHTNING_NOAA
     global LIGHTNING_AMBIENT, LIGHTNING_AMBIENT_API_KEY, LIGHTNING_AMBIENT_APP_KEY
     try:
@@ -139,6 +140,11 @@ def _load_app_settings():
         if data.get("pota_my_park"):            POTA_MY_PARK              = data["pota_my_park"].strip().upper()
         if "pota_user" in data:                 POTA_USER                 = data["pota_user"].strip()
         if "pota_pass" in data:                 POTA_PASS                 = data["pota_pass"].strip()
+        # SAT settings
+        if "sat_udp_enabled"    in data: SAT_UDP_ENABLED           = bool(data["sat_udp_enabled"])
+        if data.get("sat_udp_port"):     SAT_UDP_PORT              = int(data["sat_udp_port"])
+        if data.get("sat_adif_port"):    SAT_ADIF_PORT             = int(data["sat_adif_port"])
+        if "sat_controller_ip"  in data: SAT_CONTROLLER_IP         = data["sat_controller_ip"].strip()
         # Lightning settings
         if "lightning_accepted"        in data: LIGHTNING_ACCEPTED        = bool(data["lightning_accepted"])
         if "lightning_enabled"         in data: LIGHTNING_ENABLED         = bool(data["lightning_enabled"]) and LIGHTNING_ACCEPTED
@@ -195,7 +201,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.04"
+VERSION  = "1.05"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -276,10 +282,38 @@ _lightning_lock = threading.Lock()
 
 # ─── POTA (Parks on the Air) ──────────────────────────────────────────────────
 POTA_DATABASE   = "pota.db"     # Separate DB for POTA activations
-ACTIVE_MODE     = "general"     # "general" | "pota"
+ACTIVE_MODE     = "general"     # "general" | "pota" | "sat"
 POTA_MY_PARK    = ""            # Sticky park reference (e.g. K-1234) for current activation
 POTA_USER       = ""            # POTA.app username for self-spotting
 POTA_PASS       = ""            # POTA.app password for self-spotting
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ─── SAT (Satellite) Mode ────────────────────────────────────────────────────
+import collections as _collections  # ensure available before first use below
+SAT_UDP_ENABLED = False         # Enable SAT UDP listener
+SAT_UDP_PORT    = 9932          # S.A.T. broadcast port
+SAT_ADIF_PORT   = 1100          # S.A.T. QSO LOG TYPE ADIF-over-UDP port
+SAT_CONTROLLER_IP = ""          # S.A.T. IP address (for display only)
+_sat_state = {                  # Live state machine
+    "status": "idle",           # idle | tracking | aos | los
+    "satellite": "",            # satellite name
+    "catno": "",                # catalog number
+    "transponder": "",          # transponder name
+    "uplink_freq": "",          # uplink frequency Hz
+    "downlink_freq": "",        # downlink frequency Hz
+    "uplink_mode": "",          # uplink mode
+    "downlink_mode": "",        # downlink mode
+    "aos_az": "",               # azimuth at AOS
+    "los_az": "",               # azimuth at LOS
+    "aos_time": None,           # datetime of AOS (for elapsed timer)
+    "firmware": "",             # S.A.T. firmware version
+    "serial": "",               # S.A.T. serial number
+    "last_heard": None,         # datetime of last UDP packet
+    "pass_qsos": [],            # QSOs logged during current pass
+}
+_sat_state_lock = threading.Lock()
+_sat_events = _collections.deque(maxlen=50)  # rolling event log for UI
+_sat_qso_counter = 0                         # increments on each auto-logged SAT QSO (ADIF or UDP)
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Global storage for latest TCI data received
@@ -316,7 +350,7 @@ _digital_events = collections.deque(maxlen=50)   # {callsign, mode, freq_mhz, so
 
 # ─── Database Setup ────────────────────────────────────────────────────────────
 def get_db(db_path=None):
-    """Return a DB connection. Uses POTA_DATABASE when in pota mode unless overridden."""
+    """Return a DB connection. Uses POTA_DATABASE when in pota mode, general DB for sat mode."""
     if db_path is None:
         db_path = POTA_DATABASE if ACTIVE_MODE == "pota" else DATABASE
     conn = sqlite3.connect(db_path)
@@ -347,7 +381,10 @@ def _init_one_db(db_path):
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_callsign ON qso_log(callsign)")
-    for col in ["name", "qth", "pota_ref", "pota_p2p"]:
+    for col in ["name", "qth", "pota_ref", "pota_p2p", "state", "country", "gridsquare",
+                "prop_mode", "sat_name", "sat_catno", "transponder_name",
+                "uplink_freq", "downlink_freq", "uplink_mode", "downlink_mode",
+                "aos_az", "los_az", "my_grid", "my_lat", "my_lon"]:
         try:
             conn.execute(f"ALTER TABLE qso_log ADD COLUMN {col} TEXT")
         except Exception:
@@ -1953,8 +1990,11 @@ def save_qso():
         INSERT INTO qso_log
             (callsign, name, qth, date_worked, time_worked, band, mode,
              freq_mhz, my_rst_sent, their_rst_rcvd, remarks, contest_name,
-             pota_ref, pota_p2p)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             pota_ref, pota_p2p, state, country, gridsquare,
+             prop_mode, sat_name, sat_catno, transponder_name,
+             uplink_freq, downlink_freq, uplink_mode, downlink_mode,
+             aos_az, los_az, my_grid, my_lat, my_lon)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         callsign,
         data.get("name", ""),
@@ -1970,6 +2010,22 @@ def save_qso():
         data.get("contest_name", ""),
         data.get("pota_ref", "") or "",
         data.get("pota_p2p", "") or "",
+        data.get("state", ""),
+        data.get("country", ""),
+        data.get("gridsquare", ""),
+        data.get("prop_mode", ""),
+        data.get("sat_name", ""),
+        data.get("sat_catno", ""),
+        data.get("transponder_name", ""),
+        data.get("uplink_freq", ""),
+        data.get("downlink_freq", ""),
+        data.get("uplink_mode", ""),
+        data.get("downlink_mode", ""),
+        data.get("aos_az", ""),
+        data.get("los_az", ""),
+        data.get("my_grid", ""),
+        data.get("my_lat", ""),
+        data.get("my_lon", ""),
     ))
     conn.commit()
     conn.close()
@@ -2504,6 +2560,7 @@ def update_settings():
     global WINKEYER_ENABLED, WINKEYER_PORT, WINKEYER_WPM, WINKEYER_KEY_OUT, WINKEYER_MODE, WINKEYER_PTT, WINKEYER_PTT_LEAD, WINKEYER_PTT_TAIL
     global EQSL_USER, EQSL_PASS, EQSL_UPLOAD_ENABLED
     global POTA_MY_PARK, POTA_USER, POTA_PASS
+    global SAT_UDP_ENABLED, SAT_UDP_PORT, SAT_ADIF_PORT, SAT_CONTROLLER_IP
     global LIGHTNING_ACCEPTED, LIGHTNING_ENABLED, LIGHTNING_RANGE, LIGHTNING_UNIT, LIGHTNING_BLITZORTUNG, LIGHTNING_NOAA
     global LIGHTNING_AMBIENT, LIGHTNING_AMBIENT_API_KEY, LIGHTNING_AMBIENT_APP_KEY
     data = request.json or {}
@@ -2600,6 +2657,11 @@ def update_settings():
     if data.get("pota_my_park"):   POTA_MY_PARK      = data["pota_my_park"].strip().upper()
     if "pota_user"        in data: POTA_USER         = data["pota_user"].strip()
     if "pota_pass"        in data: POTA_PASS         = data["pota_pass"].strip()
+    # SAT settings
+    if "sat_udp_enabled"    in data: SAT_UDP_ENABLED    = bool(data["sat_udp_enabled"])
+    if data.get("sat_udp_port"):     SAT_UDP_PORT       = int(data["sat_udp_port"])
+    if data.get("sat_adif_port"):    SAT_ADIF_PORT      = int(data["sat_adif_port"])
+    if "sat_controller_ip"  in data: SAT_CONTROLLER_IP  = data["sat_controller_ip"].strip()
     # Lightning settings
     if "lightning_accepted"        in data: LIGHTNING_ACCEPTED        = bool(data["lightning_accepted"])
     if "lightning_enabled"         in data: LIGHTNING_ENABLED         = bool(data["lightning_enabled"]) and LIGHTNING_ACCEPTED
@@ -2744,64 +2806,29 @@ def restore_db():
         return jsonify({"ok": False, "error": f"Could not write database: {e}"}), 500
 
 
-@app.route("/api/apply_update", methods=["POST"])
-def apply_update():
-    """
-    Accept a SDRLogger+ update zip, extract files into the app directory.
-    Safety rules:
-      - Rejects any zip containing path-traversal sequences (../)
-      - Never overwrites .db files (user data is always preserved)
-      - Only extracts into the app's own directory tree
-    User must restart SDRLogger+ after this completes.
-    """
-    if "file" not in request.files:
-        return jsonify({"ok": False, "error": "No file uploaded"}), 400
+@app.route("/api/export_settings", methods=["POST"])
+def export_settings_file():
+    """Save the current settings JSON to the backup folder (or download if no folder set)."""
+    body = request.json or {}
+    path = (body.get("backup_path") or BACKUP_PATH or "").strip()
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"hamlog_settings_{ts}.json"
 
-    upload   = request.files["file"]
-    zip_data = upload.read()
-
-    try:
-        zf = zipfile.ZipFile(io.BytesIO(zip_data))
-    except zipfile.BadZipFile:
-        return jsonify({"ok": False, "error": "File does not appear to be a valid zip archive"}), 400
-
-    # When running as a frozen installed exe, write to the user's AppData
-    # directory where we have write access without elevation.
-    # When running from source, write to the app's own directory as before.
-    import sys as _sys
-    if getattr(_sys, "frozen", False):
-        app_dir = os.environ.get("SDRLOGGERPLUS_DATA", os.path.dirname(os.path.abspath(__file__)))
-    else:
-        app_dir = os.path.dirname(os.path.abspath(__file__))
-    extracted = []
-    skipped   = []
-
-    for name in zf.namelist():
-        # Skip directory entries
-        if name.endswith("/"):
-            continue
-        # Block path traversal
-        if ".." in name or name.startswith("/") or name.startswith("\\"):
-            return jsonify({"ok": False, "error": f"Unsafe path in zip: {name}"}), 400
-        # Never overwrite databases
-        if name.lower().endswith(".db"):
-            skipped.append(name)
-            continue
+    if path:
         try:
-            dest = os.path.join(app_dir, name)
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            with zf.open(name) as src, open(dest, "wb") as dst:
-                dst.write(src.read())
-            extracted.append(name)
+            os.makedirs(path, exist_ok=True)
+            dest = os.path.join(path, filename)
+            with open(dest, "w") as f:
+                json.dump(runtime_settings, f, indent=2)
+            return jsonify({"ok": True, "path": dest, "filename": filename})
         except Exception as e:
-            return jsonify({"ok": False, "error": f"Failed writing {name}: {e}"}), 500
+            return jsonify({"ok": False, "error": str(e)}), 500
 
-    return jsonify({
-        "ok":        True,
-        "extracted": extracted,
-        "skipped":   skipped,
-        "count":     len(extracted),
-    })
+    # No path — return as download
+    buf = io.BytesIO(json.dumps(runtime_settings, indent=2).encode("utf-8"))
+    buf.seek(0)
+    return send_file(buf, mimetype="application/json",
+                     as_attachment=True, download_name=filename)
 
 
 @app.route("/api/save_server_config", methods=["POST"])
@@ -3041,17 +3068,20 @@ def eqsl_test():
 
 @app.route("/api/set_mode", methods=["POST"])
 def set_mode():
-    """Switch active logging mode between 'general' and 'pota'."""
+    """Switch active logging mode between 'general', 'pota', and 'sat'."""
     global ACTIVE_MODE, POTA_MY_PARK
     data = request.json or {}
     mode = data.get("mode", "general")
-    if mode not in ("general", "pota"):
+    if mode not in ("general", "pota", "sat"):
         return jsonify({"ok": False, "error": "Invalid mode"}), 400
     ACTIVE_MODE  = mode
     if "pota_my_park" in data:
         POTA_MY_PARK = data["pota_my_park"].strip().upper()
     # Make sure the target DB schema is ready
-    _init_one_db(POTA_DATABASE if mode == "pota" else DATABASE)
+    if mode == "pota":
+        _init_one_db(POTA_DATABASE)
+    else:
+        _init_one_db(DATABASE)
     return jsonify({"ok": True, "mode": ACTIVE_MODE, "pota_my_park": POTA_MY_PARK})
 
 
@@ -3384,23 +3414,26 @@ def get_log():
     offset = int(request.args.get("offset", 0))
     search = request.args.get("search", "").strip()
     conn   = get_db()
+    # SAT mode: only show SAT QSOs (prop_mode = 'SAT')
+    sat_filter = " AND (prop_mode = 'SAT' OR prop_mode = 'sat')" if ACTIVE_MODE == "sat" else ""
     if search:
         like  = f"%{search}%"
         where = ("callsign LIKE ? OR band LIKE ? OR mode LIKE ? "
                  "OR contest_name LIKE ? OR remarks LIKE ?")
         params = (like, like, like, like, like)
         total = conn.execute(
-            f"SELECT COUNT(*) FROM qso_log WHERE {where}", params
+            f"SELECT COUNT(*) FROM qso_log WHERE ({where}){sat_filter}", params
         ).fetchone()[0]
         rows  = conn.execute(
-            f"SELECT * FROM qso_log WHERE {where} "
+            f"SELECT * FROM qso_log WHERE ({where}){sat_filter} "
             "ORDER BY date_worked DESC, time_worked DESC LIMIT ? OFFSET ?",
             params + (limit, offset)
         ).fetchall()
     else:
-        total = conn.execute("SELECT COUNT(*) FROM qso_log").fetchone()[0]
+        sat_where = "WHERE prop_mode = 'SAT' OR prop_mode = 'sat'" if ACTIVE_MODE == "sat" else ""
+        total = conn.execute(f"SELECT COUNT(*) FROM qso_log {sat_where}").fetchone()[0]
         rows  = conn.execute(
-            "SELECT * FROM qso_log ORDER BY date_worked DESC, time_worked DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM qso_log {sat_where} ORDER BY date_worked DESC, time_worked DESC LIMIT ? OFFSET ?",
             (limit, offset)
         ).fetchall()
     conn.close()
@@ -3425,7 +3458,7 @@ def update_qso(qso_id):
         UPDATE qso_log SET
             callsign=?, name=?, qth=?, date_worked=?, time_worked=?,
             band=?, mode=?, freq_mhz=?, my_rst_sent=?, their_rst_rcvd=?,
-            remarks=?, contest_name=?
+            remarks=?, contest_name=?, state=?, country=?, gridsquare=?
         WHERE id=?
     """, (
         data.get("callsign","").upper(),
@@ -3440,12 +3473,23 @@ def update_qso(qso_id):
         data.get("their_rst_rcvd",""),
         data.get("remarks",""),
         data.get("contest_name",""),
+        data.get("state",""),
+        data.get("country",""),
+        data.get("gridsquare",""),
         qso_id,
     ))
     conn.commit()
     conn.close()
     _worked_cache_add(data.get("callsign",""), data.get("band",""), data.get("mode",""))
     return jsonify({"ok": True})
+
+
+def _safe_col(row, col):
+    """Safely get a column from a sqlite3.Row, returning '' if column doesn't exist."""
+    try:
+        return row[col] or ""
+    except (IndexError, KeyError):
+        return ""
 
 
 @app.route("/api/export_adif")
@@ -3477,6 +3521,14 @@ def export_adif():
             tag("CONTEST_ID", r["contest_name"]) +
             (tag("MY_SIG", "POTA") + tag("MY_SIG_INFO", pota_ref) if pota_ref else "") +
             (tag("SIG", "POTA") + tag("SIG_INFO", pota_p2p) if pota_p2p else "") +
+            tag("NAME", r["name"]) +
+            tag("QTH", r["qth"]) +
+            tag("STATE", _safe_col(r, "state")) +
+            tag("COUNTRY", _safe_col(r, "country")) +
+            tag("GRIDSQUARE", _safe_col(r, "gridsquare")) +
+            (tag("PROP_MODE", _safe_col(r, "prop_mode")) if _safe_col(r, "prop_mode") else "") +
+            (tag("SAT_NAME", _safe_col(r, "sat_name")) if _safe_col(r, "sat_name") else "") +
+            (tag("FREQ_RX", _safe_col(r, "uplink_freq")) if _safe_col(r, "uplink_freq") else "") +
             "<EOR>"
         )
         lines.append(line)
@@ -3552,12 +3604,21 @@ def import_adif():
         name_val    = get_field(rec, "NAME")
         qth_val     = get_field(rec, "QTH")
         remarks_val = get_field(rec, "COMMENT") or get_field(rec, "NOTES") or get_field(rec, "QSLMSG")
+        state_val   = get_field(rec, "STATE")
+        # Fallback: extract state from CNTY field (format "OH,Butler")
+        if not state_val:
+            cnty = get_field(rec, "CNTY")
+            if cnty and "," in cnty:
+                state_val = cnty.split(",")[0].strip()
+        country_val = get_field(rec, "COUNTRY")
+        grid_val    = get_field(rec, "GRIDSQUARE")
 
         conn.execute("""
             INSERT INTO qso_log
                 (callsign, name, qth, date_worked, time_worked, band, mode,
-                 freq_mhz, my_rst_sent, their_rst_rcvd, remarks, contest_name)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                 freq_mhz, my_rst_sent, their_rst_rcvd, remarks, contest_name,
+                 state, country, gridsquare)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             callsign,
             name_val,
@@ -3571,6 +3632,9 @@ def import_adif():
             get_field(rec, "RST_RCVD"),
             remarks_val,
             get_field(rec, "CONTEST_ID"),
+            state_val,
+            country_val,
+            grid_val,
         ))
         imported += 1
     conn.commit()
@@ -4141,7 +4205,8 @@ _update_cache = None   # {"latest": "0.51", "url": "https://...", "has_update": 
 def update_check():
     """Check GitHub for a newer release. Called once at startup by the frontend."""
     global _update_cache
-    if _update_cache is not None:
+    force = request.args.get("force", "0") == "1"
+    if _update_cache is not None and not force:
         return jsonify(_update_cache)
     try:
         # Try /releases/latest first (skips drafts AND pre-releases).
@@ -4322,6 +4387,49 @@ def _load_cty_dat():
     except Exception as e:
         print(f"DXCC: failed to parse cty.dat: {e}")
 
+def _extract_prefix(callsign):
+    """Extract CQ WPX-style prefix from a callsign.
+    Returns prefix string (e.g. 'N8', 'VK3', '3DA0') or None."""
+    call = callsign.upper().strip()
+    if not call:
+        return None
+    # Split on '/' to handle portable suffixes and stroke calls
+    parts = call.split("/")
+    if len(parts) == 1:
+        base = parts[0]
+    elif len(parts) == 2:
+        # Strip trailing portable suffixes like /P /M /QRP /MM /AM
+        if len(parts[1]) <= 3 and parts[1] in ("P", "M", "QRP", "MM", "AM", "A", "B"):
+            base = parts[0]
+        else:
+            # Stroke call: use the shorter part as the prefix source
+            # VK9/N8SDR -> VK9 is prefix; N8SDR/VK9 -> VK9 is prefix
+            if len(parts[0]) < len(parts[1]):
+                base = parts[0]
+            else:
+                base = parts[1]
+    else:
+        # Multiple slashes: strip last part if short suffix, use first part
+        if len(parts[-1]) <= 3:
+            base = parts[0]
+        else:
+            base = parts[0]
+    # Extract prefix: letters and digits from start, ending after the LAST digit
+    # in the leading alphanumeric sequence
+    last_digit_pos = -1
+    for i, ch in enumerate(base):
+        if ch.isdigit():
+            last_digit_pos = i
+        elif ch.isalpha() and last_digit_pos >= 0:
+            # We hit a letter after seeing a digit — prefix ends at last_digit_pos
+            break
+    if last_digit_pos >= 0:
+        return base[:last_digit_pos + 1]
+    # No digit found: convention is first letter + "0"
+    if base:
+        return base[0] + "0"
+    return None
+
 def dxcc_lookup(callsign):
     """Look up DXCC entity for a callsign. Returns info dict or None."""
     call = callsign.upper().strip()
@@ -4354,15 +4462,21 @@ def api_dxcc_lookup():
     return jsonify({"ok": False, "error": "Not found"})
 
 
-# ─── Worked DXCC Cache ────────────────────────────────────────────────────────
+# ─── Worked DXCC / WAZ / WPX Cache ───────────────────────────────────────────
 # In-memory cache: _worked_entities = {entity_name: set of (band_upper, mode_upper)}
+# _worked_zones = {cq_zone_str: set of (band_upper, mode_upper)}
+# _worked_prefixes = {prefix_str: set of (band_upper, mode_upper)}
 # Rebuilt from DB on startup; updated incrementally when QSOs are saved/imported.
 _worked_entities = {}        # {entity_str: set((band,mode), ...)}
+_worked_zones    = {}        # {cq_zone: set((band,mode), ...)}
+_worked_prefixes = {}        # {prefix_str: set((band,mode), ...)}
 _worked_cache_lock = threading.Lock()
 
 def _rebuild_worked_cache():
-    """Scan qso_log and build a dict of worked DXCC entities → set of (band, mode)."""
-    cache = {}
+    """Scan qso_log and build dicts of worked DXCC entities, CQ zones, and WPX prefixes."""
+    ent_cache = {}
+    zone_cache = {}
+    pfx_cache = {}
     try:
         conn = get_db()
         rows = conn.execute("SELECT callsign, band, mode FROM qso_log").fetchall()
@@ -4370,22 +4484,37 @@ def _rebuild_worked_cache():
     except Exception:
         return
     for row in rows:
-        info = dxcc_lookup(row["callsign"])
+        call = str(row["callsign"]).strip().upper()
+        bm = (str(row["band"]).strip().upper(), str(row["mode"]).strip().upper())
+        info = dxcc_lookup(call)
         if info:
-            ent = info["entity"]
-            bm = (str(row["band"]).strip().upper(), str(row["mode"]).strip().upper())
-            cache.setdefault(ent, set()).add(bm)
+            ent_cache.setdefault(info["entity"], set()).add(bm)
+            cq = str(info.get("cq", "")).strip()
+            if cq:
+                zone_cache.setdefault(cq, set()).add(bm)
+        pfx = _extract_prefix(call)
+        if pfx:
+            pfx_cache.setdefault(pfx, set()).add(bm)
     with _worked_cache_lock:
-        global _worked_entities
-        _worked_entities = cache
+        global _worked_entities, _worked_zones, _worked_prefixes
+        _worked_entities = ent_cache
+        _worked_zones = zone_cache
+        _worked_prefixes = pfx_cache
 
 def _worked_cache_add(callsign, band, mode):
-    """Incrementally add a QSO to the worked cache."""
+    """Incrementally add a QSO to the worked cache (entities + zones + prefixes)."""
+    bm = (str(band).strip().upper(), str(mode).strip().upper())
     info = dxcc_lookup(callsign)
     if info:
-        bm = (str(band).strip().upper(), str(mode).strip().upper())
         with _worked_cache_lock:
             _worked_entities.setdefault(info["entity"], set()).add(bm)
+            cq = str(info.get("cq", "")).strip()
+            if cq:
+                _worked_zones.setdefault(cq, set()).add(bm)
+    pfx = _extract_prefix(callsign)
+    if pfx:
+        with _worked_cache_lock:
+            _worked_prefixes.setdefault(pfx, set()).add(bm)
 
 
 # ─── Worked Before ────────────────────────────────────────────────────────────
@@ -4417,7 +4546,8 @@ def api_worked_before():
 def api_worked_before_batch():
     """Batch check worked-before for multiple callsigns (used by spot coloring).
     Input: {"spots": [{"call":"W1ABC","band":"20M","mode":"SSB"}, ...]}
-    Output: {"results": {"W1ABC": {"entity":"United States","status":"new_entity"|"new_band_mode"|"worked"}, ...}}
+    Output: {"results": {"W1ABC": {"entity":"..","status":"new_entity"|"new_band_mode"|"worked",
+             "needs_zone":true|false, "cq":"05"}, ...}}
     """
     data = request.json or {}
     spots = data.get("spots", [])
@@ -4431,16 +4561,22 @@ def api_worked_before_batch():
             mode = s.get("mode", "").strip().upper()
             info = dxcc_lookup(call)
             if not info:
-                results[call] = {"entity": None, "status": "unknown"}
+                results[call] = {"entity": None, "status": "unknown", "needs_zone": False}
                 continue
             entity = info["entity"]
+            cq = str(info.get("cq", "")).strip()
             band_modes = _worked_entities.get(entity, set())
+            # Check if this CQ zone has been worked at all
+            zone_worked = len(_worked_zones.get(cq, set())) > 0 if cq else True
             if not band_modes:
-                results[call] = {"entity": entity, "cont": info.get("cont", ""), "status": "new_entity"}
+                results[call] = {"entity": entity, "cont": info.get("cont", ""),
+                                 "status": "new_entity", "needs_zone": not zone_worked, "cq": cq}
             elif band and mode and (band, mode) not in band_modes:
-                results[call] = {"entity": entity, "cont": info.get("cont", ""), "status": "new_band_mode"}
+                results[call] = {"entity": entity, "cont": info.get("cont", ""),
+                                 "status": "new_band_mode", "needs_zone": not zone_worked, "cq": cq}
             else:
-                results[call] = {"entity": entity, "cont": info.get("cont", ""), "status": "worked"}
+                results[call] = {"entity": entity, "cont": info.get("cont", ""),
+                                 "status": "worked", "needs_zone": not zone_worked, "cq": cq}
     return jsonify({"results": results})
 
 
@@ -4690,6 +4826,8 @@ def _parse_adif_records(text):
         "CALL", "NAME", "QTH", "GRIDSQUARE", "QSO_DATE", "TIME_ON",
         "BAND", "MODE", "FREQ", "RST_SENT", "RST_RCVD",
         "COMMENT", "NOTES", "CONTEST_ID", "MY_POTA_REF", "POTA_REF",
+        "STATE", "COUNTRY", "CNTY",
+        "PROP_MODE", "SAT_NAME", "SAT_MODE", "BAND_RX", "FREQ_RX",
     }
     records = []
     parts = re.split(r'<eor>', text, flags=re.IGNORECASE)
@@ -4729,6 +4867,12 @@ def _adif_to_qso(rec):
         tm = f"{tm[:2]}:{tm[2:4]}:{tm[4:6]}" if len(tm) >= 6 else f"{tm[:2]}:{tm[2:4]}:00"
     elif not tm:
         tm = datetime.utcnow().strftime("%H:%M:%S")
+    # State: try STATE field, then extract from CNTY (format "OH,Butler")
+    state = rec.get("STATE", "")
+    if not state:
+        cnty = rec.get("CNTY", "")
+        if cnty and "," in cnty:
+            state = cnty.split(",")[0].strip()
     return {
         "callsign": call,
         "name": rec.get("NAME", ""),
@@ -4744,6 +4888,11 @@ def _adif_to_qso(rec):
         "contest_name": rec.get("CONTEST_ID", ""),
         "pota_ref": rec.get("MY_POTA_REF", ""),
         "pota_p2p": rec.get("POTA_REF", ""),
+        "state": state,
+        "country": rec.get("COUNTRY", ""),
+        "gridsquare": rec.get("GRIDSQUARE", ""),
+        "prop_mode": rec.get("PROP_MODE", ""),
+        "sat_name": rec.get("SAT_NAME", ""),
     }
 
 def _adif_monitor_insert(qso):
@@ -4754,8 +4903,9 @@ def _adif_monitor_insert(qso):
             INSERT INTO qso_log
                 (callsign, name, qth, date_worked, time_worked, band, mode,
                  freq_mhz, my_rst_sent, their_rst_rcvd, remarks, contest_name,
-                 pota_ref, pota_p2p)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 pota_ref, pota_p2p, state, country, gridsquare,
+                 prop_mode, sat_name)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             qso["callsign"], qso["name"], qso["qth"],
             qso["date_worked"], qso["time_worked"],
@@ -4764,6 +4914,8 @@ def _adif_monitor_insert(qso):
             qso["my_rst_sent"], qso["their_rst_rcvd"],
             qso["remarks"], qso["contest_name"],
             qso["pota_ref"], qso["pota_p2p"],
+            qso.get("state", ""), qso.get("country", ""), qso.get("gridsquare", ""),
+            qso.get("prop_mode", ""), qso.get("sat_name", ""),
         ))
         conn.commit()
         conn.close()
@@ -4887,6 +5039,820 @@ def adif_monitor_dismiss():
     return jsonify({"ok": True, "dismissed": sum(len(b["qsos"]) for b in batches)})
 
 
+# ─── Awards & Statistics ──────────────────────────────────────────────────────
+
+# US state abbreviations for WAS tracking
+_US_STATES = {
+    "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
+    "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+    "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+    "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+    "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"
+}
+_US_STATE_NAMES = {
+    "ALABAMA":"AL","ALASKA":"AK","ARIZONA":"AZ","ARKANSAS":"AR",
+    "CALIFORNIA":"CA","COLORADO":"CO","CONNECTICUT":"CT","DELAWARE":"DE",
+    "FLORIDA":"FL","GEORGIA":"GA","HAWAII":"HI","IDAHO":"ID",
+    "ILLINOIS":"IL","INDIANA":"IN","IOWA":"IA","KANSAS":"KS",
+    "KENTUCKY":"KY","LOUISIANA":"LA","MAINE":"ME","MARYLAND":"MD",
+    "MASSACHUSETTS":"MA","MICHIGAN":"MI","MINNESOTA":"MN","MISSISSIPPI":"MS",
+    "MISSOURI":"MO","MONTANA":"MT","NEBRASKA":"NE","NEVADA":"NV",
+    "NEW HAMPSHIRE":"NH","NEW JERSEY":"NJ","NEW MEXICO":"NM","NEW YORK":"NY",
+    "NORTH CAROLINA":"NC","NORTH DAKOTA":"ND","OHIO":"OH","OKLAHOMA":"OK",
+    "OREGON":"OR","PENNSYLVANIA":"PA","RHODE ISLAND":"RI","SOUTH CAROLINA":"SC",
+    "SOUTH DAKOTA":"SD","TENNESSEE":"TN","TEXAS":"TX","UTAH":"UT",
+    "VERMONT":"VT","VIRGINIA":"VA","WASHINGTON":"WA","WEST VIRGINIA":"WV",
+    "WISCONSIN":"WI","WYOMING":"WY"
+}
+
+def _extract_us_state(qth_str):
+    """Try to extract a US state abbreviation from a QTH string."""
+    if not qth_str:
+        return None
+    qth = qth_str.strip().upper()
+    # Direct 2-letter abbreviation match (e.g., "OH", "Columbus, OH", "OH, USA")
+    for token in re.split(r'[,\s/]+', qth):
+        token = token.strip()
+        if token in _US_STATES:
+            return token
+    # Full state name match (e.g., "Ohio", "New York")
+    for name, abbr in _US_STATE_NAMES.items():
+        if name in qth:
+            return abbr
+    return None
+
+
+@app.route("/awards")
+def awards_page():
+    return render_template("awards.html", version=VERSION)
+
+
+@app.route("/api/awards/dxcc")
+def api_awards_dxcc():
+    """Return DXCC award progress — entities worked, with band/mode breakdown."""
+    band_filter = request.args.get("band", "").strip().upper()
+    mode_filter = request.args.get("mode", "").strip().upper()
+    with _worked_cache_lock:
+        entities = {}
+        for entity, bm_set in _worked_entities.items():
+            bands_worked = {}
+            for (b, m) in bm_set:
+                if band_filter and b != band_filter:
+                    continue
+                if mode_filter and m != mode_filter:
+                    continue
+                bands_worked.setdefault(b, []).append(m)
+            if bands_worked:
+                entities[entity] = {
+                    "bands": bands_worked,
+                    "count": len(bands_worked)
+                }
+    # Get continent for each entity from prefix table
+    entity_info = {}
+    seen = set()
+    for pfx, info in _dxcc_prefixes.items():
+        ent = info["entity"]
+        if ent not in seen and ent in entities:
+            seen.add(ent)
+            entity_info[ent] = {"cont": info.get("cont", ""), "cq": info.get("cq", "")}
+    return jsonify({
+        "ok": True,
+        "total_worked": len(entities),
+        "entities": entities,
+        "entity_info": entity_info
+    })
+
+
+@app.route("/api/awards/was")
+def api_awards_was():
+    """Return WAS (Worked All States) progress — states worked, with band/mode breakdown."""
+    band_filter = request.args.get("band", "").strip().upper()
+    mode_filter = request.args.get("mode", "").strip().upper()
+    try:
+        conn = get_db()
+        rows = conn.execute("SELECT callsign, qth, band, mode, state, country FROM qso_log").fetchall()
+        conn.close()
+    except Exception as e:
+        print(f"Awards WAS: DB error: {e}")
+        return jsonify({"ok": False, "error": "Database error"})
+
+    states = {}   # {state_abbr: {"bands": {band: [modes]}, "calls": set()}}
+    for row in rows:
+        call = str(row["callsign"]).strip().upper()
+        # Try the state column first (populated from ADIF STATE field)
+        state = None
+        raw_state = _safe_col(row, "state").strip().upper()
+        if raw_state and raw_state in _US_STATES:
+            state = raw_state
+        elif raw_state and raw_state in _US_STATE_NAMES:
+            state = _US_STATE_NAMES[raw_state]
+        # Fallback: extract from QTH field
+        if not state:
+            state = _extract_us_state(_safe_col(row, "qth"))
+        # Last resort: only for US callsigns, try to find state from QTH
+        if not state:
+            info = dxcc_lookup(call)
+            if not info or info["entity"] not in ("United States", "Alaska", "Hawaii"):
+                continue
+            # Alaska and Hawaii are DXCC entities — auto-map them
+            if info["entity"] == "Alaska":
+                state = "AK"
+            elif info["entity"] == "Hawaii":
+                state = "HI"
+            else:
+                continue  # US callsign but no state info available
+        else:
+            # Verify it's a US callsign if state came from QTH (could be wrong)
+            info = dxcc_lookup(call)
+            if not info or info["entity"] not in ("United States", "Alaska", "Hawaii"):
+                continue
+
+        b = str(row["band"]).strip().upper()
+        m = str(row["mode"]).strip().upper()
+        if band_filter and b != band_filter:
+            continue
+        if mode_filter and m != mode_filter:
+            continue
+        if state not in states:
+            states[state] = {"bands": {}, "calls": set()}
+        states[state]["bands"].setdefault(b, []).append(m)
+        states[state]["calls"].add(call)
+
+    # Convert sets to lists for JSON
+    out = {}
+    for st, data in states.items():
+        out[st] = {"bands": data["bands"], "calls": list(data["calls"])[:5]}
+
+    print(f"Awards WAS: {len(out)} states found from {len(rows)} QSOs")
+    return jsonify({
+        "ok": True,
+        "total_worked": len(out),
+        "total_needed": 50,
+        "states": out
+    })
+
+
+@app.route("/api/awards/waz")
+def api_awards_waz():
+    """Return WAZ (Worked All Zones) progress — CQ zones worked, with band/mode breakdown."""
+    band_filter = request.args.get("band", "").strip().upper()
+    mode_filter = request.args.get("mode", "").strip().upper()
+    try:
+        conn = get_db()
+        rows = conn.execute("SELECT callsign, band, mode FROM qso_log").fetchall()
+        conn.close()
+    except Exception:
+        return jsonify({"ok": False, "error": "Database error"})
+
+    zones = {}  # {zone_num: {"bands": {band: [modes]}, "entities": set()}}
+    for row in rows:
+        call = str(row["callsign"]).strip().upper()
+        info = dxcc_lookup(call)
+        if not info or not info.get("cq"):
+            continue
+        cq = str(info["cq"]).strip()
+        b = str(row["band"]).strip().upper()
+        m = str(row["mode"]).strip().upper()
+        if band_filter and b != band_filter:
+            continue
+        if mode_filter and m != mode_filter:
+            continue
+        if cq not in zones:
+            zones[cq] = {"bands": {}, "entities": set()}
+        zones[cq]["bands"].setdefault(b, []).append(m)
+        zones[cq]["entities"].add(info["entity"])
+
+    out = {}
+    for z, data in zones.items():
+        out[z] = {"bands": data["bands"], "entities": list(data["entities"])[:10]}
+
+    return jsonify({
+        "ok": True,
+        "total_worked": len(out),
+        "total_needed": 40,
+        "zones": out
+    })
+
+
+@app.route("/api/awards/wpx")
+def api_awards_wpx():
+    """Return WPX (Worked All Prefixes) progress — prefixes worked, with band/mode breakdown."""
+    band_filter = request.args.get("band", "").strip().upper()
+    mode_filter = request.args.get("mode", "").strip().upper()
+    try:
+        conn = get_db()
+        rows = conn.execute("SELECT callsign, band, mode FROM qso_log").fetchall()
+        conn.close()
+    except Exception:
+        return jsonify({"ok": False, "error": "Database error"})
+
+    prefixes = {}  # {prefix: {"bands": {band: [modes]}, "entities": set(), "calls": set()}}
+    for row in rows:
+        call = str(row["callsign"]).strip().upper()
+        pfx = _extract_prefix(call)
+        if not pfx:
+            continue
+        b = str(row["band"]).strip().upper()
+        m = str(row["mode"]).strip().upper()
+        if band_filter and b != band_filter:
+            continue
+        if mode_filter and m != mode_filter:
+            continue
+        if pfx not in prefixes:
+            prefixes[pfx] = {"bands": {}, "entities": set(), "calls": set()}
+        prefixes[pfx]["bands"].setdefault(b, []).append(m)
+        prefixes[pfx]["calls"].add(call)
+        info = dxcc_lookup(call)
+        if info:
+            prefixes[pfx]["entities"].add(info["entity"])
+
+    out = {}
+    for p, data in prefixes.items():
+        out[p] = {
+            "bands": data["bands"],
+            "entities": list(data["entities"])[:5],
+            "calls": list(data["calls"])[:5],
+            "band_count": len(data["bands"])
+        }
+
+    return jsonify({
+        "ok": True,
+        "total_worked": len(out),
+        "prefixes": out
+    })
+
+
+# ─── S.A.T. UDP Listener ─────────────────────────────────────────────────────
+def sat_udp_listener():
+    """Background thread: listens for S.A.T. controller UDP broadcasts on port 9932.
+    Parses comma-separated SAT protocol messages and updates _sat_state."""
+    import time as _t
+    while True:
+        if not SAT_UDP_ENABLED:
+            _t.sleep(2)
+            continue
+        s = None
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(("0.0.0.0", SAT_UDP_PORT))
+            s.settimeout(2.0)
+            _log(f"SAT: UDP listener active on port {SAT_UDP_PORT}")
+            while SAT_UDP_ENABLED:
+                try:
+                    data, addr = s.recvfrom(4096)
+                    if not data:
+                        continue
+                    text = data.decode('utf-8', errors='replace').strip()
+                    if not text.startswith("SAT,"):
+                        continue
+                    _log(f"SAT: UDP from {addr[0]}: {text}")
+                    _parse_sat_message(text)
+                except socket.timeout:
+                    continue
+        except Exception as e:
+            _log(f"SAT: UDP error (port {SAT_UDP_PORT}): {e}")
+            _t.sleep(5)
+        finally:
+            if s:
+                try: s.close()
+                except: pass
+
+
+def _parse_sat_message(text):
+    """Parse a single SAT protocol message and update state machine."""
+    parts = text.split(",")
+    if len(parts) < 2:
+        return
+    cmd = parts[1].strip().upper()
+    now = datetime.utcnow()
+
+    with _sat_state_lock:
+        _sat_state["last_heard"] = now.isoformat()
+
+        if cmd == "BOOT" and len(parts) >= 4:
+            _sat_state["serial"] = parts[2].strip()
+            _sat_state["firmware"] = parts[3].strip()
+            _sat_state["status"] = "idle"
+            _sat_events.append({"time": now.isoformat(), "event": "boot",
+                               "detail": f"S.A.T. v{parts[3].strip()} (SN: {parts[2].strip()})"})
+
+        elif cmd == "START TRACK" and len(parts) >= 4:
+            _sat_state["status"] = "tracking"
+            _sat_state["satellite"] = parts[2].strip()
+            _sat_state["catno"] = parts[3].strip()
+            _sat_state["pass_qsos"] = []
+            # Clear transponder info for new pass
+            _sat_state["transponder"] = ""
+            _sat_state["uplink_freq"] = ""
+            _sat_state["downlink_freq"] = ""
+            _sat_state["uplink_mode"] = ""
+            _sat_state["downlink_mode"] = ""
+            _sat_state["aos_az"] = ""
+            _sat_state["los_az"] = ""
+            _sat_state["aos_time"] = None
+            _sat_events.append({"time": now.isoformat(), "event": "track",
+                               "detail": f"Tracking {parts[2].strip()} ({parts[3].strip()})"})
+
+        elif cmd == "AOS" and len(parts) >= 3:
+            _sat_state["status"] = "aos"
+            _sat_state["aos_az"] = parts[2].strip()
+            _sat_state["aos_time"] = now.isoformat()
+            _sat_events.append({"time": now.isoformat(), "event": "aos",
+                               "detail": f"AOS at {parts[2].strip()}\u00b0"})
+
+        elif cmd == "LOS" and len(parts) >= 3:
+            _sat_state["status"] = "los"
+            _sat_state["los_az"] = parts[2].strip()
+            _sat_state["aos_time"] = None
+            _sat_events.append({"time": now.isoformat(), "event": "los",
+                               "detail": f"LOS at {parts[2].strip()}\u00b0"})
+
+        elif cmd == "TRANSPONDER" and len(parts) >= 7:
+            _sat_state["transponder"] = parts[2].strip()
+            _sat_state["uplink_freq"] = parts[3].strip()
+            _sat_state["uplink_mode"] = parts[4].strip()
+            _sat_state["downlink_freq"] = parts[5].strip()
+            _sat_state["downlink_mode"] = parts[6].strip()
+            _sat_events.append({"time": now.isoformat(), "event": "transponder",
+                               "detail": f"{parts[2].strip()}: \u2191{parts[3].strip()} \u2193{parts[5].strip()}"})
+
+        elif cmd == "QSO" and len(parts) >= 12:
+            # SAT,QSO,SATNAME,CALL,GRID,MODE,COMMENT,RSTSENT,RSTRECV,UPFREQ,DOWNFREQ,NAME
+            qso_info = {
+                "sat_name": parts[2].strip(),
+                "callsign": parts[3].strip().upper(),
+                "grid": parts[4].strip(),
+                "mode": parts[5].strip().upper(),
+                "comment": parts[6].strip(),
+                "rst_sent": parts[7].strip(),
+                "rst_recv": parts[8].strip(),
+                "uplink_freq": parts[9].strip(),
+                "downlink_freq": parts[10].strip(),
+                "name": parts[11].strip() if len(parts) > 11 else "",
+                "time": now.isoformat(),
+            }
+            _sat_state["pass_qsos"].append(qso_info)
+            _sat_events.append({"time": now.isoformat(), "event": "qso",
+                               "detail": f"QSO: {qso_info['callsign']} on {qso_info['sat_name']}"})
+            # Auto-log to database
+            _sat_auto_log_qso(qso_info)
+
+        elif cmd == "STOP":
+            _sat_state["status"] = "idle"
+            _sat_state["aos_time"] = None
+            _sat_events.append({"time": now.isoformat(), "event": "stop",
+                               "detail": "Tracking stopped"})
+
+
+def _sat_auto_log_qso(qso_info):
+    """Auto-save a SAT QSO to the general database when received via UDP."""
+    try:
+        # Convert frequency from Hz to MHz
+        up_mhz = ""
+        dn_mhz = ""
+        try:
+            if qso_info.get("uplink_freq"):
+                up_mhz = f"{float(qso_info['uplink_freq']) / 1e6:.6f}".rstrip('0').rstrip('.')
+        except (ValueError, TypeError):
+            up_mhz = qso_info.get("uplink_freq", "")
+        try:
+            if qso_info.get("downlink_freq"):
+                dn_mhz = f"{float(qso_info['downlink_freq']) / 1e6:.6f}".rstrip('0').rstrip('.')
+        except (ValueError, TypeError):
+            dn_mhz = qso_info.get("downlink_freq", "")
+
+        # Determine band from downlink frequency
+        freq_for_band = None
+        try:
+            freq_for_band = float(dn_mhz) if dn_mhz else None
+        except (ValueError, TypeError):
+            pass
+        band = freq_to_band(freq_for_band) if freq_for_band else ""
+
+        now = datetime.utcnow()
+        conn = get_db(DATABASE)  # Always use general DB for SAT QSOs
+        conn.execute("""
+            INSERT INTO qso_log
+                (callsign, name, qth, date_worked, time_worked, band, mode,
+                 freq_mhz, my_rst_sent, their_rst_rcvd, remarks, contest_name,
+                 pota_ref, pota_p2p, state, country, gridsquare,
+                 prop_mode, sat_name, sat_catno, transponder_name,
+                 uplink_freq, downlink_freq, uplink_mode, downlink_mode,
+                 aos_az, los_az, my_grid, my_lat, my_lon)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            qso_info.get("callsign", ""),
+            qso_info.get("name", ""),
+            qso_info.get("grid", ""),       # grid goes to qth
+            now.strftime("%Y-%m-%d"),
+            now.strftime("%H:%M:%S"),
+            band,
+            qso_info.get("mode", ""),
+            float(dn_mhz) if dn_mhz else None,  # freq_mhz = downlink
+            qso_info.get("rst_sent", "59"),
+            qso_info.get("rst_recv", "59"),
+            qso_info.get("comment", ""),
+            "",                             # contest_name
+            "", "",                         # pota_ref, pota_p2p
+            "", "", qso_info.get("grid", ""),  # state, country, gridsquare
+            "SAT",                          # prop_mode
+            qso_info.get("sat_name", ""),
+            _sat_state.get("catno", ""),
+            _sat_state.get("transponder", ""),
+            up_mhz,
+            dn_mhz,
+            _sat_state.get("uplink_mode", ""),
+            _sat_state.get("downlink_mode", ""),
+            _sat_state.get("aos_az", ""),
+            _sat_state.get("los_az", ""),
+            "",                             # my_grid (from settings later)
+            "",                             # my_lat
+            "",                             # my_lon
+        ))
+        conn.commit()
+        conn.close()
+        _log(f"SAT: QSO auto-logged: {qso_info.get('callsign')} on {qso_info.get('sat_name')}")
+        global _sat_qso_counter
+        _sat_qso_counter += 1
+        # Update worked cache
+        _worked_cache_add(qso_info.get("callsign", ""), band, qso_info.get("mode", ""))
+    except Exception as e:
+        _log(f"SAT: Auto-log error: {e}")
+
+
+# ─── SAT ADIF-over-UDP Listener (QSO LOG TYPE) ──────────────────────────────
+def sat_adif_listener():
+    """Listen for ADIF records sent from S.A.T. via its QSO LOG TYPE feature.
+    The S.A.T. sends ADIF-formatted QSO records over UDP to a configurable
+    IP:PORT when a QSO is logged on the device (ACLog, N1MM, Log4OM, etc.)."""
+    import socket, time
+    while True:
+        if not SAT_UDP_ENABLED:
+            time.sleep(2)
+            continue
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.settimeout(3)
+            s.bind(("0.0.0.0", SAT_ADIF_PORT))
+            _log(f"SAT-ADIF: Listener active on port {SAT_ADIF_PORT}")
+            while SAT_UDP_ENABLED:
+                try:
+                    data, addr = s.recvfrom(8192)
+                except socket.timeout:
+                    continue
+                try:
+                    text = data.decode("utf-8", errors="replace").strip()
+                    if not text:
+                        continue
+                    _log(f"SAT-ADIF: Received {len(text)} bytes from {addr[0]}:{addr[1]}")
+                    _log(f"SAT-ADIF: Raw → {text[:300]}")
+                    _sat_process_adif_record(text)
+                except Exception as pe:
+                    _log(f"SAT-ADIF: Parse error: {pe}")
+            s.close()
+        except Exception as e:
+            _log(f"SAT-ADIF: Error (port {SAT_ADIF_PORT}): {e}")
+            time.sleep(5)
+
+
+def _sat_process_adif_record(text):
+    """Parse an ADIF record received from the S.A.T. and insert as SAT QSO."""
+    # Use parse_adif_string for single-record parsing (more forgiving)
+    fields = parse_adif_string(text)
+    if not fields.get("call"):
+        _log(f"SAT-ADIF: No CALL field found, skipping")
+        return
+
+    call = fields.get("call", "").upper()
+    name = fields.get("name", "")
+    grid = fields.get("gridsquare", fields.get("grid", ""))
+    state = fields.get("state", "")
+    country = fields.get("country", "")
+    mode = fields.get("mode", "")
+    rst_sent = fields.get("rst_sent", "59")
+    rst_recv = fields.get("rst_rcvd", fields.get("rst_recv", "59"))
+    comment = fields.get("comment", fields.get("notes", ""))
+    sat_name = fields.get("sat_name", "")
+    prop_mode = fields.get("prop_mode", "SAT")
+
+    # Frequencies — ADIF uses MHz
+    freq = fields.get("freq", "")
+    freq_rx = fields.get("freq_rx", "")
+    # If we have freq and freq_rx, assume freq=uplink, freq_rx=downlink
+    # Some loggers use freq=downlink — the S.A.T. sends both
+    up_mhz = freq if freq_rx else ""
+    dn_mhz = freq_rx if freq_rx else freq
+
+    # Band from downlink freq
+    band_str = fields.get("band", "")
+    if not band_str and dn_mhz:
+        try:
+            band_str = freq_to_band(float(dn_mhz))
+        except (ValueError, TypeError):
+            pass
+
+    # Date and time
+    dt = fields.get("qso_date", "")
+    if len(dt) == 8:
+        dt = f"{dt[:4]}-{dt[4:6]}-{dt[6:8]}"
+    elif not dt:
+        dt = date.today().isoformat()
+    tm = fields.get("time_on", "")
+    if len(tm) >= 6:
+        tm = f"{tm[:2]}:{tm[2:4]}:{tm[4:6]}"
+    elif len(tm) >= 4:
+        tm = f"{tm[:2]}:{tm[2:4]}:00"
+    elif not tm:
+        tm = datetime.utcnow().strftime("%H:%M:%S")
+
+    # Enrich with current SAT state if available
+    with _sat_state_lock:
+        if not sat_name and _sat_state.get("satellite"):
+            sat_name = _sat_state["satellite"]
+        catno = _sat_state.get("catno", "")
+        transponder = _sat_state.get("transponder", "")
+        up_mode = fields.get("sat_mode", _sat_state.get("uplink_mode", ""))
+        dn_mode = _sat_state.get("downlink_mode", mode)
+        aos_az = _sat_state.get("aos_az", "")
+        los_az = _sat_state.get("los_az", "")
+
+    try:
+        conn = get_db(DATABASE)
+        conn.execute("""
+            INSERT INTO qso_log
+                (callsign, name, qth, date_worked, time_worked, band, mode,
+                 freq_mhz, my_rst_sent, their_rst_rcvd, remarks, contest_name,
+                 pota_ref, pota_p2p, state, country, gridsquare,
+                 prop_mode, sat_name, sat_catno, transponder_name,
+                 uplink_freq, downlink_freq, uplink_mode, downlink_mode,
+                 aos_az, los_az, my_grid, my_lat, my_lon)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            call, name, grid, dt, tm,
+            band_str, mode,
+            float(dn_mhz) if dn_mhz else None,
+            rst_sent, rst_recv,
+            comment, "",                        # contest_name
+            "", "",                             # pota_ref, pota_p2p
+            state, country, grid,
+            prop_mode if prop_mode else "SAT",
+            sat_name, catno, transponder,
+            up_mhz, dn_mhz,
+            up_mode, dn_mode,
+            aos_az, los_az,
+            "", "", "",                         # my_grid, my_lat, my_lon
+        ))
+        conn.commit()
+        conn.close()
+        _log(f"SAT-ADIF: QSO logged → {call} on {sat_name} ({mode})")
+        global _sat_qso_counter
+        _sat_qso_counter += 1
+        _worked_cache_add(call, band_str, mode)
+        # Add to pass QSO list for the SAT status panel
+        with _sat_state_lock:
+            _sat_state["pass_qsos"].append({
+                "callsign": call, "sat_name": sat_name,
+                "mode": mode, "grid": grid,
+                "rst_sent": rst_sent, "rst_recv": rst_recv,
+                "time": tm, "source": "adif"
+            })
+    except Exception as e:
+        _log(f"SAT-ADIF: Insert error: {e}")
+
+
+# ─── SAT Status API ──────────────────────────────────────────────────────────
+_sat_track_cache = {"data": None, "ts": 0}  # cache /track responses briefly
+
+def _sat_poll_track():
+    """Poll the S.A.T. /track endpoint for live tracking data."""
+    import time as _t
+    now = _t.time()
+    # Cache for 1.5s to avoid hammering the S.A.T.
+    if _sat_track_cache["data"] and (now - _sat_track_cache["ts"]) < 1.5:
+        return _sat_track_cache["data"]
+    sat_ip = SAT_CONTROLLER_IP or "192.168.200.194"
+    try:
+        resp = requests.get(f"http://{sat_ip}/track", timeout=2)
+        if resp.ok:
+            data = resp.json()
+            _sat_track_cache["data"] = data
+            _sat_track_cache["ts"] = now
+            # Update _sat_state from live data
+            with _sat_state_lock:
+                _sat_state["last_heard"] = datetime.utcnow().isoformat()
+                if data.get("satname"):
+                    _sat_state["satellite"] = data["satname"].strip()
+                    _sat_state["catno"] = str(data.get("catno", ""))
+                if data.get("aosAZ"):
+                    _sat_state["aos_az"] = f"{data['aosAZ']:.1f}"
+                if data.get("losAZ"):
+                    _sat_state["los_az"] = f"{data['losAZ']:.1f}"
+                # Determine pass status from ttaos/ttlos
+                ttaos = data.get("ttaos", -1)
+                ttlos = data.get("ttlos", -1)
+                if data.get("satname") and ttaos == 0 and ttlos > 0:
+                    _sat_state["status"] = "aos"
+                    if not _sat_state.get("aos_time"):
+                        _sat_state["aos_time"] = datetime.utcnow().isoformat()
+                elif data.get("satname") and ttaos > 0:
+                    _sat_state["status"] = "tracking"
+                    _sat_state["aos_time"] = None
+                elif data.get("satname"):
+                    _sat_state["status"] = "tracking"
+                else:
+                    _sat_state["status"] = "idle"
+                # Update firmware from /status data if present
+                if data.get("fw"):
+                    _sat_state["firmware"] = str(data["fw"])
+            return data
+    except Exception as e:
+        _log(f"SAT: /track poll error: {e}")
+    return None
+
+
+@app.route("/api/sat/status")
+def api_sat_status():
+    """Return current S.A.T. state for the satellite status panel,
+    enriched with live /track data from the S.A.T. controller."""
+    # Poll live data from S.A.T.
+    track = None
+    if SAT_UDP_ENABLED and SAT_CONTROLLER_IP:
+        track = _sat_poll_track()
+
+    with _sat_state_lock:
+        state = dict(_sat_state)
+        state["pass_qsos"] = list(_sat_state["pass_qsos"])
+
+    # Calculate elapsed time since AOS
+    elapsed = ""
+    if state.get("aos_time") and state["status"] == "aos":
+        try:
+            aos_dt = datetime.fromisoformat(state["aos_time"])
+            delta = datetime.utcnow() - aos_dt
+            mins = int(delta.total_seconds() // 60)
+            secs = int(delta.total_seconds() % 60)
+            elapsed = f"{mins:02d}:{secs:02d}"
+        except Exception:
+            pass
+    state["elapsed"] = elapsed
+    state["enabled"] = SAT_UDP_ENABLED
+    state["port"] = SAT_UDP_PORT
+    state["adif_port"] = SAT_ADIF_PORT
+    state["qso_counter"] = _sat_qso_counter
+
+    # Enrich with live /track data
+    if track:
+        state["live"] = True
+        state["sat_az"] = round(track.get("satAZ", 0), 1)
+        state["sat_el"] = round(track.get("satEL", 0), 1)
+        state["max_el"] = round(track.get("maxEL", 0), 1)
+        state["range_km"] = round(track.get("rng", 0), 1)
+        state["ttlos"] = track.get("ttlos", -1)
+        state["ttaos"] = track.get("ttaos", -1)
+        state["los_az"] = f"{track['losAZ']:.1f}" if track.get("losAZ") else ""
+        state["aos_az"] = f"{track['aosAZ']:.1f}" if track.get("aosAZ") else ""
+        # GPS info
+        state["my_grid"] = track.get("gpsgr", track.get("grid", ""))
+        state["my_lat"] = track.get("gpslat", track.get("lat", ""))
+        state["my_lon"] = track.get("gpslon", track.get("lon", ""))
+        state["gps_lock"] = bool(track.get("gpslock", 0))
+        state["gps_sats"] = track.get("gpssats", 0)
+        # Active transponders with Doppler
+        freqs = track.get("freq", [])
+        state["transponders"] = []
+        for f in freqs:
+            up_hz = f.get("upFreq", 0)
+            dn_hz = f.get("downFreq", 0)
+            dop_up = f.get("dop_up", 0)
+            dop_dn = f.get("dop_down", 0)
+            state["transponders"].append({
+                "name": (f.get("descr") or "").strip(),
+                "up_mode": (f.get("upMode") or "").strip(),
+                "dn_mode": (f.get("downMode") or "").strip(),
+                "up_freq": up_hz,
+                "dn_freq": dn_hz,
+                "dop_up": dop_up,
+                "dop_dn": dop_dn,
+                "up_corrected": up_hz + dop_up if up_hz else 0,
+                "dn_corrected": dn_hz + dop_dn if dn_hz else 0,
+            })
+        # Also set the "active" transponder info in main state for form auto-fill
+        # Use the first transponder with both up and down freqs, or the one with Doppler
+        active = None
+        for t in state["transponders"]:
+            if t["up_freq"] and t["dn_freq"] and (t["dop_up"] or t["dop_dn"]):
+                active = t
+                break
+        if not active and state["transponders"]:
+            # Fallback: first with both freqs
+            for t in state["transponders"]:
+                if t["up_freq"] and t["dn_freq"]:
+                    active = t
+                    break
+        if not active and state["transponders"]:
+            active = state["transponders"][0]
+        if active:
+            state["transponder"] = active["name"]
+            state["uplink_freq"] = str(active["up_corrected"] or active["up_freq"])
+            state["downlink_freq"] = str(active["dn_corrected"] or active["dn_freq"])
+            state["uplink_mode"] = active["up_mode"]
+            state["downlink_mode"] = active["dn_mode"]
+    else:
+        state["live"] = False
+
+    # Recent events
+    state["events"] = list(_sat_events)[-10:]
+    return jsonify(state)
+
+
+# ─── SAT Log Fetch (pull ADIF from S.A.T. device) ───────────────────────────
+@app.route("/api/sat/fetch_log", methods=["POST"])
+def api_sat_fetch_log():
+    """Fetch the QSO log from the S.A.T. device via its /adif endpoint,
+    parse it, and import new QSOs with duplicate detection."""
+    global _sat_qso_counter
+    sat_ip = SAT_CONTROLLER_IP or "192.168.200.194"
+    try:
+        resp = requests.get(f"http://{sat_ip}/adif", timeout=5)
+        if not resp.ok:
+            return jsonify({"ok": False, "error": f"S.A.T. returned HTTP {resp.status_code}"})
+        adif_text = resp.text
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Cannot reach S.A.T. at {sat_ip}: {e}"})
+
+    # Parse ADIF records
+    records = _parse_adif_records(adif_text)
+    if not records:
+        return jsonify({"ok": True, "imported": 0, "skipped": 0,
+                        "msg": "No QSO records found in S.A.T. log"})
+
+    # Build set of existing SAT QSOs for duplicate detection (call+date+time)
+    conn = get_db(DATABASE)
+    existing = set()
+    try:
+        rows = conn.execute(
+            "SELECT callsign, date_worked, time_worked FROM qso_log WHERE prop_mode='SAT'"
+        ).fetchall()
+        for row in rows:
+            existing.add((row[0].upper().strip(), row[1].strip(), row[2].strip()[:5]))
+    except Exception:
+        pass
+
+    imported = 0
+    skipped = 0
+    for rec in records:
+        qso = _adif_to_qso(rec)
+        if not qso:
+            continue
+        # Force SAT prop_mode
+        if not qso.get("prop_mode"):
+            qso["prop_mode"] = "SAT"
+        # Duplicate check: call + date + time (to minute)
+        dup_key = (qso["callsign"].upper().strip(),
+                   qso["date_worked"].strip(),
+                   qso["time_worked"].strip()[:5])
+        if dup_key in existing:
+            skipped += 1
+            continue
+        # Insert
+        try:
+            conn.execute("""
+                INSERT INTO qso_log
+                    (callsign, name, qth, date_worked, time_worked, band, mode,
+                     freq_mhz, my_rst_sent, their_rst_rcvd, remarks, contest_name,
+                     pota_ref, pota_p2p, state, country, gridsquare,
+                     prop_mode, sat_name)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                qso["callsign"], qso["name"], qso["qth"],
+                qso["date_worked"], qso["time_worked"],
+                qso["band"], qso["mode"],
+                float(qso["freq_mhz"]) if qso["freq_mhz"] else None,
+                qso["my_rst_sent"], qso["their_rst_rcvd"],
+                qso["remarks"], qso["contest_name"],
+                qso["pota_ref"], qso["pota_p2p"],
+                qso.get("state", ""), qso.get("country", ""),
+                qso.get("gridsquare", ""),
+                qso["prop_mode"], qso.get("sat_name", ""),
+            ))
+            existing.add(dup_key)
+            imported += 1
+            _worked_cache_add(qso["callsign"], qso["band"], qso["mode"])
+        except Exception as e:
+            _log(f"SAT-FETCH: Insert error for {qso['callsign']}: {e}")
+
+    conn.commit()
+    conn.close()
+    if imported:
+        _sat_qso_counter += imported
+    _log(f"SAT-FETCH: Imported {imported}, skipped {skipped} duplicates from S.A.T. at {sat_ip}")
+    return jsonify({"ok": True, "imported": imported, "skipped": skipped,
+                    "msg": f"Imported {imported} QSO{'s' if imported != 1 else ''}, "
+                           f"skipped {skipped} duplicate{'s' if skipped != 1 else ''}"})
+
+
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     os.makedirs("templates", exist_ok=True)
@@ -4901,6 +5867,10 @@ if __name__ == "__main__":
     # Start Digital App integration listeners (always running; activate via settings)
     threading.Thread(target=digital_udp_listener, daemon=True).start()
     threading.Thread(target=digital_tcp_server,   daemon=True).start()
+    # Start S.A.T. UDP listener (always running; activates when SAT_UDP_ENABLED is True)
+    threading.Thread(target=sat_udp_listener, daemon=True).start()
+    # Start S.A.T. ADIF-over-UDP listener (QSO LOG TYPE — port 1100 default)
+    threading.Thread(target=sat_adif_listener, daemon=True).start()
     # Start flrig poller (always running; activates when FLRIG_ENABLED is True)
     threading.Thread(target=flrig_poller, daemon=True).start()
     # Start HamLib poller (always running; activates when HAMLIB_ENABLED is True)

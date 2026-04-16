@@ -16,7 +16,7 @@
 ; ============================================================
 
 #define AppName      "SDRLogger+"
-#define AppVersion   "1.04"
+#define AppVersion   "1.05"
 #define AppPublisher "Rick N8SDR"
 #define AppURL       "https://www.qrz.com/db/N8SDR"
 #define AppExeName   "SDRLoggerPlus.exe"
@@ -116,7 +116,8 @@ begin
     'SDRLogger+ is a Ham Radio contact logger designed for use with' + #13#10 +
     'Expert Electronics Thetis SDR, EESDR, or any HamLib-compatible' + #13#10 +
     'transceiver. Includes CW decoder, logbook uploads, DX cluster,' + #13#10 +
-    'rotator control, POTA support, and more.' + #13#10 + #13#10 +
+    'rotator control, POTA support, full S.A.T. satellite controller' + #13#10 +
+    'integration, Awards tracking (DXCC, WAS, WAZ, WPX), and more.' + #13#10 + #13#10 +
     'Click Next to continue, or Cancel to exit Setup.';
 end;
 

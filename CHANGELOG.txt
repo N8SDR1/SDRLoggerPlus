@@ -1,6 +1,95 @@
 SDRLogger+ — Change Log
 =======================
 
+v1.05  (2026-04-16)
+------------------------------------------
+The biggest single release yet — full CSN Technologies S.A.T. controller
+integration, an entirely new Awards Dashboard, and System tab improvements.
+
+  ── 🛰 S.A.T. SATELLITE INTEGRATION (NEW) ─────────────────────────────────
+- New: SAT Mode — three-way mode toggle (General / 🏕 POTA / 🛰 SAT) in the
+  header bar. SAT mode transforms the entire UI for satellite operating:
+  satellite-specific QSO entry form, satellite log columns (Callsign,
+  Satellite, Grid, Date, Time, Mode, Up↑/Dn↓ Freq, RST, Remarks), and the
+  DX Cluster panel is replaced by the live Satellite Status panel.
+- New: Live Satellite Status Panel — polls the S.A.T.'s /track JSON API
+  every 2 seconds to display:
+    • Satellite name and NORAD catalog number
+    • Status: IDLE / TRACKING / AOS — PASS ACTIVE / LOS
+    • Real-time AZ / EL with color coding (green when above horizon)
+    • Max EL, range (km), AOS Az, LOS Az
+    • Live Time-to-LOS countdown (turns red under 60 seconds)
+    • Elapsed time since AOS
+    • Active transponder name + Doppler-corrected uplink/downlink in MHz
+    • Full transponder list (all available for tracked satellite)
+    • Pass QSO log (real-time as QSOs are made)
+    • GPS lock / satellite count / operator grid square
+- New: UDP Event Listener (port 9932) — receives the S.A.T.'s broadcast
+  protocol events: BOOT, START TRACK, AOS, LOS, TRANSPONDER, QSO, STOP.
+  Maintains a live state machine of the current pass.
+- New: Real-Time QSO Push (ADIF-over-UDP, port 1100) — when you log a QSO
+  on the S.A.T. device, it is instantly pushed to SDRLogger+ via the
+  S.A.T.'s QSO LOG TYPE feature. Compatible with N1MM, DXKeeper, HRD,
+  Log4OM, ACLog, and MacLogger formats. QSO appears in SDRLogger+ within
+  ~2 seconds with a toast notification and automatic log refresh.
+- New: One-Click Log Fetch — "⬇ Fetch S.A.T. Log" button pulls the entire
+  QSO log directly from the S.A.T. via its /adif endpoint. Smart duplicate
+  detection (callsign + date + time-to-minute) ensures no double entries —
+  perfect for importing QSOs logged while SDRLogger+ wasn't running.
+- New: SAT QSO Auto-Population — Satellite name, uplink/downlink frequency
+  (Doppler-corrected, in MHz), uplink/downlink mode, and main Mode field
+  all auto-fill from the S.A.T.'s live tracking data. The Mode dropdown
+  label changes to "(auto from S.A.T.)" in SAT mode.
+- New: SAT Connection Badge — gold "S.A.T." badge in the header bar, only
+  visible in SAT mode. Shows "S.A.T. OFFLINE" → "S.A.T. CONNECTED" →
+  "S.A.T. SO-50" (with active satellite name) as the connection comes up.
+  Matches the existing TCI / FLRIG / HAMLIB badge pattern.
+- New: Dedicated SAT Settings Tab — own "🛰 Satellite" tab in Settings
+  with controller IP, UDP broadcast port (9932), QSO Log port (1100),
+  setup guide, and the exact Windows Firewall commands needed.
+- New: SAT ADIF Export Fields — PROP_MODE=SAT, SAT_NAME, FREQ_RX (downlink)
+  added to ADIF export for full LoTW / Club Log satellite DXCC credit.
+- New: 13 New Database Columns — prop_mode, sat_name, sat_catno,
+  transponder_name, uplink_freq, downlink_freq, uplink_mode, downlink_mode,
+  aos_az, los_az, my_grid, my_lat, my_lon. Existing databases auto-migrate.
+
+  ── 🏆 AWARDS DASHBOARD (NEW) ─────────────────────────────────────────────
+- New: Complete Awards Tracking System — accessible via /awards from the
+  main UI. Four trackers, all powered by the worked-DXCC cache:
+    • DXCC — 340 entities tracked. Color-coded cards: gold = completed,
+      cyan = worked, dim = not worked. Filter by continent, sort by entity
+      name or worked count. Per-band breakdown.
+    • WAS (Worked All States) — US 50-state map view + card grid.
+      Filter by band/mode. Shows which states need confirmation.
+      Built from STATE field in QSO records.
+    • WAZ (Worked All Zones) — 40 CQ Zones. Each zone shows its name,
+      countries within, and worked status. Filter and sort options.
+    • WPX (Worked All Prefixes) — CQ WPX-style prefix extraction
+      algorithm. Tracks unique callsign prefixes worked. Sortable by
+      prefix or worked date.
+- New: Server-side worked-prefix cache (_worked_prefixes) joins the
+  existing _worked_entities and _worked_zones caches for fast lookups.
+- New: /api/awards/dxcc, /api/awards/was, /api/awards/waz, /api/awards/wpx
+  endpoints serve the worked data to the dashboard.
+
+  ── ⚙ SYSTEM TAB IMPROVEMENTS ────────────────────────────────────────────
+- Change: Replaced the in-app zip-update mechanism with a cleaner
+  "Check for Updates" notification + GitHub release link. The
+  manualUpdateCheck() flow polls GitHub and shows a one-click link to
+  the latest installer.
+- Change: /api/update_check now accepts ?force=1 to bypass the cache for
+  manual update checks.
+- Removed: Dead applyUpdate() JavaScript function and its UI.
+- New: Settings Export to backup folder — exportSettings() now saves the
+  current settings JSON to the configured Backup Path with a timestamp,
+  giving you a portable snapshot before making major changes.
+- New: /api/export_settings_to_folder backend endpoint.
+
+  ── 🛰 SAT-RELATED FIXES ──────────────────────────────────────────────────
+- Fix: SAT settings modal no longer closes immediately when configuring
+  SAT IP / port — onchange="saveSettings()" handlers removed from SAT
+  inputs (settings now save when modal closes normally).
+
 v1.04 Beta  (2026-04-15)
 ------------------------------------------
 - Performance: QSO save uploads (QRZ Logbook, LoTW, Club Log, eQSL) now run

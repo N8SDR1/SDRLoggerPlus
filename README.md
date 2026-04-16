@@ -4,7 +4,7 @@
   # SDR**Logger+**
   ### Ham Radio SDR Logbook — Built by Hams, for Hams
 
-  ![Version](https://img.shields.io/badge/version-1.04-00e5ff?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-1.05-00e5ff?style=flat-square)
   ![Platform](https://img.shields.io/badge/platform-Windows-39ff14?style=flat-square)
   ![License](https://img.shields.io/badge/license-MIT-00e5ff?style=flat-square)
   ![Status](https://img.shields.io/badge/status-Release-39ff14?style=flat-square)
@@ -17,7 +17,17 @@
 
 ## Overview
 
-SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineered for operators running TCI (Transceiver Control Interface®) by Expert Electronics — SDR applications such as the popular EESDR and Thetis SDR — or any HamLib-compatible radio. Log contacts, work DX, decode CW, control your rotator, and upload QSOs to every major service — all from a single, stunning interface.
+SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineered for operators running TCI (Transceiver Control Interface®) by Expert Electronics — SDR applications such as the popular EESDR and Thetis SDR — or any HamLib-compatible radio. **Now with full satellite operating support** via the CSN Technologies S.A.T. controller, plus a complete Awards Dashboard for tracking DXCC, WAS, WAZ, and WPX. Log contacts, work DX, work satellites, decode CW, control your rotator, and upload QSOs to every major service — all from a single, stunning interface.
+
+---
+
+## 🆕 What's New in v1.05
+
+> **The Satellite + Awards Update** — the biggest single-feature drop yet.
+
+- 🛰 **Full S.A.T. Controller Integration** — live tracking, Doppler-corrected frequencies, real-time QSO push, one-click log fetch (CSN Technologies S.A.T.)
+- 🏆 **Complete Awards Dashboard** — DXCC, WAS, WAZ, and WPX trackers with worked status, filters, and band/mode breakdown
+- ⚙ **System Tab Improvements** — cleaner update notification flow, settings export to backup folder
 
 ---
 
@@ -27,9 +37,12 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 <tr>
 <td valign="top" width="50%">
 
+- 🟡 **🛰 SAT Satellite Mode** (CSN Technologies S.A.T.)
+- 🟡 **🏆 Awards Dashboard** (DXCC · WAS · WAZ · WPX)
 - 🔵 TCI Integration — EESDR & Thetis SDR
 - 🔵 HamLib / rigctld / FLRIG Support
 - 🔵 Built-in CW Keyer & Soft Decoder
+- 🔵 K1EL WinKeyer Hardware CW Keyer
 - 🔵 Live DX Cluster + Spotting
 - 🔵 RBN Band-Opening Alerts (6m/2m/70cm/10m)
 - 🔵 Real-Time Solar Propagation Data (color-coded)
@@ -60,7 +73,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ## 📥 Download
 
-> **[⬇ Download SDRLoggerPlus-Setup-1.04.exe](https://github.com/N8SDR1/SDRLoggerPlus/releases/latest)**
+> **[⬇ Download SDRLoggerPlus-Setup-1.05.exe](https://github.com/N8SDR1/SDRLoggerPlus/releases/latest)**
 >
 > Windows · Free · No subscription · No cloud
 
@@ -73,7 +86,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ## 🚀 Quick Start
 
-1. Download and run `SDRLoggerPlus-Setup-1.04.exe`
+1. Download and run `SDRLoggerPlus-Setup-1.05.exe`
 2. Accept defaults — installs to `C:\SDRLoggerPlus`
 3. SDRLogger+ launches automatically and opens your browser to `http://127.0.0.1:5000`
 4. Go to **Settings** and enter your callsign, QRZ credentials, and TCI/HamLib connection details
@@ -109,6 +122,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 | **DX Cluster** | Live Telnet spotting |
 | **PstRotator / HamLib** | Rotator control |
 | **Expert Electronics TCI** | Full SDR integration |
+| **CSN Technologies S.A.T.** | Full satellite controller integration — live tracking, Doppler, real-time QSO push |
 
 ---
 
@@ -153,6 +167,6 @@ With development assistance by **Claude AI** (Anthropic)
 ---
 
 <div align="center">
-  <sub>SDRLogger+ v1.04 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
+  <sub>SDRLogger+ v1.05 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
   <sub>73 de N8SDR — good DX and happy logging!</sub>
 </div>
