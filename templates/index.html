@@ -323,8 +323,9 @@
   .spot-dest-seg button{font-family:var(--mono);font-size:10px;padding:4px 10px;border:none;background:transparent;color:var(--muted);cursor:pointer;transition:all .15s;border-right:1px solid var(--border);}
   .spot-dest-seg button:last-child{border-right:none;}
   .spot-dest-seg button.sds-active-c1{background:rgba(57,255,20,.15);color:var(--accent2);font-weight:700;}
+  .spot-dest-seg button.sds-active-c2{background:rgba(57,255,20,.15);color:var(--accent2);font-weight:700;}
+  .spot-dest-seg button.sds-active-c3{background:rgba(57,255,20,.15);color:var(--accent2);font-weight:700;}
   .spot-dest-seg button.sds-active-off{background:rgba(90,112,128,.2);color:var(--text);font-weight:700;}
-  .spot-dest-seg button.sds-active-sh{background:rgba(0,229,255,.15);color:var(--accent);font-weight:700;}
   /* Context menu */
   #ctx-menu{position:fixed;z-index:9000;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:4px 0;min-width:180px;box-shadow:0 4px 18px rgba(0,0,0,.5);display:none;}
   #ctx-menu .ctx-item{font-family:var(--mono);font-size:12px;padding:7px 16px;cursor:pointer;color:#e8f0f8;transition:background .1s;}
@@ -397,7 +398,16 @@
     color:var(--muted) !important; font-size:9px !important; }
   .leaflet-control-attribution a { color:var(--muted) !important; }
   /* Soften the map tiles slightly */
-  .leaflet-tile-pane { filter: brightness(0.78) saturate(0.85); }
+  #qso-map .leaflet-tile-pane { filter: brightness(0.78) saturate(0.85); }
+  #sat-map .leaflet-tile-pane { filter: none; }
+  #sat-map { background:#001a2e !important; }
+  #sat-map .leaflet-container { font-family: var(--mono); }
+  #sat-map .sat-tooltip-label {
+    background:transparent !important; border:none !important; box-shadow:none !important;
+    color:#ffd700 !important; font-family:var(--mono); font-size:10px; font-weight:700;
+    text-shadow:0 0 4px #000, 0 1px 2px #000; padding:0 !important;
+  }
+  #sat-map .sat-tooltip-label::before { display:none !important; }
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 </head>
@@ -406,7 +416,7 @@
 <header>
   <img src="/static/img/sdrLogger_icon.png" alt="SDRLogger+" style="width:50px;height:50px;border-radius:7px;flex-shrink:0;object-fit:cover;">
   <div class="logo">SDR<span>Logger+</span><span style="font-size:11px;font-weight:400;color:#a8b8c8;letter-spacing:1px;margin-left:10px;font-family:var(--mono);">v{{ version }}</span></div>
-  <div id="header-call" style="font-family:var(--mono);font-size:16px;color:#d0dce8;white-space:nowrap;letter-spacing:.5px;">SDR Logbook</div>
+  <div id="header-call" style="font-family:var(--mono);font-size:16px;color:#d0dce8;white-space:nowrap;letter-spacing:.5px;margin-right:28px;"></div>
   <a id="update-banner" href="#" target="_blank" style="display:none;font-family:var(--mono);font-size:11px;color:var(--bg);background:var(--accent2);padding:3px 12px;border-radius:12px;text-decoration:none;white-space:nowrap;letter-spacing:.5px;font-weight:600;animation:updatePulse 2s ease-in-out 3;">🔔 Update Available</a>
   <div id="lightning-banner" style="display:none;font-family:var(--mono);font-size:12px;padding:4px 12px;border-radius:12px;white-space:nowrap;letter-spacing:.5px;font-weight:700;cursor:default;border:1px solid;transition:all .3s;" title="Lightning detected nearby">
     <span id="lightning-bolt" style="font-size:14px;">⚡</span>
@@ -452,13 +462,13 @@
       <div id="pota-mode-toggle" title="Switch between General, POTA, and SAT logging modes"
            style="display:flex;align-items:center;margin-left:auto;margin-right:6px;border:1px solid var(--border);border-radius:4px;overflow:hidden;cursor:pointer;flex-shrink:0;">
         <button id="pota-btn-gen" onclick="setPotaMode('general')"
-                style="padding:2px 8px;border:none;background:var(--accent);color:#000;font-family:var(--mono);font-size:9px;font-weight:700;cursor:pointer;transition:all .15s;">General</button>
-        <span style="color:#e07070;font-family:var(--mono);font-size:10px;font-weight:700;padding:0 3px;background:var(--surface);align-self:stretch;display:flex;align-items:center;">/</span>
+                style="padding:4px 12px;border:none;background:var(--accent);color:#000;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;">📓 General</button>
+        <span style="color:#e07070;font-family:var(--mono);font-size:13px;font-weight:700;padding:0 4px;background:var(--surface);align-self:stretch;display:flex;align-items:center;">/</span>
         <button id="pota-btn-pota" onclick="setPotaMode('pota')"
-                style="padding:2px 8px;border:none;background:var(--surface);color:var(--muted);font-family:var(--mono);font-size:9px;font-weight:700;cursor:pointer;transition:all .15s;">🏕 POTA</button>
-        <span style="color:#e07070;font-family:var(--mono);font-size:10px;font-weight:700;padding:0 3px;background:var(--surface);align-self:stretch;display:flex;align-items:center;">/</span>
+                style="padding:4px 12px;border:none;background:var(--surface);color:var(--muted);font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;">🏕 POTA</button>
+        <span style="color:#e07070;font-family:var(--mono);font-size:13px;font-weight:700;padding:0 4px;background:var(--surface);align-self:stretch;display:flex;align-items:center;">/</span>
         <button id="pota-btn-sat" onclick="setPotaMode('sat')"
-                style="padding:2px 8px;border:none;background:var(--surface);color:var(--muted);font-family:var(--mono);font-size:9px;font-weight:700;cursor:pointer;transition:all .15s;">🛰 SAT</button>
+                style="padding:4px 12px;border:none;background:var(--surface);color:var(--muted);font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;">🛰 SAT</button>
       </div>
       <button class="dock-collapse-btn" style="margin-left:0;" onclick="togglePanel('qso')" title="Collapse">—</button>
     </div>
@@ -671,29 +681,6 @@
     <div class="ctx-item" onclick="hideCtxMenu()">Dismiss</div>
   </div>
 
-  <!-- Panel: ADIF Import / Export -->
-  <div class="dock-panel" id="dp-adif" data-panel-id="adif" data-default-col="0"
-       ondragover="panelDragOver(event,'adif')" ondrop="panelDrop(event,'adif')">
-    <div class="dock-panel-hdr" draggable="true"
-         ondragstart="panelDragStart(event,'adif')" ondragend="panelDragEnd()">
-      <span class="dock-grip" title="Drag to reposition">⠿</span>
-      <h2>📁 ADIF Import / Export</h2>
-      <button class="dock-collapse-btn" onclick="togglePanel('adif')" title="Collapse">—</button>
-    </div>
-    <div class="dock-panel-body" id="dpb-adif">
-      <div style="padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <button class="btn btn-export" onclick="exportADIF()">⬇ Export ADIF</button>
-        <button class="btn btn-import" onclick="document.getElementById('import-file').click()">⬆ Import ADIF</button>
-        <input type="file" id="import-file" style="display:none" accept=".adi,.adif" onchange="importADIF(this)">
-        <select id="import-dup-mode" title="Duplicate handling" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 8px;outline:none;cursor:pointer;">
-          <option value="skip">Skip duplicates</option>
-          <option value="replace">Replace duplicates</option>
-          <option value="keep_both">Keep all (no dedup)</option>
-        </select>
-      </div>
-    </div>
-  </div><!-- dp-adif -->
-
   <!-- Panel: Distance Map -->
   <div class="dock-panel" id="dp-distance" data-panel-id="distance" data-default-col="0"
        ondragover="panelDragOver(event,'distance')" ondrop="panelDrop(event,'distance')">
@@ -716,6 +703,24 @@
       </div>
     </div>
   </div><!-- dp-distance -->
+
+  <!-- Panel: Satellite Map (SAT mode only) — occupies the Distance slot in col 0 -->
+  <div class="dock-panel" id="dp-satmap" data-panel-id="satmap" data-default-col="0"
+       ondragover="panelDragOver(event,'satmap')" ondrop="panelDrop(event,'satmap')" style="display:none;">
+    <div class="dock-panel-hdr" draggable="true"
+         ondragstart="panelDragStart(event,'satmap')" ondragend="panelDragEnd()">
+      <span class="dock-grip" title="Drag to reposition">⠿</span>
+      <h2>🛰 Satellite Map</h2>
+      <span id="satmap-name" style="font-family:var(--mono);font-size:12px;color:var(--accent2);margin-left:auto;">—</span>
+      <span id="satmap-alt"  style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:10px;white-space:nowrap;">—</span>
+      <button class="dock-collapse-btn" onclick="togglePanel('satmap')" title="Collapse">—</button>
+    </div>
+    <div class="dock-panel-body" id="dpb-satmap" style="display:flex;flex-direction:column;overflow:hidden;">
+      <div style="position:relative;flex:1;min-height:0;">
+        <div id="sat-map" style="width:100%;height:100%;background:#0b1624;"></div>
+      </div>
+    </div>
+  </div><!-- dp-satmap -->
 
 </div><!-- dock-col-0 -->
 
@@ -960,8 +965,10 @@
       <button class="settings-tab active" data-tab="tab-station" onclick="switchSettingsTab('tab-station')">📻 Station &amp; Rig</button>
       <button class="settings-tab" data-tab="tab-lookups" onclick="switchSettingsTab('tab-lookups')">🔍 Lookups &amp; Uploads</button>
       <button class="settings-tab" data-tab="tab-cluster" onclick="switchSettingsTab('tab-cluster')">📡 Cluster &amp; Integrations</button>
-      <button class="settings-tab" data-tab="tab-pota" onclick="switchSettingsTab('tab-pota')">🏕 POTA &amp; Display</button>
+      <button class="settings-tab" data-tab="tab-display" onclick="switchSettingsTab('tab-display')">🎨 Display</button>
+      <button class="settings-tab" data-tab="tab-pota" onclick="switchSettingsTab('tab-pota')">🏕 POTA</button>
       <button class="settings-tab" data-tab="tab-sat" onclick="switchSettingsTab('tab-sat')">🛰 Satellite</button>
+      <button class="settings-tab" data-tab="tab-propagation" onclick="switchSettingsTab('tab-propagation')">📡 Propagation</button>
       <button class="settings-tab" data-tab="tab-system" onclick="switchSettingsTab('tab-system')">🛠 System</button>
       <button class="settings-tab" data-tab="tab-awards" onclick="switchSettingsTab('tab-awards')">🏆 Awards</button>
     </div>
@@ -1192,6 +1199,22 @@
         <button class="btn-test-qrz" onclick="testQRZKey()">🔑 Test Login</button>
         <span id="qrz-test-result" style="font-family:var(--mono);font-size:11px;"></span>
       </div>
+      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">
+        <label style="font-family:var(--mono);font-size:11px;color:var(--accent2);font-weight:600;display:block;margin-bottom:6px;">QRZ Button Behavior</label>
+        <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:8px;line-height:1.6;">
+          What happens when you click the <b style="color:var(--text)">QRZ</b> button on the QSO entry panel.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+            <input type="radio" name="cfg-qrz-button-mode" value="lookup" id="cfg-qrz-btn-mode-lookup" style="accent-color:var(--accent2);cursor:pointer;">
+            Show callsign info popup (fills Name &amp; QTH from QRZ/HamQTH)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+            <input type="radio" name="cfg-qrz-button-mode" value="browser" id="cfg-qrz-btn-mode-browser" style="accent-color:var(--accent2);cursor:pointer;">
+            Open the callsign's QRZ.com page in a new browser tab (also fills Name &amp; QTH)
+          </label>
+        </div>
+      </div>
     </div>
     <div class="settings-section">
       <h4>QRZ Logbook API</h4>
@@ -1203,10 +1226,12 @@
       <div style="display:flex;align-items:center;gap:14px;margin-top:10px;flex-wrap:wrap;">
         <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
           <input type="checkbox" id="cfg-qrz-logbook-enabled" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
-          Auto-upload QSOs to QRZ Logbook
-          <span style="color:#ff4444;font-size:10px;font-weight:600;">[On by Default]</span>
+          Auto-upload each logged QSO to my QRZ Logbook
         </label>
         <button class="btn-test-qrz" onclick="testQRZLogbookKey()" style="margin-left:auto;flex-shrink:0;">🔑 Test Logbook Key</button>
+      </div>
+      <div style="font-family:var(--mono);font-size:9px;color:#8fafc0;margin-top:4px;line-height:1.5;">
+        Off by default. Enable to push every saved QSO to your QRZ logbook automatically (requires a valid Logbook API Key above).
       </div>
       <div style="margin-top:4px;min-height:16px;">
         <span id="qrz-logbook-test-result" style="font-family:var(--mono);font-size:11px;"></span>
@@ -1517,9 +1542,10 @@
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-family:var(--mono);font-size:10px;color:var(--muted);">Destination:</span>
             <div class="spot-dest-seg">
-              <button id="sdt-c1"  onclick="setSpotDest('cluster1')" title="Send via Cluster 1 telnet connection">C1</button>
               <button id="sdt-off" onclick="setSpotDest('off')"      title="Spotting disabled">OFF</button>
-              <button id="sdt-sh"  onclick="setSpotDest('spothole')" title="Spothole (receive only — cannot send spots via Spothole API)">SH</button>
+              <button id="sdt-c1"  onclick="setSpotDest('cluster1')" title="Send DX spot via Cluster 1 telnet">C1</button>
+              <button id="sdt-c2"  onclick="setSpotDest('cluster2')" title="Send DX spot via Cluster 2 telnet">C2</button>
+              <button id="sdt-c3"  onclick="setSpotDest('cluster3')" title="Send DX spot via Cluster 3 telnet">C3</button>
             </div>
           </div>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
@@ -1528,7 +1554,7 @@
           </label>
         </div>
         <div style="font-family:var(--mono);font-size:9px;color:#8fafc0;margin-top:6px;line-height:1.6;">
-          <strong style="color:var(--accent2)">C1</strong> = send DX spot via Cluster 1 telnet &nbsp;·&nbsp; <strong style="color:#8fafc0">SH</strong> = Spothole is a <em>read-only</em> aggregator — it has no public API for receiving spots &nbsp;·&nbsp; <strong>OFF</strong> = disabled
+          Pick which cluster receives your <strong>📡 Spot</strong> sends. Switch between <strong style="color:var(--accent2)">C1 / C2 / C3</strong> if a cluster is down. Spothole is not listed because it is a <em>read-only</em> aggregator with no submit API — it still receives your spot via whichever cluster you send through.
         </div>
       </div>
     </div>
@@ -1686,7 +1712,7 @@
       </div>
     </div>
     </div><!-- /tab-cluster -->
-    <div class="settings-tab-content" id="tab-pota">
+    <div class="settings-tab-content" id="tab-display">
     <!-- Display preferences -->
     <div class="settings-section">
       <h4>Display</h4>
@@ -1701,15 +1727,7 @@
             <option value="xxlarge">X-Large+ (×1.30)</option>
           </select>
         </div>
-        <div class="settings-field">
-          <label>Panadapter Spot Color <span style="font-size:9px;color:#8fafc0">— on Thetis</span></label>
-          <select id="cfg-spot-color" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 10px;outline:none;width:100%;">
-            <option value="#00e5ff">Cyan</option>
-            <option value="#ff4444">Red</option>
-            <option value="#ffffff">White</option>
-            <option value="#ffd700">Yellow</option>
-          </select>
-        </div>
+        <div class="settings-field"></div>
       </div>
       <div style="margin-top:10px;">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -1719,6 +1737,70 @@
         <span style="font-family:var(--mono);font-size:9px;color:#8fafc0;margin-left:23px;">Checks GitHub for a newer release when the app starts. No personal data is sent.</span>
       </div>
     </div>
+
+    <!-- Panadapter Spot Coloring (TCI) -->
+    <div class="settings-section">
+      <h4>Panadapter Spot Coloring <span style="font-size:9px;color:#8fafc0;font-weight:400;">— color choices pushed to Thetis via TCI</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Controls only what colors are sent to the Thetis panadapter. The DX Cluster panel colors are unchanged.
+      </div>
+      <div style="display:flex;gap:18px;margin-bottom:10px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="radio" name="cfg-pan-color-mode" id="cfg-pan-color-mode-single" value="single" style="accent-color:var(--accent2);cursor:pointer;" checked>
+          Single color (all spots use one color)
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="radio" name="cfg-pan-color-mode" id="cfg-pan-color-mode-category" value="category" style="accent-color:var(--accent2);cursor:pointer;">
+          Color by category
+        </label>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label>Single Color <span style="font-size:9px;color:#8fafc0">— used when "Single color" mode is selected</span></label>
+          <select id="cfg-spot-color" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 10px;outline:none;width:100%;height:36px;">
+            <option value="#00e5ff">Cyan</option>
+            <option value="#ff4444">Red</option>
+            <option value="#ffffff">White</option>
+            <option value="#ffd700">Yellow</option>
+          </select>
+        </div>
+        <div class="settings-field"></div>
+      </div>
+      <div class="settings-row" style="margin-top:6px;">
+        <div class="settings-field">
+          <label>🆕 Needed Entity <span style="font-size:9px;color:#8fafc0">— new DXCC</span></label>
+          <input type="color" id="cfg-pan-color-needed" value="#ff3344" style="width:100%;height:36px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;padding:2px;">
+        </div>
+        <div class="settings-field">
+          <label>🎯 New Band <span style="font-size:9px;color:#8fafc0">— new band for entity</span></label>
+          <input type="color" id="cfg-pan-color-newband" value="#ffd700" style="width:100%;height:36px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;padding:2px;">
+        </div>
+      </div>
+      <div class="settings-row" style="margin-top:6px;">
+        <div class="settings-field">
+          <label>📻 New Mode <span style="font-size:9px;color:#8fafc0">— new mode for entity</span></label>
+          <input type="color" id="cfg-pan-color-newmode" value="#ff8c00" style="width:100%;height:36px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;padding:2px;">
+        </div>
+        <div class="settings-field">
+          <label>⚪ Standard <span style="font-size:9px;color:#8fafc0">— already worked / plain DX</span></label>
+          <input type="color" id="cfg-pan-color-standard" value="#00e5ff" style="width:100%;height:36px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;padding:2px;">
+        </div>
+      </div>
+      <div class="settings-row" style="margin-top:6px;">
+        <div class="settings-field">
+          <label>🔥 Hot List <span style="font-size:9px;color:#8fafc0">— overrides category for watched callsigns</span></label>
+          <input type="color" id="cfg-pan-color-hot" value="#ff1744" style="width:100%;height:36px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;padding:2px;">
+        </div>
+        <div class="settings-field"></div>
+      </div>
+      <div style="margin-top:8px;">
+        <button type="button" onclick="resetPanadapterColors()" style="font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;">↺ Reset to defaults</button>
+        <span style="font-family:var(--mono);font-size:9px;color:#8fafc0;margin-left:10px;">Hot-list callsigns always win — they override all category colors.</span>
+      </div>
+    </div>
+
+    </div><!-- /tab-display -->
+    <div class="settings-tab-content" id="tab-pota">
     <!-- POTA -->
     <div class="settings-section">
       <h4>🏕 POTA <span style="font-size:9px;color:#8fafc0;font-weight:400;">— Parks on the Air activation logging</span></h4>
@@ -1799,7 +1881,72 @@
       </div>
     </div>
     </div><!-- /tab-sat -->
+    <div class="settings-tab-content" id="tab-propagation">
+    <div class="settings-section">
+      <h4>📡 Propagation Forecast <span style="font-size:9px;color:#8fafc0;font-weight:400;">— in-app HF prediction (simplified IONCAP-style model)</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Controls the in-app <strong>📡 VOACAP</strong> chip shown next to the Entity info in the QSO panel. Clicking the chip opens a popup with a band-by-band reliability forecast for the current callsign.<br>
+        These are <strong style="color:#ffd700;">our</strong> simplified predictions — for authoritative results, the popup links out to <a href="https://www.voacap.com/hf/" target="_blank" style="color:#ffd700;">voacap.com</a>. All math runs in the popup window only and does not affect TCI, SAT, cluster, or solar polling.
+      </div>
+      <div class="settings-group">
+        <div class="settings-row">
+          <label class="settings-label"><input type="checkbox" id="cfg-voacap-enabled" checked> Show 📡 VOACAP chip in QSO entry panel</label>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">TX Power (W)</label>
+          <input type="number" class="settings-input" id="cfg-voacap-tx-power" value="100" min="1" max="1500" step="1">
+          <span style="font-size:9px;color:#8fafc0;margin-left:6px;">Your average transmit power</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">TX Antenna Gain (dBi)</label>
+          <input type="number" class="settings-input" id="cfg-voacap-tx-gain" value="5" min="-10" max="30" step="0.5">
+          <span style="font-size:9px;color:#8fafc0;margin-left:6px;">Dipole≈2, vertical≈0, 3-el yagi≈8, hex≈6</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">RX Antenna Gain (dBi)</label>
+          <input type="number" class="settings-input" id="cfg-voacap-rx-gain" value="5" min="-10" max="30" step="0.5">
+          <span style="font-size:9px;color:#8fafc0;margin-left:6px;">Assumed gain at the far station</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">Noise Environment</label>
+          <select class="settings-input" id="cfg-voacap-noise-env">
+            <option value="quiet">Quiet rural (low QRN)</option>
+            <option value="rural">Rural</option>
+            <option value="residential" selected>Residential (typical)</option>
+            <option value="industrial">Industrial</option>
+            <option value="city">City / high QRM</option>
+          </select>
+          <span style="font-size:9px;color:#8fafc0;margin-left:6px;">CCIR P.372 noise model — affects required SNR</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label"><input type="checkbox" id="cfg-voacap-es-enable" checked> Include sporadic E boost (summer, 28/24/50 MHz)</label>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label"><input type="checkbox" id="cfg-voacap-long-path"> Use long path (default short path)</label>
+        </div>
+      </div>
+    </div>
+    </div><!-- /tab-propagation -->
     <div class="settings-tab-content" id="tab-system">
+    <!-- ADIF Import / Export -->
+    <div class="settings-section">
+      <h4>📁 ADIF Import / Export</h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Export your QSO log to an ADIF file for upload to LoTW, eQSL, Club Log, or other logging services.
+        Import ADIF files exported from other loggers.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-export" onclick="exportADIF()">⬇ Export ADIF</button>
+        <button class="btn btn-import" onclick="document.getElementById('import-file').click()">⬆ Import ADIF</button>
+        <input type="file" id="import-file" style="display:none" accept=".adi,.adif" onchange="importADIF(this)">
+        <select id="import-dup-mode" title="Duplicate handling" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 8px;outline:none;cursor:pointer;">
+          <option value="skip">Skip duplicates</option>
+          <option value="replace">Replace duplicates</option>
+          <option value="keep_both">Keep all (no dedup)</option>
+        </select>
+      </div>
+    </div>
+
     <!-- Backup & Restore -->
     <div class="settings-section">
       <h4>Backup &amp; Restore</h4>
@@ -1907,6 +2054,28 @@
       </div>
       <div id="debug-log-preview" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;max-height:120px;overflow-y:auto;background:#0a0e14;padding:6px 8px;border-radius:3px;border:1px solid var(--border);display:none;"></div>
     </div>
+
+    <!-- Support / Donate -->
+    <div class="settings-section">
+      <h4>♥ Support SDRLogger+</h4>
+      <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
+        <div style="flex:1;min-width:240px;">
+          <p style="font-family:var(--mono);font-size:11px;color:#a8c8d8;line-height:1.7;margin:0;font-style:italic;">
+            Built by a fellow ham, for the community — free to use, free to share.
+            A small donation keeps the code flowing and fuels the occasional cup of coffee.
+            <span style="color:var(--accent2);font-style:normal;font-weight:bold;">73 de N8SDR</span>
+          </p>
+        </div>
+        <div style="flex:0 0 auto;text-align:center;">
+          <a href="https://www.paypal.com/donate/?business=NP2ZQS4LR454L&no_recurring=0&item_name=Built+by+a+fellow+ham%2C+for+the+community.++Free+to+use%2C+free+to+share.+A+small+donation+keeps+the+code+flowing.+73+de+N8SDR&currency_code=USD"
+             target="_blank" rel="noopener" title="Donate via PayPal">
+            <img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif"
+                 alt="Donate via PayPal"
+                 style="display:block;border-radius:4px;max-width:140px;">
+          </a>
+        </div>
+      </div>
+    </div>
     </div><!-- /tab-system -->
     <div class="settings-tab-content" id="tab-awards">
     <div class="settings-section">
@@ -1958,12 +2127,24 @@
     <a href="/help" target="_blank" style="display:block;text-align:center;font-family:var(--mono);font-size:11px;color:var(--accent);padding:10px 0 4px;letter-spacing:1px;text-decoration:none;opacity:.8;transition:opacity .15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.8'">? SDRLogger+ Quick Start Guide ↗</a>
     <div style="display:flex;gap:10px;align-items:center;">
       <button class="btn-save-settings" onclick="saveSettings()" style="flex:1;">Save Settings</button>
-      <button class="btn-save-settings" onclick="resetDockLayout()" style="background:var(--surface);border-color:var(--border);color:var(--muted);flex:0 0 auto;font-size:10px;padding:8px 10px;letter-spacing:.5px;" title="Restore all panels to their default column positions">↺ Reset Layout</button>
+      <button class="btn-save-settings" onclick="resetDockLayout()" style="background:var(--surface);border-color:var(--border);color:var(--muted);flex:0 0 auto;font-size:10px;padding:6px 8px;letter-spacing:.5px;" title="Restore all panels to their default column positions">↺ Reset Layout</button>
+      <a href="https://www.paypal.com/donate/?business=NP2ZQS4LR454L&no_recurring=0&item_name=Built+by+a+fellow+ham%2C+for+the+community.++Free+to+use%2C+free+to+share.+A+small+donation+keeps+the+code+flowing.+73+de+N8SDR&currency_code=USD"
+         target="_blank" rel="noopener"
+         title="Support SDRLogger+ — donations keep the code flowing. 73 de N8SDR"
+         style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:6px 10px;border-radius:4px;border:1px solid #ffc439;background:#ffc439;color:#003087;text-decoration:none;transition:all .15s;"
+         onmouseover="this.style.background='#ffb800';this.style.borderColor='#ffb800';"
+         onmouseout="this.style.background='#ffc439';this.style.borderColor='#ffc439';">
+        ♥ Donate
+      </a>
     </div>
   </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- satellite.js: SGP4 orbital propagation for the SAT-mode ground-track overlay.
+     Loaded lazily; a missing CDN just means the ground track is skipped — the
+     rest of the app (including the sat map's sub-point & footprint) still works. -->
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
 <script>
 // ─── STATE ──────────────────────────────────────────────────────────────────
 let allLogs = [];
@@ -2076,6 +2257,17 @@ window.onunhandledrejection = function(evt) {
 };
 
 window.addEventListener('DOMContentLoaded', () => {
+  // Pre-seed potaMode from settings BEFORE restoreDockLayout so the right
+  // per-mode dock layout is loaded on first paint (not whatever the default is).
+  try {
+    const _initS = loadSettings();
+    // NB: SAT mode is intentionally NOT auto-restored on page reload (the app
+    // only polls the S.A.T. while actively in SAT mode — the user deliberately
+    // re-enters it). So we only pre-seed 'general' or 'pota' here.
+    if (_initS && (_initS.pota_mode === 'pota' || _initS.pota_mode === 'general')) {
+      potaMode = _initS.pota_mode;
+    }
+  } catch(e) {}
   restoreDockLayout();
   insertRowHandles();
   setDefaultDateTime();
@@ -2666,6 +2858,18 @@ async function checkWorkedBefore(cs) {
       } else if (!d.worked_band_mode && band && mode) {
         html += ` <span style="background:rgba(0,229,255,.12);color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:1px 6px;margin-left:8px;font-size:10px;font-weight:700;">NEW BAND/MODE</span>`;
       }
+      // 📡 VOACAP propagation-forecast chip — hidden in SAT mode (see applyPotaModeUI)
+      // and respects the user's "Show 📡 VOACAP chip" setting (default on).
+      // Opens /propagation?call=... in a popup window, like the CW keyer does.
+      const _voacapOn = (loadSettings().voacap_enabled !== false);
+      if (_voacapOn) {
+      html += ` <span id="voacap-chip-slot" style="margin-left:10px;"><span style="color:var(--muted);margin-right:4px;">/</span>`
+            + `<a href="#" onclick="openVoacap('${esc(cs.toUpperCase())}');return false;" `
+            + `title="Open propagation forecast for this callsign" `
+            + `style="background:rgba(255,215,0,.10);color:#ffd700;border:1px solid #ffd700;`
+            + `border-radius:3px;padding:1px 7px;font-size:10px;font-weight:700;letter-spacing:.5px;`
+            + `text-decoration:none;cursor:pointer;transition:all .15s;">📡 VOACAP</a></span>`;
+      }
       dxccEl.innerHTML = html;
     }
     // Also show the classic worked-before banner with previous QSO list
@@ -2685,12 +2889,29 @@ async function checkWorkedBefore(cs) {
 async function qrzLookup() {
   const cs = document.getElementById('callsign').value.trim();
   if (!cs) { toast('Enter a callsign first','error'); return; }
+  // Mode: 'lookup' (show in-app modal, default) or 'browser' (open qrz.com page in new tab)
+  const _qrzMode = (loadSettings().qrz_button_mode === 'browser') ? 'browser' : 'lookup';
   try {
     const res = await fetch(`/api/callsign_lookup/${encodeURIComponent(cs)}`);
     const data = await res.json();
-    if (data.error) { toast(data.error,'error'); return; }
+    if (data.error) {
+      // In browser mode, still open the QRZ page even if local lookup fails
+      if (_qrzMode === 'browser') {
+        window.open('https://www.qrz.com/db/' + encodeURIComponent(cs.toUpperCase()), '_blank', 'noopener');
+        return;
+      }
+      toast(data.error,'error');
+      return;
+    }
     if (data.name) document.getElementById('name').value = data.name;
     if (data.qth)  document.getElementById('qth').value  = data.qth;
+    if (_qrzMode === 'browser') {
+      // Open the callsign's QRZ.com profile in a new tab — Name/QTH already filled above
+      window.open('https://www.qrz.com/db/' + encodeURIComponent((data.callsign || cs).toUpperCase()), '_blank', 'noopener');
+      const _src = data.source === 'hamqth' ? 'HamQTH' : 'QRZ';
+      toast(`Filled from ${_src} · opening QRZ page`, 'success');
+      return;
+    }
     const src = data.source === 'hamqth' ? 'HamQTH' : 'QRZ';
     document.getElementById('qrz-modal-content').innerHTML = `
       <div style="color:var(--accent);font-size:18px;margin-bottom:8px;">${esc(data.callsign)}</div>
@@ -2702,7 +2923,13 @@ async function qrzLookup() {
       <div style="margin-top:8px;color:var(--accent2);font-size:11px;">✓ Name and QTH filled in form &nbsp;·&nbsp; Source: ${src}</div>
     `;
     document.getElementById('qrz-modal').classList.add('open');
-  } catch(e) { toast('Callsign lookup failed','error'); }
+  } catch(e) {
+    if (_qrzMode === 'browser') {
+      window.open('https://www.qrz.com/db/' + encodeURIComponent(cs.toUpperCase()), '_blank', 'noopener');
+    } else {
+      toast('Callsign lookup failed','error');
+    }
+  }
 }
 
 // ─── SAVE QSO ────────────────────────────────────────────────────────────────
@@ -2960,20 +3187,31 @@ async function importADIF(input) {
 }
 
 // ─── DX SPOTTING ─────────────────────────────────────────────────────────────
-let spotDestination = 'off';   // 'cluster1' | 'off' | 'spothole'
+let spotDestination = 'off';   // 'off' | 'cluster1' | 'cluster2' | 'cluster3'
+
+// Map a spot destination to its cluster index (0/1/2) and display label.
+function _spotDestInfo(dest) {
+  if (dest === 'cluster1') return {idx: 0, label: 'Cluster 1'};
+  if (dest === 'cluster2') return {idx: 1, label: 'Cluster 2'};
+  if (dest === 'cluster3') return {idx: 2, label: 'Cluster 3'};
+  return {idx: -1, label: 'OFF'};
+}
 let lastSpot        = null;    // {callsign, freq_mhz, mode, timestamp}
 let _pendingSpot    = null;    // spot data held for confirm strip
 
 const SPOT_WINDOW_MS = 10 * 60 * 1000;   // 10-minute hard limit for log-row spotting
 
 function setSpotDest(dest) {
+  // Migrate legacy 'spothole' setting silently — Spothole never accepted submitted spots.
+  if (dest === 'spothole') dest = 'off';
+  if (!['off','cluster1','cluster2','cluster3'].includes(dest)) dest = 'off';
   spotDestination = dest;
-  ['c1','off','sh'].forEach(k => {
+  ['off','c1','c2','c3'].forEach(k => {
     const btn = document.getElementById('sdt-' + k);
     if (btn) btn.className = '';
   });
-  const map = {cluster1:'sdt-c1', off:'sdt-off', spothole:'sdt-sh'};
-  const activeMap = {cluster1:'sds-active-c1', off:'sds-active-off', spothole:'sds-active-sh'};
+  const map = {off:'sdt-off', cluster1:'sdt-c1', cluster2:'sdt-c2', cluster3:'sdt-c3'};
+  const activeMap = {off:'sds-active-off', cluster1:'sds-active-c1', cluster2:'sds-active-c2', cluster3:'sds-active-c3'};
   const el = document.getElementById(map[dest]);
   if (el) el.className = activeMap[dest];
   updateSpotButton();
@@ -2988,15 +3226,16 @@ function updateSpotButton() {
     btn.textContent = '📡 Spot';
     return;
   }
+  const destLabel = _spotDestInfo(spotDestination).label;
   // Check if we have live form data or a recent lastSpot
   const formCall = document.getElementById('callsign')?.value.trim().toUpperCase();
   if (formCall) {
     btn.className   = 'btn btn-spot';
-    btn.title       = `Spot ${formCall} via ${spotDestination === 'cluster1' ? 'Cluster 1' : 'Spothole'}`;
+    btn.title       = `Spot ${formCall} via ${destLabel}`;
     btn.textContent = `📡 Spot`;
   } else if (lastSpot && (Date.now() - lastSpot.timestamp) < SPOT_WINDOW_MS) {
     btn.className   = 'btn btn-spot spot-last';
-    btn.title       = `Spot last logged: ${lastSpot.callsign} (within 10 min)`;
+    btn.title       = `Spot last logged: ${lastSpot.callsign} (within 10 min) via ${destLabel}`;
     btn.textContent = `📡 Spot (${lastSpot.callsign})`;
   } else {
     btn.className   = 'btn btn-spot spot-off';
@@ -3004,6 +3243,13 @@ function updateSpotButton() {
     btn.textContent = '📡 Spot';
   }
 }
+
+// Programmatic `.value =` writes to the callsign input (TCI activation, QRZ
+// lookup auto-fill, cluster-row click) do NOT fire the 'input' event, so the
+// 'input' listener on #callsign won't refresh the spot button.  This timer
+// catches those cases — tiny cost, makes the button reflect form state
+// without the user having to manually click in the field first.
+setInterval(updateSpotButton, 1000);
 
 function clickSpotButton() {
   if (spotDestination === 'off') {
@@ -3031,7 +3277,7 @@ function clickSpotButton() {
 
 function showSpotConfirm(spotData) {
   _pendingSpot = spotData;
-  const dest   = spotDestination === 'cluster1' ? 'Cluster 1' : 'Spothole';
+  const dest   = _spotDestInfo(spotDestination).label;
   const freqKhz = spotData.freq_mhz ? (parseFloat(spotData.freq_mhz) * 1000).toFixed(1) : '?';
   document.getElementById('spot-confirm-text').textContent =
     `Send: ${spotData.callsign}  ${freqKhz} kHz  ${spotData.mode || ''}  → ${dest}`;
@@ -3040,8 +3286,9 @@ function showSpotConfirm(spotData) {
 }
 
 function confirmSpot() {
-  if (_pendingSpot) executeSpot(_pendingSpot);
-  cancelSpot();
+  // NOTE: don't clear _pendingSpot here — executeSpot decides whether to clear
+  // (success / hard error) or hold it (waiting for WebSocket auto-connect).
+  if (_pendingSpot) executeSpot(_pendingSpot, /*fromConfirmStrip=*/true);
 }
 
 function cancelSpot() {
@@ -3049,35 +3296,76 @@ function cancelSpot() {
   document.getElementById('spot-confirm-strip').style.display = 'none';
 }
 
-async function executeSpot(spotData) {
-  const {callsign, freq_mhz, mode} = spotData;
+// Internal helper — actually push the DX command on an open WebSocket.
+function _sendSpotOnSocket(slot, info, callsign, freq_mhz, mode) {
+  const freqKhz = freq_mhz ? (parseFloat(freq_mhz) * 1000).toFixed(1) : '0';
   const comment = mode || '';
-  if (spotDestination === 'cluster1') {
-    const ws = clusterSockets[0];
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      // Auto-connect C1 then retry the spot once connected
-      const s = loadSettings();
-      if (!s.c1_server) {
-        toast('Cluster 1 server not configured — set it in ⚙ Settings → DX Clusters', 'error'); return;
-      }
-      toast('Cluster 1 not connected — connecting now, please click Spot again once connected…', 'error');
-      s.c1_enabled = true;
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-      connectAllClusters();
+  // Standard DX cluster spot command: DX FREQ DXCALL [COMMENT]
+  // Cluster knows your callsign from login — do NOT use "DX de YOURCALL" (that is output format)
+  const cmd = `DX ${freqKhz} ${callsign}${comment ? ' ' + comment : ''}`;
+  clusterSockets[slot].send(cmd);
+  toast(`📡 Spotted ${callsign} on ${freqKhz} kHz via ${info.label}`, 'success');
+}
+
+async function executeSpot(spotData, fromConfirmStrip = false) {
+  const {callsign, freq_mhz, mode} = spotData;
+  const info = _spotDestInfo(spotDestination);
+  if (info.idx < 0) {
+    toast('Spot destination is OFF — enable in ⚙ Settings → DX Clusters', 'error');
+    cancelSpot();
+    return;
+  }
+  const slot    = info.idx;          // 0/1/2 → clusterSockets index
+  const slotKey = ['c1','c2','c3'][slot];
+  const s = loadSettings();
+  const serverField = s[slotKey + '_server'];
+  if (!serverField) {
+    toast(`${info.label} server not configured — set it in ⚙ Settings → DX Clusters`, 'error');
+    cancelSpot();
+    return;
+  }
+  const ws = clusterSockets[slot];
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    _sendSpotOnSocket(slot, info, callsign, freq_mhz, mode);
+    cancelSpot();
+    updateSpotButton();
+    return;
+  }
+  // ── WebSocket not open yet — auto-connect and queue the spot ───────────────
+  // We wait up to ~6s for the socket to open, then fire the spot automatically.
+  // The confirm strip stays visible with a "connecting…" hint so the user knows
+  // their click didn't get lost.  Cancel button still works (cancelSpot() clears
+  // _pendingSpot which the poll below checks).
+  if (fromConfirmStrip) {
+    const txt = document.getElementById('spot-confirm-text');
+    if (txt) txt.textContent = `Connecting to ${info.label}… spot will send when ready (Cancel to abort)`;
+  } else {
+    toast(`${info.label} not connected — connecting now, your spot will send automatically once ready…`, 'success');
+  }
+  s[slotKey + '_enabled'] = true;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  connectAllClusters();
+  const startedAt = Date.now();
+  const TIMEOUT_MS = 6000;
+  const POLL_MS   = 250;
+  const poll = setInterval(() => {
+    // Was the spot cancelled by the user?
+    if (!_pendingSpot && fromConfirmStrip) { clearInterval(poll); return; }
+    const ws2 = clusterSockets[slot];
+    if (ws2 && ws2.readyState === WebSocket.OPEN) {
+      clearInterval(poll);
+      _sendSpotOnSocket(slot, info, callsign, freq_mhz, mode);
+      cancelSpot();
+      updateSpotButton();
       return;
     }
-    const freqKhz = freq_mhz ? (parseFloat(freq_mhz) * 1000).toFixed(1) : '0';
-    // Standard DX cluster spot command: DX FREQ DXCALL [COMMENT]
-    // Cluster knows your callsign from login — do NOT use "DX de YOURCALL" (that is output format)
-    const cmd = `DX ${freqKhz} ${callsign}${comment ? ' ' + comment : ''}`;
-    ws.send(cmd);
-    toast(`📡 Spotted ${callsign} on ${freqKhz} kHz via Cluster 1`, 'success');
-  } else if (spotDestination === 'spothole') {
-    // Spothole is a read-only spot aggregator — it has no public API for receiving
-    // externally submitted spots. Use C1 (Cluster 1 telnet) to send spots.
-    toast('Spothole does not accept submitted spots — it is a read-only aggregator. Switch destination to C1 to spot via cluster.', 'error');
-  }
-  updateSpotButton();
+    if (Date.now() - startedAt > TIMEOUT_MS) {
+      clearInterval(poll);
+      toast(`${info.label} did not connect within ${TIMEOUT_MS/1000}s — spot not sent. Check the cluster status, then try again.`, 'error');
+      cancelSpot();
+      updateSpotButton();
+    }
+  }, POLL_MS);
 }
 
 // Right-click context menu
@@ -3375,7 +3663,7 @@ function loadSettings() {
 
 function applyStoredCallsign() {
   const s = loadSettings();
-  if (s.callsign) document.getElementById('header-call').textContent = `${s.callsign} · SDR Logbook`;
+  if (s.callsign) document.getElementById('header-call').textContent = s.callsign;
 }
 
 function openCwWindow() {
@@ -3384,6 +3672,20 @@ function openCwWindow() {
   const l = saved.x != null ? saved.x : (screen.width - w) / 2;
   const t = saved.y != null ? saved.y : (screen.height - h) / 2;
   window.open('/cw','cwKeyer',`width=${w},height=${h},left=${l},top=${t},resizable=yes,scrollbars=yes`);
+}
+
+// Open the Propagation Forecast popup — called by the 📡 VOACAP chip in the
+// DXCC info line. Passes the target callsign as a ?call=... query param so
+// the forecast page pre-fills and kicks off a QRZ/HamQTH lookup for the grid.
+// The chip itself is hidden in SAT mode (see applyPotaModeUI) since HF
+// propagation predictions don't apply to line-of-sight satellite passes.
+function openVoacap(callsign) {
+  const call = (callsign || '').trim().toUpperCase();
+  const url = '/propagation' + (call ? '?call=' + encodeURIComponent(call) : '');
+  const w = 1560, h = 1120;
+  const l = Math.max(0, (screen.width  - w) / 2);
+  const t = Math.max(0, (screen.height - h) / 2);
+  window.open(url, 'propForecast', `width=${w},height=${h},left=${l},top=${t},resizable=yes,scrollbars=yes`);
 }
 
 async function openSettings() {
@@ -3398,7 +3700,13 @@ async function openSettings() {
   document.getElementById('cfg-qrz-user').value         = s.qrz_user||'';
   document.getElementById('cfg-qrz-pass').value         = s.qrz_pass||'';
   document.getElementById('cfg-qrz-logbook-key').value  = s.qrz_logbook_key||'';
-  document.getElementById('cfg-qrz-logbook-enabled').checked = s.qrz_logbook_upload_enabled !== false;
+  document.getElementById('cfg-qrz-logbook-enabled').checked = s.qrz_logbook_upload_enabled === true;
+  // QRZ button mode: 'lookup' (default, shows info modal) or 'browser' (opens qrz.com page)
+  const _qrzBtnMode = (s.qrz_button_mode === 'browser') ? 'browser' : 'lookup';
+  const _qrzModeLookup  = document.getElementById('cfg-qrz-btn-mode-lookup');
+  const _qrzModeBrowser = document.getElementById('cfg-qrz-btn-mode-browser');
+  if (_qrzModeLookup)  _qrzModeLookup.checked  = (_qrzBtnMode === 'lookup');
+  if (_qrzModeBrowser) _qrzModeBrowser.checked = (_qrzBtnMode === 'browser');
   document.getElementById('cfg-hamqth-user').value      = s.hamqth_user||'';
   document.getElementById('cfg-hamqth-pass').value      = s.hamqth_pass||'';
   document.getElementById('cfg-lotw-tqsl-path').value        = s.lotw_tqsl_path||'';
@@ -3422,11 +3730,22 @@ async function openSettings() {
   document.getElementById('cfg-c3-port').value          = s.c3_port   || '23';
   document.getElementById('cfg-spothole-enabled').checked = s.spothole_enabled === true;
   document.getElementById('cfg-spothole-age').value      = s.spothole_age    || '600';
-  document.getElementById('cfg-spothole-source').value   = s.spothole_source || 'Cluster';
+  // NOTE: don't use `||` here — the "All sources" option has value="" which is falsy.
+  // Use nullish-style check so an explicitly-saved empty string is preserved.
+  document.getElementById('cfg-spothole-source').value   = (s.spothole_source === undefined || s.spothole_source === null) ? 'Cluster' : s.spothole_source;
   document.getElementById('cfg-spothole-band').value     = s.spothole_band   || '';
   document.getElementById('cfg-update-check').checked    = s.update_check !== false;  // default on
   document.getElementById('cfg-font-size').value        = s.font_size        || 'normal';
   document.getElementById('cfg-spot-color').value       = s.spot_color       || '#00e5ff';
+  // Panadapter spot coloring
+  const _panMode = (s.pan_color_mode === 'category') ? 'category' : 'single';
+  document.getElementById('cfg-pan-color-mode-single').checked   = (_panMode === 'single');
+  document.getElementById('cfg-pan-color-mode-category').checked = (_panMode === 'category');
+  document.getElementById('cfg-pan-color-needed').value   = s.pan_color_needed   || '#ff3344';
+  document.getElementById('cfg-pan-color-newband').value  = s.pan_color_newband  || '#ffd700';
+  document.getElementById('cfg-pan-color-newmode').value  = s.pan_color_newmode  || '#ff8c00';
+  document.getElementById('cfg-pan-color-standard').value = s.pan_color_standard || '#00e5ff';
+  document.getElementById('cfg-pan-color-hot').value      = s.pan_color_hot      || '#ff1744';
   document.getElementById('cfg-spot-mode-filter').value = s.spot_mode_filter || '';
   document.getElementById('cfg-spot-max').value         = s.spot_max         || '25';
   document.getElementById('cfg-dxcc-filter').value      = s.dxcc_filter      || '';
@@ -3495,6 +3814,14 @@ async function openSettings() {
   document.getElementById('cfg-sat-udp-port').value      = s.sat_udp_port || '9932';
   document.getElementById('cfg-sat-adif-port').value     = s.sat_adif_port || '1100';
   document.getElementById('cfg-sat-ip').value            = s.sat_controller_ip || '';
+  // Propagation / VOACAP settings
+  document.getElementById('cfg-voacap-enabled').checked    = s.voacap_enabled !== false; // default true
+  document.getElementById('cfg-voacap-tx-power').value     = s.voacap_tx_power || 100;
+  document.getElementById('cfg-voacap-tx-gain').value      = (s.voacap_tx_gain !== undefined ? s.voacap_tx_gain : 5);
+  document.getElementById('cfg-voacap-rx-gain').value      = (s.voacap_rx_gain !== undefined ? s.voacap_rx_gain : 5);
+  document.getElementById('cfg-voacap-noise-env').value    = s.voacap_noise_env || 'residential';
+  document.getElementById('cfg-voacap-es-enable').checked  = s.voacap_es_enable !== false; // default true
+  document.getElementById('cfg-voacap-long-path').checked  = s.voacap_long_path === true;
   document.getElementById('cfg-spotter-region').value   = s.spotter_region || '';
   document.getElementById('cfg-rbn-enabled').checked    = s.rbn_enabled === true;
   document.getElementById('cfg-rbn-server').value       = s.rbn_server || 'telnet.reversebeacon.net';
@@ -3543,6 +3870,7 @@ async function saveSettings() {
     tci_host:        document.getElementById('cfg-tci-host').value.trim(),
     tci_port:        document.getElementById('cfg-tci-port').value,
     qrz_user:        document.getElementById('cfg-qrz-user').value.trim().toUpperCase(),
+    qrz_button_mode: (document.getElementById('cfg-qrz-btn-mode-browser')?.checked ? 'browser' : 'lookup'),
     qrz_pass:        document.getElementById('cfg-qrz-pass').value,
     qrz_logbook_key: document.getElementById('cfg-qrz-logbook-key').value.trim(),
     qrz_logbook_upload_enabled: document.getElementById('cfg-qrz-logbook-enabled').checked,
@@ -3575,6 +3903,13 @@ async function saveSettings() {
     update_check:     document.getElementById('cfg-update-check').checked,
     font_size:        document.getElementById('cfg-font-size').value,
     spot_color:       document.getElementById('cfg-spot-color').value,
+    // Panadapter spot coloring
+    pan_color_mode:     (document.getElementById('cfg-pan-color-mode-category')?.checked ? 'category' : 'single'),
+    pan_color_needed:   document.getElementById('cfg-pan-color-needed').value,
+    pan_color_newband:  document.getElementById('cfg-pan-color-newband').value,
+    pan_color_newmode:  document.getElementById('cfg-pan-color-newmode').value,
+    pan_color_standard: document.getElementById('cfg-pan-color-standard').value,
+    pan_color_hot:      document.getElementById('cfg-pan-color-hot').value,
     spot_mode_filter: document.getElementById('cfg-spot-mode-filter').value.trim(),
     spot_max:         document.getElementById('cfg-spot-max').value || '25',
     dxcc_filter:      document.getElementById('cfg-dxcc-filter').value.trim(),
@@ -3634,6 +3969,13 @@ async function saveSettings() {
     sat_udp_port:     document.getElementById('cfg-sat-udp-port').value || '9932',
     sat_adif_port:    document.getElementById('cfg-sat-adif-port').value || '1100',
     sat_controller_ip: document.getElementById('cfg-sat-ip').value.trim(),
+    voacap_enabled:   document.getElementById('cfg-voacap-enabled').checked,
+    voacap_tx_power:  parseFloat(document.getElementById('cfg-voacap-tx-power').value) || 100,
+    voacap_tx_gain:   parseFloat(document.getElementById('cfg-voacap-tx-gain').value) || 0,
+    voacap_rx_gain:   parseFloat(document.getElementById('cfg-voacap-rx-gain').value) || 0,
+    voacap_noise_env: document.getElementById('cfg-voacap-noise-env').value || 'residential',
+    voacap_es_enable: document.getElementById('cfg-voacap-es-enable').checked,
+    voacap_long_path: document.getElementById('cfg-voacap-long-path').checked,
     spotter_region:   document.getElementById('cfg-spotter-region').value,
     rbn_enabled:      document.getElementById('cfg-rbn-enabled').checked,
     rbn_server:       document.getElementById('cfg-rbn-server').value.trim() || 'telnet.reversebeacon.net',
@@ -3653,7 +3995,7 @@ async function saveSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   if (s.itu_region) { ituRegion = parseInt(s.itu_region); _lastOOBBand = null; }
   try { await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(s)}); } catch(e) {}
-  if (s.callsign) document.getElementById('header-call').textContent = `${s.callsign} · SDR Logbook`;
+  if (s.callsign) document.getElementById('header-call').textContent = s.callsign;
   applyFontSize(s.font_size || 'normal');
   // Update POTA park if changed in settings
   if (s.pota_my_park) {
@@ -4102,9 +4444,11 @@ function connectOneCluster(idx, server, port, callsign) {
 }
 
 function connectSpothole(s) {
+  // Preserve "All sources" (empty string) — only fall back to "Cluster" if undefined/null.
+  const sourceParam = (s.spothole_source === undefined || s.spothole_source === null) ? 'Cluster' : s.spothole_source;
   const params = new URLSearchParams({
     max_age: s.spothole_age || '600',
-    source:  s.spothole_source || 'Cluster',
+    source:  sourceParam,
   });
   if (s.spothole_band) params.set('band', s.spothole_band);
   const wsUrl = `ws://${location.host}/api/spothole_ws?${params}`;
@@ -4207,7 +4551,7 @@ function parseSpotLine(line) {
   if (!band) return null;
   const rest     = line.slice(m.index + m[0].length).trim().replace(/\d{4}Z.*$/, '').trim().slice(0, 25);
   // Try to extract mode from the comment
-  const modeM    = rest.match(/\b(FT8|FT4|CW|SSB|USB|LSB|RTTY|JS8|AM|FM|DIGI|DATA|WSPR|PSK31)\b/i);
+  const modeM    = rest.match(/\b(FT8|FT4|MSK144|Q65|FST4W|FST4|JT65|JT9|CW|SSB|USB|LSB|RTTY|JS8|AM|FM|DIGI|DATA|WSPR|PSK31|VARAC|OLIVIA|HELL|SSTV|PACKET)\b/i);
   const mode     = modeM ? modeM[1].toUpperCase() : '';
   const now      = new Date();
   const timeStr  = `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}`;
@@ -4241,21 +4585,86 @@ function addSpot(spot) {
     }
   }
 
-  // Mirror new spot to Thetis waterfall via TCI — uses user-selected ARGB color
-  if (tciConnected) {
-    const hexColor = loadSettings().spot_color || '#00e5ff';
-    fetch('/api/tci_spot', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        freq_khz: spot.freqKhz,
-        callsign: spot.dxCall,
-        mode:     (spot.mode || 'ssb').toLowerCase(),
-        argb:     hexToArgb(hexColor),
-        comment:  spot.comment
-      })
-    }).catch(() => {});
+  // Mirror new spot to Thetis panadapter via TCI — with filtering, category coloring, bucket dedup
+  if (tciConnected) pushSpotToPanadapter(spot);
+}
+
+// ── Panadapter spot push: category coloring (fire-and-forget) ────────────────
+// Fire-and-forget model — matches original behavior prior to the color feature.
+// Thetis manages its own spot lifetime on the panadapter. We just choose what
+// color to assign based on worked-before category (or single color if category
+// mode is off).
+
+// Canonical cache key — must match the format used by colorSpotsWorked()
+// so panadapter coloring and DX cluster coloring share entries.
+function _spotCacheKey(call, band, mode) {
+  return `${(call||'').toUpperCase()}|${(band||'').toUpperCase()}|${(mode||'').toUpperCase()}`;
+}
+
+function _panPickColor(spot, s) {
+  // Hot list always overrides
+  if (typeof hotEnabled !== 'undefined' && hotEnabled && typeof hotCalls !== 'undefined' && Array.isArray(hotCalls) && hotCalls.includes(spot.dxCall.toUpperCase())) {
+    return s.pan_color_hot || '#ff1744';
   }
+  if (s.pan_color_mode !== 'category') {
+    return s.spot_color || '#00e5ff';
+  }
+  // Look up cached worked-before info (canonical key — uppercase everywhere)
+  const key = _spotCacheKey(spot.dxCall, spot.band, spot.mode);
+  const info = (typeof _workedSpotCache !== 'undefined') ? _workedSpotCache[key] : null;
+  const status = info ? (typeof info === 'string' ? info : info.status) : null;
+  if (window._panColorDebug) {
+    console.log('[pan-color]', key, '→', status, info && {nb:info.new_band_for_entity, nm:info.new_mode_for_entity});
+  }
+  if (status === 'new_entity') return s.pan_color_needed || '#ff3344';
+  if (status === 'new_band_mode') {
+    const nb = info && info.new_band_for_entity;
+    const nm = info && info.new_mode_for_entity;
+    if (nb) return s.pan_color_newband || '#ffd700';
+    if (nm) return s.pan_color_newmode || '#ff8c00';
+    return s.pan_color_newband || '#ffd700';
+  }
+  return s.pan_color_standard || '#00e5ff';
+}
+
+async function pushSpotToPanadapter(spot) {
+  const s = loadSettings();
+  // If category coloring is on and we don't have worked-before info cached,
+  // fetch it inline so the first-seen spot gets the correct category color.
+  if (s.pan_color_mode === 'category') {
+    const key = _spotCacheKey(spot.dxCall, spot.band, spot.mode);
+    if (!(key in _workedSpotCache)) {
+      try {
+        const res = await fetch('/api/worked_before_batch', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({spots: [{call: spot.dxCall.toUpperCase(), band: (spot.band||'').toUpperCase(), mode: (spot.mode||'').toUpperCase()}]})
+        });
+        const data = await res.json();
+        const r = data?.results?.[spot.dxCall.toUpperCase()];
+        if (r) _workedSpotCache[key] = r;
+      } catch(e) {}
+    }
+  }
+  const hex = _panPickColor(spot, s);
+  fetch('/api/tci_spot', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      freq_khz: spot.freqKhz,
+      callsign: spot.dxCall,
+      mode:     (spot.mode || 'ssb').toLowerCase(),
+      argb:     hexToArgb(hex),
+      comment:  spot.comment
+    })
+  }).catch(() => {});
+}
+
+// ── UI helper for color picker reset ──────────────────────────────────────────
+function resetPanadapterColors() {
+  document.getElementById('cfg-pan-color-needed').value   = '#ff3344';
+  document.getElementById('cfg-pan-color-newband').value  = '#ffd700';
+  document.getElementById('cfg-pan-color-newmode').value  = '#ff8c00';
+  document.getElementById('cfg-pan-color-standard').value = '#00e5ff';
+  document.getElementById('cfg-pan-color-hot').value      = '#ff1744';
 }
 
 function pruneSpots() {
@@ -4832,6 +5241,24 @@ function applyPotaModeUI(mode) {
     if (clusterTitle) clusterTitle.textContent = _potaSpotsActive ? '🏕 POTA Spots' : '📡 DX Cluster';
   }
 
+  // Hide the azimuth Rotator Control panel in SAT mode (SAT uses its own AZ/EL rotator)
+  const rotPanel = document.getElementById('dp-rotator');
+  if (rotPanel) rotPanel.style.display = isS ? 'none' : '';
+
+  // Swap Distance Map ↔ Satellite Map based on mode (same col-0 slot)
+  const distPanel   = document.getElementById('dp-distance');
+  const satmapPanel = document.getElementById('dp-satmap');
+  if (distPanel)   distPanel.style.display   = isS ? 'none' : '';
+  if (satmapPanel) satmapPanel.style.display = isS ? '' : 'none';
+  if (isS) { setTimeout(_satMapInit, 50); } else { _satMapStop(); }
+
+  // Hide the 📡 VOACAP propagation chip in SAT mode — HF propagation
+  // predictions don't apply to line-of-sight satellite passes. The chip
+  // is rendered into the #dxcc-info line by checkWorkedBefore() at
+  // lookup time, so we just toggle its visibility here.
+  const voacapSlot = document.getElementById('voacap-chip-slot');
+  if (voacapSlot) voacapSlot.style.display = isS ? 'none' : '';
+
   // Hide/show general form fields that don't apply in SAT mode
   const bandField = document.getElementById('band')?.closest('.field');
   const freqField = document.getElementById('freq_mhz')?.closest('.field');
@@ -4864,10 +5291,14 @@ function applyPotaModeUI(mode) {
 }
 
 async function setPotaMode(mode, notify=true) {
+  // Per-mode dock layouts: snapshot the CURRENT mode's arrangement before
+  // switching, then restore the incoming mode's arrangement after the UI swap.
+  try { if (typeof saveDockLayout === 'function') saveDockLayout(); } catch(e) {}
   potaMode = mode;
   const s  = loadSettings();
   if (mode === 'pota' && !potaMyPark) potaMyPark = (s.pota_my_park || '').toUpperCase();
   applyPotaModeUI(mode);
+  try { if (typeof restoreDockLayout === 'function') restoreDockLayout(mode); } catch(e) {}
   // Persist
   s.pota_mode = mode;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
@@ -4978,6 +5409,7 @@ async function _pollSatStatus() {
     const data = await res.json();
     _satState = data;
     _renderSatStatus(data);
+    if (typeof _satMapUpdate === 'function') _satMapUpdate(data);
     // Note: QSO-counter check moved to _pollSatQsoCount (500ms poll) for lower latency
   } catch(e) {}
 }
@@ -5211,11 +5643,16 @@ function updateBandActivity() {
     const n = counts[b];
     const cls = hmClass(n);
     const label = b.replace('m','');
-    return `<div class="band-hm-cell ${cls}" title="${b}: ${n} spot${n!==1?'s':''} (30 min)">
+    return `<div class="band-hm-cell ${cls}" title="${b}: ${n} spot${n!==1?'s':''} from cluster spots in last 30 min">
       <span>${n > 0 ? n : '·'}</span><span class="band-hm-lbl">${label}</span>
     </div>`;
   }).join('');
 }
+
+// Periodic refresh — keeps heatmap accurate (decays old spots) even when no new
+// spots arrive.  Without this the heatmap can stay frozen on stale counts when
+// a band quiets down.  60s cadence is plenty for a 30-min trailing window.
+setInterval(updateBandActivity, 60 * 1000);
 
 // ─── FONT SIZE ────────────────────────────────────────────────────────────────
 function applyFontSize(size) {
@@ -5330,6 +5767,304 @@ function showMapOverlay(msg) {
 function hideMapOverlay() {
   const el = document.getElementById('map-info-overlay');
   if (el) el.style.display = 'none';
+}
+
+// ─── Satellite Map (SAT mode) ────────────────────────────────────────────────
+// Independent Leaflet map in the #sat-map container. Reads sub-satellite point,
+// altitude, and station pos from /api/sat/status (already polled every 2s by
+// _pollSatStatus → _renderSatStatus), so no new network traffic.
+let _satMap = null, _satStationMarker = null, _satMarker = null, _satFootprint = null;
+let _satGreylineLayer = null, _satBeamLine = null, _satGridLayer = null;
+// Ground-track overlay state (Tier 2: SGP4 via satellite.js)
+let _satTrackLayer = null;     // L.layerGroup — the drawn polylines + AOS/LOS markers
+let _satTleCurrent = null;     // {name, line1, line2, satrec, fetchedForName}
+let _satTrackTimer = null;     // interval id for redraws (orbit shifts slightly with time)
+
+function _satMapInit() {
+  if (typeof L === 'undefined') return;
+  const el = document.getElementById('sat-map');
+  if (!el) return;
+  if (_satMap) { _satMap.invalidateSize(); return; }
+  // Equirectangular (plate carrée) projection — classic sat-tracker style.
+  // Latitude is linear in pixels, so circles stay symmetric around their center
+  // at any latitude (no Mercator tall-ellipse distortion).
+  _satMap = L.map('sat-map', {
+    crs: L.CRS.EPSG4326,
+    zoomControl:true, attributionControl:true, scrollWheelZoom:true,
+    worldCopyJump:false, minZoom:0, maxZoom:6
+  }).setView([20, 0], 1);
+  // Custom pane for the ground track so it renders UNDER the footprint circle,
+  // station marker, and satellite icon. Leaflet's default overlayPane z-index
+  // is 400; 350 puts us above the tile/grid layers but below everything else.
+  _satMap.createPane('satTrack');
+  _satMap.getPane('satTrack').style.zIndex = 350;
+  // NASA GIBS Blue Marble Next Generation — natural-earth imagery, EPSG:4326,
+  // free, no API key. Static composite (no cloud coverage issues).
+  L.tileLayer(
+    'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_NextGeneration/default/500m/{z}/{y}/{x}.jpeg',
+    {
+      tileSize: 512, minZoom: 0, maxZoom: 6, noWrap: false,
+      attribution: 'NASA EOSDIS GIBS · Blue Marble'
+    }
+  ).addTo(_satMap);
+
+  // ── Static overlay: subtle graticule (Blue Marble imagery is busy, keep it faint) ──
+  const grid = [];
+  [-60,-30,30,60].forEach(lat => {
+    grid.push(L.polyline([[lat,-180],[lat,180]], { color:'#ffffff', weight:0.5, opacity:0.12, dashArray:'2 5', interactive:false }));
+  });
+  grid.push(L.polyline([[0,-180],[0,180]], { color:'#00e5ff', weight:0.8, opacity:0.35, interactive:false })); // equator
+  [-120,-60,60,120,180].forEach(lon => {
+    grid.push(L.polyline([[-85,lon],[85,lon]], { color:'#ffffff', weight:0.5, opacity:0.12, dashArray:'2 5', interactive:false }));
+  });
+  grid.push(L.polyline([[-85,0],[85,0]], { color:'#ffffff', weight:0.5, opacity:0.18, interactive:false })); // prime meridian
+  _satGridLayer = L.layerGroup(grid).addTo(_satMap);
+
+  // ── Station marker ─────────────────────────────────────────────────────────
+  try {
+    const s = loadSettings();
+    if (s.grid) {
+      const p = gridToLatLon(s.grid);
+      if (p) _satStationMarker = L.circleMarker([p.lat, p.lon], {
+        radius:6, color:'#00e5ff', fillColor:'#00e5ff', fillOpacity:0.9, weight:2
+      }).addTo(_satMap).bindTooltip(s.callsign || 'My QTH');
+    }
+  } catch(e) {}
+
+  // If we already have sat state, paint it now
+  if (typeof _satState !== 'undefined' && _satState) _satMapUpdate(_satState);
+}
+
+let _satGreylineTimer = null;
+function _satUpdateGreyline() {
+  if (!_satMap) return;
+  if (_satGreylineLayer) { _satMap.removeLayer(_satGreylineLayer); _satGreylineLayer = null; }
+  const now = new Date();
+  const JD  = now.getTime() / 86400000 + 2440587.5;
+  const n   = JD - 2451545.0;
+  const L0  = ((280.460 + 0.9856474 * n) % 360 + 360) % 360;
+  const g   = ((357.528 + 0.9856003 * n) % 360 + 360) % 360 * Math.PI / 180;
+  const lam = (L0 + 1.915 * Math.sin(g) + 0.020 * Math.sin(2*g)) * Math.PI / 180;
+  const eps = 23.4393 * Math.PI / 180;
+  const dec = Math.asin(Math.sin(eps) * Math.sin(lam));
+  const RA  = Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam)) * 180 / Math.PI;
+  const T   = n / 36525;
+  const GMST = ((280.46061837 + 360.98564736629 * n + 0.000387933*T*T) % 360 + 360) % 360;
+  let sunLon = ((RA - GMST) % 360 + 360) % 360;
+  if (sunLon > 180) sunLon -= 360;
+  const pts = [];
+  for (let lon = -180; lon <= 180; lon += 2) {
+    const HA = (lon - sunLon) * Math.PI / 180;
+    let lat = Math.abs(dec) < 1e-4 ? (Math.cos(HA) > 0 ? 89 : -89)
+            : Math.max(-89, Math.min(89, Math.atan2(-Math.cos(HA), Math.tan(dec)) * 180 / Math.PI));
+    pts.push([lat, lon]);
+  }
+  const nightPole = dec > 0 ? -90 : 90;
+  _satGreylineLayer = L.layerGroup([
+    L.polygon([...pts, [nightPole,180], [nightPole,-180]], {
+      color:'none', fillColor:'#000814', fillOpacity:0.55, weight:0, interactive:false
+    }),
+    L.polyline(pts, { color:'#4488bb', weight:1.2, opacity:0.75, dashArray:'4 3', interactive:false })
+  ]).addTo(_satMap);
+  // Keep greyline under the station / sat / footprint
+  try { _satGreylineLayer.getLayers().forEach(l => l.bringToBack()); } catch(e) {}
+  try { if (_satGridLayer) _satGridLayer.getLayers().forEach(l => l.bringToBack()); } catch(e) {}
+}
+
+function _satMapStop() {
+  // Non-destructive: keep the map instance around for quick re-entry to SAT mode.
+  // Just let it rest. If memory becomes a concern we can L.remove() here.
+  if (_satTrackTimer) { clearInterval(_satTrackTimer); _satTrackTimer = null; }
+}
+
+// ── Ground Track (Tier 2) ──────────────────────────────────────────────────
+// Fetch a TLE from our cached /api/sat/tle proxy, parse with satellite.js,
+// propagate ±45 min from "now" at 30-second steps, and draw the sub-point
+// track as a cyan polyline. Handles antimeridian wraps by splitting into
+// multiple polylines whenever Δlon > 180°.
+async function _satLoadTLE(satName) {
+  if (!satName) return null;
+  // Re-use if same name
+  if (_satTleCurrent && _satTleCurrent.fetchedForName === satName && _satTleCurrent.satrec) {
+    return _satTleCurrent;
+  }
+  try {
+    const r = await fetch('/api/sat/tle?sat=' + encodeURIComponent(satName));
+    if (!r.ok) { _satTleCurrent = null; return null; }
+    const j = await r.json();
+    if (!j.ok || !j.line1 || !j.line2) { _satTleCurrent = null; return null; }
+    if (typeof satellite === 'undefined') return null; // lib not loaded
+    const satrec = satellite.twoline2satrec(j.line1, j.line2);
+    _satTleCurrent = { name: j.name, line1: j.line1, line2: j.line2, satrec, fetchedForName: satName };
+    return _satTleCurrent;
+  } catch (e) {
+    console.warn('[sat-map] TLE fetch failed:', e);
+    return null;
+  }
+}
+
+function _satPropagateTrack(satrec, startDate, minutesAhead, minutesBehind, stepSec) {
+  // Returns array of {lat, lon, t} sub-satellite points.
+  if (!satrec || typeof satellite === 'undefined') return [];
+  const pts = [];
+  const startMs = startDate.getTime() - minutesBehind * 60000;
+  const endMs   = startDate.getTime() + minutesAhead  * 60000;
+  for (let ms = startMs; ms <= endMs; ms += stepSec * 1000) {
+    const d = new Date(ms);
+    const pv = satellite.propagate(satrec, d);
+    if (!pv || !pv.position) continue;
+    const gmst = satellite.gstime(d);
+    const geo = satellite.eciToGeodetic(pv.position, gmst);
+    const lat = satellite.degreesLat(geo.latitude);
+    const lon = satellite.degreesLong(geo.longitude);
+    if (isFinite(lat) && isFinite(lon)) pts.push({ lat, lon, t: d });
+  }
+  return pts;
+}
+
+function _satSplitAntimeridian(pts) {
+  // Split a track into segments wherever longitude wraps (|Δlon| > 180°).
+  const segs = [];
+  let cur = [];
+  for (let i = 0; i < pts.length; i++) {
+    if (cur.length === 0) { cur.push(pts[i]); continue; }
+    const prev = cur[cur.length - 1];
+    if (Math.abs(pts[i].lon - prev.lon) > 180) {
+      segs.push(cur);
+      cur = [pts[i]];
+    } else {
+      cur.push(pts[i]);
+    }
+  }
+  if (cur.length) segs.push(cur);
+  return segs;
+}
+
+async function _satDrawGroundTrack(satName) {
+  if (!_satMap) return;
+  const tle = await _satLoadTLE(satName);
+  if (!tle) {
+    if (_satTrackLayer) { _satMap.removeLayer(_satTrackLayer); _satTrackLayer = null; }
+    return;
+  }
+  // Propagate ~3 forward orbits + 90 min tail behind (matches CSN controller's
+  // multi-orbit view). 30-second step keeps the polyline smooth without bloat.
+  const pts = _satPropagateTrack(tle.satrec, new Date(), 270, 90, 30);
+  if (!pts.length) return;
+  const segs = _satSplitAntimeridian(pts);
+  const layers = [];
+  segs.forEach(seg => {
+    const ll = seg.map(p => [p.lat, p.lon]);
+    // Cyan dashed polyline — matches the S.A.T. controller's track style.
+    layers.push(L.polyline(ll, {
+      pane: 'satTrack',
+      color: '#00e5ff', weight: 1.4, opacity: 0.75, dashArray: '5 4', interactive: false
+    }));
+  });
+  // End-of-track arrow heads (small circles at first/last points)
+  const first = pts[0], last = pts[pts.length - 1];
+  const fmt = d => {
+    const hh = String(d.getUTCHours()).padStart(2,'0');
+    const mm = String(d.getUTCMinutes()).padStart(2,'0');
+    return `${hh}:${mm}Z`;
+  };
+  layers.push(L.circleMarker([first.lat, first.lon], {
+    pane: 'satTrack',
+    radius: 3, color:'#00e5ff', fillColor:'#00e5ff', fillOpacity:0.9, weight:1, interactive:false
+  }).bindTooltip(fmt(first.t), { permanent:true, direction:'right', offset:[4,0], className:'sat-tooltip-label' }));
+  layers.push(L.circleMarker([last.lat, last.lon], {
+    pane: 'satTrack',
+    radius: 3, color:'#00e5ff', fillColor:'#00e5ff', fillOpacity:0.9, weight:1, interactive:false
+  }).bindTooltip(fmt(last.t), { permanent:true, direction:'left', offset:[-4,0], className:'sat-tooltip-label' }));
+  // Swap in
+  if (_satTrackLayer) _satMap.removeLayer(_satTrackLayer);
+  _satTrackLayer = L.layerGroup(layers).addTo(_satMap);
+  try { _satTrackLayer.getLayers().forEach(l => l.bringToBack && l.bringToBack()); } catch(e){}
+}
+
+let _satLastTrackName = null;
+let _satLastTrackMs = 0;
+function _satMapUpdate(s) {
+  if (!_satMap || !s) return;
+  // Kick off / refresh ground track when satellite name changes, or every 2 min.
+  try {
+    const name = s.satellite || '';
+    const nowMs = Date.now();
+    if (name && (name !== _satLastTrackName || (nowMs - _satLastTrackMs) > 120000)) {
+      _satLastTrackName = name;
+      _satLastTrackMs = nowMs;
+      _satDrawGroundTrack(name);
+    }
+    if (!name && _satTrackLayer) {
+      _satMap.removeLayer(_satTrackLayer); _satTrackLayer = null; _satLastTrackName = null;
+    }
+  } catch(e) {}
+  // Move station marker if S.A.T. GPS gives us a better fix
+  if (s.my_lat && s.my_lon) {
+    const mLat = parseFloat(s.my_lat), mLon = parseFloat(s.my_lon);
+    if (!isNaN(mLat) && !isNaN(mLon)) {
+      if (_satStationMarker) _satStationMarker.setLatLng([mLat, mLon]);
+      else _satStationMarker = L.circleMarker([mLat, mLon], {
+        radius:6, color:'#00e5ff', fillColor:'#00e5ff', fillOpacity:0.9, weight:2
+      }).addTo(_satMap);
+    }
+  }
+  // Satellite sub-point
+  const nameEl = document.getElementById('satmap-name');
+  const altEl  = document.getElementById('satmap-alt');
+  if (nameEl) nameEl.textContent = s.satellite || '—';
+  if (s.sat_lat != null && s.sat_lon != null) {
+    const lat = parseFloat(s.sat_lat), lon = parseFloat(s.sat_lon);
+    const alt = s.sat_alt_km ? parseFloat(s.sat_alt_km) : null;
+    if (altEl) altEl.textContent = alt ? `${Math.round(alt)} km` : '—';
+    if (_satMarker) _satMarker.setLatLng([lat, lon]);
+    else {
+      // Yellow diamond marker — matches the S.A.T. controller's own display
+      // style for the actively-tracked satellite. Drawn in a 20×20 viewBox,
+      // anchored dead-center at (10,10).
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" ' +
+        'style="display:block;filter:drop-shadow(0 0 3px #ffd700);">' +
+          '<polygon points="10,1 19,10 10,19 1,10" ' +
+          'fill="#ffd700" stroke="#fff4a3" stroke-width="1.2" stroke-linejoin="miter"/>' +
+        '</svg>';
+      _satMarker = L.marker([lat, lon], {
+        icon: L.divIcon({
+          className:'sat-icon',
+          html: svg,
+          iconSize:[20,20], iconAnchor:[10,10]
+        })
+      }).addTo(_satMap).bindTooltip(s.satellite || 'Satellite', { permanent:true, direction:'top', offset:[0,-12], className:'sat-tooltip-label' });
+    }
+    // Footprint radius. CSN S.A.T. firmware's satFootprint is the coverage
+    // DIAMETER, so halve it. If firmware value missing, compute geometric
+    // horizon radius from altitude:  R * acos(R / (R + alt))  [km; R=6371]
+    let footprintKm = s.sat_footprint_km ? parseFloat(s.sat_footprint_km) / 2 : null;
+    if (!footprintKm && alt && alt > 0) {
+      const R = 6371;
+      footprintKm = R * Math.acos(R / (R + alt));
+    }
+    if (footprintKm && footprintKm > 0) {
+      const footprintM = footprintKm * 1000;
+      if (_satFootprint) { _satFootprint.setLatLng([lat, lon]); _satFootprint.setRadius(footprintM); }
+      else _satFootprint = L.circle([lat, lon], {
+        radius: footprintM, color:'#ffd700', weight:1.5, opacity:0.7,
+        fillColor:'#ffd700', fillOpacity:0.08, interactive:false
+      }).addTo(_satMap);
+    }
+    // Beam-heading line from station to satellite sub-point
+    if (_satStationMarker) {
+      const stLL = _satStationMarker.getLatLng();
+      const beam = [[stLL.lat, stLL.lng], [lat, lon]];
+      if (_satBeamLine) _satBeamLine.setLatLngs(beam);
+      else _satBeamLine = L.polyline(beam, {
+        color:'#ffd700', weight:1.2, opacity:0.55, dashArray:'4 4', interactive:false
+      }).addTo(_satMap);
+    }
+  } else {
+    if (altEl) altEl.textContent = '—';
+    if (_satBeamLine) { _satMap.removeLayer(_satBeamLine); _satBeamLine = null; }
+  }
 }
 
 function clearMapDX() {
@@ -5463,9 +6198,30 @@ function togglePanel(panelId) {
   saveDockLayout();
 }
 window.addEventListener('beforeunload', () => saveDockLayout());
+// Per-mode dock layouts — each of the three operating modes (general / pota / sat)
+// gets its own saved column order + collapsed state + panel heights. Drag/resize
+// actions save to the currently-active mode's slot; switching modes restores
+// that mode's slot. First-time users and upgraders from the single-layout world
+// are migrated transparently in _dockCurrentModeKey() below.
+function _dockCurrentModeKey() {
+  try {
+    if (typeof potaMode === 'string' && ['general','pota','sat'].includes(potaMode)) return potaMode;
+  } catch(e) {}
+  return 'general';
+}
+function _dockMigrate(s) {
+  // One-time migration: if the old single `_dock` slot exists but no per-mode
+  // store, seed all three modes from it so no one loses their arrangement.
+  if (s._dock && !s._dockByMode) {
+    s._dockByMode = { general: s._dock, pota: JSON.parse(JSON.stringify(s._dock)), sat: JSON.parse(JSON.stringify(s._dock)) };
+  }
+  if (!s._dockByMode) s._dockByMode = {};
+  return s;
+}
 function saveDockLayout() {
-  const s = loadSettings();
-  s._dock = {
+  const s = _dockMigrate(loadSettings());
+  const modeKey = _dockCurrentModeKey();
+  const snap = {
     cols: [0,1,2].map(i => {
       const col = document.getElementById('dock-col-' + i);
       return col ? [...col.querySelectorAll(':scope > .dock-panel')].map(p => p.dataset.panelId) : [];
@@ -5475,50 +6231,67 @@ function saveDockLayout() {
   };
   document.querySelectorAll('.dock-panel').forEach(p => {
     if (!p.dataset.panelId) return;
-    if (p.classList.contains('collapsed')) s._dock.collapsed[p.dataset.panelId] = true;
+    if (p.classList.contains('collapsed')) snap.collapsed[p.dataset.panelId] = true;
     const m = p.style.flex && p.style.flex.match(/0 0 (\d+)px/);
-    if (m) s._dock.heights[p.dataset.panelId] = parseInt(m[1]);
-    else if (p.offsetHeight > 0) s._dock.heights[p.dataset.panelId] = p.offsetHeight;
+    if (m) snap.heights[p.dataset.panelId] = parseInt(m[1]);
+    else if (p.offsetHeight > 0) snap.heights[p.dataset.panelId] = p.offsetHeight;
   });
+  s._dockByMode[modeKey] = snap;
+  s._dock = snap; // keep legacy key in sync for any other code that reads it
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }
-function restoreDockLayout() {
-  const s = loadSettings();
-  if (!s._dock) return;
-  const { cols, collapsed, heights } = s._dock;
-  if (cols) {
-    cols.forEach((panelIds, ci) => {
-      const col = document.getElementById('dock-col-' + ci);
-      if (!col) return;
-      panelIds.forEach(pid => {
-        const panel = document.getElementById('dp-' + pid);
-        if (panel) col.appendChild(panel);
+function restoreDockLayout(modeOverride) {
+  const s = _dockMigrate(loadSettings());
+  const modeKey = modeOverride || _dockCurrentModeKey();
+  const layout = (s._dockByMode && s._dockByMode[modeKey]) || s._dock;
+  // ── First clear any prior inline heights so we don't stack stale values ──
+  document.querySelectorAll('.dock-panel').forEach(p => {
+    p.classList.remove('collapsed');
+    const btn = p.querySelector('.dock-collapse-btn');
+    if (btn) btn.textContent = '—';
+    if (p.style.flex) p.style.flex = '';
+  });
+  if (layout) {
+    const { cols, collapsed, heights } = layout;
+    if (cols) {
+      cols.forEach((panelIds, ci) => {
+        const col = document.getElementById('dock-col-' + ci);
+        if (!col) return;
+        panelIds.forEach(pid => {
+          const panel = document.getElementById('dp-' + pid);
+          if (panel) col.appendChild(panel);
+        });
       });
-    });
+    }
+    if (collapsed) {
+      Object.keys(collapsed).forEach(pid => {
+        const el = document.getElementById('dp-' + pid);
+        if (!el) return;
+        el.classList.add('collapsed');
+        const btn = el.querySelector('.dock-collapse-btn');
+        if (btn) btn.textContent = '+';
+      });
+    }
+    if (heights) {
+      Object.keys(heights).forEach(pid => {
+        const el = document.getElementById('dp-' + pid);
+        if (el) el.style.flex = `0 0 ${heights[pid]}px`;
+      });
+    }
   }
-  if (collapsed) {
-    Object.keys(collapsed).forEach(pid => {
-      const el = document.getElementById('dp-' + pid);
-      if (!el) return;
-      el.classList.add('collapsed');
-      const btn = el.querySelector('.dock-collapse-btn');
-      if (btn) btn.textContent = '+';
-    });
-  }
-  if (heights) {
-    Object.keys(heights).forEach(pid => {
-      const el = document.getElementById('dp-' + pid);
-      if (el) el.style.flex = `0 0 ${heights[pid]}px`;
-    });
-  }
-  // Give panels default heights if none were saved
-  const defaults = { log: 480, cluster: 500, distance: 340, rotator: 260 };
+  // Give panels default heights if none were saved for this mode
+  const defaults = { log: 480, cluster: 500, distance: 340, rotator: 260, satmap: 420 };
   Object.entries(defaults).forEach(([pid, h]) => {
     const el = document.getElementById('dp-' + pid);
     if (el && !el.style.flex) el.style.flex = `0 0 ${h}px`;
   });
+  // Re-insert row handles now that the DOM has been reshuffled
+  try { if (typeof insertRowHandles === 'function') insertRowHandles(); } catch(e) {}
   // Leaflet needs a kick after the map container gets its height
-  setTimeout(() => { if (typeof _map !== 'undefined' && _map) _map.invalidateSize(); }, 200);
+  setTimeout(() => {
+    if (typeof _map !== 'undefined' && _map) _map.invalidateSize();
+    if (typeof _satMap !== 'undefined' && _satMap) _satMap.invalidateSize();
+  }, 200);
 }
 
 // ─── ROTATOR ──────────────────────────────────────────────────────────────────

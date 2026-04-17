@@ -438,6 +438,7 @@
         <tr><td><code>QRZ Username / Password</code></td><td>QRZ.com credentials for XML lookup. Requires an active <a href="https://shop.qrz.com/collections/subscriptions" target="_blank" style="color:var(--accent)">XML Data subscription</a>.</td></tr>
         <tr><td><code>QRZ Logbook API Key</code></td><td>Your QRZ Logbook API key (qrz.com → My Logbook → Settings). The key is stored masked (hidden) for security.</td></tr>
         <tr><td><code>Auto-upload QSOs to QRZ Logbook</code></td><td>Checkbox — <strong style="color:#ff4444;">ON by default.</strong> Uncheck to disable automatic QSO uploads to QRZ while keeping your key saved.</td></tr>
+        <tr><td><code>QRZ Button Behavior</code></td><td>Radio choice — <em>Show callsign info popup</em> (default, in-app modal) or <em>Open the callsign's QRZ.com page in a new browser tab</em>. Both modes still auto-fill Name &amp; QTH from QRZ/HamQTH.</td></tr>
         <tr><td><code>HamQTH Username / Password</code></td><td>HamQTH.com credentials for free callsign lookup. Used as primary source if QRZ is not configured, or as fallback if QRZ does not find a callsign.</td></tr>
         <tr><td><code>Path to tqsl.exe</code></td><td>Full path to the TQSL executable (e.g. <code>C:\Program Files (x86)\TrustedQSL\bin\tqsl.exe</code>), or just <code>tqsl</code> if TQSL is on your system PATH. Click <strong>🔍 Verify TQSL Path</strong> to confirm.</td></tr>
         <tr><td><code>Station Location</code></td><td>The Station Location name as defined in TQSL (File → Station Locations). More precise than callsign alone — required if you operate from multiple locations. Leave blank to fall back to your callsign certificate.</td></tr>
@@ -475,7 +476,7 @@
         <tr><td><code>Hot Stations Watchlist</code></td><td>Comma-separated callsigns to highlight in red when spotted (e.g. <code>DX0DX,VK9XX</code>).</td></tr>
         <tr><td><code>Announce via speech</code></td><td>When checked, a voice announcement plays each time a watchlist callsign is spotted. Repeats at most once every 15 minutes per callsign to prevent continuous alerts if a DXpedition is heavily spotted.</td></tr>
         <tr><td><code>Text Size</code></td><td>UI zoom level: Normal, Large (×1.18), X-Large (×1.30).</td></tr>
-        <tr><td><code>Panadapter Spot Color</code></td><td>Color used for spot markers on the Thetis or EESDR panadapter display.</td></tr>
+        <tr><td><code>Panadapter Spot Coloring</code></td><td>Choose <strong>Single color</strong> (one color for every spot pushed to Thetis) or <strong>Color by category</strong> (per-spot color based on worked-before state): Needed Entity, New Band, New Mode, Standard (already worked), Hot List. All five category colors are user-configurable via color pickers, plus a Reset-to-defaults button. Hot List calls always override with the Hot color regardless of worked-before state.</td></tr>
         <tr><td><code>Digital App — UDP Listener</code></td><td>Enable to receive QSOLogged packets from WSJT-X, JTDX, MSHV (binary) or VarAC/Log4OM ADIF-over-UDP. Default port 2237.</td></tr>
         <tr><td><code>Digital App — TCP Server</code></td><td>Enable to accept ADIF connections from VarAC TCP mode and DXKeeper/N1MM/Logger32-compatible loggers. Default port 52001.</td></tr>
         <tr><td><code>Rotator — Enable</code></td><td>Activates rotator control. Also toggleable via the Active checkbox in the Rotator panel header.</td></tr>
@@ -514,7 +515,13 @@
       <li>No badge — you have already worked this entity on this band and mode.</li>
     </ul>
     <p>The <strong>⚠ Worked Before</strong> banner also appears with a list of previous QSO dates, bands, and modes if you have any prior contacts with that specific callsign.</p>
-    <div class="tip">Click <strong>QRZ</strong> to open a detailed lookup popup for the entered callsign.</div>
+    <div class="tip">Click <strong>QRZ</strong> to look up the entered callsign. The button has two modes — choose under <strong>Settings → Lookup → QRZ Button Behavior</strong>:
+      <ul style="margin:6px 0 0 18px;padding:0;">
+        <li><strong>Show callsign info popup</strong> (default) — opens a styled popup with name, QTH, grid, country, CQ/ITU zone.</li>
+        <li><strong>Open the callsign's QRZ.com page in a new browser tab</strong> — opens <code>qrz.com/db/&lt;CALL&gt;</code>.</li>
+      </ul>
+      Both modes auto-fill <strong>Name</strong> and <strong>QTH</strong> in the QSO form from QRZ/HamQTH.
+    </div>
   </div>
 
   <!-- QSO LOG -->
@@ -583,7 +590,20 @@
     <h3>Clicking a Spot</h3>
     <p>Clicking any spot row fills the callsign, frequency, and mode in the logging form <em>and</em> tunes your radio automatically via whichever rig path is active (TCI → flrig → HamLib). For TCI/Thetis, digital modes (FT8, FT4, JS8, DATA, WSPR, VarAC, PSK31, DIGI) are automatically sent as <strong>DIGU</strong> (Digital Upper); RTTY-R spots use <strong>DIGL</strong>. USB, LSB, CW, AM, and FM pass through unchanged.</p>
     <h3>Panadapter Integration</h3>
-    <p>All received spots are mirrored to the Thetis or EESDR panadapter as colored markers. The marker color is configurable in Settings → Display → Panadapter Spot Color.</p>
+    <p>All received spots are mirrored to the Thetis or EESDR panadapter as colored markers. Marker coloring is configurable in <strong>Settings → Display → Panadapter Spot Coloring</strong>:</p>
+    <ul>
+      <li><strong>Single color</strong> — one color for every spot pushed to the panadapter (legacy behavior).</li>
+      <li><strong>Color by category</strong> — per-spot color based on your worked-before data:
+        <ul>
+          <li><span style="color:#ff3344;font-weight:600">Needed Entity</span> — DXCC entity never worked</li>
+          <li><span style="color:#ffd700;font-weight:600">New Band</span> — entity worked, but never on this band</li>
+          <li><span style="color:#ff8c00;font-weight:600">New Mode</span> — entity worked on this band, but never on this mode</li>
+          <li><span style="color:#00e5ff;font-weight:600">Standard</span> — band and mode already worked for this entity</li>
+          <li><span style="color:#ff1744;font-weight:600">Hot List</span> — callsign is on your Hot Stations watchlist (overrides all other categories)</li>
+        </ul>
+      </li>
+    </ul>
+    <p>All five category colors are user-configurable via HTML5 color pickers, plus a <strong>Reset to defaults</strong> button. Thetis manages the panadapter spot lifecycle on its own — SDRLogger+ only chooses the color and fires the spot once.</p>
     <div class="tip">Spothole.app aggregates DX Cluster, RBN, POTA, and SOTA spots. Enable it in Settings for a much richer spot feed with no Telnet required.</div>
   </div>
 
@@ -1237,6 +1257,46 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
       <li><strong>S.A.T. Live</strong> indicator with grid square, GPS sat count, and ADIF port</li>
       <li><strong>⬇ Fetch S.A.T. Log</strong> button — pulls the entire stored QSO log from the S.A.T. with duplicate detection</li>
     </ul>
+  </div>
+
+  <h2>🛰 Satellite Map Panel <span style="font-size:12px;color:var(--muted);">(v1.06.1+)</span></h2>
+  <div class="section-card">
+    <p>When you switch into SAT mode, the <strong>Distance Map</strong> panel is automatically hidden and replaced by a dedicated <strong>🛰 Satellite Map</strong> panel in the same slot. Flip back to General or POTA and the Distance Map returns.</p>
+    <p>The satellite map uses a plate carrée (equirectangular) projection rendered on NASA EOSDIS GIBS <strong>Blue Marble Next Generation</strong> imagery, and updates every 2 seconds from the same <code>/track</code> feed that drives the status panel.</p>
+    <h3>What's on the map</h3>
+    <ul>
+      <li><strong>Yellow diamond</strong> — the actively-tracked satellite's sub-point (matches the CSN S.A.T. controller's own display style)</li>
+      <li><strong>Yellow footprint circle</strong> — coverage radius. LEO (~400 km) is ~2,400 km; RS-44 (~1,200 km) is ~4,000 km</li>
+      <li><strong>Cyan ground track</strong> — ~3 forward orbits + ~90 min trailing track, propagated client-side via SGP4 from the latest Celestrak TLE. Dashed cyan polyline with UTC timestamp labels at both ends, split cleanly at the antimeridian</li>
+      <li><strong>Cyan station dot</strong> — your QTH, from saved grid or S.A.T. live GPS</li>
+      <li><strong>Yellow beam line</strong> — dashed line from station to sub-point for quick "which way is it?" awareness</li>
+    </ul>
+    <p>TLEs are fetched from Celestrak's <code>amateur.txt</code> feed via <code>/api/sat/tle</code> and cached server-side for 6 hours, so switching satellites doesn't hammer their servers. Name matching is fuzzy (e.g. <code>ISS</code> resolves to <code>ISS (ZARYA)</code>). If a bird isn't in the feed, the ground track skips — the rest of the map still works.</p>
+    <div class="tip">The sat map is a regular dock panel — drag it to any column, collapse, or resize. With <strong>per-mode dock layouts</strong> (v1.06.1+), the position you choose in SAT mode is remembered independently from your General and POTA layouts.</div>
+  </div>
+
+  <h2>🧭 Per-Mode Dock Layouts <span style="font-size:12px;color:var(--muted);">(v1.06.1+)</span></h2>
+  <div class="section-card">
+    <p>Dock panel arrangements (columns, order, collapsed state, heights) are now saved <strong>independently for each operating mode</strong> — General, POTA, and SAT each have their own layout. Drag a panel, collapse it, or resize it, and the change is written to the currently-active mode's slot only.</p>
+    <p>Switch modes and the incoming mode's saved arrangement snaps in. Close the browser, re-open hours later, and you boot straight back into your last layout for the current mode.</p>
+    <div class="tip">Existing single-layout users are migrated transparently — your current arrangement is cloned into all three mode slots on first launch, so nobody loses their setup. From that point each mode diverges independently.</div>
+    <p><strong>Note:</strong> SAT mode is intentionally not auto-restored across page reloads (consistent with the "only talk to the S.A.T. while actively in SAT mode" design). You'll boot back into General or POTA, then click 🛰 SAT when you're ready for a pass.</p>
+  </div>
+
+  <h2>📡 Propagation Forecast <span style="font-size:12px;color:var(--muted);">(v1.07+)</span></h2>
+  <div class="section-card">
+    <p>A small <strong>📡 VOACAP</strong> chip appears inline with the Entity info line under the callsign in the QSO entry panel. Click it to open a dedicated propagation-forecast popup for the current callsign. The callsign's grid is auto-resolved via QRZ / HamQTH, and the popup pre-loads current solar data (SFI / K / A) from your existing <code>/api/solar</code> feed.</p>
+    <p>The popup shows:</p>
+    <ul>
+      <li><strong>Station profile</strong> — echoed TX power, TX/RX antenna gain, noise environment, Sporadic-E enable, and path direction pulled from <strong>Settings → 📡 Propagation</strong>.</li>
+      <li><strong>Path info</strong> — great-circle distance, bearing, midpoint, solar zenith at the midpoint, and the predicted MUF / LUF for the path.</li>
+      <li><strong>Band-by-band forecast</strong> — reliability bar and estimated SNR (dB in a 2.5 kHz SSB-equivalent bandwidth) for every band from 160 m to 6 m, plus an open / marginal / closed status icon.</li>
+      <li><strong>24-hour chart</strong> — predicted reliability per band at each UTC hour, with the current hour highlighted in gold.</li>
+    </ul>
+    <p>Under the hood the forecaster runs a simplified IONCAP-style model entirely in the popup window (no server calls beyond the existing <code>/api/solar</code> and <code>/api/callsign_lookup</code> endpoints). Inputs: foF2 diurnal model scaled from SSN, M-factor for MUF, D-layer LUF with K-index degradation, Gaussian band reliability around 0.85 × MUF, K geomagnetic penalty curve, CCIR Rec P.372 noise by environment, link-budget SNR from your EIRP, auroral absorption on polar paths, and summer sporadic-E enhancement on 24 / 28 / 50 MHz.</p>
+    <div class="tip"><strong>This is SDRLogger+'s own simplified estimate</strong> — good for "is this band worth trying right now?" planning, but not a substitute for the real VOACAP Fortran engine. The popup includes a prominent <strong>🔗 Open Official VOACAP.com Prediction</strong> button that links to <a href="https://www.voacap.com/hf/" target="_blank">voacap.com/hf/</a> with your path pre-filled for authoritative predictions.</div>
+    <p>The chip is hidden automatically in 🛰 SAT mode (HF prediction doesn't apply to line-of-sight satellite passes) and can be toggled off entirely in <strong>Settings → 📡 Propagation → "Show 📡 VOACAP chip in QSO entry panel"</strong>.</p>
+    <p>An <strong>← Return to SDRLogger+</strong> button in the popup header closes the popup and re-focuses the main window — no new tab or window is spawned.</p>
   </div>
 
   <h2>SAT QSO Entry Form</h2>

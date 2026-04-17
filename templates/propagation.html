@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDRLogger+ — Propagation Forecast</title>
+<link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
+<style>
+  :root {
+    --bg:#0a0d12; --surface:#111620; --card:#161c28; --border:#1e2a3a;
+    --accent:#00e5ff; --accent2:#39ff14; --warn:#ff6b35; --text:#cdd9e5;
+    --muted:#5a7080; --green:#00c851; --red:#ff4444; --gold:#ffd700;
+    --mono:'Courier New',monospace;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;
+    font-size:16px;min-height:100vh;display:flex;flex-direction:column;}
+  body::after{content:'';position:fixed;inset:0;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px);
+    pointer-events:none;z-index:9999;}
+
+  /* Header */
+  .pg-header{background:var(--surface);border-bottom:1px solid var(--border);
+    padding:8px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+  .pg-title{font-family:var(--mono);font-size:20px;font-weight:700;
+    color:var(--accent);letter-spacing:2px;text-transform:uppercase;}
+  .btn-return{background:rgba(0,229,255,.08);border:1px solid var(--accent);color:var(--accent);
+    padding:7px 16px;border-radius:3px;cursor:pointer;font-family:var(--mono);font-size:13px;
+    font-weight:700;letter-spacing:1px;text-transform:uppercase;text-decoration:none;
+    transition:all .15s;}
+  .btn-return:hover{background:rgba(0,229,255,.18);text-shadow:0 0 6px var(--accent);}
+  .pg-title span{color:var(--accent2);}
+  .ver-label{font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:auto;}
+
+  /* Cards */
+  .pg-wrap{padding:20px;display:flex;flex-direction:column;gap:16px;max-width:1500px;margin:0 auto;width:100%;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:5px;padding:16px 20px;}
+  .card-head{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--accent);margin-bottom:8px;
+    display:flex;align-items:center;gap:8px;}
+  .card-head .chip{font-size:12px;color:#9fb3c4;font-weight:400;letter-spacing:.5px;text-transform:none;}
+
+  /* Disclosure banner */
+  .disclose{background:linear-gradient(180deg,#162433 0%,#101820 100%);
+    border:1px solid #2c4055;border-radius:5px;padding:10px 14px;
+    display:flex;align-items:flex-start;gap:10px;}
+  .disclose .icon{font-size:26px;line-height:1;flex-shrink:0;padding-top:2px;}
+  .disclose .txt{font-size:14px;line-height:1.5;flex:1;}
+  .disclose strong{color:var(--accent);}
+  .disclose a{color:var(--gold);text-decoration:none;font-weight:700;}
+  .disclose a:hover{text-decoration:underline;}
+
+  /* Inputs row */
+  .inputs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+  .inp-cell{display:flex;flex-direction:column;gap:3px;}
+  .inp-cell label{font-size:13px;color:#b8ccde;font-family:var(--mono);letter-spacing:.5px;
+    text-transform:uppercase;font-weight:700;}
+  .inp-cell input,.inp-cell select{background:var(--bg);color:var(--text);
+    border:1px solid var(--border);border-radius:3px;padding:7px 10px;
+    font-family:var(--mono);font-size:15px;outline:none;}
+  .inp-cell input:focus,.inp-cell select:focus{border-color:var(--accent);}
+  .inp-cell .ghost{font-size:12px;color:#9fb3c4;margin-top:2px;min-height:14px;}
+
+  /* Path info */
+  .path-row{display:flex;flex-wrap:wrap;gap:24px;font-family:var(--mono);font-size:15px;}
+  .path-row b{color:var(--accent);font-weight:700;}
+  .path-row .pi-item{display:flex;flex-direction:column;}
+  .path-row .pi-label{font-size:12px;color:#b8ccde;letter-spacing:.5px;text-transform:uppercase;font-weight:700;}
+
+  /* Band table */
+  table.bands{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:15px;}
+  table.bands th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);
+    color:var(--accent);font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;}
+  table.bands td{padding:7px 10px;border-bottom:1px solid #1a2432;}
+  table.bands tr:hover td{background:#131a24;}
+  .band-name{font-weight:700;color:var(--text);}
+  .relbar{height:10px;border-radius:3px;background:var(--border);overflow:hidden;min-width:160px;}
+  .relbar .fill{height:100%;transition:width .3s;}
+  .status-ico{font-size:11px;}
+  .snr-weak{color:#f0b050;}
+  .snr-good{color:var(--accent2);}
+  .snr-strong{color:#8effff;text-shadow:0 0 4px var(--accent);}
+  .snr-dead{color:var(--muted);}
+
+  /* 24-hour chart */
+  .chart-wrap{overflow-x:auto;}
+  table.chart{border-collapse:collapse;font-family:var(--mono);font-size:12px;min-width:1100px;}
+  table.chart th,table.chart td{border:1px solid var(--border);padding:0;text-align:center;}
+  table.chart th{background:var(--surface);color:var(--muted);padding:6px 3px;font-weight:700;min-width:32px;}
+  table.chart td.cell{width:32px;height:22px;}
+  table.chart td.band-label{background:var(--surface);color:var(--text);padding:4px 10px;
+    text-align:right;min-width:64px;font-weight:700;font-size:13px;}
+  table.chart td.now-col{box-shadow:inset 0 0 0 1px var(--gold);}
+  .chart-legend{display:flex;gap:16px;margin-top:10px;font-size:12px;color:var(--muted);
+    align-items:center;flex-wrap:wrap;}
+  .legend-box{display:inline-block;width:14px;height:10px;border-radius:2px;vertical-align:middle;
+    margin-right:4px;}
+
+  /* Big voacap.com CTA */
+  .cta-row{display:flex;justify-content:center;padding:6px 0 2px;}
+  .btn-cta{background:rgba(255,215,0,.1);border:1px solid var(--gold);color:var(--gold);
+    padding:12px 28px;border-radius:4px;cursor:pointer;font-family:var(--mono);
+    font-size:15px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+    text-decoration:none;transition:all .15s;}
+  .btn-cta:hover{background:rgba(255,215,0,.2);text-shadow:0 0 6px var(--gold);}
+
+  /* Small refresh + status line */
+  .status-line{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:12px;
+    color:var(--muted);padding:0 2px;}
+  .status-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);
+    box-shadow:0 0 4px var(--accent2);}
+  .btn-refresh{background:transparent;border:1px solid var(--border);color:var(--accent);
+    padding:5px 12px;border-radius:3px;cursor:pointer;font-family:var(--mono);font-size:12px;
+    margin-left:auto;}
+  .btn-refresh:hover{border-color:var(--accent);background:rgba(0,229,255,.08);}
+
+  /* Input mode toggle (call vs grid) */
+  .mode-toggle{display:inline-flex;border:1px solid var(--border);border-radius:3px;overflow:hidden;}
+  .mode-toggle button{background:var(--bg);color:#b8ccde;border:none;
+    padding:4px 12px;font-family:var(--mono);font-size:12px;cursor:pointer;font-weight:700;}
+  .mode-toggle button.active{background:var(--accent);color:#000;}
+</style>
+</head>
+<body>
+
+<div class="pg-header">
+  <div class="pg-title">📡 SDRLogger<span>+</span> — Propagation Forecast</div>
+  <a href="#" class="btn-return" onclick="returnToLogger();return false;"
+     title="Close this window and return to SDRLogger+">← Return to SDRLogger+</a>
+  <span class="ver-label">v{{ version }}</span>
+</div>
+
+<div class="pg-wrap">
+
+  <!-- Self-labeling banner -->
+  <div class="disclose">
+    <div class="icon">ℹ️</div>
+    <div class="txt">
+      <strong>SDRLogger+'s own simplified VOACAP-style forecast.</strong>
+      This is our own in-browser propagation estimate using current solar data and standard
+      ionospheric formulas. For authoritative predictions with full antenna modeling, detailed
+      hop analysis, and the actual ITS/VOACAP engine, use
+      <a href="#" id="voacap-link-top" target="_blank" rel="noopener">voacap.com &rarr;</a>
+      (opens in a new tab, pre-filled with your path).
+    </div>
+  </div>
+
+  <!-- Inputs -->
+  <div class="card">
+    <div class="card-head">
+      Inputs
+      <span class="chip">live solar data from your existing SDRLogger+ feed · all fields editable for "what-if" planning</span>
+    </div>
+    <div class="inputs-grid">
+      <div class="inp-cell">
+        <label>My Grid (TX)</label>
+        <input id="my-grid" type="text" placeholder="EM79rj" maxlength="8">
+      </div>
+      <div class="inp-cell">
+        <label>
+          Target
+          <span class="mode-toggle" style="margin-left:6px;">
+            <button id="tgt-mode-call" class="active" onclick="setTgtMode('call')">CALL</button>
+            <button id="tgt-mode-grid" onclick="setTgtMode('grid')">GRID</button>
+          </span>
+        </label>
+        <input id="target-input" type="text" placeholder="W1AW or FN31pr" maxlength="12">
+        <span class="ghost" id="target-ghost">Callsign lookup gives us the grid (QRZ / HamQTH)</span>
+      </div>
+      <div class="inp-cell">
+        <label>UTC Hour (0-23)</label>
+        <input id="utc-hour" type="number" min="0" max="23" step="1">
+        <span class="ghost" id="utc-now-hint">—</span>
+      </div>
+      <div class="inp-cell">
+        <label>SFI</label>
+        <input id="sfi-in" type="number" min="60" max="400" step="1">
+      </div>
+      <div class="inp-cell">
+        <label>K Index</label>
+        <input id="k-in" type="number" min="0" max="9" step="1">
+      </div>
+      <div class="inp-cell">
+        <label>A Index</label>
+        <input id="a-in" type="number" min="0" max="400" step="1">
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings echo -->
+  <div class="card" style="padding:8px 14px;">
+    <div class="card-head" style="margin-bottom:4px;">
+      Station Profile
+      <span class="chip">edit in <strong>SDRLogger+ → ⚙ Settings → 📡 Propagation</strong></span>
+    </div>
+    <div class="path-row" id="cfg-row">
+      <div class="pi-item"><span class="pi-label">TX Power</span><b id="cfg-pwr">—</b></div>
+      <div class="pi-item"><span class="pi-label">TX Gain</span><b id="cfg-tg">—</b></div>
+      <div class="pi-item"><span class="pi-label">RX Gain</span><b id="cfg-rg">—</b></div>
+      <div class="pi-item"><span class="pi-label">Noise Env</span><b id="cfg-ne">—</b></div>
+      <div class="pi-item"><span class="pi-label">Sporadic E</span><b id="cfg-es">—</b></div>
+      <div class="pi-item"><span class="pi-label">Path</span><b id="cfg-pp">—</b></div>
+    </div>
+  </div>
+
+  <!-- Path info -->
+  <div class="card">
+    <div class="card-head">
+      Path
+      <span class="chip" id="path-chip">great-circle calculations · midpoint illumination</span>
+    </div>
+    <div class="path-row" id="path-row">
+      <div class="pi-item"><span class="pi-label">Distance</span><b id="path-dist">—</b></div>
+      <div class="pi-item"><span class="pi-label">Bearing (TX→RX)</span><b id="path-bearing">—</b></div>
+      <div class="pi-item"><span class="pi-label">Midpoint</span><b id="path-mid">—</b></div>
+      <div class="pi-item"><span class="pi-label">Solar Zenith @ Midpt</span><b id="path-zen">—</b></div>
+      <div class="pi-item"><span class="pi-label">MUF</span><b id="path-muf">—</b></div>
+      <div class="pi-item"><span class="pi-label">LUF</span><b id="path-luf">—</b></div>
+    </div>
+  </div>
+
+  <!-- Band Forecast Table -->
+  <div class="card">
+    <div class="card-head">
+      Band-by-Band Forecast
+      <span class="chip">predicted reliability for this path at the selected UTC hour</span>
+    </div>
+    <table class="bands">
+      <thead>
+        <tr>
+          <th>Band</th>
+          <th>Center Freq</th>
+          <th>Reliability</th>
+          <th>% · SNR (2.5 kHz)</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="band-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- 24-Hour Chart -->
+  <div class="card">
+    <div class="card-head">
+      24-Hour Forecast
+      <span class="chip">predicted reliability per band, by UTC hour · the gold column is "now"</span>
+    </div>
+    <div class="chart-wrap">
+      <table class="chart" id="chart24"></table>
+    </div>
+    <div class="chart-legend">
+      <span><span class="legend-box" style="background:#1a2432;"></span>Closed / &lt; 10%</span>
+      <span><span class="legend-box" style="background:#5a3028;"></span>Poor / 10-30%</span>
+      <span><span class="legend-box" style="background:#7a5a28;"></span>Marginal / 30-50%</span>
+      <span><span class="legend-box" style="background:#3a7a40;"></span>Good / 50-75%</span>
+      <span><span class="legend-box" style="background:#39ff14;"></span>Excellent / &gt; 75%</span>
+    </div>
+  </div>
+
+  <!-- CTA to voacap.com -->
+  <div class="cta-row">
+    <a href="#" id="voacap-link-bottom" target="_blank" rel="noopener" class="btn-cta">
+      🔗 Open Official VOACAP.com Prediction for This Path
+    </a>
+  </div>
+
+  <!-- Status -->
+  <div class="status-line">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">Ready.</span>
+    <span id="solar-age" style="color:var(--muted);"></span>
+    <button class="btn-refresh" onclick="refreshAll(true)">↻ Refresh Solar</button>
+  </div>
+
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// PROPAGATION FORECAST — client-side IONCAP-style simplified model
+//
+// This is NOT the real VOACAP Fortran engine. It is a simplified forecaster
+// intended to answer "is this band worth trying right now?" — not for
+// DXpedition planning. For authoritative predictions see voacap.com.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Ham bands (center freq in MHz) ─────────────────────────────────────────
+const BANDS = [
+  { name: '160m', freq:  1.830, f_lo:  1.800, f_hi:  2.000 },
+  { name: '80m',  freq:  3.750, f_lo:  3.500, f_hi:  4.000 },
+  { name: '60m',  freq:  5.355, f_lo:  5.330, f_hi:  5.405 },
+  { name: '40m',  freq:  7.150, f_lo:  7.000, f_hi:  7.300 },
+  { name: '30m',  freq: 10.125, f_lo: 10.100, f_hi: 10.150 },
+  { name: '20m',  freq: 14.175, f_lo: 14.000, f_hi: 14.350 },
+  { name: '17m',  freq: 18.120, f_lo: 18.068, f_hi: 18.168 },
+  { name: '15m',  freq: 21.225, f_lo: 21.000, f_hi: 21.450 },
+  { name: '12m',  freq: 24.925, f_lo: 24.890, f_hi: 24.990 },
+  { name: '10m',  freq: 28.500, f_lo: 28.000, f_hi: 29.700 },
+  { name: '6m',   freq: 50.100, f_lo: 50.000, f_hi: 54.000 },
+];
+
+// ── Grid ↔ lat/lon helpers ─────────────────────────────────────────────────
+function gridToLatLon(g) {
+  if (!g) return null;
+  g = g.trim().toUpperCase();
+  if (g.length < 4) return null;
+  const A = 'A'.charCodeAt(0), Z0 = '0'.charCodeAt(0);
+  const lon = (g.charCodeAt(0)-A)*20 - 180 + (g.charCodeAt(2)-Z0)*2;
+  const lat = (g.charCodeAt(1)-A)*10 -  90 + (g.charCodeAt(3)-Z0)*1;
+  let rlon = lon + 1, rlat = lat + 0.5;
+  if (g.length >= 6) {
+    const sa = 'a'.charCodeAt(0);
+    const c5 = g.charCodeAt(4) >= sa ? g.charCodeAt(4) : g.charCodeAt(4) + 32;
+    const c6 = g.charCodeAt(5) >= sa ? g.charCodeAt(5) : g.charCodeAt(5) + 32;
+    rlon = lon + (c5-sa)*(2/24) + (1/24);
+    rlat = lat + (c6-sa)*(1/24) + (0.5/24);
+  }
+  return { lat: rlat, lon: rlon };
+}
+
+// ── Great-circle distance & bearing ────────────────────────────────────────
+function greatCircle(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = x => x * Math.PI/180, toDeg = x => x * 180/Math.PI;
+  const phi1=toRad(lat1), phi2=toRad(lat2);
+  const dphi=toRad(lat2-lat1), dl=toRad(lon2-lon1);
+  const a = Math.sin(dphi/2)**2 + Math.cos(phi1)*Math.cos(phi2)*Math.sin(dl/2)**2;
+  const d = 2 * R * Math.asin(Math.sqrt(Math.max(0, Math.min(1, a))));
+  // Bearing TX → RX (initial)
+  const y = Math.sin(dl)*Math.cos(phi2);
+  const x = Math.cos(phi1)*Math.sin(phi2) - Math.sin(phi1)*Math.cos(phi2)*Math.cos(dl);
+  const bear = (toDeg(Math.atan2(y, x)) + 360) % 360;
+  // Midpoint
+  const Bx = Math.cos(phi2)*Math.cos(dl), By = Math.cos(phi2)*Math.sin(dl);
+  const latM = toDeg(Math.atan2(Math.sin(phi1)+Math.sin(phi2),
+                                Math.sqrt((Math.cos(phi1)+Bx)**2 + By**2)));
+  const lonM = lon1 + toDeg(Math.atan2(By, Math.cos(phi1)+Bx));
+  return { dist_km: d, bearing: bear, mid_lat: latM, mid_lon: ((lonM+540)%360)-180 };
+}
+
+// ── Solar zenith angle at given lat/lon + UTC date ─────────────────────────
+// Returns zenith in degrees (0 = sun overhead, 90 = horizon, >90 = night)
+function solarZenith(lat, lon, dateUTC) {
+  const toRad = x => x * Math.PI/180, toDeg = x => x * 180/Math.PI;
+  // Julian day
+  const JD = dateUTC.getTime()/86400000 + 2440587.5;
+  const n  = JD - 2451545.0;
+  const L  = ((280.460 + 0.9856474 * n) % 360 + 360) % 360;
+  const g  = toRad(((357.528 + 0.9856003 * n) % 360 + 360) % 360);
+  const lam = toRad(L + 1.915*Math.sin(g) + 0.020*Math.sin(2*g));
+  const eps = toRad(23.4393);
+  const dec = Math.asin(Math.sin(eps)*Math.sin(lam));
+  // Greenwich mean sidereal time, hour angle
+  const T = n/36525;
+  const GMST = ((280.46061837 + 360.98564736629 * n + 0.000387933*T*T) % 360 + 360) % 360;
+  const HA = toRad(((GMST + lon - toDeg(Math.atan2(Math.cos(eps)*Math.sin(lam), Math.cos(lam)))) % 360 + 360) % 360);
+  const phi = toRad(lat);
+  const cosZ = Math.sin(phi)*Math.sin(dec) + Math.cos(phi)*Math.cos(dec)*Math.cos(HA);
+  return toDeg(Math.acos(Math.max(-1, Math.min(1, cosZ))));
+}
+
+// ── Station / environment config (loaded from main app's localStorage) ────
+// Pure read — never written here. Defaults match the Settings → 📡 Propagation
+// tab defaults so the popup behaves sensibly even before the user saves.
+function loadCfg() {
+  try {
+    const raw = localStorage.getItem('hamlog_settings');
+    const s = raw ? (JSON.parse(raw) || {}) : {};
+    return {
+      tx_power: parseFloat(s.voacap_tx_power) || 100,
+      tx_gain:  isFinite(parseFloat(s.voacap_tx_gain)) ? parseFloat(s.voacap_tx_gain) : 5,
+      rx_gain:  isFinite(parseFloat(s.voacap_rx_gain)) ? parseFloat(s.voacap_rx_gain) : 5,
+      noise_env: s.voacap_noise_env || 'residential',
+      es_enable: s.voacap_es_enable !== false,
+      long_path: s.voacap_long_path === true,
+    };
+  } catch(e) {
+    return { tx_power:100, tx_gain:5, rx_gain:5, noise_env:'residential', es_enable:true, long_path:false };
+  }
+}
+let CFG = loadCfg();
+
+// ── CCIR Rec P.372 atmospheric/man-made noise ─────────────────────────────
+// Median noise figure Fa (dB above kT0B) at 3 MHz for each environment;
+// frequency dependence ≈ -27.7 log10(f_MHz) per Recommendation P.372-13.
+const NOISE_FA3 = { quiet:35, rural:45, residential:55, industrial:62, city:72 };
+function noiseDbm(freq_mhz, env) {
+  const Fa3 = NOISE_FA3[env] || NOISE_FA3.residential;
+  const Fa  = Fa3 - 27.7 * Math.log10(Math.max(0.5, freq_mhz / 3.0));
+  // Noise power in dBm in 2.5 kHz SSB-equivalent BW: kTB = -174 + 10log(2500) ≈ -140 dBm
+  return -140 + Math.max(5, Fa);
+}
+
+// ── Simplified IONCAP-style propagation model ──────────────────────────────
+// Given path + solar inputs, returns per-band reliability (0-100) + MUF/LUF.
+function forecast(txLat, txLon, rxLat, rxLon, dateUTC, sfi, k_idx, a_idx) {
+  const gc0 = greatCircle(txLat, txLon, rxLat, rxLon);
+  // Long path option: use the complementary great-circle distance (≈40,075 km - d)
+  // and hold the midpoint at the antipode of the original midpoint for illumination.
+  const isLong = !!CFG.long_path && gc0.dist_km > 50;
+  const gc = isLong
+    ? { dist_km: 40075 - gc0.dist_km,
+        bearing: (gc0.bearing + 180) % 360,
+        mid_lat: -gc0.mid_lat,
+        mid_lon: ((gc0.mid_lon + 360) % 360) - 180 }
+    : gc0;
+  const d_km = gc.dist_km;
+  // Solar zenith at path midpoint
+  const zen = solarZenith(gc.mid_lat, gc.mid_lon, dateUTC);
+  const cosZ = Math.cos(zen * Math.PI/180);
+  const cosZpos = Math.max(0, cosZ);
+  // SSN from SFI (Kestrel conversion, clamped)
+  const ssn = Math.max(0, (sfi - 63.75) / 0.728);
+  // F2 critical frequency foF2 (MHz) — very rough diurnal + solar activity model
+  //   night baseline:  3 MHz + small SSN boost
+  //   day boost:       up to ~9 MHz × cosZ, scaled with SSN
+  const foF2_night = 3.0 + 0.010 * ssn;
+  const foF2_day   = foF2_night + (5.0 + 0.035 * ssn) * cosZpos;
+  const foF2 = foF2_day;  // day_side takes care of cosZ=0 case
+  // M-factor (MUF/foF2 ratio) — grows with path length to ~3.5 at long paths
+  const mFactor = Math.min(3.5, 1 + 2.5 * Math.pow(Math.min(d_km, 3500)/3500, 0.6));
+  const MUF = foF2 * mFactor;
+  // LUF — daytime D-layer absorption raises LUF; night LUF is low
+  //   baseline 2 MHz; boost up to ~7 MHz when sun overhead + high SSN
+  //   K-index degradation: small K=0-2, strong K=5+ spreads absorption
+  const kDeg = Math.max(0, k_idx || 0);
+  const LUF = Math.min(MUF*0.9, 2.0 + (4.5 + 0.02*ssn)*cosZpos - 0.5*Math.min(3, kDeg));
+  // K-index global reliability penalty (geomagnetic disturbance)
+  const kPenalty = kDeg <= 2 ? 1.0
+                  : kDeg === 3 ? 0.92
+                  : kDeg === 4 ? 0.80
+                  : kDeg === 5 ? 0.62
+                  : kDeg === 6 ? 0.42
+                  : 0.25;
+  // Auroral absorption — paths passing through high magnetic latitudes get extra
+  // hammered when K is elevated. We use geographic latitude as a proxy for the
+  // auroral oval (good enough for "is the polar path open?").
+  const polarHit = Math.max(Math.abs(gc.mid_lat), Math.abs(txLat), Math.abs(rxLat)) > 60;
+  let auroraPenalty = 1.0;
+  if (polarHit && kDeg >= 4) {
+    auroraPenalty = Math.max(0.15, 1.0 - 0.18 * (kDeg - 3));
+  }
+  // Sporadic E — summer-hemisphere boost on 50 / 28 / 24 MHz for short paths.
+  // Random component is deterministic per UTC-hour to avoid table flicker.
+  const month = dateUTC.getUTCMonth() + 1;  // 1-12
+  const myHemiLat = (txLat + rxLat) / 2;
+  const isSummer = (myHemiLat >= 0 && month >= 5 && month <= 8) ||
+                   (myHemiLat <  0 && (month <= 2 || month === 12));
+  const esActive = CFG.es_enable && isSummer;
+  // Pseudo-random-but-stable seed for the hour
+  const esSeed = (dateUTC.getUTCDate() * 31 + dateUTC.getUTCHours()) % 97;
+  // Per-band reliability
+  //   Optimal freq = 0.85 × MUF (slightly under MUF is usually best)
+  //   Gaussian around optimum with spread ≈ 0.30 × MUF
+  //   Very steep cutoff above MUF (x1.05 cap)
+  //   Absorption cutoff below LUF
+  const optF = 0.85 * MUF;
+  const spread = 0.30 * MUF;
+  const bands = BANDS.map(b => {
+    let rel;
+    if (b.freq > MUF * 1.15) {
+      // well above MUF — only occasional Es / scatter
+      rel = Math.max(0, 8 - (b.freq - MUF)*2);
+    } else if (b.freq < LUF) {
+      // absorbed
+      rel = Math.max(0, 12 - (LUF - b.freq)*8);
+    } else {
+      // Gaussian core
+      const delta = (b.freq - optF) / spread;
+      rel = 100 * Math.exp(-delta*delta);
+      // Extra penalty approaching MUF from below
+      if (b.freq > MUF) rel *= Math.max(0, 1 - (b.freq - MUF)/(MUF*0.15));
+    }
+    rel *= kPenalty * auroraPenalty;
+    // Short-path daylight bonus on higher bands (ground-wave / NVIS excluded; just a
+    // light boost where high-band sporadic enhancement often shows up)
+    if (d_km < 800 && b.freq > 14) rel *= 0.7;  // long-skip doesn't help on short paths
+    if (d_km < 300 && b.freq < 8)  rel *= 1.15; // NVIS bands shine on short paths
+    // Sporadic E — boost summer-hemisphere short-path 6/10/12m
+    if (esActive && d_km > 400 && d_km < 2300 && (b.freq >= 24 && b.freq <= 54)) {
+      // Higher chance / boost on 6m, less on 10/12m
+      const esBase = (b.freq >= 50) ? 55 : (b.freq >= 28 ? 35 : 25);
+      const esRand = ((esSeed * (b.freq | 0) * 7) % 100) / 100;  // 0..1 stable
+      const esBoost = esBase * esRand;
+      rel = Math.max(rel, esBoost);
+    }
+    rel = Math.max(0, Math.min(100, rel));
+    // SNR estimate (dB in 2.5 kHz BW) — simplified link budget:
+    //   EIRP = 10log10(P_W) + Gtx
+    //   Path loss ≈ free-space at midpoint slant range + ionospheric absorption
+    //               proxy = max(0, 10log10(d_km/300)) * 6 dB (scales with hops)
+    //               + LUF-floor absorption
+    //   Rx power = EIRP - PL + Grx  (then SNR = Pr - Noise)
+    const eirp_dbm = 30 + 10*Math.log10(Math.max(1, CFG.tx_power)) + CFG.tx_gain;
+    // Free-space at "effective slant" — 300 km hops, 2 hops min
+    const hops = Math.max(1, Math.ceil(d_km / 3000));
+    const slant_km = Math.max(300, d_km / hops + 300);
+    const fsl_db = 32.45 + 20*Math.log10(b.freq) + 20*Math.log10(slant_km);
+    // Per-hop ionospheric loss (rough): 2 dB low band, 0.5 dB high band, plus K
+    const ionLoss = (LUF >= b.freq ? 18 : Math.max(0.5, 6 - 0.15*(b.freq-LUF))) * hops
+                  + 0.8 * kDeg;
+    const pr_dbm = eirp_dbm - fsl_db - ionLoss + CFG.rx_gain;
+    const noise_dbm = noiseDbm(b.freq, CFG.noise_env);
+    let snr_db = pr_dbm - noise_dbm;
+    // If MUF clearly closes the band, force SNR to floor
+    if (b.freq > MUF * 1.15) snr_db = Math.min(snr_db, -20);
+    // Reliability and SNR should agree at the extremes — blend slightly
+    if (rel < 5)  snr_db = Math.min(snr_db, -15);
+    if (rel > 90) snr_db = Math.max(snr_db,  15);
+    let snr_label = 'dead';
+    if (snr_db >= 20)      snr_label = 'strong';
+    else if (snr_db >= 6)  snr_label = 'good';
+    else if (snr_db >= -6) snr_label = 'weak';
+    return { ...b, rel: Math.round(rel), snr: snr_label, snr_db: Math.round(snr_db) };
+  });
+  return {
+    dist_km: d_km, bearing: gc.bearing,
+    mid_lat: gc.mid_lat, mid_lon: gc.mid_lon,
+    zen_deg: zen, ssn, foF2, MUF, LUF, kPenalty,
+    bands
+  };
+}
+
+// ── Color helpers for the 24-hour chart cells ──────────────────────────────
+function relColor(rel) {
+  if (rel < 10)      return '#1a2432'; // closed
+  if (rel < 30)      return '#5a3028'; // poor
+  if (rel < 50)      return '#7a5a28'; // marginal
+  if (rel < 75)      return '#3a7a40'; // good
+  return '#39ff14';                    // excellent
+}
+function relFillColor(rel) { return relColor(rel); }
+
+// ════════════════════════════════════════════════════════════════════════════
+// UI Wiring
+// ════════════════════════════════════════════════════════════════════════════
+let currentMyLatLon = null;
+let currentTargetLatLon = null;
+let currentTargetLabel = '—';
+let currentSolar = { sfi: 100, k: 2, a: 8, fetched_at: 0 };
+let targetMode = 'call';  // 'call' or 'grid'
+
+function $(id) { return document.getElementById(id); }
+
+// Close this popup and focus back on the SDRLogger+ main window.
+// If we were opened via window.open() the opener is still alive — just close ourselves.
+// Fallback: try to focus the opener if close is blocked (some browsers refuse
+// to close windows not opened by script), and as a last resort navigate home.
+function returnToLogger() {
+  try { if (window.opener && !window.opener.closed) window.opener.focus(); } catch(e) {}
+  try { window.close(); } catch(e) {}
+  // If the window didn't actually close (still here after a tick), go to the main page
+  setTimeout(() => { if (!window.closed) { /* window.close was blocked */ } }, 150);
+}
+
+function setStatus(text, ok=true) {
+  $('status-text').textContent = text;
+  $('status-dot').style.background = ok ? 'var(--accent2)' : 'var(--red)';
+  $('status-dot').style.boxShadow  = ok ? '0 0 4px var(--accent2)' : '0 0 4px var(--red)';
+}
+
+function setTgtMode(m) {
+  targetMode = m;
+  $('tgt-mode-call').classList.toggle('active', m === 'call');
+  $('tgt-mode-grid').classList.toggle('active', m === 'grid');
+  $('target-input').placeholder = m === 'call' ? 'W1AW' : 'FN31pr';
+  $('target-ghost').textContent = m === 'call'
+    ? 'Callsign lookup gives us the grid (QRZ / HamQTH)'
+    : 'Enter a 4- or 6-character Maidenhead grid';
+  resolveTarget();
+}
+
+// Resolve target callsign → grid (or grid directly)
+async function resolveTarget() {
+  const raw = ($('target-input').value || '').trim();
+  if (!raw) { currentTargetLatLon = null; currentTargetLabel = '—'; $('target-ghost').textContent='(enter a callsign or grid)'; render(); return; }
+  if (targetMode === 'grid') {
+    const ll = gridToLatLon(raw);
+    if (ll) {
+      currentTargetLatLon = ll;
+      currentTargetLabel = raw.toUpperCase();
+      $('target-ghost').textContent = `Grid decoded: ${ll.lat.toFixed(2)}°, ${ll.lon.toFixed(2)}°`;
+      render();
+    } else {
+      currentTargetLatLon = null;
+      $('target-ghost').textContent = 'Invalid grid — use format FN31 or FN31pr';
+    }
+    return;
+  }
+  // Callsign lookup
+  $('target-ghost').textContent = 'Looking up ' + raw.toUpperCase() + '...';
+  try {
+    const r = await fetch('/api/callsign_lookup/' + encodeURIComponent(raw.toUpperCase()));
+    if (!r.ok) { $('target-ghost').textContent='Not found — try entering grid directly'; currentTargetLatLon=null; render(); return; }
+    const d = await r.json();
+    const g = d.grid || d.gridsquare || d.grid_square;
+    if (!g) { $('target-ghost').textContent='Found ' + (d.name||raw) + ' but no grid in record'; currentTargetLatLon=null; render(); return; }
+    const ll = gridToLatLon(g);
+    currentTargetLatLon = ll;
+    currentTargetLabel = raw.toUpperCase() + ' (' + g + ')';
+    $('target-ghost').textContent = `${raw.toUpperCase()} → ${g}${d.qth ? ' · ' + d.qth : ''}`;
+    render();
+  } catch (e) {
+    $('target-ghost').textContent = 'Lookup failed — try entering grid directly';
+  }
+}
+
+// Fetch solar data from existing /api/solar endpoint
+async function fetchSolar(force=false) {
+  try {
+    const r = await fetch('/api/solar' + (force ? '?_=' + Date.now() : ''));
+    if (!r.ok) return;
+    const d = await r.json();
+    const sfi = parseFloat(d.sfi) || parseFloat(d.solarflux) || 100;
+    const k   = parseFloat(d.kindex) || parseFloat(d.k_index) || 2;
+    const a   = parseFloat(d.aindex) || parseFloat(d.a_index) || 8;
+    currentSolar = { sfi, k, a, fetched_at: Date.now() };
+    if (document.activeElement !== $('sfi-in')) $('sfi-in').value = Math.round(sfi);
+    if (document.activeElement !== $('k-in'))   $('k-in').value   = Math.round(k);
+    if (document.activeElement !== $('a-in'))   $('a-in').value   = Math.round(a);
+    $('solar-age').textContent = '· solar data fetched ' + new Date().toUTCString().slice(17,22) + ' UTC';
+  } catch (e) {
+    setStatus('Could not fetch solar data — using defaults', false);
+  }
+}
+
+// Pull settings (my grid)
+async function fetchMyGrid() {
+  try {
+    // Try to pull from localStorage first (the main app stores it there)
+    const raw = localStorage.getItem('hamlog_settings');
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s && s.grid) {
+        $('my-grid').value = s.grid;
+        const ll = gridToLatLon(s.grid);
+        if (ll) currentMyLatLon = ll;
+        return;
+      }
+    }
+  } catch(e) {}
+}
+
+// Update the station-profile row from current CFG
+function renderCfgRow() {
+  $('cfg-pwr').textContent = CFG.tx_power + ' W';
+  $('cfg-tg').textContent  = (CFG.tx_gain >= 0 ? '+' : '') + CFG.tx_gain + ' dBi';
+  $('cfg-rg').textContent  = (CFG.rx_gain >= 0 ? '+' : '') + CFG.rx_gain + ' dBi';
+  $('cfg-ne').textContent  = CFG.noise_env;
+  $('cfg-es').textContent  = CFG.es_enable ? 'enabled' : 'off';
+  $('cfg-pp').textContent  = CFG.long_path ? 'long path' : 'short path';
+}
+
+// Build and render the full forecast
+function render() {
+  CFG = loadCfg();          // pick up any Settings changes saved in the main app
+  renderCfgRow();
+  const myGridEl = $('my-grid');
+  if (myGridEl.value) {
+    const ll = gridToLatLon(myGridEl.value.trim());
+    if (ll) currentMyLatLon = ll;
+  }
+  if (!currentMyLatLon) {
+    setStatus('Enter your grid square to start', false);
+    clearOutputs();
+    return;
+  }
+  if (!currentTargetLatLon) {
+    // standalone mode — use reciprocal bearing of my own grid for a "here to anywhere" snapshot
+    setStatus('Standalone mode — showing band conditions at my QTH. Enter a target for path-specific forecast.');
+    renderStandalone();
+    return;
+  }
+  const utcHour = parseInt($('utc-hour').value);
+  const sfi = parseFloat($('sfi-in').value) || currentSolar.sfi;
+  const k   = parseFloat($('k-in').value)   || currentSolar.k;
+  const a   = parseFloat($('a-in').value)   || currentSolar.a;
+  // Build a date at the selected UTC hour (today)
+  const now = new Date();
+  const dt  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+    isFinite(utcHour) ? utcHour : now.getUTCHours(), 0, 0));
+  const f = forecast(currentMyLatLon.lat, currentMyLatLon.lon,
+                     currentTargetLatLon.lat, currentTargetLatLon.lon, dt, sfi, k, a);
+  renderPath(f);
+  renderBandTable(f);
+  renderChart24();
+  updateVoacapLinks();
+  setStatus('Forecast: ' + currentTargetLabel);
+}
+
+function renderStandalone() {
+  // For standalone: pretend we're forecasting to a far-field path (3000 km, W→E)
+  // just to compute overall MUF/LUF at my QTH's illumination. Useful "what's the
+  // band doing right now" snapshot.
+  const utcHour = parseInt($('utc-hour').value);
+  const sfi = parseFloat($('sfi-in').value) || currentSolar.sfi;
+  const k   = parseFloat($('k-in').value)   || currentSolar.k;
+  const a   = parseFloat($('a-in').value)   || currentSolar.a;
+  const now = new Date();
+  const dt  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+    isFinite(utcHour) ? utcHour : now.getUTCHours(), 0, 0));
+  // Use a fictitious 3000 km east-heading RX point as proxy for "typical DX path"
+  const rxLat = currentMyLatLon.lat;
+  const rxLon = ((currentMyLatLon.lon + 27) + 540) % 360 - 180; // ~3000 km east
+  const f = forecast(currentMyLatLon.lat, currentMyLatLon.lon, rxLat, rxLon, dt, sfi, k, a);
+  f._standalone = true;
+  renderPath(f);
+  renderBandTable(f);
+  renderChart24();
+  updateVoacapLinks();
+}
+
+function clearOutputs() {
+  ['path-dist','path-bearing','path-mid','path-zen','path-muf','path-luf'].forEach(id => $(id).textContent = '—');
+  $('band-tbody').innerHTML = '';
+  $('chart24').innerHTML = '';
+}
+
+function renderPath(f) {
+  if (f._standalone) {
+    $('path-dist').textContent = 'standalone (no target)';
+    $('path-bearing').textContent = '—';
+  } else {
+    const mi = Math.round(f.dist_km * 0.621371);
+    $('path-dist').textContent = Math.round(f.dist_km) + ' km / ' + mi + ' mi';
+    $('path-bearing').textContent = Math.round(f.bearing) + '°';
+  }
+  $('path-mid').textContent = f.mid_lat.toFixed(1) + '°, ' + f.mid_lon.toFixed(1) + '°';
+  $('path-zen').textContent = f.zen_deg.toFixed(0) + '° (' + (f.zen_deg > 90 ? 'night' : 'day') + ')';
+  $('path-muf').textContent = f.MUF.toFixed(1) + ' MHz';
+  $('path-luf').textContent = f.LUF.toFixed(1) + ' MHz';
+}
+
+function renderBandTable(f) {
+  const tb = $('band-tbody');
+  tb.innerHTML = '';
+  f.bands.forEach(b => {
+    const tr = document.createElement('tr');
+    const rel = b.rel;
+    const col = relFillColor(rel);
+    const snrCls = 'snr-' + b.snr;
+    const statusIco = rel >= 50 ? '🟢' : rel >= 25 ? '🟡' : '🔴';
+    const statusTxt = rel >= 75 ? 'open' : rel >= 50 ? 'open' : rel >= 25 ? 'marginal' : rel >= 10 ? 'poor' : 'closed';
+    tr.innerHTML =
+      '<td class="band-name">' + b.name + '</td>' +
+      '<td>' + b.freq.toFixed(3) + ' MHz</td>' +
+      '<td><div class="relbar"><div class="fill" style="width:' + rel + '%;background:' + col + ';"></div></div></td>' +
+      '<td><span class="' + snrCls + '">' + rel + '% · ' + (b.snr_db >= 0 ? '+' : '') + b.snr_db + ' dB · ' + b.snr + '</span></td>' +
+      '<td>' + statusIco + ' ' + statusTxt + '</td>';
+    tb.appendChild(tr);
+  });
+}
+
+function renderChart24() {
+  if (!currentMyLatLon) return;
+  const sfi = parseFloat($('sfi-in').value) || currentSolar.sfi;
+  const k   = parseFloat($('k-in').value)   || currentSolar.k;
+  const a   = parseFloat($('a-in').value)   || currentSolar.a;
+  const now = new Date();
+  const nowHour = now.getUTCHours();
+  const tbl = $('chart24');
+  tbl.innerHTML = '';
+  // Header row (hours)
+  let html = '<tr><th></th>';
+  for (let h = 0; h < 24; h++) {
+    html += '<th' + (h === nowHour ? ' class="now-col" style="color:var(--gold)"' : '') + '>' + String(h).padStart(2,'0') + '</th>';
+  }
+  html += '</tr>';
+  // Target for each hour
+  const rxLat = currentTargetLatLon ? currentTargetLatLon.lat : currentMyLatLon.lat;
+  const rxLon = currentTargetLatLon ? currentTargetLatLon.lon : ((currentMyLatLon.lon + 27 + 540) % 360 - 180);
+  // Rows: one per band
+  BANDS.forEach(band => {
+    html += '<tr><td class="band-label">' + band.name + '</td>';
+    for (let h = 0; h < 24; h++) {
+      const dt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, 0, 0));
+      const f = forecast(currentMyLatLon.lat, currentMyLatLon.lon, rxLat, rxLon, dt, sfi, k, a);
+      const b = f.bands.find(x => x.name === band.name);
+      const col = relColor(b.rel);
+      const title = band.name + ' @ ' + String(h).padStart(2,'0') + ':00Z: ' + b.rel + '% (' + b.snr + ')';
+      html += '<td class="cell' + (h === nowHour ? ' now-col' : '') + '" style="background:' + col + ';" title="' + title + '"></td>';
+    }
+    html += '</tr>';
+  });
+  tbl.innerHTML = html;
+}
+
+// Build the voacap.com deep-link URL with our parameters
+function updateVoacapLinks() {
+  if (!currentMyLatLon) return;
+  // voacap.com's point-to-point predictor accepts lat/lon + SSN + month + hour via its UI.
+  // There's no stable documented API, so we just send the user to the main hf/ page with
+  // our path as hash parameters — they can manually fine-tune from there.
+  const myGrid  = $('my-grid').value.trim();
+  const tgt     = $('target-input').value.trim();
+  const sfi     = parseFloat($('sfi-in').value) || currentSolar.sfi;
+  const url = 'https://www.voacap.com/hf/?tx=' + encodeURIComponent(myGrid)
+            + (tgt ? '&rx=' + encodeURIComponent(tgt) : '')
+            + '&sfi=' + Math.round(sfi);
+  $('voacap-link-top').href = url;
+  $('voacap-link-bottom').href = url;
+}
+
+// Master refresh entry
+async function refreshAll(forceSolar) {
+  if (forceSolar) await fetchSolar(true);
+  render();
+}
+
+// Initial setup
+async function init() {
+  const qs = new URLSearchParams(window.location.search);
+  const callParam = qs.get('call');
+  const gridParam = qs.get('grid');
+  await fetchMyGrid();
+  await fetchSolar();
+  const now = new Date();
+  $('utc-hour').value = now.getUTCHours();
+  $('utc-now-hint').textContent = 'now: ' + String(now.getUTCHours()).padStart(2,'0') + ':00Z';
+  // Wire input listeners
+  $('my-grid').addEventListener('change', () => render());
+  $('my-grid').addEventListener('blur', () => render());
+  $('target-input').addEventListener('change', resolveTarget);
+  $('target-input').addEventListener('blur', resolveTarget);
+  $('target-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === 'Tab') resolveTarget();
+  });
+  ['utc-hour','sfi-in','k-in','a-in'].forEach(id => {
+    $(id).addEventListener('input', () => render());
+    $(id).addEventListener('change', () => render());
+  });
+  // Pre-fill target from URL
+  if (callParam) {
+    setTgtMode('call');
+    $('target-input').value = callParam.toUpperCase();
+    await resolveTarget();
+  } else if (gridParam) {
+    setTgtMode('grid');
+    $('target-input').value = gridParam.toUpperCase();
+    await resolveTarget();
+  } else {
+    render();
+  }
+  // Auto-refresh solar data every 5 min
+  setInterval(() => fetchSolar(false), 5*60*1000);
+  // Re-render every minute so the "now" column and UTC-hour default track time
+  setInterval(() => {
+    $('utc-now-hint').textContent = 'now: ' + String(new Date().getUTCHours()).padStart(2,'0') + ':00Z';
+    renderChart24();
+  }, 60*1000);
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+
+</body>
+</html>
