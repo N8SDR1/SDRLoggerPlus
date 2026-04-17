@@ -4,7 +4,7 @@
   # SDR**Logger+**
   ### Ham Radio SDR Logbook — Built by Hams, for Hams
 
-  ![Version](https://img.shields.io/badge/version-1.06-00e5ff?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-1.07-00e5ff?style=flat-square)
   ![Platform](https://img.shields.io/badge/platform-Windows-39ff14?style=flat-square)
   ![License](https://img.shields.io/badge/license-MIT-00e5ff?style=flat-square)
   ![Status](https://img.shields.io/badge/status-Release-39ff14?style=flat-square)
@@ -21,15 +21,33 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ---
 
-## 🆕 What's New in v1.06
+## 🆕 What's New in v1.07
 
-> **SAT Performance & Polish** (pre-release) — building on v1.05's Satellite + Awards Update.
+> **Propagation Forecast** — new in-app HF propagation predictor, plus everything from v1.06.1.
 
-- ⚡ **Faster SAT QSO Push** — new /adif background poller bypasses firmware UDP delay; QSOs typically appear in &lt;3 seconds
-- 🛰 **Mode-Gated SAT Listeners** — UDP ports 1100/9932 are only opened while in 🛰 SAT mode; freed when in General/POTA
-- 🧹 **Smart SAT Dedup** — duplicate QSOs from multi-path arrivals (UDP push + /adif poll) now prevented automatically; new 🧹 Dedupe button cleans up legacy duplicates
-- ⚡ **Performance Fix** — replaced full table scan with in-memory dedup index (eliminates 5-7s lag on large databases)
-- 🔧 **Launcher Fix** — SAT listener threads now correctly start in installed builds (v1.05 silently failed to bind UDP ports)
+- 📡 **VOACAP Propagation Chip** — inline chip in the QSO entry panel's Entity info line. Click to open a full-page propagation forecast popup for the current callsign (auto-resolves grid via QRZ/HamQTH). Hidden automatically in 🛰 SAT mode.
+- 📊 **Band-by-Band Forecast** — per-path reliability % and estimated SNR (dB) for every ham band from 160 m to 6 m, with a 24-hour UTC chart showing predicted openings across the day.
+- 🔬 **Real Link-Budget Math** — EIRP from your TX power + antenna gain, per-hop free-space + ionospheric loss, CCIR Rec P.372 atmospheric / man-made noise model by environment, K-index penalty, auroral absorption on polar paths, summer sporadic E boost, optional long-path mode.
+- ⚙ **Propagation Settings Tab** — TX power (W), TX / RX antenna gain (dBi), noise environment (quiet → city), sporadic-E enable, long-path toggle, chip on/off. All math runs client-side in the popup — **no impact on TCI / SAT / cluster / solar pollers.**
+- 🔗 **Returns to voacap.com** — self-labeled as SDRLogger+'s own simplified estimate; big CTA links out to voacap.com for authoritative predictions with the real ITS Fortran engine.
+- ← **Return to SDRLogger+** button in popup header — closes the forecast and re-focuses the main window (no new tab spawned).
+
+### v1.06.1 features (rolled forward)
+
+- 🛰 **Satellite Map Panel** — full-globe Blue Marble map that auto-swaps in for the Distance Map when you enter SAT mode. Live yellow-diamond sub-point, footprint coverage circle, beam line, and ~3-orbit SGP4 ground track propagated from Celestrak TLEs
+- 🧭 **Per-Mode Dock Layouts** — General, POTA, and SAT each remember their own panel arrangement independently
+- 🎨 **Panadapter Spot Coloring** — category-based colors (Needed Entity / New Band / New Mode / Standard / Hot List), all five configurable
+- 🎨 **Mode Toggle Bump** — bigger, more legible General / POTA / SAT toggle with a 📓 notepad icon on General
+- 🔧 **QRZ Button Behavior** — radio choice: in-app popup or open QRZ.com in a browser tab
+- 🔧 **Spothole "All sources" fix** — no longer silently reverts to "DX Cluster only" on save
+
+### v1.06 features
+
+- ⚡ Faster SAT QSO Push — /adif background poller bypasses firmware UDP delay (<3s arrival)
+- 🛰 Mode-Gated SAT Listeners — UDP ports 1100/9932 only opened while in 🛰 SAT mode
+- 🧹 Smart SAT Dedup + 🧹 Dedupe button for legacy cleanup
+- ⚡ In-memory dedup index (eliminates 5-7s lag on large databases)
+- 🔧 Launcher Fix — SAT listener threads now correctly start in installed builds
 
 ### v1.05 features
 
@@ -81,7 +99,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ## 📥 Download
 
-> **[⬇ Download SDRLoggerPlus-Setup-1.06.exe](https://github.com/N8SDR1/SDRLoggerPlus/releases/latest)**
+> **[⬇ Download SDRLoggerPlus-Setup-1.07.exe](https://github.com/N8SDR1/SDRLoggerPlus/releases/latest)**
 >
 > Windows · Free · No subscription · No cloud
 
@@ -94,7 +112,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ## 🚀 Quick Start
 
-1. Download and run `SDRLoggerPlus-Setup-1.06.exe`
+1. Download and run `SDRLoggerPlus-Setup-1.07.exe`
 2. Accept defaults — installs to `C:\SDRLoggerPlus`
 3. SDRLogger+ launches automatically and opens your browser to `http://127.0.0.1:5000`
 4. Go to **Settings** and enter your callsign, QRZ credentials, and TCI/HamLib connection details
@@ -175,6 +193,6 @@ With development assistance by **Claude AI** (Anthropic)
 ---
 
 <div align="center">
-  <sub>SDRLogger+ v1.06 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
+  <sub>SDRLogger+ v1.07 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
   <sub>73 de N8SDR — good DX and happy logging!</sub>
 </div>

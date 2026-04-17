@@ -168,7 +168,7 @@ WEB_HOST = _srv_cfg.get("web_host", "0.0.0.0")
 QRZ_USER = ""                                 # QRZ.com username (your callsign)
 QRZ_PASS = ""                                 # QRZ.com password
 QRZ_LOGBOOK_KEY = ""                          # Logbook API key — qrz.com/hamlogbook (My Logbook → Settings → API Key)
-QRZ_LOGBOOK_UPLOAD_ENABLED = True             # Auto-upload QSOs to QRZ Logbook (toggleable from Settings)
+QRZ_LOGBOOK_UPLOAD_ENABLED = False            # Auto-upload QSOs to QRZ Logbook (off by default — opt-in via Settings)
 QRZ_LOOKUP_ENABLED = True
 
 HAMQTH_USER = ""                              # HamQTH.com username (free callsign lookup)
@@ -201,7 +201,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.06"
+VERSION  = "1.07"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -340,7 +340,7 @@ tci_send_lock   = threading.Lock()
 
 # Spot registry: freq_hz → callsign — lets VFO changes identify clicked spots
 # when Thetis doesn't fire spot_activated (most firmware versions don't)
-tci_spot_registry      = {}   # {freq_hz: callsign}
+tci_spot_registry      = {}   # {freq_hz: callsign} — lookup for VFO-click detection
 tci_spot_registry_lock = threading.Lock()
 
 # Digital app event queue — browser polls /api/digital_events to get auto-logged QSOs
@@ -524,7 +524,7 @@ def flrig_set_freq_mode(freq_mhz, mode=""):
             mode_up = mode.strip().upper()
             # Audio-passthrough digital modes — apply FLRIG_DIGITAL_MODE override if set
             # RTTY/RTTY-R are native radio modes and bypass this; they go to _FLRIG_MODE_OUT directly
-            _DIGITAL_PASSTHROUGH_USB = {"FT8","FT4","JS8","WSPR","JT65","JT9","DIGI","PSK31","DIGU","DATA-U","PKT-U"}
+            _DIGITAL_PASSTHROUGH_USB = {"FT8","FT4","JS8","WSPR","JT65","JT9","DIGI","PSK31","DIGU","DATA-U","PKT-U","MSK144","Q65","FST4","FST4W","VARAC","OLIVIA","HELL","PACKET","DATA"}
             _DIGITAL_PASSTHROUGH_LSB = {"DIGL","DATA-L","PKT-L"}
             if mode_up in _DIGITAL_PASSTHROUGH_USB:
                 # Use manual override first (e.g. "USB-D" for Icom), then auto-detected, then default
@@ -617,7 +617,9 @@ def hamlib_set_freq_mode(freq_mhz, mode=""):
         "DIGU":"PKTUSB","DIGL":"PKTLSB",
         "FT8":"PKTUSB","FT4":"PKTUSB","JS8":"PKTUSB","WSPR":"PKTUSB",
         "JT65":"PKTUSB","JT9":"PKTUSB","PSK31":"PKTUSB",
+        "MSK144":"PKTUSB","Q65":"PKTUSB","FST4":"PKTUSB","FST4W":"PKTUSB",
         "DIGI":"PKTUSB","DATA":"PKTUSB","VARAC":"PKTUSB",
+        "OLIVIA":"PKTUSB","HELL":"PKTUSB","PACKET":"PKTUSB",
     }
     try:
         if freq_mhz is not None:
@@ -1872,6 +1874,15 @@ def _save_cw_serial():
 def cw_page():
     return render_template("cw.html", version=VERSION)
 
+# ─── Propagation Forecast (VOACAP-style) ────────────────────────────────────
+# Opens as a standalone popup window (like /cw). Accepts optional ?call= to
+# pre-fill the target callsign — the QSO entry panel's 📡 VOACAP button
+# passes the currently-looked-up callsign here. Without ?call= the page is
+# a standalone planning tool: any grid/callsign in, band-by-band forecast out.
+@app.route("/propagation")
+def propagation_page():
+    return render_template("propagation.html", version=VERSION)
+
 @app.route("/api/cw_send", methods=["POST"])
 def api_cw_send():
     global _cw_wpm
@@ -2992,7 +3003,7 @@ def flrig_tune():
         try:
             srv = _flrig_server()
             mode_up = mode.strip().upper()
-            _DIGITAL_PASSTHROUGH_USB = {"FT8","FT4","JS8","WSPR","JT65","JT9","DIGI","PSK31","DIGU","DATA-U","PKT-U"}
+            _DIGITAL_PASSTHROUGH_USB = {"FT8","FT4","JS8","WSPR","JT65","JT9","DIGI","PSK31","DIGU","DATA-U","PKT-U","MSK144","Q65","FST4","FST4W","VARAC","OLIVIA","HELL","PACKET","DATA"}
             _DIGITAL_PASSTHROUGH_LSB = {"DIGL","DATA-L","PKT-L"}
             if mode_up in _DIGITAL_PASSTHROUGH_USB:
                 flrig_mode = FLRIG_DIGITAL_MODE if FLRIG_DIGITAL_MODE else latest_flrig.get("digital_usb", "DATA-U")
@@ -3174,8 +3185,10 @@ def tci_tune():
             "SSB":  "USB",
             "CW":   "CWU",
             "FT8":  "DIGU", "FT4":  "DIGU", "JS8":  "DIGU",
+            "MSK144":"DIGU", "Q65": "DIGU", "FST4":"DIGU", "FST4W":"DIGU",
             "WSPR": "DIGU", "JT65": "DIGU", "JT9":  "DIGU",
             "PSK31":"DIGU", "DIGI": "DIGU", "DATA": "DIGU", "VARAC":"DIGU",
+            "OLIVIA":"DIGU","HELL":"DIGU", "PACKET":"DIGU",
             "RTTY": "DIGU", "RTTY-R":"DIGL", "RTTYR":"DIGL",
         }
         tci_mode = _TCI_MODE_MAP.get(mode, mode)
@@ -4568,15 +4581,26 @@ def api_worked_before_batch():
             band_modes = _worked_entities.get(entity, set())
             # Check if this CQ zone has been worked at all
             zone_worked = len(_worked_zones.get(cq, set())) > 0 if cq else True
+            # For finer-grained splitting (panadapter category coloring):
+            # new_band_for_entity → this entity has never been worked on this band (any mode)
+            # new_mode_for_entity → this entity has never been worked on this mode (any band)
+            worked_bands_for_entity = {b for (b, _m) in band_modes}
+            worked_modes_for_entity = {m for (_b, m) in band_modes}
+            new_band_for_entity = bool(band) and band not in worked_bands_for_entity
+            new_mode_for_entity = bool(mode) and mode not in worked_modes_for_entity
             if not band_modes:
                 results[call] = {"entity": entity, "cont": info.get("cont", ""),
-                                 "status": "new_entity", "needs_zone": not zone_worked, "cq": cq}
+                                 "status": "new_entity", "needs_zone": not zone_worked, "cq": cq,
+                                 "new_band_for_entity": True, "new_mode_for_entity": True}
             elif band and mode and (band, mode) not in band_modes:
                 results[call] = {"entity": entity, "cont": info.get("cont", ""),
-                                 "status": "new_band_mode", "needs_zone": not zone_worked, "cq": cq}
+                                 "status": "new_band_mode", "needs_zone": not zone_worked, "cq": cq,
+                                 "new_band_for_entity": new_band_for_entity,
+                                 "new_mode_for_entity": new_mode_for_entity}
             else:
                 results[call] = {"entity": entity, "cont": info.get("cont", ""),
-                                 "status": "worked", "needs_zone": not zone_worked, "cq": cq}
+                                 "status": "worked", "needs_zone": not zone_worked, "cq": cq,
+                                 "new_band_for_entity": False, "new_mode_for_entity": False}
     return jsonify({"results": results})
 
 
@@ -5640,6 +5664,59 @@ def _sat_process_adif_record(text):
 # ─── SAT Status API ──────────────────────────────────────────────────────────
 _sat_track_cache = {"data": None, "ts": 0}  # cache /track responses briefly
 
+
+def _sat_subpoint_from_look(lat_deg, lon_deg, az_deg, el_deg, rng_km):
+    """Compute sub-satellite geodetic (lat, lon, alt_km) from station look-angle + range.
+
+    Uses a spherical Earth (R=6371 km) — accurate to <0.3% for LEO altitudes,
+    which is plenty for a panel map display.
+
+    Math:
+      1. Station → ECEF unit vector S.
+      2. Local ENU unit vectors at station.
+      3. Look vector in ENU = (cos E sin A, cos E cos A, sin E).
+      4. Satellite ECEF = station_ECEF + rng * (ENU→ECEF * look_ENU).
+      5. Convert sat ECEF → geodetic lat/lon/alt.
+    """
+    try:
+        from math import sin, cos, asin, atan2, sqrt, radians, degrees
+        R = 6371.0  # Earth mean radius, km
+        if lat_deg in (None, "") or lon_deg in (None, "") or rng_km in (None, 0):
+            return None
+        lat_deg = float(lat_deg); lon_deg = float(lon_deg)
+        az = radians(float(az_deg or 0))
+        el = radians(float(el_deg or 0))
+        rng = float(rng_km)
+        lat = radians(lat_deg); lon = radians(lon_deg)
+
+        # Station ECEF (spherical)
+        sx = R * cos(lat) * cos(lon)
+        sy = R * cos(lat) * sin(lon)
+        sz = R * sin(lat)
+
+        # ENU components of look vector (azimuth clockwise from north)
+        e = cos(el) * sin(az)
+        n = cos(el) * cos(az)
+        u = sin(el)
+
+        # ENU → ECEF rotation
+        ex = -sin(lon)*e - sin(lat)*cos(lon)*n + cos(lat)*cos(lon)*u
+        ey =  cos(lon)*e - sin(lat)*sin(lon)*n + cos(lat)*sin(lon)*u
+        ez =  cos(lat)*n + sin(lat)*u
+
+        # Satellite ECEF
+        satx = sx + rng * ex
+        saty = sy + rng * ey
+        satz = sz + rng * ez
+
+        r_sat = sqrt(satx*satx + saty*saty + satz*satz)
+        sat_lat = degrees(asin(satz / r_sat))
+        sat_lon = degrees(atan2(saty, satx))
+        sat_alt = r_sat - R
+        return {"lat": round(sat_lat, 4), "lon": round(sat_lon, 4), "alt_km": round(sat_alt, 1)}
+    except Exception:
+        return None
+
 def _sat_poll_track():
     """Poll the S.A.T. /track endpoint for live tracking data."""
     import time as _t
@@ -5736,6 +5813,43 @@ def api_sat_status():
         state["my_lon"] = track.get("gpslon", track.get("lon", ""))
         state["gps_lock"] = bool(track.get("gpslock", 0))
         state["gps_sats"] = track.get("gpssats", 0)
+        # Sub-satellite point for the map panel. The CSN S.A.T. firmware exposes
+        # satLat / satLon as RADIANS, satAlt + satFootprint in km. Prefer those.
+        # Fallback: compute from station + look-angle + range.
+        from math import degrees as _deg
+        raw_lat = track.get("satLat", track.get("satlat"))
+        raw_lon = track.get("satLon", track.get("satlon"))
+        sat_alt = track.get("satAlt", track.get("satalt"))
+        sat_foot = track.get("satFootprint")
+        sat_lat = sat_lon = None
+        if raw_lat is not None and raw_lon is not None:
+            try:
+                # Heuristic: values in radians are bounded by |π|. If |val| ≤ π we
+                # treat as radians (the CSN firmware's convention).
+                rlat = float(raw_lat); rlon = float(raw_lon)
+                if abs(rlat) <= 3.2 and abs(rlon) <= 3.2:
+                    sat_lat = round(_deg(rlat), 4)
+                    sat_lon = round(_deg(rlon), 4)
+                else:
+                    sat_lat = round(rlat, 4)
+                    sat_lon = round(rlon, 4)
+            except Exception:
+                pass
+        if sat_lat is None or sat_lon is None:
+            sub = _sat_subpoint_from_look(
+                state.get("my_lat"), state.get("my_lon"),
+                state.get("sat_az"), state.get("sat_el"), state.get("range_km"),
+            )
+            if sub:
+                sat_lat, sat_lon = sub["lat"], sub["lon"]
+                if sat_alt is None: sat_alt = sub["alt_km"]
+        if sat_lat is not None and sat_lon is not None:
+            state["sat_lat"] = sat_lat
+            state["sat_lon"] = sat_lon
+            state["sat_alt_km"] = round(float(sat_alt), 1) if sat_alt is not None else None
+            if sat_foot is not None:
+                try: state["sat_footprint_km"] = round(float(sat_foot), 1)
+                except Exception: pass
         # Active transponders with Doppler
         freqs = track.get("freq", [])
         state["transponders"] = []
@@ -5782,6 +5896,86 @@ def api_sat_status():
     # Recent events
     state["events"] = list(_sat_events)[-10:]
     return jsonify(state)
+
+
+# ─── SAT TLE Feed (Celestrak amateur.txt, cached) ───────────────────────────
+# The ground-track overlay on the sat map uses SGP4 propagation (client-side
+# via satellite.js). TLEs come from Celestrak's amateur.txt. We cache the whole
+# feed in-memory with a 6-hour TTL so we don't hammer their server when the
+# user switches satellites.
+_TLE_CACHE = {"fetched_at": 0.0, "lines": [], "by_name": {}}
+_TLE_TTL_SECONDS = 6 * 3600
+_TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=tle"
+
+def _tle_normalize_name(name):
+    """Match sat names loosely: uppercase, strip punctuation/whitespace.
+    Celestrak uses 'ISS (ZARYA)', S.A.T. says 'ISS'. Also 'RS-44' vs 'RS44' etc."""
+    if not name: return ""
+    s = str(name).upper()
+    # strip parenthesised aliases
+    s = _re.sub(r"\(.*?\)", "", s)
+    s = _re.sub(r"[^A-Z0-9]", "", s)
+    return s.strip()
+
+def _tle_refresh(force=False):
+    """Fetch amateur.txt if cache is stale. Populates _TLE_CACHE['by_name']."""
+    now = _time.time()
+    if not force and (now - _TLE_CACHE["fetched_at"] < _TLE_TTL_SECONDS) and _TLE_CACHE["by_name"]:
+        return True
+    try:
+        resp = requests.get(_TLE_URL, timeout=10)
+        if resp.status_code != 200 or not resp.text:
+            return False
+        lines = [ln.rstrip("\r\n") for ln in resp.text.splitlines() if ln.strip()]
+        by_name = {}
+        i = 0
+        while i + 2 < len(lines):
+            name = lines[i].strip()
+            l1 = lines[i+1]
+            l2 = lines[i+2]
+            if l1.startswith("1 ") and l2.startswith("2 "):
+                by_name[_tle_normalize_name(name)] = {"name": name, "line1": l1, "line2": l2}
+                i += 3
+            else:
+                i += 1
+        if by_name:
+            _TLE_CACHE["fetched_at"] = now
+            _TLE_CACHE["lines"] = lines
+            _TLE_CACHE["by_name"] = by_name
+            return True
+    except Exception as e:
+        print(f"[TLE] fetch error: {e}")
+    return False
+
+@app.route("/api/sat/tle")
+def api_sat_tle():
+    """Return TLE lines for the requested satellite name (query param: sat).
+    Cached in-memory for ~6h. Returns {ok, name, line1, line2} on success,
+    {ok:false, error} on miss."""
+    sat_name = (request.args.get("sat") or "").strip()
+    if not sat_name:
+        return jsonify({"ok": False, "error": "missing sat parameter"}), 400
+    if not _tle_refresh():
+        # Still try to use any cached data if the fetch failed
+        if not _TLE_CACHE["by_name"]:
+            return jsonify({"ok": False, "error": "tle feed unavailable"}), 502
+    key = _tle_normalize_name(sat_name)
+    rec = _TLE_CACHE["by_name"].get(key)
+    # Fallback: contains-match (for names like "HADES-SA" vs "HADES SA (SO-121)")
+    if not rec:
+        for k, v in _TLE_CACHE["by_name"].items():
+            if key and (key in k or k in key):
+                rec = v
+                break
+    if not rec:
+        return jsonify({"ok": False, "error": f"'{sat_name}' not in amateur.txt"}), 404
+    return jsonify({
+        "ok": True,
+        "name": rec["name"],
+        "line1": rec["line1"],
+        "line2": rec["line2"],
+        "cache_age_s": int(_time.time() - _TLE_CACHE["fetched_at"]),
+    })
 
 
 # ─── SAT QSO Counter (fast polling endpoint for new-QSO detection) ──────────

@@ -1,6 +1,177 @@
 SDRLogger+ — Change Log
 =======================
 
+v1.07  (2026-04-17)
+------------------------------------------
+Propagation-forecast release: new in-app HF propagation predictor with
+dedicated popup page, Settings tab, CCIR P.372 noise + link-budget SNR
+math, and a 📡 VOACAP chip right next to the callsign in the QSO panel.
+All v1.06.1 features (satellite map, per-mode dock layouts, mode-toggle
+visibility bump, panadapter spot coloring) are rolled forward unchanged.
+
+  ── 📡 PROPAGATION FORECAST (NEW) ─────────────────────────────────────────
+- New: **📡 VOACAP chip** inline in the QSO entry panel's Entity info
+  line — click to open a dedicated propagation-forecast popup for the
+  current callsign (pulls the grid via QRZ/HamQTH). Chip is
+  mode-aware: hidden in 🛰 SAT mode (HF prediction doesn't apply to
+  LOS satellite passes) and honors a Settings toggle.
+- New: `/propagation` route — self-contained popup page (opens in a
+  window like /cw does, sized 1560×1120). Self-labels predictions as
+  SDRLogger+'s own simplified forecast and links prominently to
+  voacap.com for authoritative runs.
+- New: Per-path forecast math (all client-side — cannot affect TCI /
+  SAT / cluster / solar pollers):
+    • Maidenhead grid → lat/lon, great-circle distance/bearing/midpoint
+    • Solar zenith at midpoint (full JD / declination / GMST / hour-angle)
+    • foF2 day/night diurnal model scaled from SSN (SFI → SSN Kestrel
+      conversion)
+    • M-factor (MUF/foF2) that grows with path length, LUF with D-layer
+      absorption plus K-index degradation
+    • Per-band Gaussian reliability curve around 0.85·MUF with steep MUF
+      cutoff and LUF absorption floor
+    • K-index global geomagnetic penalty curve (1.0 at K≤2 down to 0.25
+      at K≥7)
+    • **CCIR Rec P.372** atmospheric / man-made noise model by
+      environment (quiet / rural / residential / industrial / city) with
+      proper f^-0.27-style frequency scaling in 2.5 kHz SSB bandwidth
+    • **Link-budget SNR** estimate in dB per band — EIRP = 30 + 10·log(P)
+      + G_tx, per-hop free-space loss, ionospheric absorption scaled
+      with hops / freq vs LUF / K, minus CCIR noise floor
+    • **Auroral absorption** — paths crossing |lat| > 60° with K≥4 take
+      up to ~85 % additional reliability hit
+    • **Sporadic E** — summer-hemisphere boost on 24/28/50 MHz for
+      short paths (400–2300 km), deterministic-per-UTC-hour so the
+      24-hour chart doesn't flicker
+    • **Long-path** toggle — flips to 40,075 − d and antipodal midpoint
+- New: 📡 Propagation Settings tab — TX power (W), TX / RX antenna
+  gain (dBi), noise environment, sporadic-E enable, long-path toggle,
+  VOACAP-chip on/off. Changes apply live on next forecast render.
+- New: **24-hour band-reliability chart** — UTC columns with the
+  current hour highlighted in gold; color-coded cells from "closed"
+  to "excellent" per band.
+- Large, readable popup: 16px base / 20px title / bumped input +
+  label contrast (#b8ccde / #9fb3c4 on dark) so fine print reads
+  clearly at arm's length. "← Return to SDRLogger+" button in the
+  header closes the popup and re-focuses the main window — no new
+  tab / window spawned.
+
+  ── 🛠 OTHER ──────────────────────────────────────────────────────────────
+- All v1.06.1 features (satellite map panel, per-mode dock layouts,
+  mode toggle visibility bump, panadapter spot coloring, QRZ button
+  behavior, spothole all-sources fix, header/SAT cosmetics) roll
+  forward unchanged. See v1.06.1 entry below for details.
+
+
+v1.06.1  (2026-04-17)
+------------------------------------------
+Hotfix on top of v1.06 — UI fixes folded in, plus major SAT-mode additions
+(satellite map panel with live ground track) and per-mode dock layouts.
+
+  ── 🛰 SATELLITE MAP PANEL (NEW, SAT MODE ONLY) ────────────────────────────
+- New: Dedicated **🛰 Satellite Map** dock panel that swaps in for the
+  Distance Map automatically when you enter SAT mode (and swaps back on
+  switch to General / POTA). No manual panel juggling.
+- New: Full-globe plate carrée (equirectangular) projection rendered on
+  NASA EOSDIS GIBS Blue Marble Next Generation imagery. No API key, free
+  natural-earth tileset.
+- New: Live satellite sub-point (yellow diamond icon, drop-shadowed),
+  footprint coverage circle (yellow, semi-transparent fill), beam-heading
+  dashed line from your station to the sub-point, and station marker
+  (cyan dot) sourced from either saved grid or live S.A.T. GPS fix.
+- New: **Ground track overlay** — ~3 forward orbits + ~90 min trailing
+  track, propagated client-side via SGP4 (satellite.js). Cyan dashed
+  polyline with UTC timestamp labels at both ends. Rendered in a lower
+  Leaflet pane so the footprint, beam line, and sat icon always sit
+  cleanly on top. Antimeridian wraps split the polyline automatically.
+- New: Backend `/api/sat/tle?sat=<name>` endpoint — pulls Celestrak's
+  `amateur.txt` feed, caches it in-memory for 6 hours, fuzzy-matches the
+  requested satellite name (e.g. `ISS` → `ISS (ZARYA)`, `RS-44` →
+  `RS-44 & BREEZE-KM R/B`). Graceful fallback: if a satellite isn't in
+  the feed, the ground track skips and the rest of the map still works.
+- New: Backend `/api/sat/status` enriched with sub-satellite point data
+  — `sat_lat`, `sat_lon`, `sat_alt_km`, `sat_footprint_km`. Handles the
+  CSN S.A.T. firmware's radians-vs-degrees convention (values ≤ ~π are
+  auto-converted from radians to degrees) and its diameter-vs-radius
+  footprint convention (halved in the frontend).
+
+  ── 🧭 PER-MODE DOCK LAYOUTS (NEW) ─────────────────────────────────────────
+- New: Dock panel arrangements (columns, order, collapsed state, heights)
+  are now saved **independently for each operating mode** — General,
+  POTA, and SAT each have their own layout. Drag the Sat Map to col 2 in
+  SAT mode, flip to General, and your General arrangement snaps back
+  untouched.
+- Migration: Existing single-layout users are transparently upgraded —
+  the old `_dock` storage is cloned into all three mode slots on first
+  launch so nobody loses their arrangement.
+- Note: SAT mode is intentionally NOT auto-restored across page reloads
+  (consistent with the "only talk to the S.A.T. while actively in SAT
+  mode" design). General / POTA pre-seed on first paint so you boot
+  straight into the correct layout.
+
+  ── 🎨 MODE TOGGLE VISIBILITY BUMP ─────────────────────────────────────────
+- Cosmetic: The General / POTA / SAT mode toggle in the QSO panel header
+  is bigger and more legible — font bumped from 9px to 12px, padding
+  from 2px/8px to 4px/12px. It's one of the most-used controls in the
+  app; it now reads as a proper target instead of a sidebar afterthought.
+- Cosmetic: General mode gets a 📓 notepad icon for visual parity with
+  🏕 POTA and 🛰 SAT. Toggle now reads: 📓 General / 🏕 POTA / 🛰 SAT.
+
+  ── 🎨 PANADAPTER SPOT COLORING ────────────────────────────────────────────
+- New: Category-based coloring for spots pushed to Thetis via TCI. Choose
+  between "Single color" (legacy behavior) or "Color by category" in
+  Settings → Display → Panadapter Spot Coloring. Categories:
+    • Needed Entity  (default #ff3344 red)   — never worked this DXCC entity
+    • New Band       (default #ffd700 gold)  — entity worked, but not on this band
+    • New Mode       (default #ff8c00 orange)— entity worked on this band, new mode
+    • Standard       (default #00e5ff cyan)  — already worked this band+mode
+    • Hot List       (default #ff1744 red)   — call appears on your Hot List
+  All five colors are user-configurable via HTML5 color pickers, plus a
+  "Reset to defaults" button. Single-color dropdown is aligned with the
+  category pickers so all color choices sit inline.
+- New: Hot List override — any spot whose callsign is on your Hot List
+  is always colored with the Hot color regardless of worked-before state.
+- Fix: Canonical cache key (`CALL|BAND|MODE` all uppercase) across both
+  the DX cluster panel and the panadapter push paths. Previously the
+  panadapter path used mixed casing, causing occasional cache misses and
+  wrong colors (often New Mode when the spot should have been New Band).
+- Debug: set `window._panColorDebug = true` in DevTools console to log
+  per-spot color decisions (key, status, new-band/new-mode flags).
+- Note: panadapter lifecycle (how long a spot stays visible on Thetis's
+  panadapter) is unchanged — Thetis manages that on its own, matching
+  pre-feature behavior. No filtering, auto-clear, or repush logic was
+  added.
+
+  ── 🎨 HEADER & SAT MODE COSMETICS ─────────────────────────────────────────
+- Cosmetic: Removed redundant "SDR Logbook" label from the header banner
+  (the app is already titled SDRLogger+). Header now shows just your
+  callsign, with extra spacing before the Lightning / Update banners.
+- Cosmetic: In 🛰 SAT mode, the azimuth-only Rotator Control panel is now
+  auto-hidden. Satellite tracking uses its own AZ/EL rotator via the
+  S.A.T. controller, so the dock panel was redundant (and confusing) in
+  satellite mode. Reappears automatically on switch to General or POTA.
+
+  ── 🛠 OTHER FIXES ─────────────────────────────────────────────────────────
+
+- Fix: Spothole "Source Filter" — selecting "All sources" no longer
+  silently reverts to "DX Cluster only" on save. Caused by a JavaScript
+  `||` falsy-empty-string trap (the "All sources" option has value=""),
+  which also made the spothole feed run with the most restrictive filter
+  even when the user thought they had picked "all". Users who reported
+  "hardly any cluster spots" should now see the full feed once the
+  intended source filter is selected.
+- New: QRZ Button Behavior toggle — Settings → Lookup → QRZ Lookup now
+  has a radio choice for what happens when you click the QRZ button on
+  the QSO entry panel:
+    • "Show callsign info popup" (default — current v1.06 behavior)
+    • "Open the callsign's QRZ.com page in a new browser tab"
+  Both modes still auto-fill Name and QTH from QRZ/HamQTH.
+- Fix: Band Activity heatmap (header bar) now refreshes on a 60s timer
+  so old spots decay out of the trailing 30-minute window even when no
+  new spots are arriving. Previously the heatmap only updated when a
+  new spot came in, so a quiet band could leave the cells frozen on
+  stale counts. Tooltip wording also clarified.
+- All v1.06 SAT improvements still apply (see v1.06 entry below).
+
 v1.06  (2026-04-16)
 ------------------------------------------
 SAT performance & polish release. Pre-release for testing alongside v1.05.
