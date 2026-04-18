@@ -201,7 +201,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.07"
+VERSION  = "1.08"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -5807,10 +5807,30 @@ def api_sat_status():
         state["ttaos"] = track.get("ttaos", -1)
         state["los_az"] = f"{track['losAZ']:.1f}" if track.get("losAZ") else ""
         state["aos_az"] = f"{track['aosAZ']:.1f}" if track.get("aosAZ") else ""
-        # GPS info
+        # GPS info — CSN S.A.T. firmware reports gpslat/gpslon in RADIANS (same
+        # convention as satLat/satLon). Apply the same |val| ≤ π heuristic so
+        # the my-position marker on the sat map lands at the right place.
+        # Without this, an Ohio station (~41°N, -83°W → 0.71 rad, -1.45 rad)
+        # ends up plotted near the equator off west Africa.
         state["my_grid"] = track.get("gpsgr", track.get("grid", ""))
-        state["my_lat"] = track.get("gpslat", track.get("lat", ""))
-        state["my_lon"] = track.get("gpslon", track.get("lon", ""))
+        from math import degrees as _deg_my
+        _raw_my_lat = track.get("gpslat", track.get("lat", ""))
+        _raw_my_lon = track.get("gpslon", track.get("lon", ""))
+        try:
+            if _raw_my_lat != "" and _raw_my_lon != "":
+                _ml = float(_raw_my_lat); _mn = float(_raw_my_lon)
+                if abs(_ml) <= 3.2 and abs(_mn) <= 3.2:
+                    state["my_lat"] = round(_deg_my(_ml), 5)
+                    state["my_lon"] = round(_deg_my(_mn), 5)
+                else:
+                    state["my_lat"] = round(_ml, 5)
+                    state["my_lon"] = round(_mn, 5)
+            else:
+                state["my_lat"] = _raw_my_lat
+                state["my_lon"] = _raw_my_lon
+        except Exception:
+            state["my_lat"] = _raw_my_lat
+            state["my_lon"] = _raw_my_lon
         state["gps_lock"] = bool(track.get("gpslock", 0))
         state["gps_sats"] = track.get("gpssats", 0)
         # Sub-satellite point for the map panel. The CSN S.A.T. firmware exposes

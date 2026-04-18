@@ -1,6 +1,92 @@
 SDRLogger+ — Change Log
 =======================
 
+v1.08  (2026-04-17)
+------------------------------------------
+Map upgrade release: new Distance Map style picker for General / POTA
+(Voyager / Positron / Dark Matter), full SAT map projection rewrite for
+pixel-perfect station-marker alignment, smarter footprint sizing that
+mirrors the S.A.T. controller's own MAP panel, and a satellite-name
+label that finally refreshes when you switch birds. Also bundles the
+RBN band-opening alert fix that closes a stale-WebSocket race on
+Settings save. All v1.07 propagation-forecast and v1.06.1 features
+roll forward unchanged.
+
+  ── 🗺 DISTANCE MAP STYLE PICKER (NEW) ────────────────────────────────────
+- New: Settings → 📡 Station & Rig → "Distance Map Style" lets you pick
+  the General / POTA distance-map basemap from three free, no-API-key
+  EPSG:3857 tile sets:
+    • **Voyager** (default) — bright, color borders + city/state labels
+    • **Positron** — very light, minimalist, maximum readability
+    • **Dark Matter** — dark theme to match the SAT map
+- Live hot-swap: pick a style, click Save, the tile layer is replaced
+  in place — no reload, no marker/line/greyline re-init.
+- Dark Matter ships pretty inky out of the box, so when chosen the
+  per-pane CSS filter flips to brightness 1.30 / contrast 1.10 — country
+  borders and labels read cleanly without losing the dark theme. Voyager
+  and Positron keep their existing soft-down filter so they don't
+  overpower the rest of the dark UI.
+- Distance / bearing / great-circle line / DX & skimmer markers / RBN
+  spot placement are all coordinate-based — tile choice is purely
+  cosmetic and never touches the math.
+
+  ── 🛰 SAT MAP ACCURACY PASS ──────────────────────────────────────────────
+- Fix: SAT map station marker was plotted ~10° north of the user's
+  actual grid (Hamilton/OH appearing near the ND/Canada border). Root
+  cause: NASA EOSDIS GIBS Blue Marble (EPSG:4326) tiles + Leaflet's
+  plate-carrée CRS pixel-math combo mis-aligned the marker overlay vs
+  the painted tile imagery. SAT map now renders on standard Web
+  Mercator (EPSG:3857) using CartoDB Dark Matter tiles — pixel-perfect
+  alignment for the marker, the satellite sub-point and the geodesic
+  footprint polygon. Same projection the General/POTA map has always
+  used, so behavior is consistent across all three modes.
+- Fix: SAT map footprint sized too aggressively. Now prefers the CSN
+  controller's own satFootprint value when sane (500–10000 km radius
+  range), so our circle matches the controller's MAP panel exactly.
+  When the controller doesn't report a footprint, we fall back to the
+  geometric formula at the 5° minimum-elevation horizon (instead of
+  the theoretical 0°), giving a more realistic "useful pass" coverage
+  area ~15 % smaller than the old 0°-horizon math. Always rendered as
+  a 96-point geodesic polygon so it warps correctly under Mercator at
+  high latitude.
+- Fix: SAT map satellite-name label (yellow diamond's permanent
+  tooltip) was set once at marker creation and never refreshed — when
+  the tracked bird changed (e.g. AO-07 → CATSAT) the diamond kept
+  showing the previous name until the page was reloaded, even though
+  the banner and log correctly updated. Tooltip content is now
+  refreshed on every state push when the satellite name changes.
+- Fix: SAT map "my position" was plotted near the equator off west
+  Africa for stations everywhere. The CSN S.A.T. firmware reports
+  gpslat / gpslon in RADIANS (same convention as satLat / satLon),
+  but the backend was passing them through as raw numbers — so an
+  Ohio station at 41°N / -83°W (≈ 0.71 rad / -1.45 rad) showed up
+  near 0°N / -1.5°E. Backend now applies the same |val| ≤ π
+  radians-→-degrees heuristic that's used for the satellite
+  sub-point.
+- Fix: SAT map "my position" was still off after the radians fix
+  because the marker was being overridden by the CSN firmware's GPS
+  fields, which are unreliable across passes (sometimes off by
+  hundreds of km). Frontend now ALWAYS prefers the user's typed
+  grid square from Settings; the S.A.T. GPS is used only as a
+  last-resort fallback when no grid is configured. Marker tooltip now
+  also displays the source ("Settings grid" vs "S.A.T. GPS") and the
+  computed lat/lon for at-a-glance verification.
+
+  ── 🛠 OTHER ──────────────────────────────────────────────────────────────
+- Fix: RBN band-opening alerts kept firing for bands the user
+  un-checked in Settings. Two issues, both fixed: (1) the WebSocket
+  `.close()` is async, so the *old* RBN socket could keep delivering
+  spots for several seconds after save with the now-disabled band
+  still in its server-side filter — handlers are now detached
+  immediately on reconnect; (2) `processRbnSpot()` relied entirely on
+  the server-side filter and didn't double-check the spot's band
+  against the user's current band-checkboxes — now reads live
+  settings on every spot and drops anything not in the allowed set.
+- All v1.07 propagation-forecast features (📡 VOACAP chip, /propagation
+  popup page, CCIR P.372 noise model, link-budget SNR, 24-hour band
+  reliability chart) roll forward unchanged. See v1.07 entry below.
+
+
 v1.07  (2026-04-17)
 ------------------------------------------
 Propagation-forecast release: new in-app HF propagation predictor with
@@ -55,7 +141,6 @@ visibility bump, panadapter spot coloring) are rolled forward unchanged.
   header closes the popup and re-focuses the main window — no new
   tab / window spawned.
 
-  ── 🛠 OTHER ──────────────────────────────────────────────────────────────
 - All v1.06.1 features (satellite map panel, per-mode dock layouts,
   mode toggle visibility bump, panadapter spot coloring, QRZ button
   behavior, spothole all-sources fix, header/SAT cosmetics) roll

@@ -4,7 +4,7 @@
   # SDR**Logger+**
   ### Ham Radio SDR Logbook — Built by Hams, for Hams
 
-  ![Version](https://img.shields.io/badge/version-1.07-00e5ff?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-1.08-00e5ff?style=flat-square)
   ![Platform](https://img.shields.io/badge/platform-Windows-39ff14?style=flat-square)
   ![License](https://img.shields.io/badge/license-MIT-00e5ff?style=flat-square)
   ![Status](https://img.shields.io/badge/status-Release-39ff14?style=flat-square)
@@ -21,9 +21,15 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ---
 
-## 🆕 What's New in v1.07
+## 🆕 What's New in v1.08
 
-> **Propagation Forecast** — new in-app HF propagation predictor, plus everything from v1.06.1.
+> **Map Upgrade Release** — Distance Map style picker, full SAT map projection rewrite for pixel-perfect alignment, smarter footprint sizing, plus everything from v1.07's Propagation Forecast and v1.06.1's SAT panel.
+
+- 🗺 **Distance Map Style Picker** — Settings → Station & Rig → choose between **Voyager** (bright color borders, default), **Positron** (very light minimalist), or **Dark Matter** (dark theme with brightness boost) for the General/POTA distance map. Hot-swaps in place — no reload, no impact on distance/bearing/marker math.
+- 🛰 **SAT Map Accuracy Pass** — switched to standard Web Mercator + CartoDB Dark Matter tiles for pixel-perfect station-marker alignment (no more ND drift for Ohio stations), footprint now prefers the controller's own value (matches your S.A.T. controller's MAP panel exactly) with 5°-elevation geodesic-polygon fallback, satellite-name label refreshes when the tracked bird changes (no stale "AO-07" sticking around when you switch to CATSAT), station marker always honors your typed grid square (S.A.T. GPS used only as last-resort fallback), and marker tooltip now shows source + computed lat/lon for at-a-glance verification.
+- 🛰 **RBN Band Filter Fix** — band-opening alerts now respect live Settings checkboxes immediately on save (no more stale-socket spots from a band you just unchecked). WebSocket handlers detached before close to kill the async-close race.
+
+### v1.07 features (rolled forward)
 
 - 📡 **VOACAP Propagation Chip** — inline chip in the QSO entry panel's Entity info line. Click to open a full-page propagation forecast popup for the current callsign (auto-resolves grid via QRZ/HamQTH). Hidden automatically in 🛰 SAT mode.
 - 📊 **Band-by-Band Forecast** — per-path reliability % and estimated SNR (dB) for every ham band from 160 m to 6 m, with a 24-hour UTC chart showing predicted openings across the day.
@@ -34,7 +40,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ### v1.06.1 features (rolled forward)
 
-- 🛰 **Satellite Map Panel** — full-globe Blue Marble map that auto-swaps in for the Distance Map when you enter SAT mode. Live yellow-diamond sub-point, footprint coverage circle, beam line, and ~3-orbit SGP4 ground track propagated from Celestrak TLEs
+- 🛰 **Satellite Map Panel** — full-globe map that auto-swaps in for the Distance Map when you enter SAT mode. Live yellow-diamond sub-point, geodesic footprint coverage polygon, beam line, and ~3-orbit SGP4 ground track propagated from Celestrak TLEs
 - 🧭 **Per-Mode Dock Layouts** — General, POTA, and SAT each remember their own panel arrangement independently
 - 🎨 **Panadapter Spot Coloring** — category-based colors (Needed Entity / New Band / New Mode / Standard / Hot List), all five configurable
 - 🎨 **Mode Toggle Bump** — bigger, more legible General / POTA / SAT toggle with a 📓 notepad icon on General
@@ -99,7 +105,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ## 📥 Download
 
-> **[⬇ Download SDRLoggerPlus-Setup-1.07.exe](https://github.com/N8SDR1/SDRLoggerPlus/releases/latest)**
+> **[⬇ Download SDRLoggerPlus-Setup-1.08.exe](https://github.com/N8SDR1/SDRLoggerPlus/releases/latest)**
 >
 > Windows · Free · No subscription · No cloud
 
@@ -112,7 +118,7 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ## 🚀 Quick Start
 
-1. Download and run `SDRLoggerPlus-Setup-1.07.exe`
+1. Download and run `SDRLoggerPlus-Setup-1.08.exe`
 2. Accept defaults — installs to `C:\SDRLoggerPlus`
 3. SDRLogger+ launches automatically and opens your browser to `http://127.0.0.1:5000`
 4. Go to **Settings** and enter your callsign, QRZ credentials, and TCI/HamLib connection details
@@ -193,6 +199,6 @@ With development assistance by **Claude AI** (Anthropic)
 ---
 
 <div align="center">
-  <sub>SDRLogger+ v1.07 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
+  <sub>SDRLogger+ v1.08 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
   <sub>73 de N8SDR — good DX and happy logging!</sub>
 </div>
