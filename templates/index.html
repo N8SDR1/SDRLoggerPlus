@@ -397,8 +397,13 @@
   .leaflet-control-attribution { background:rgba(10,13,18,.7) !important;
     color:var(--muted) !important; font-size:9px !important; }
   .leaflet-control-attribution a { color:var(--muted) !important; }
-  /* Soften the map tiles slightly */
+  /* Soften the map tiles slightly. The "Voyager" and "Positron" presets ship
+     pretty bright by default, so we tone them down to match the rest of the
+     dark UI. Dark Matter is already inky; instead of darkening it further we
+     bump brightness/contrast a touch so country borders + city labels read
+     cleanly. The body class flips with the user's Settings → Map Style pick. */
   #qso-map .leaflet-tile-pane { filter: brightness(0.78) saturate(0.85); }
+  body.map-style-dark #qso-map .leaflet-tile-pane { filter: brightness(1.30) contrast(1.10); }
   #sat-map .leaflet-tile-pane { filter: none; }
   #sat-map { background:#001a2e !important; }
   #sat-map .leaflet-container { font-family: var(--mono); }
@@ -982,6 +987,16 @@
       <div class="settings-row">
         <div class="settings-field"><label>Operator Name</label><input type="text" id="cfg-opname" placeholder="e.g. John"></div>
         <div class="settings-field"><label>Grid Square</label><input type="text" id="cfg-grid" placeholder="e.g. FN31"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label>Distance Map Style <span style="font-size:9px;color:#8fafc0;font-weight:400;">— used in General &amp; POTA modes</span></label>
+          <select id="cfg-map-style">
+            <option value="voyager">Voyager — bright, color borders &amp; labels (default)</option>
+            <option value="positron">Positron — very light, minimalist</option>
+            <option value="dark">Dark Matter — dark theme to match SAT map</option>
+          </select>
+        </div>
       </div>
     </div>
     <div class="settings-section">
@@ -3690,6 +3705,7 @@ function openVoacap(callsign) {
 
 async function openSettings() {
   const s = loadSettings();
+  document.getElementById('cfg-map-style').value        = s.map_style || 'voyager';
   document.getElementById('cfg-callsign').value         = s.callsign||'';
   document.getElementById('cfg-opname').value           = s.opname||'';
   document.getElementById('cfg-grid').value             = s.grid||'';
@@ -3862,6 +3878,7 @@ async function openSettings() {
 
 async function saveSettings() {
   const s = {
+    map_style:       document.getElementById('cfg-map-style').value || 'voyager',
     callsign:        document.getElementById('cfg-callsign').value.trim().toUpperCase(),
     opname:          document.getElementById('cfg-opname').value.trim(),
     grid:            document.getElementById('cfg-grid').value.trim().toUpperCase(),
@@ -4030,6 +4047,31 @@ async function saveSettings() {
   // RBN: connect or disconnect based on settings change
   if (s.rbn_enabled) { connectRbn(s); }
   else { disconnectRbn(); }
+
+  // Distance map: hot-swap the tile style if the user picked a different one.
+  try { if (typeof applyMapTileStyle === 'function' && _map) applyMapTileStyle(s.map_style || 'voyager'); } catch(e) {}
+
+  // SAT map: refresh station marker so a grid edit takes effect immediately,
+  // not on the next sat-state push.
+  try {
+    window._satMarkerLogged = false;
+    if (typeof _satMapUpdate === 'function' && typeof _satState !== 'undefined' && _satState) {
+      _satMapUpdate(_satState);
+    } else if (typeof _satMap !== 'undefined' && _satMap && s.grid) {
+      const _gp = gridToLatLon(s.grid);
+      if (_gp) {
+        const tt = `${s.callsign || 'My QTH'}<br>Settings grid ${s.grid.toUpperCase()}<br>${_gp.lat.toFixed(3)}, ${_gp.lon.toFixed(3)}`;
+        if (_satStationMarker) {
+          _satStationMarker.setLatLng([_gp.lat, _gp.lon]);
+          try { _satStationMarker.setTooltipContent(tt); } catch(e){}
+        } else {
+          _satStationMarker = L.circleMarker([_gp.lat, _gp.lon], {
+            radius:6, color:'#00e5ff', fillColor:'#00e5ff', fillOpacity:0.9, weight:2
+          }).addTo(_satMap).bindTooltip(tt);
+        }
+      }
+    }
+  } catch(e) {}
 
   closeModal('settings-modal');
   toast('✓ Settings saved','success');
@@ -4288,7 +4330,15 @@ function connectAllClusters() {
 
 // ─── RBN Band-Opening Alert Connection & Processing ─────────────────────────
 function connectRbn(s) {
-  if (_rbnSocket) { try { _rbnSocket.close(); } catch(e){} _rbnSocket = null; }
+  if (_rbnSocket) {
+    // Detach handlers first so any in-flight messages from the old socket
+    // (close is async — server may still be sending for a few seconds) can't
+    // fire alerts on bands the user just turned off.
+    try { _rbnSocket.onmessage = null; _rbnSocket.onopen = null;
+          _rbnSocket.onclose = null; _rbnSocket.onerror = null; } catch(e){}
+    try { _rbnSocket.close(); } catch(e){}
+    _rbnSocket = null;
+  }
   _rbnConnected = false;
 
   const callsign = s.callsign;
@@ -4358,7 +4408,18 @@ function disconnectRbn() {
 }
 
 function processRbnSpot(spot, settings) {
-  const s = settings || loadSettings();
+  // Always re-read the LIVE settings so band-toggle changes apply immediately
+  // even if the closure-captured `settings` was built when this band was on.
+  // (Defensive: also covers any race where the old socket still feeds spots.)
+  const s = loadSettings();
+  if (!s.rbn_enabled) return;
+  const allowed = new Set();
+  if (s.rbn_10m)  allowed.add('10m');
+  if (s.rbn_6m)   allowed.add('6m');
+  if (s.rbn_2m)   allowed.add('2m');
+  if (s.rbn_70cm) allowed.add('70cm');
+  const spotBand = (spot.band || '').toLowerCase();
+  if (!allowed.has(spotBand)) return;
   const myGrid = s.grid;
   if (!myGrid) return;
 
@@ -5737,13 +5798,53 @@ function updateGreyline() {
   ]).addTo(_map);
 }
 
+// Distance-map tile-style registry. Each entry returns args ready to feed
+// into L.tileLayer(url, opts). All three are EPSG:3857, free, no API key,
+// so swapping is purely cosmetic and never affects distance/bearing math.
+const _MAP_TILE_STYLES = {
+  voyager: {
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    opts: { subdomains:'abcd', maxZoom:12,
+            attribution:'© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>' }
+  },
+  positron: {
+    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    opts: { subdomains:'abcd', maxZoom:12,
+            attribution:'© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>' }
+  },
+  dark: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    // className wires a CSS filter (see <style> in <head>) to push the tile
+    // brightness/contrast up a notch — Dark Matter ships pretty inky out of
+    // the box and this lifts country borders and labels without losing the
+    // dark theme. Filter values were eyeballed against the SAT map for parity.
+    opts: { subdomains:'abcd', maxZoom:12, className:'tile-dark-bright',
+            attribution:'© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>' }
+  }
+};
+let _mapTileLayer = null;
+
+function applyMapTileStyle(style) {
+  if (!_map) return;
+  const def = _MAP_TILE_STYLES[style] || _MAP_TILE_STYLES.voyager;
+  if (_mapTileLayer) { _map.removeLayer(_mapTileLayer); _mapTileLayer = null; }
+  _mapTileLayer = L.tileLayer(def.url, def.opts).addTo(_map);
+  // Flip a body-level class so the per-style CSS filter (see <style> block)
+  // can pick the right brightness/contrast curve for the chosen tile set.
+  try {
+    document.body.classList.remove('map-style-voyager','map-style-positron','map-style-dark');
+    document.body.classList.add('map-style-' + (style || 'voyager'));
+  } catch(e) {}
+  // Tile layer goes UNDER everything else; force a redraw so existing
+  // overlays (greyline, markers, distance line) repaint cleanly on top.
+  if (typeof updateGreyline === 'function') updateGreyline();
+}
+
 function initMap() {
   if (_map || typeof L === 'undefined') return;
   _map = L.map('qso-map', { zoomControl:true, attributionControl:true, scrollWheelZoom:true }).setView([20,0], 2);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    subdomains:'abcd', maxZoom:12,
-    attribution:'© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>'
-  }).addTo(_map);
+  const _initStyle = (loadSettings().map_style) || 'voyager';
+  applyMapTileStyle(_initStyle);
   updateGreyline();
   setInterval(updateGreyline, 60000);
 
@@ -5785,28 +5886,31 @@ function _satMapInit() {
   const el = document.getElementById('sat-map');
   if (!el) return;
   if (_satMap) { _satMap.invalidateSize(); return; }
-  // Equirectangular (plate carrée) projection — classic sat-tracker style.
-  // Latitude is linear in pixels, so circles stay symmetric around their center
-  // at any latitude (no Mercator tall-ellipse distortion).
+  // Web Mercator (EPSG:3857) — same projection as the distance map and the
+  // standard for OpenStreetMap-style tile providers. We tried EPSG:4326 with
+  // NASA Blue Marble for the classic plate-carrée sat-tracker look, but the
+  // tile origin / CRS pixel-math combo mis-aligned the marker overlay vs the
+  // tile imagery (lat 39 was painting at roughly the lat-48 latitude band),
+  // so the cyan station dot kept landing hundreds of km north of where the
+  // user's Maidenhead grid actually is. Mercator + OSM gives pixel-perfect
+  // alignment on the marker, the satellite sub-point and the footprint.
   _satMap = L.map('sat-map', {
-    crs: L.CRS.EPSG4326,
     zoomControl:true, attributionControl:true, scrollWheelZoom:true,
-    worldCopyJump:false, minZoom:0, maxZoom:6
-  }).setView([20, 0], 1);
+    worldCopyJump:true, minZoom:1, maxZoom:6
+  }).setView([20, 0], 2);
   // Custom pane for the ground track so it renders UNDER the footprint circle,
   // station marker, and satellite icon. Leaflet's default overlayPane z-index
   // is 400; 350 puts us above the tile/grid layers but below everything else.
   _satMap.createPane('satTrack');
   _satMap.getPane('satTrack').style.zIndex = 350;
-  // NASA GIBS Blue Marble Next Generation — natural-earth imagery, EPSG:4326,
-  // free, no API key. Static composite (no cloud coverage issues).
-  L.tileLayer(
-    'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_NextGeneration/default/500m/{z}/{y}/{x}.jpeg',
-    {
-      tileSize: 512, minZoom: 0, maxZoom: 6, noWrap: false,
-      attribution: 'NASA EOSDIS GIBS · Blue Marble'
-    }
-  ).addTo(_satMap);
+  // CartoDB Dark Matter — clean dark basemap that fits the rest of the UI's
+  // dark theme. Standard EPSG:3857 XYZ tiles, no API key. Pixel-perfect
+  // alignment with Leaflet's default Mercator marker overlay.
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
+    attribution: '© OpenStreetMap · © CARTO',
+    maxZoom: 6, minZoom: 1
+  }).addTo(_satMap);
 
   // ── Static overlay: subtle graticule (Blue Marble imagery is busy, keep it faint) ──
   const grid = [];
@@ -5825,9 +5929,13 @@ function _satMapInit() {
     const s = loadSettings();
     if (s.grid) {
       const p = gridToLatLon(s.grid);
-      if (p) _satStationMarker = L.circleMarker([p.lat, p.lon], {
-        radius:6, color:'#00e5ff', fillColor:'#00e5ff', fillOpacity:0.9, weight:2
-      }).addTo(_satMap).bindTooltip(s.callsign || 'My QTH');
+      if (p) {
+        const tt = `${s.callsign || 'My QTH'}<br>Settings grid ${s.grid.toUpperCase()}<br>${p.lat.toFixed(3)}, ${p.lon.toFixed(3)}`;
+        _satStationMarker = L.circleMarker([p.lat, p.lon], {
+          radius:6, color:'#00e5ff', fillColor:'#00e5ff', fillOpacity:0.9, weight:2
+        }).addTo(_satMap).bindTooltip(tt);
+        console.log('[satmap] station marker init:', s.grid, '→', p.lat.toFixed(4), p.lon.toFixed(4));
+      }
     }
   } catch(e) {}
 
@@ -5940,6 +6048,33 @@ function _satSplitAntimeridian(pts) {
   return segs;
 }
 
+// Build a geodesic "circle" around (centerLat, centerLon) with the given
+// radius in km, sampled at `steps` points. Used for the satellite footprint
+// since Leaflet's L.circle is broken on EPSG:4326 maps. Returns [[lat,lon]…]
+// suitable for L.polygon. Uses the spherical-Earth destination-point formula.
+function _satGeodesicCircle(centerLat, centerLon, radiusKm, steps) {
+  const R = 6371;
+  const d  = radiusKm / R;                  // angular distance in radians
+  const φ1 = centerLat * Math.PI / 180;
+  const λ1 = centerLon * Math.PI / 180;
+  const sinφ1 = Math.sin(φ1), cosφ1 = Math.cos(φ1);
+  const sinD  = Math.sin(d),  cosD  = Math.cos(d);
+  const ring = [];
+  for (let i = 0; i <= steps; i++) {
+    const θ  = (i / steps) * 2 * Math.PI;   // bearing 0..2π
+    const sinφ2 = sinφ1 * cosD + cosφ1 * sinD * Math.cos(θ);
+    const φ2  = Math.asin(Math.max(-1, Math.min(1, sinφ2)));
+    const λ2  = λ1 + Math.atan2(Math.sin(θ) * sinD * cosφ1,
+                                cosD - sinφ1 * sinφ2);
+    let lonDeg = λ2 * 180 / Math.PI;
+    // Wrap into [-180, 180] without making polygon spans cross the antimeridian
+    while (lonDeg >  180) lonDeg -= 360;
+    while (lonDeg < -180) lonDeg += 360;
+    ring.push([φ2 * 180 / Math.PI, lonDeg]);
+  }
+  return ring;
+}
+
 async function _satDrawGroundTrack(satName) {
   if (!_satMap) return;
   const tle = await _satLoadTLE(satName);
@@ -5999,16 +6134,44 @@ function _satMapUpdate(s) {
       _satMap.removeLayer(_satTrackLayer); _satTrackLayer = null; _satLastTrackName = null;
     }
   } catch(e) {}
-  // Move station marker if S.A.T. GPS gives us a better fix
-  if (s.my_lat && s.my_lon) {
-    const mLat = parseFloat(s.my_lat), mLon = parseFloat(s.my_lon);
-    if (!isNaN(mLat) && !isNaN(mLon)) {
-      if (_satStationMarker) _satStationMarker.setLatLng([mLat, mLon]);
-      else _satStationMarker = L.circleMarker([mLat, mLon], {
-        radius:6, color:'#00e5ff', fillColor:'#00e5ff', fillOpacity:0.9, weight:2
-      }).addTo(_satMap);
+  // Station marker — ALWAYS prefer the user's typed grid square from Settings,
+  // and only fall back to the S.A.T.'s GPS lat/lon if no grid is configured.
+  // Earlier versions overrode the grid position with the S.A.T. GPS, but the
+  // CSN firmware's GPS field has been unreliable across passes (sometimes
+  // off by hundreds of km) and the typed grid is what the user explicitly
+  // intends to plot. The grid was already used to create the marker at sat
+  // map init; here we just refresh in case the user changed it in Settings.
+  try {
+    const _cs = loadSettings();
+    let _stLat = null, _stLon = null, _stSrc = '';
+    if (_cs.grid) {
+      const _gp = gridToLatLon(_cs.grid);
+      if (_gp) { _stLat = _gp.lat; _stLon = _gp.lon; _stSrc = 'Settings grid ' + _cs.grid.toUpperCase(); }
     }
-  }
+    if (_stLat == null && s.my_lat != null && s.my_lon != null) {
+      const mLat = parseFloat(s.my_lat), mLon = parseFloat(s.my_lon);
+      if (!isNaN(mLat) && !isNaN(mLon) && (mLat !== 0 || mLon !== 0)) {
+        _stLat = mLat; _stLon = mLon; _stSrc = 'S.A.T. GPS';
+      }
+    }
+    if (_stLat != null) {
+      const _ttip = `${_cs.callsign || 'My QTH'}<br>${_stSrc}<br>${_stLat.toFixed(3)}, ${_stLon.toFixed(3)}`;
+      if (_satStationMarker) {
+        _satStationMarker.setLatLng([_stLat, _stLon]);
+        try { _satStationMarker.setTooltipContent(_ttip); } catch(e){}
+      } else {
+        _satStationMarker = L.circleMarker([_stLat, _stLon], {
+          radius:6, color:'#00e5ff', fillColor:'#00e5ff', fillOpacity:0.9, weight:2
+        }).addTo(_satMap).bindTooltip(_ttip);
+      }
+      // One-shot console diagnostic so we can verify the marker source matches
+      // the user's expected QTH if it ever drifts again.
+      if (!window._satMarkerLogged) {
+        window._satMarkerLogged = true;
+        console.log('[satmap] station marker:', _stSrc, '→', _stLat.toFixed(4), _stLon.toFixed(4));
+      }
+    }
+  } catch(e) {}
   // Satellite sub-point
   const nameEl = document.getElementById('satmap-name');
   const altEl  = document.getElementById('satmap-alt');
@@ -6017,7 +6180,17 @@ function _satMapUpdate(s) {
     const lat = parseFloat(s.sat_lat), lon = parseFloat(s.sat_lon);
     const alt = s.sat_alt_km ? parseFloat(s.sat_alt_km) : null;
     if (altEl) altEl.textContent = alt ? `${Math.round(alt)} km` : '—';
-    if (_satMarker) _satMarker.setLatLng([lat, lon]);
+    if (_satMarker) {
+      _satMarker.setLatLng([lat, lon]);
+      // Refresh the permanent label when the tracked bird changes — without
+      // this the marker keeps showing the previous satellite's name until the
+      // user reloads the page.
+      try {
+        const _newName = s.satellite || 'Satellite';
+        const _tt = _satMarker.getTooltip();
+        if (_tt && _tt.getContent() !== _newName) _satMarker.setTooltipContent(_newName);
+      } catch(e) {}
+    }
     else {
       // Yellow diamond marker — matches the S.A.T. controller's own display
       // style for the actively-tracked satellite. Drawn in a 20×20 viewBox,
@@ -6036,19 +6209,40 @@ function _satMapUpdate(s) {
         })
       }).addTo(_satMap).bindTooltip(s.satellite || 'Satellite', { permanent:true, direction:'top', offset:[0,-12], className:'sat-tooltip-label' });
     }
-    // Footprint radius. CSN S.A.T. firmware's satFootprint is the coverage
-    // DIAMETER, so halve it. If firmware value missing, compute geometric
-    // horizon radius from altitude:  R * acos(R / (R + alt))  [km; R=6371]
-    let footprintKm = s.sat_footprint_km ? parseFloat(s.sat_footprint_km) / 2 : null;
+    // Footprint coverage circle. We always render as a true geodesic polygon
+    // (96 points each at exact great-circle distance from the sub-satellite
+    // point) so the footprint warps correctly under Web Mercator at high lat.
+    //
+    // Sizing: prefer the CSN S.A.T. controller's own satFootprint value when
+    // it's present and sane — that way our map matches the controller's MAP
+    // panel exactly. Fall back to the geometric horizon formula at the 5°
+    // minimum elevation typical for satellite work (slightly smaller than the
+    // theoretical 0° horizon, gives a more realistic "useful" footprint).
+    //
+    //   α  = asin( R/(R+h) · cos(θ_min) )
+    //   γ  = 90° − θ_min − α       (central angle, deg)
+    //   r  = R · γ · π/180        (great-circle radius, km)
+    let footprintKm = null;
+    if (s.sat_footprint_km != null) {
+      const fp = parseFloat(s.sat_footprint_km);
+      // Sanity-clamp to a believable range for LEO/MEO (500–10000 km radius).
+      // Anything outside that and we trust the geometry instead. Some firmware
+      // revs report diameter in km, others km-radius, others nm — the clamp
+      // keeps obviously-wrong values from blowing up the display.
+      if (!isNaN(fp) && fp >= 500 && fp <= 10000) footprintKm = fp;
+    }
     if (!footprintKm && alt && alt > 0) {
       const R = 6371;
-      footprintKm = R * Math.acos(R / (R + alt));
+      const θmin = 5 * Math.PI / 180;
+      const α = Math.asin( R / (R + alt) * Math.cos(θmin) );
+      const γ = (Math.PI / 2) - θmin - α;     // radians
+      footprintKm = R * γ;
     }
     if (footprintKm && footprintKm > 0) {
-      const footprintM = footprintKm * 1000;
-      if (_satFootprint) { _satFootprint.setLatLng([lat, lon]); _satFootprint.setRadius(footprintM); }
-      else _satFootprint = L.circle([lat, lon], {
-        radius: footprintM, color:'#ffd700', weight:1.5, opacity:0.7,
+      const ring = _satGeodesicCircle(lat, lon, footprintKm, 96);
+      if (_satFootprint) _satFootprint.setLatLngs(ring);
+      else _satFootprint = L.polygon(ring, {
+        color:'#ffd700', weight:1.5, opacity:0.7,
         fillColor:'#ffd700', fillOpacity:0.08, interactive:false
       }).addTo(_satMap);
     }

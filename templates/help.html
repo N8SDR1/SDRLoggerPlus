@@ -637,6 +637,13 @@
       <li>Distance displayed in km or miles (toggle in the map panel header).</li>
     </ul>
     <p>The map also renders a <strong>greyline overlay</strong> — the day/night terminator — updated every 60 seconds, so you can see propagation conditions at a glance.</p>
+    <p><strong>Map Style picker (v1.08+)</strong> — Settings → Station &amp; Rig → <em>Distance Map Style</em> swaps the basemap between three free EPSG:3857 tile sets:</p>
+    <ul>
+      <li><strong>Voyager</strong> <em>(default)</em> — bright, colorful, clear country/state borders and city labels.</li>
+      <li><strong>Positron</strong> — very light, near-grayscale, minimalist.</li>
+      <li><strong>Dark Matter</strong> — dark theme with brightness/contrast lift, matches the SAT map's look.</li>
+    </ul>
+    <p>The choice is purely cosmetic — distance, bearing, marker placement, and greyline math are all coordinate-based and unaffected by tile style. Style hot-swaps in place when you click Save; no reload required.</p>
     <div class="tip">Set your Grid Square in Settings to enable the distance line and beam headings.</div>
   </div>
 
