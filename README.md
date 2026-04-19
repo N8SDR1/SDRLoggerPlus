@@ -21,6 +21,12 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ---
 
+## 🆕 What's New in v1.10
+
+> **SAT map footprint accuracy fix** — the yellow coverage circle on the Satellite map was rendering ~2× too large across every bird because we were treating the CSN S.A.T. controller's `satFootprint` value as a radius when it's actually the DIAMETER (inheriting the predict/Gpredict convention). Rewrote the sizing math to compute the radius directly from satellite altitude using the 0° geometric-horizon formula `r = R · acos(R / (R + h))`, so our circle now matches the S.A.T. controller's own MAP panel. Validated against live SO-50 telemetry: alt 605.9 km → 2,679 km radius, matching CSN's reported diameter 5,352.8 km to 0.1%. All v1.09-rc2 / rc1 features below roll forward unchanged.
+
+---
+
 ## 🆕 What's New in v1.09-rc2
 
 > **Polish release** — three font-scale buttons (A · A · A+) on `/awards`, `/stats`, and `/feeds`; brighter/larger 🔥 Hot List status banner with inline ✕ Clear-All on `/feeds` AND on Settings → Display; smarter Feeds callsign extractor that now ignores band tokens (`10M`, `12M`, `70CM`), power tokens (`50W`, `100W`, `1KW`), and Maidenhead grid squares (`QL64XG`); cross-tab live sync hardening for the Hot List via `BroadcastChannel`. All v1.09-rc1 features below remain.
@@ -223,6 +229,6 @@ With development assistance by **Claude AI** (Anthropic)
 ---
 
 <div align="center">
-  <sub>SDRLogger+ v1.09-rc2 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
+  <sub>SDRLogger+ v1.10 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
   <sub>73 de N8SDR — good DX and happy logging!</sub>
 </div>

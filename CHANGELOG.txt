@@ -1,6 +1,57 @@
 SDRLogger+ — Change Log
 =======================
 
+v1.10  (2026-04-19)
+------------------------------------------
+SAT-map footprint accuracy fix on top of v1.09-rc2. Rolls forward
+everything from the rc1 / rc2 line (Auto-Backup, four new awards,
+Statistics Dashboard, Feeds & Alerts, Station Metadata, Gray Line,
+High Wind Alerts, ARCO rotator, font scaling, Hot List polish,
+smarter callsign extractor) plus:
+
+  ── 🛰 SAT MAP FOOTPRINT FIX (v1.10) ──────────────────────────────────
+    The yellow coverage circle on the SAT map was rendering ~2x too
+    large across every bird. Root cause: the CSN S.A.T. controller's
+    `satFootprint` JSON field inherits the predict / Gpredict convention
+    where that value is the DIAMETER in km (= 12756.33 * acos(R/(R+h))
+    at 0° horizon), but we were feeding it to Leaflet as a radius. So
+    every footprint circle was drawn at twice its real coverage area.
+
+    Fix: stop trusting the controller's footprint value entirely. The
+    frontend now computes the footprint radius directly from satellite
+    altitude using the 0° geometric-horizon formula:
+
+        γ = acos( R / (R + h) )    (central angle, radians)
+        r = R * γ                  (great-circle radius, km)
+
+    This matches what the CSN S.A.T. controller's own MAP panel draws,
+    and matches Gpredict's default behavior too. Validated against live
+    SO-50 telemetry: alt=605.9 km -> new radius 2679 km; CSN's reported
+    diameter 5352.8 km divides exactly to 2676 km (0.1% agreement).
+
+    The backend still exposes sat_footprint_km to the frontend for
+    diagnostics purposes, but the map code intentionally ignores it
+    so there's a single source of truth. Now immune to any future
+    firmware changes in CSN's footprint field format.
+
+  ── 📝 DOC CORRECTIONS ────────────────────────────────────────────────
+    Help guide (help.html) and wiki (Satellite-Mode.md) footprint
+    descriptions rewritten with the correct formula and accurate
+    reference numbers: ISS (~420 km) ≈ 2300 km radius; SO-50 (~610 km)
+    ≈ 2680 km; RS-44 (~1200 km) ≈ 3580 km.
+
+  ── 🧠 KNOWN NITPICK (DEFERRED TO A LATER RELEASE) ────────────────────
+    Because the SAT map uses Web Mercator (EPSG:3857 — conformal), our
+    footprint circles look more uniformly circular across birds than
+    the CSN S.A.T. controller's MAP panel, which uses plate carrée
+    (EPSG:4326) and therefore shows the circle stretched horizontally
+    at high latitudes. The footprint MATH is correct; only the
+    projection-induced visual shape differs. We moved to Mercator in
+    v1.08 to fix a ~200 km station-marker drift that EPSG:4326 with
+    NASA Blue Marble was causing. A cleaner EPSG:4326 solution
+    (equirectangular look, correct marker alignment) is earmarked for
+    a future release.
+
 v1.09-rc2  (2026-04-18)
 ------------------------------------------
 Polish / fix release on top of rc1.

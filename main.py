@@ -254,7 +254,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.09-rc2"
+VERSION  = "1.10"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -6710,13 +6710,29 @@ def _fetch_dxpeditions():
                 qsl         = m.group(4).strip()
                 if qsl.lower().startswith("qsl via:"):
                     qsl = qsl[8:].strip()
-            # All callsigns: primary + any others found in description
+            # Callsigns: ONLY trust the CALL column from the NG3K title
+            # (group 3 of _NG3K_TITLE_RE). The freeform description routinely
+            # contains QSL-via calls, OPDX reporter calls, operator calls, and
+            # other tokens that are NOT the DXpedition's operating call(s) —
+            # surfacing them as clickable Hot-List chips was wrong.
+            # Some titles list multiple ops with "/" or "+" separators; split
+            # on those so each genuine call becomes its own chip while still
+            # preserving portable-call slashes like "JG8NQJ/JD1".
             calls = []
-            if primary_call and _looks_like_call(primary_call):
-                calls.append(primary_call)
-            for c in _extract_calls(desc):
-                if c not in calls:
-                    calls.append(c)
+            if primary_call:
+                # Split on '+' (multi-op separator on NG3K) but keep '/' intact
+                # for portable calls. Then validate each token.
+                for tok in primary_call.split('+'):
+                    tok = tok.strip().upper()
+                    if not tok:
+                        continue
+                    # Strip any trailing punctuation
+                    tok = tok.rstrip(',;.')
+                    # A portable call like "JG8NQJ/JD1" is one chip; validate
+                    # the base (pre-slash) part as a real call.
+                    base = tok.split('/')[0]
+                    if _looks_like_call(base) and tok not in calls:
+                        calls.append(tok)
             out.append({
                 "title":     title,
                 "country":   country,
@@ -7314,8 +7330,15 @@ def api_sat_status():
         state["gps_lock"] = bool(track.get("gpslock", 0))
         state["gps_sats"] = track.get("gpssats", 0)
         # Sub-satellite point for the map panel. The CSN S.A.T. firmware exposes
-        # satLat / satLon as RADIANS, satAlt + satFootprint in km. Prefer those.
+        # satLat / satLon as RADIANS, satAlt in km. Prefer those.
         # Fallback: compute from station + look-angle + range.
+        #
+        # NOTE on satFootprint: CSN firmware emits this field (inheriting the
+        # predict/Gpredict convention where it's the DIAMETER in km, = 12756.33 *
+        # acos(R/(R+h)) at 0° horizon). We still surface it to the frontend for
+        # diagnostics, but the map code intentionally ignores it and computes
+        # the footprint RADIUS directly from satAlt so there's a single source
+        # of truth.
         from math import degrees as _deg
         raw_lat = track.get("satLat", track.get("satlat"))
         raw_lon = track.get("satLon", track.get("satlon"))
