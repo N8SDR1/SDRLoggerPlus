@@ -6560,30 +6560,20 @@ function _satMapUpdate(s) {
     // (96 points each at exact great-circle distance from the sub-satellite
     // point) so the footprint warps correctly under Web Mercator at high lat.
     //
-    // Sizing: prefer the CSN S.A.T. controller's own satFootprint value when
-    // it's present and sane — that way our map matches the controller's MAP
-    // panel exactly. Fall back to the geometric horizon formula at the 5°
-    // minimum elevation typical for satellite work (slightly smaller than the
-    // theoretical 0° horizon, gives a more realistic "useful" footprint).
+    // Sizing: always compute from satellite altitude using the 0° geometric
+    // horizon formula. We intentionally IGNORE the controller's satFootprint
+    // field — CSN inherits the predict/Gpredict convention where that value is
+    // the DIAMETER (km), not the radius, so feeding it to Leaflet as a radius
+    // produced a circle 2× too large. Computing from altitude gives a single
+    // source of truth and matches the S.A.T. controller's own MAP panel (which
+    // also draws at 0° horizon).
     //
-    //   α  = asin( R/(R+h) · cos(θ_min) )
-    //   γ  = 90° − θ_min − α       (central angle, deg)
-    //   r  = R · γ · π/180        (great-circle radius, km)
+    //   γ = acos( R / (R + h) )    (central angle, radians)
+    //   r = R · γ                  (great-circle radius, km)
     let footprintKm = null;
-    if (s.sat_footprint_km != null) {
-      const fp = parseFloat(s.sat_footprint_km);
-      // Sanity-clamp to a believable range for LEO/MEO (500–10000 km radius).
-      // Anything outside that and we trust the geometry instead. Some firmware
-      // revs report diameter in km, others km-radius, others nm — the clamp
-      // keeps obviously-wrong values from blowing up the display.
-      if (!isNaN(fp) && fp >= 500 && fp <= 10000) footprintKm = fp;
-    }
-    if (!footprintKm && alt && alt > 0) {
+    if (alt && alt > 0) {
       const R = 6371;
-      const θmin = 5 * Math.PI / 180;
-      const α = Math.asin( R / (R + alt) * Math.cos(θmin) );
-      const γ = (Math.PI / 2) - θmin - α;     // radians
-      footprintKm = R * γ;
+      footprintKm = R * Math.acos(R / (R + alt));
     }
     if (footprintKm && footprintKm > 0) {
       const ring = _satGeodesicCircle(lat, lon, footprintKm, 96);
@@ -7314,7 +7304,7 @@ function insertRowHandles() {
   });
   // Ensure these panels always have a bottom resize handle even if they're
   // the last panel in their column (the loop above only inserts between panels)
-  ['log', 'cluster', 'distance'].forEach(pid => {
+  ['log', 'cluster', 'distance', 'rotator'].forEach(pid => {
     const panel = document.getElementById('dp-' + pid);
     if (panel && !panel.nextElementSibling?.classList?.contains('dock-rh')) {
       const rh = document.createElement('div');

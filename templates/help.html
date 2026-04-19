@@ -162,27 +162,6 @@
   <h1>SDR<span style="color:var(--accent2);">Logger+</span> Quick Start Guide</h1>
   <p class="subtitle">v{{ version }} &nbsp;·&nbsp; Ham Radio Logging · DX Cluster · POTA Spots · RBN Band-Opening Alerts · TCI / Thetis SDR Integration · Solar Conditions · Rotator Control · CW Keyer / Decoder</p>
 
-  <div class="tip" style="margin-bottom:24px;">
-    <strong style="color:var(--accent2);letter-spacing:1px;">✦ What's New in v1.09-rc2</strong>
-    <ul style="margin:8px 0 2px 22px;">
-      <li>🔤 <strong>Three-step font scaling</strong> (A · A · A+) on the <code>/awards</code>, <code>/stats</code>, and <code>/feeds</code> pages — choice persists across pages via <code>localStorage</code>.</li>
-      <li>🔥 <strong>Hot List polish</strong> — brighter/larger status banner on <code>/feeds</code>, inline ✕ Clear-All buttons on both <code>/feeds</code> AND in main Settings → Display, and live cross-tab sync via <code>BroadcastChannel</code>.</li>
-      <li>📡 <strong>Smarter Feeds callsign extractor</strong> — now ignores band tokens (<code>10M</code>, <code>12M</code>, <code>70CM</code>), power tokens (<code>50W</code>, <code>100W</code>, <code>1KW</code>), and Maidenhead grid squares (<code>QL64XG</code>) so only real callsigns become clickable Hot-List chips.</li>
-    </ul>
-    <strong style="color:var(--accent2);letter-spacing:1px;">✦ What's New in v1.09-rc1</strong>
-    <ul style="margin:8px 0 2px 22px;">
-      <li>💾 <strong>Scheduled Auto-Backup</strong> — Daily / Weekly / On-Exit runs write .db + ADIF for both General and POTA logs to a timestamped folder, with retention pruning that only touches folders created by the scheduler.</li>
-      <li>🏆 <strong>New award trackers</strong> — VUCC (grids per VHF/UHF band), 5BWAS (50 states × 80/40/20/15/10), 5BDXCC (100+ entities × 80/40/20/15/10), and <strong>WAC</strong> (Worked All Continents — six base continents plus an Antarctica endorsement) added alongside DXCC/WAS/WAZ/WPX.</li>
-      <li>📊 <strong>Statistics Dashboard</strong> at <code>/stats</code> — six Chart.js visualizations (QSOs/year, by-band donut, by-mode donut, top-10 entities, cumulative-over-time, hour-of-day heatmap), source/range/mode controls, and a five-pill stat strip across the top.</li>
-      <li>📡 <strong>Feeds &amp; Alerts</strong> at <code>/feeds</code> — live WA7BNM contest calendar and NG3K DXpedition announcements. Click any DXpedition callsign chip to instantly add (or remove) it from your 🔥 Hot List, broadcast live to the running main logger.</li>
-      <li>🎙 <strong>Station Metadata + expanded CW macros</strong> — five new free-text Settings fields (Rig, Antenna, Power, State, County) feed an expanded 12-token CW keyer macro vocabulary (<code>{MYRIG}</code> <code>{MYANT}</code> <code>{MYPWR}</code> <code>{MYSTATE}</code> <code>{MYCNTY}</code> joined the existing five). Metadata is NOT stored per-QSO and NOT written to ADIF.</li>
-      <li>🌓 <strong>Gray Line overlay</strong> on the General/POTA distance maps — day/night terminator and night-side shading, recomputed every minute.</li>
-      <li>💨 <strong>High Wind Alerts</strong> promoted to a dedicated Weather Alerts tab in Settings — NWS warnings, nearest METAR, and Ambient PWS feeds, three-tier 💨 banner.</li>
-      <li>⏱ <strong>Idle timeout raised to 60 minutes</strong> with a browser pagehide beacon — walk-aways no longer kill the app, but closing the tab still releases the executable for installer updates.</li>
-      <li>⚙ <strong>Settings reorganized</strong> — Weather Alerts is now its own tab; Rotator Control moved from Cluster &amp; Integrations to Station &amp; Rig where the rest of the hardware lives.</li>
-    </ul>
-  </div>
-
   <div class="help-tabs" id="help-tab-bar">
     <button class="help-tab active" data-htab="htab-start" onclick="switchHelpTab('htab-start')">🚀 Getting Started</button>
     <button class="help-tab" data-htab="htab-logging" onclick="switchHelpTab('htab-logging')">📋 Logging &amp; QSO</button>
@@ -205,13 +184,22 @@
   <h2>First Run Setup</h2>
   <div class="section-card">
     <h3>1 — Configure Your Station</h3>
-    <p>Click the <strong>⚙ Settings</strong> button in the top-right corner and fill in:</p>
+    <p>Click the <strong>⚙ Settings</strong> button in the top-right corner and fill in the <strong>My Station</strong> section:</p>
     <ul>
       <li><strong>My Callsign</strong> — your callsign (e.g. <code>N8SDR</code>). This is sent to the DX cluster as your login and displayed in the header.</li>
       <li><strong>Operator Name</strong> — your first name, used for cluster login prompts.</li>
       <li><strong>Grid Square</strong> — your Maidenhead locator (e.g. <code>EN82</code>). Required for the distance map and beam headings.</li>
     </ul>
-    <div class="tip">Your callsign must be set before connecting to any DX cluster.</div>
+    <p style="margin-top:10px;">The following fields are optional and are used <strong>solely as the source for CW keyer macro substitution</strong> — they are <strong>NOT</strong> stored per-QSO and <strong>NOT</strong> written to ADIF exports. Fill them in if you want your CW macros to expand your rig, antenna, power, state, or county automatically (e.g. state QSO parties, county hunters, rag-chew ID macros):</p>
+    <ul>
+      <li><strong>Rig</strong> — free text, your radio (e.g. <code>IC-7300</code>, <code>Anan-7000DLE</code>, <code>FT-DX10</code>). Expands via <code>{MYRIG}</code> in CW macros.</li>
+      <li><strong>Antenna</strong> — free text, your antenna (e.g. <code>HEXBEAM @ 40FT</code>, <code>END-FED 40-10</code>). Expands via <code>{MYANT}</code>.</li>
+      <li><strong>Power</strong> — free text, sent verbatim by the CW keyer. Format however you want it sent: <code>100W</code>, <code>1KW</code>, <code>5W QRP</code>, etc. Expands via <code>{MYPWR}</code>.</li>
+      <li><strong>State</strong> — free text, your state or province (e.g. <code>OH</code>, <code>ON</code>). Expands via <code>{MYSTATE}</code>.</li>
+      <li><strong>County</strong> — free text, your county (e.g. <code>HAMILTON</code>). Expands via <code>{MYCNTY}</code>.</li>
+    </ul>
+    <p style="margin-top:10px;">See the <a href="#" onclick="switchHelpTab('htab-cw');return false;" style="color:var(--accent);">CW Decoder</a> section for the full 12-token macro vocabulary and the clickable insert buttons in the macro editor.</p>
+    <div class="tip">Your callsign must be set before connecting to any DX cluster. The station-metadata fields are purely for CW macros — leaving them blank is fine if you don't run CW or don't want auto-expansion.</div>
 
     <h3>2 — TCI / Thetis Connection</h3>
     <p>Enter your Thetis TCI host (default <code>127.0.0.1</code>) and port (default <code>50001</code>). When connected, the <span class="badge badge-green">TCI LIVE</span> badge lights up in the header and the logging form auto-fills frequency, mode, and spotted callsigns.</p>
@@ -453,6 +441,12 @@
       <tbody>
         <tr><td><code>My Callsign</code></td><td>Your station callsign. Displayed in header and used for cluster login.</td></tr>
         <tr><td><code>Grid Square</code></td><td>Maidenhead locator for distance/bearing calculations.</td></tr>
+        <tr><td><code>Rig</code> <em>(v1.09)</em></td><td>Free text — your radio (e.g. <code>IC-7300</code>, <code>Anan-7000DLE</code>). <strong>CW macro source only</strong> — expands via <code>{MYRIG}</code>. Not stored per-QSO, not written to ADIF.</td></tr>
+        <tr><td><code>Antenna</code> <em>(v1.09)</em></td><td>Free text — your antenna (e.g. <code>HEXBEAM @ 40FT</code>). <strong>CW macro source only</strong> — expands via <code>{MYANT}</code>.</td></tr>
+        <tr><td><code>Power</code> <em>(v1.09)</em></td><td>Free text — sent verbatim by the CW keyer. Format however you want to send it: <code>100W</code>, <code>1KW</code>, <code>5W QRP</code>. <strong>CW macro source only</strong> — expands via <code>{MYPWR}</code>.</td></tr>
+        <tr><td><code>State</code> <em>(v1.09)</em></td><td>Free text — your state or province (e.g. <code>OH</code>, <code>ON</code>). <strong>CW macro source only</strong> — expands via <code>{MYSTATE}</code>. Useful for state QSO parties.</td></tr>
+        <tr><td><code>County</code> <em>(v1.09)</em></td><td>Free text — your county (e.g. <code>HAMILTON</code>). <strong>CW macro source only</strong> — expands via <code>{MYCNTY}</code>. Useful for county hunters / QSO parties.</td></tr>
+        <tr><td><code>Show Gray Line</code> <em>(v1.09)</em></td><td>Optional day/night terminator overlay and night-side shading polygon on the General and POTA Distance Maps (not SAT). Recomputes every minute with per-basemap styling. Off by default.</td></tr>
         <tr><td><code>ITU Region</code></td><td>Your ITU region: <strong>1</strong> (Europe/Africa/Russia), <strong>2</strong> (Americas, default), <strong>3</strong> (Asia-Pacific). Used to check whether your VFO frequency is within the ITU band allocation — a warning toast appears if you tune outside the region's allocation for the selected band.</td></tr>
         <tr><td><code>TCI — Enable</code></td><td>Enable or disable TCI connection to Thetis. Disable if you are running flrig-only and don't want SDRLogger+ attempting TCI reconnects. The TCI LIVE badge is hidden when disabled.</td></tr>
         <tr><td><code>TCI Host / Port</code></td><td>Address of Thetis TCI WebSocket server (default 127.0.0.1:50001). Changing either value and saving automatically reconnects — no restart needed.</td></tr>
@@ -494,15 +488,26 @@
         <tr><td><code>CQ Zone Filter</code></td><td>Comma-separated CQ zone numbers (e.g. <code>4,5,14</code>). Blank = all zones.</td></tr>
         <tr><td><code>Continent Filter</code></td><td>Comma-separated continent codes: <code>NA SA EU AF AS OC</code>. Blank = all continents.</td></tr>
         <tr><td><code>Highlight Hot Stations</code></td><td>Checkbox to enable red highlighting of watchlist callsigns in the spot list.</td></tr>
-        <tr><td><code>Hot Stations Watchlist</code></td><td>Comma-separated callsigns to highlight in red when spotted (e.g. <code>DX0DX,VK9XX</code>).</td></tr>
+        <tr><td><code>Hot Stations Watchlist</code></td><td>Comma-separated callsigns to highlight in red when spotted (e.g. <code>DX0DX,VK9XX</code>). <em>(v1.09)</em> Inline <strong>✕ Clear</strong> button sits next to the field — one click (with confirm) empties the list. Changes broadcast live to every open tab including the <code>/feeds</code> page via <code>BroadcastChannel("sdrlogger-hotlist")</code>.</td></tr>
         <tr><td><code>Announce via speech</code></td><td>When checked, a voice announcement plays each time a watchlist callsign is spotted. Repeats at most once every 15 minutes per callsign to prevent continuous alerts if a DXpedition is heavily spotted.</td></tr>
-        <tr><td><code>Text Size</code></td><td>UI zoom level: Normal, Large (×1.18), X-Large (×1.30).</td></tr>
+        <tr><td><code>Text Size</code></td><td>Main-logger UI zoom level: Normal, Large (×1.18), X-Large (×1.30). <em>(v1.09)</em> The separate dashboard pages (<code>/awards</code>, <code>/stats</code>, <code>/feeds</code>) have their own three-step font scale (A · A · A+) toggle in their page headers, persisted via <code>localStorage</code> key <code>sdrlogger_ui_scale</code>.</td></tr>
         <tr><td><code>Panadapter Spot Coloring</code></td><td>Choose <strong>Single color</strong> (one color for every spot pushed to Thetis) or <strong>Color by category</strong> (per-spot color based on worked-before state): Needed Entity, New Band, New Mode, Standard (already worked), Hot List. All five category colors are user-configurable via color pickers, plus a Reset-to-defaults button. Hot List calls always override with the Hot color regardless of worked-before state.</td></tr>
         <tr><td><code>Digital App — UDP Listener</code></td><td>Enable to receive QSOLogged packets from WSJT-X, JTDX, MSHV (binary) or VarAC/Log4OM ADIF-over-UDP. Default port 2237.</td></tr>
         <tr><td><code>Digital App — TCP Server</code></td><td>Enable to accept ADIF connections from VarAC TCP mode and DXKeeper/N1MM/Logger32-compatible loggers. Default port 52001.</td></tr>
-        <tr><td><code>Rotator — Enable</code></td><td>Activates rotator control. Also toggleable via the Active checkbox in the Rotator panel header.</td></tr>
-        <tr><td><code>Rotator — Protocol</code></td><td>PstRotator (XML, default), GS-232/Yaesu, or EasyComm II.</td></tr>
-        <tr><td><code>Rotator — Host / Port</code></td><td>Address of the rotator controller software. Default 127.0.0.1:12000 for PstRotator.</td></tr>
+        <tr><td><code>Rotator — Enable</code></td><td>Activates rotator control. Also toggleable via the Active checkbox in the Rotator panel header. <em>(As of v1.09, Rotator Control lives in the Station &amp; Rig Settings tab alongside TCI / flrig / HamLib / WinKeyer — moved from Cluster &amp; Integrations.)</em></td></tr>
+        <tr><td><code>Rotator — Protocol</code></td><td>PstRotator (XML, default), GS-232/Yaesu, EasyComm II, or <strong>ARCO</strong> <em>(v1.08.1+)</em>.</td></tr>
+        <tr><td><code>Rotator — Host / Port</code></td><td>Address of the rotator controller software. Default 127.0.0.1:12000 for PstRotator. For ARCO, point this at the serial bridge / TCP host if using a network adapter.</td></tr>
+        <tr><td colspan="2" style="background:rgba(57,255,20,.05);padding:4px 10px;font-family:var(--mono);font-size:11px;color:var(--accent2);letter-spacing:1px;">────── 🌎 Awards, 📊 Statistics &amp; 📡 Feeds <em>(v1.09)</em> ──────</td></tr>
+        <tr><td><code>Awards Tab → Cards</code> <em>(v1.09)</em></td><td>Three access cards link to the full-page dashboards: <strong>🏆 Awards</strong> (<code>/awards</code>), <strong>📊 Statistics</strong> (<code>/stats</code>), and <strong>📡 Feeds &amp; Alerts</strong> (<code>/feeds</code>). Each opens in its own tab; the pages cross-link to each other in their headers.</td></tr>
+        <tr><td colspan="2" style="background:rgba(255,64,64,.05);padding:4px 10px;font-family:var(--mono);font-size:11px;color:#ff4444;letter-spacing:1px;">────── ⛈ Weather Alerts tab <em>(v1.09 — new tab)</em> ──────</td></tr>
+        <tr><td><code>Weather Alerts — Acceptance Gate</code> <em>(v1.09)</em></td><td>Shared disclaimer for both Lightning Detection and High Wind Alerts. Both subsystems stay dormant until you read and accept the on-screen disclaimer. Accept once, both become eligible to display banners.</td></tr>
+        <tr><td><code>Lightning Detection</code></td><td>Three-source lightning banner (Blitzortung + NOAA/NWS + Ambient Weather). Three-tier color-coded alert (distant / moderate / close). <strong>CLOSE BY</strong> tier has a bounce animation as of v1.09.</td></tr>
+        <tr><td><code>💨 High Wind Alerts</code> <em>(v1.09)</em></td><td>Three-tier wind-speed banner from NWS alerts, NWS METAR, and Ambient PWS. Defaults: elevated 30 mph sustained / high 45 mph gust / extreme with 20-min cooldown.</td></tr>
+        <tr><td colspan="2" style="background:rgba(0,229,255,.05);padding:4px 10px;font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:1px;">────── 💾 Backup &amp; Restore <em>(v1.09 auto-backup)</em> ──────</td></tr>
+        <tr><td><code>Auto-Backup — Enable</code> <em>(v1.09)</em></td><td>Checkbox — turns on scheduled auto-backup. Writes raw <code>.db</code> copies AND ADIF exports for both General + POTA databases into one timestamped folder (<code>backups/SDRLoggerPlus-YYYY-MM-DD_HHMM/</code>).</td></tr>
+        <tr><td><code>Auto-Backup — Interval</code> <em>(v1.09)</em></td><td>Daily, Weekly, or On-Exit. Schedule state persists in <code>auto_backup_state.json</code> — closing/reopening within 24 h will not refire Daily.</td></tr>
+        <tr><td><code>Auto-Backup — Retention</code> <em>(v1.09)</em></td><td>Keep last N folders (default 14). Only prunes the oldest <code>SDRLoggerPlus-*</code> folder <strong>after</strong> a successful new write — a failed run never destroys prior backups. Pre-delete safety backups are immune.</td></tr>
+        <tr><td><code>Run Backup Now</code> <em>(v1.09)</em></td><td>Manual-trigger button. UI shows last-run status and next-due countdown.</td></tr>
       </tbody>
     </table>
   </div>
@@ -592,9 +597,11 @@
     <p><strong>Clicking a POTA spot</strong> fills the QSO entry form and tunes your radio, just like a normal DX cluster spot. The park reference is automatically placed in the <em>Contest / Event / Park</em> field. If you are in <strong>POTA mode</strong> and have set your own park reference (i.e. you are activating), the reference is also placed in the <em>P2P Park Ref</em> field for true park-to-park contacts.</p>
     <p>Click <strong>🏕 POTA</strong> again to return to the normal DX cluster view. Band filtering still applies — if you are on 20m, only POTA spots on 20m are shown.</p>
 
-    <h3>Hot Stations (Watchlist Highlight &amp; Announcement)</h3>
-    <p>Enable <strong>Highlight Hot Stations</strong> in Settings → DX Clusters and enter a comma-separated watchlist of callsigns (e.g. <code>DX0DX,VK9XX,ZL9HR</code>). When a watched callsign appears in the spot list, it is highlighted with a <strong style="color:#ff4444">red callsign</strong> and a red left border — making it easy to spot rare DX at a glance. Toggle the checkbox to turn highlighting on or off without clearing the watchlist.</p>
+    <h3>🔥 Hot List — Watchlist Highlight &amp; Announcement</h3>
+    <p>Enable <strong>Highlight Hot Stations</strong> in Settings → Display → 🔥 Hot List and enter a comma-separated watchlist of callsigns (e.g. <code>DX0DX,VK9XX,ZL9HR</code>). When a watched callsign appears in the spot list, it is highlighted with a <strong style="color:#ff4444">red callsign</strong> and a red left border — making it easy to spot rare DX at a glance. Toggle the checkbox to turn highlighting on or off without clearing the watchlist.</p>
     <p>Enable <strong>Announce via speech</strong> to also hear a voice alert when a watchlist callsign is spotted — for example: <em>"Hot spot. D X zero D X. 20m, USB."</em> Announcements use your system's built-in text-to-speech and repeat at most once every 15 minutes per callsign, so a heavily-worked DXpedition won't trigger continuous alerts.</p>
+    <p><strong>✕ Clear All</strong> <em>(v1.09)</em> — an inline ✕ Clear button sits next to the callsigns input (and also on the <code>/feeds</code> status banner). Clicking it prompts for confirmation and then empties the entire watchlist in one shot. Clears propagate live to every open tab via <code>BroadcastChannel("sdrlogger-hotlist")</code>.</p>
+    <div class="tip"><strong>Add callsigns without typing</strong> — on the <a href="/feeds" target="_blank" style="color:var(--accent);">📡 Feeds &amp; Alerts</a> page (v1.09), every DXpedition announcement shows a clickable call chip. Click to toggle that callsign in or out of your Hot List — changes persist and broadcast instantly to the running main logger, no reload needed.</div>
     <h3>RBN Band-Opening Alerts</h3>
     <p>SDRLogger+ connects to the <strong>Reverse Beacon Network (RBN)</strong> to detect VHF/UHF band openings near your location. RBN skimmers are automated receivers with known grid squares — when a skimmer within your configured distance hears a signal on a monitored band, SDRLogger+ fires an alert.</p>
     <p>Configure in <strong>⚙ Settings → DX Clusters → RBN Band-Opening Alerts</strong>:</p>
@@ -795,6 +802,7 @@
         <tr><td>PstRotator</td><td>12000 (UDP)</td><td>PstRotator software — supports almost all rotator hardware including Yaesu, Hygain, Prosistel, and more</td></tr>
         <tr><td>GS-232 / Yaesu</td><td>configurable</td><td>Yaesu G-450, G-800, G-1000, G-2800; direct serial-to-TCP bridge (e.g. com0com + ser2net)</td></tr>
         <tr><td>EasyComm II</td><td>configurable</td><td>Ham Radio Deluxe Rotator, various open-source controllers</td></tr>
+        <tr><td><strong>ARCO</strong> <em>(v1.08.1+)</em></td><td>serial (USB) or TCP</td><td><strong>ARCO</strong> dedicated rotator controller — native protocol, live AZ/EL polling, click-to-aim from the map, click-to-park</td></tr>
       </tbody>
     </table>
     <h3>The Rotator Panel</h3>
@@ -815,12 +823,21 @@
       <li>The Stop command (<code>&lt;PST&gt;&lt;STOP&gt;1&lt;/STOP&gt;&lt;/PST&gt;</code>) is also sent via UDP — the same method used by N1MM Logger+, Swisslog, and Logger32</li>
     </ul>
     <div class="tip">In PstRotator, go to <strong>Communication → UDP Control Port</strong> and ensure the port is set to <strong>12000</strong> (matching SDRLogger+ Settings). No TCP server setup is needed.</div>
+    <h3>ARCO Setup Notes <em>(v1.08.1+)</em></h3>
+    <p>SDRLogger+ has native support for the <strong>ARCO</strong> rotator controller — no PstRotator middleware needed. Connect the ARCO over USB (appears as a COM port) or via TCP if you've bridged it through a serial-to-network adapter, then select <code>ARCO</code> from the protocol dropdown in Settings.</p>
+    <ul>
+      <li><strong>Live AZ + EL</strong> readout (where supported by your antenna setup)</li>
+      <li><strong>Click-to-aim</strong> — click any spot on the Distance Map to send the bearing to the ARCO</li>
+      <li><strong>Click-to-park</strong> — single button returns the rotator to its home/park position</li>
+      <li><strong>Auto-rotate</strong> — points at the DX on every callsign lookup, same as the other backends</li>
+    </ul>
+    <div class="tip">If you're switching from PstRotator to native ARCO, you can leave PstRotator installed but uncheck "Active" in its UI to avoid both apps fighting for the COM port.</div>
     <h3>Settings</h3>
     <p>Configure the rotator under <strong>⚙ Settings → Station &amp; Rig → Rotator Control</strong>. (As of v1.09 the rotator settings moved here from Cluster &amp; Integrations so all physical-hardware configuration — TCI, flrig, HamLib, WinKeyer, rotator — lives on one tab.)</p>
     <p>Options:</p>
     <ul>
       <li>Enable/disable the rotator</li>
-      <li>Select protocol (PstRotator, GS-232, or EasyComm II)</li>
+      <li>Select protocol (PstRotator, GS-232, EasyComm II, or <strong>ARCO</strong>)</li>
       <li>Set host (default <code>127.0.0.1</code>) and port (default <code>12000</code>)</li>
     </ul>
     <div class="tip">Use the <strong>Test</strong> button in the Rotator panel to verify the connection before operating. The status dot turns green on a successful command.</div>
@@ -1278,7 +1295,7 @@
     <div class="tip">SAT mode is a third option on the <strong>General / 🏕 POTA / 🛰 SAT</strong> mode toggle in the header. Switch to SAT mode to transform the entire UI for satellite operating.</div>
   </div>
 
-  <h2>When SDRLogger+ Talks to the S.A.T.</h2>
+  <h3>When SDRLogger+ Talks to the S.A.T.</h3>
   <div class="section-card">
     <p>SDRLogger+ <strong>only listens to and polls the S.A.T. while you are in SAT mode.</strong> This is intentional — many operators leave their S.A.T. powered on continuously, but only want SDRLogger+ to interact with it during active satellite sessions.</p>
     <table>
@@ -1292,7 +1309,7 @@
     <p>The gold <strong>S.A.T.</strong> badge in the header bar is your confirmation that SDRLogger+ is actively talking to the S.A.T. If you're in SAT mode and the badge stays red ("S.A.T. OFFLINE"), check your S.A.T. IP address and that the device is powered on / reachable.</p>
   </div>
 
-  <h2>How It Works</h2>
+  <h3>How It Works</h3>
   <div class="section-card">
     <p>SDRLogger+ communicates with the S.A.T. controller over four complementary network channels — all standards-based:</p>
     <table>
@@ -1306,7 +1323,7 @@
     </table>
   </div>
 
-  <h2>Setup</h2>
+  <h3>Setup</h3>
   <div class="section-card">
     <h3>1. Configure SDRLogger+</h3>
     <p>Open <strong>⚙ Settings → 🛰 Satellite</strong> tab and enter:</p>
@@ -1338,7 +1355,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <p>Click the <strong>🛰 SAT</strong> button in the General / 🏕 POTA / 🛰 SAT toggle at the top of SDRLogger+. The Satellite Status panel appears in place of the DX Cluster, and live data populates within seconds once the S.A.T. is tracking a bird.</p>
   </div>
 
-  <h2>The Satellite Status Panel</h2>
+  <h3>The Satellite Status Panel</h3>
   <div class="section-card">
     <p>Replaces the DX Cluster panel when in SAT mode. Refreshes every 2 seconds from the S.A.T.'s <code>/track</code> API.</p>
 
@@ -1371,14 +1388,14 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     </ul>
   </div>
 
-  <h2>🛰 Satellite Map Panel <span style="font-size:12px;color:var(--muted);">(v1.06.1+)</span></h2>
+  <h3>🛰 Satellite Map Panel <span style="font-size:12px;color:var(--muted);">(v1.06.1+)</span></h3>
   <div class="section-card">
     <p>When you switch into SAT mode, the <strong>Distance Map</strong> panel is automatically hidden and replaced by a dedicated <strong>🛰 Satellite Map</strong> panel in the same slot. Flip back to General or POTA and the Distance Map returns.</p>
     <p>The satellite map uses a plate carrée (equirectangular) projection rendered on NASA EOSDIS GIBS <strong>Blue Marble Next Generation</strong> imagery, and updates every 2 seconds from the same <code>/track</code> feed that drives the status panel.</p>
     <h3>What's on the map</h3>
     <ul>
       <li><strong>Yellow diamond</strong> — the actively-tracked satellite's sub-point (matches the CSN S.A.T. controller's own display style)</li>
-      <li><strong>Yellow footprint circle</strong> — coverage radius. LEO (~400 km) is ~2,400 km; RS-44 (~1,200 km) is ~4,000 km</li>
+      <li><strong>Yellow footprint circle</strong> — coverage radius computed from satellite altitude using the 0° geometric-horizon formula (<code>R · acos(R/(R+h))</code>), matching what the CSN S.A.T. controller's own MAP panel draws. Typical radii: ISS (~420 km) ≈ 2,300 km; SO-50 (~610 km) ≈ 2,680 km; RS-44 (~1,200 km) ≈ 3,580 km</li>
       <li><strong>Cyan ground track</strong> — ~3 forward orbits + ~90 min trailing track, propagated client-side via SGP4 from the latest Celestrak TLE. Dashed cyan polyline with UTC timestamp labels at both ends, split cleanly at the antimeridian</li>
       <li><strong>Cyan station dot</strong> — your QTH, from saved grid or S.A.T. live GPS</li>
       <li><strong>Yellow beam line</strong> — dashed line from station to sub-point for quick "which way is it?" awareness</li>
@@ -1387,7 +1404,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <div class="tip">The sat map is a regular dock panel — drag it to any column, collapse, or resize. With <strong>per-mode dock layouts</strong> (v1.06.1+), the position you choose in SAT mode is remembered independently from your General and POTA layouts.</div>
   </div>
 
-  <h2>🧭 Per-Mode Dock Layouts <span style="font-size:12px;color:var(--muted);">(v1.06.1+)</span></h2>
+  <h3>🧭 Per-Mode Dock Layouts <span style="font-size:12px;color:var(--muted);">(v1.06.1+)</span></h3>
   <div class="section-card">
     <p>Dock panel arrangements (columns, order, collapsed state, heights) are now saved <strong>independently for each operating mode</strong> — General, POTA, and SAT each have their own layout. Drag a panel, collapse it, or resize it, and the change is written to the currently-active mode's slot only.</p>
     <p>Switch modes and the incoming mode's saved arrangement snaps in. Close the browser, re-open hours later, and you boot straight back into your last layout for the current mode.</p>
@@ -1395,7 +1412,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <p><strong>Note:</strong> SAT mode is intentionally not auto-restored across page reloads (consistent with the "only talk to the S.A.T. while actively in SAT mode" design). You'll boot back into General or POTA, then click 🛰 SAT when you're ready for a pass.</p>
   </div>
 
-  <h2>📡 Propagation Forecast <span style="font-size:12px;color:var(--muted);">(v1.07+)</span></h2>
+  <h3>📡 Propagation Forecast <span style="font-size:12px;color:var(--muted);">(v1.07+)</span></h3>
   <div class="section-card">
     <p>A small <strong>📡 VOACAP</strong> chip appears inline with the Entity info line under the callsign in the QSO entry panel. Click it to open a dedicated propagation-forecast popup for the current callsign. The callsign's grid is auto-resolved via QRZ / HamQTH, and the popup pre-loads current solar data (SFI / K / A) from your existing <code>/api/solar</code> feed.</p>
     <p>The popup shows:</p>
@@ -1411,7 +1428,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <p>An <strong>← Return to SDRLogger+</strong> button in the popup header closes the popup and re-focuses the main window — no new tab or window is spawned.</p>
   </div>
 
-  <h2>SAT QSO Entry Form</h2>
+  <h3>SAT QSO Entry Form</h3>
   <div class="section-card">
     <p>In SAT mode, the QSO entry form is streamlined for satellite operating. Fields marked with ★ are auto-populated from the S.A.T.'s live data:</p>
     <table>
@@ -1433,13 +1450,13 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <p>Fields hidden in SAT mode (vs General mode): Band, Frequency, QTH, Contest/Event/Park.</p>
   </div>
 
-  <h2>Real-Time QSO Push</h2>
+  <h3>Real-Time QSO Push</h3>
   <div class="section-card">
     <p>When you log a QSO <strong>on the S.A.T. device itself</strong> (using its built-in LOG ENTRY screen), the S.A.T. broadcasts an ADIF record over UDP to SDRLogger+. The QSO appears in your log within <strong>~2 seconds</strong> with a toast notification: <em>🛰 SAT QSO received from S.A.T.</em></p>
     <p>This works with any of the S.A.T.'s QSO LOG TYPE options (N1MM, DXKeeper, HRD, Log4OM, ACLog, MacLogger) — they all send standard ADIF over UDP.</p>
   </div>
 
-  <h2>"⬇ Fetch S.A.T. Log" Button</h2>
+  <h3>"⬇ Fetch S.A.T. Log" Button</h3>
   <div class="section-card">
     <p>The S.A.T. controller stores up to <strong>100 QSO log entries</strong> internally. The <strong>⬇ Fetch S.A.T. Log</strong> button (in the connection bar of the Satellite Status panel) pulls the entire stored log directly from the S.A.T. via its <code>/adif</code> endpoint.</p>
     <p>Smart <strong>duplicate detection</strong> (callsign + date + sat name within a ±5 minute window) ensures no double entries — you can hit the button anytime without worry.</p>
@@ -1451,14 +1468,14 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     </ul>
   </div>
 
-  <h2>"🧹 Dedupe" Button</h2>
+  <h3>"🧹 Dedupe" Button</h3>
   <div class="section-card">
     <p>The orange <strong>🧹 Dedupe</strong> button (next to ⬇ Fetch in the connection bar) cleans up duplicate SAT QSOs already in your log. It scans all QSOs with <code>prop_mode=SAT</code> and removes copies where the callsign, date, and satellite name match within a ±5-minute window.</p>
     <p>The <strong>earliest copy is kept</strong> — that one usually has the most complete data (band, frequency, transponder) from the original UDP push. You'll be asked to confirm before any rows are deleted.</p>
     <div class="tip">In normal use (v1.06+) you should never need this button — the dedup logic prevents duplicates from being inserted in the first place. It exists for cleaning up legacy duplicates from older versions or unusual edge cases.</div>
   </div>
 
-  <h2>ADIF Export &amp; LoTW</h2>
+  <h3>ADIF Export &amp; LoTW</h3>
   <div class="section-card">
     <p>SAT QSOs are exported with full ADIF 3.1 satellite fields for LoTW, Club Log, eQSL, and other services:</p>
     <ul>
@@ -1471,7 +1488,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     </ul>
   </div>
 
-  <h2>Troubleshooting SAT Mode</h2>
+  <h3>Troubleshooting SAT Mode</h3>
   <div class="section-card">
     <h3>No data appears in the Satellite Status panel</h3>
     <ul>
@@ -1504,7 +1521,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <p>Open the dashboard from the <strong>🏆 Awards</strong> link in the navigation bar, or by navigating to <code>/awards</code> in your browser.</p>
   </div>
 
-  <h2>The Trackers</h2>
+  <h3>The Trackers</h3>
   <div class="section-card">
     <p>Each tab is independent — switching between them is instant, and your selected filter and sort options are preserved. As of v1.09 the dashboard has eight trackers:</p>
     <table>
@@ -1522,7 +1539,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     </table>
   </div>
 
-  <h2>Color Coding</h2>
+  <h3>Color Coding</h3>
   <div class="section-card">
     <p>All four trackers use the same colour-coded card system:</p>
     <table>
@@ -1535,7 +1552,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     </table>
   </div>
 
-  <h2>DXCC Tracker</h2>
+  <h3>DXCC Tracker</h3>
   <div class="section-card">
     <p>Tracks all <strong>340 DXCC entities</strong> worldwide. Each entity card shows:</p>
     <ul>
@@ -1553,7 +1570,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <div class="tip">DXCC entities are resolved using the bundled <code>cty.dat</code> database (from country-files.com). Every QSO callsign is parsed and the entity is identified at log-time and cached for instant dashboard lookups.</div>
   </div>
 
-  <h2>WAS Tracker (Worked All States)</h2>
+  <h3>WAS Tracker (Worked All States)</h3>
   <div class="section-card">
     <p>Tracks all <strong>50 US states</strong> for the ARRL Worked All States award. Displays both a US map view and a card grid.</p>
     <h3>Filters</h3>
@@ -1571,7 +1588,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <div class="tip">If your WAS tracker shows fewer states than expected, you can re-import your ADIF with "Replace Duplicates" to populate state fields from your existing QSOs.</div>
   </div>
 
-  <h2>WAZ Tracker (Worked All Zones)</h2>
+  <h3>WAZ Tracker (Worked All Zones)</h3>
   <div class="section-card">
     <p>Tracks all <strong>40 CQ Zones</strong> for the CQ Worked All Zones award. Each zone card shows:</p>
     <ul>
@@ -1587,7 +1604,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <p>CQ Zones are derived from the cty.dat lookup at log-time and cached for fast dashboard queries.</p>
   </div>
 
-  <h2>WPX Tracker (Worked All Prefixes)</h2>
+  <h3>WPX Tracker (Worked All Prefixes)</h3>
   <div class="section-card">
     <p>Tracks unique callsign <strong>prefixes</strong> worked using the <strong>CQ WPX prefix extraction algorithm</strong>. A prefix is the part of the callsign before the last numeric digit (with handling for portable indicators, special prefixes, etc.).</p>
     <h3>Examples</h3>
@@ -1606,7 +1623,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     </ul>
   </div>
 
-  <h2>📡 VUCC Tracker (VHF/UHF Century Club)</h2>
+  <h3>📡 VUCC Tracker (VHF/UHF Century Club)</h3>
   <div class="section-card">
     <p>Tracks unique 4-character <strong>Maidenhead grid squares</strong> worked on each VHF/UHF band for the ARRL VUCC award. The threshold for certification varies by band:</p>
     <table>
@@ -1633,7 +1650,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <div class="tip">If your VUCC totals look low, re-run QRZ lookups on older QSOs or re-import your ADIF with <em>Replace Duplicates</em> to back-fill GRIDSQUARE from lookup sources.</div>
   </div>
 
-  <h2>🇺🇸 5BWAS Tracker (Five-Band WAS)</h2>
+  <h3>🇺🇸 5BWAS Tracker (Five-Band WAS)</h3>
   <div class="section-card">
     <p>Tracks all <strong>50 US states on each of the five classic HF bands</strong> — 80, 40, 20, 15, and 10 meters — for the ARRL Five-Band Worked All States award.</p>
     <p>The tracker shows a <strong>State × Band matrix</strong>: 50 rows (states, alphabetical) × 5 band columns. Each cell is cyan when the state/band combination has been worked and dim when not yet worked. Per-band totals and overall progress (out of 250) are shown at the top.</p>
@@ -1641,7 +1658,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <div class="tip">Uses the same STATE-field resolution as the single-band WAS tracker — make sure STATE is populated (QRZ lookup or ADIF import) for QSOs to count.</div>
   </div>
 
-  <h2>🌍 5BDXCC Tracker (Five-Band DXCC)</h2>
+  <h3>🌍 5BDXCC Tracker (Five-Band DXCC)</h3>
   <div class="section-card">
     <p>Tracks <strong>100+ DXCC entities worked on each of 80 / 40 / 20 / 15 / 10 meters</strong> for the ARRL Five-Band DXCC award.</p>
     <p>Each band card shows how many entities you have worked on that band, with a progress bar toward 100. The tracker also displays a <strong>union total</strong> across all five bands — the count of distinct entities that have been worked on at least one of the five classic bands (useful for planning which bands still need the entity).</p>
@@ -1649,7 +1666,7 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     <div class="tip">Entity resolution uses the same <code>cty.dat</code> lookup as the main DXCC tracker — WARC bands (30m, 17m, 12m) are intentionally excluded by the 5BDXCC rule, but they still count toward the regular DXCC tab.</div>
   </div>
 
-  <h2>🌎 WAC Tracker (Worked All Continents)</h2>
+  <h3>🌎 WAC Tracker (Worked All Continents)</h3>
   <div class="section-card">
     <p>Tracks the six standard continents required for the IARU <strong>Worked All Continents</strong> award: <strong>North America (NA), South America (SA), Europe (EU), Asia (AS), Africa (AF), Oceania (OC)</strong>. Antarctica (AN) is shown below as a separate endorsement card and is <strong>not</strong> required for the base award.</p>
     <p>Each continent card shows:</p>
@@ -2010,15 +2027,30 @@ function jumpToSection(sel) {
   setTimeout(() => { sel.value = ''; }, 400);
 }
 
-// Populate section dropdown from all h2 headings
+// Populate section dropdown from all h2 headings, grouped by parent tab
 document.addEventListener('DOMContentLoaded', function() {
   const sel = document.getElementById('section-jump');
+  // Map tab id → label shown in the tab bar
+  const tabLabels = {};
+  document.querySelectorAll('.help-tab').forEach(btn => {
+    tabLabels[btn.dataset.htab] = btn.textContent.trim();
+  });
+  let currentTabId = null;
+  let currentGroup = null;
   document.querySelectorAll('.container h2').forEach(function(h, i) {
     if (!h.id) h.id = 'sec-' + i;
+    const tab = h.closest('.help-tab-content');
+    const tabId = tab ? tab.id : null;
+    if (tabId !== currentTabId) {
+      currentGroup = document.createElement('optgroup');
+      currentGroup.label = tabLabels[tabId] || 'Other';
+      sel.appendChild(currentGroup);
+      currentTabId = tabId;
+    }
     const opt = document.createElement('option');
     opt.value = h.id;
     opt.textContent = h.textContent.trim();
-    sel.appendChild(opt);
+    currentGroup.appendChild(opt);
   });
 });
 
