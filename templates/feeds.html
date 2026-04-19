@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDRLogger+ — Feeds & Alerts</title>
+<link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600&display=swap');
+  :root{--bg:#0a0d12;--surface:#111620;--card:#161c28;--border:#1e2a3a;
+    --accent:#00e5ff;--accent2:#39ff14;--warn:#ff6b35;--text:#cdd9e5;
+    --muted:#5a7080;--green:#00c851;--red:#ff4444;--gold:#ffd700;--hot:#ff1744;
+    --mono:'Share Tech Mono',monospace;--head:'Rajdhani',sans-serif;--body:'Exo 2',sans-serif;}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.6;}
+  body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px);pointer-events:none;z-index:9999;}
+
+  header{background:var(--surface);border-bottom:2px solid var(--accent);padding:14px 28px;
+    display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;}
+  .logo{font-family:var(--head);font-size:22px;font-weight:700;color:var(--accent);letter-spacing:3px;text-transform:uppercase;}
+  .logo span{color:var(--accent2);}
+  .logo-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:6px;letter-spacing:2px;}
+  .nav-spacer{margin-left:auto;}
+  .nav-btn{font-family:var(--mono);font-size:12px;padding:6px 16px;border-radius:3px;
+    border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;
+    text-decoration:none;transition:all .15s;margin-left:8px;}
+  .nav-btn:hover{background:rgba(0,229,255,.1);}
+
+  /* Status banner */
+  .status-banner{padding:14px 28px;font-family:var(--mono);font-size:15px;
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    background:var(--surface);border-bottom:1px solid var(--border);color:var(--text);font-weight:600;}
+  .status-banner > span:first-child{color:var(--accent);font-size:16px;letter-spacing:.5px;}
+  .status-banner .pill{padding:5px 14px;border-radius:14px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-size:13px;}
+  .pill-on{background:rgba(0,200,81,.22);color:var(--accent2);border:1px solid var(--accent2);text-shadow:0 0 8px rgba(57,255,20,.4);}
+  .pill-off{background:rgba(255,107,53,.18);color:var(--warn);border:1px solid var(--warn);}
+  .status-banner .hint{color:#d5e3ef;font-weight:400;font-size:14px;}
+  .status-banner strong{color:var(--accent);font-size:17px;font-weight:700;text-shadow:0 0 6px rgba(0,229,255,.4);}
+
+  /* Tabs */
+  .feed-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);padding:0 28px;background:var(--surface);}
+  .feed-tab{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:1px;padding:12px 28px;
+    background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;
+    color:var(--muted);cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s;}
+  .feed-tab:hover{color:var(--text);}
+  .feed-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .feed-tab .badge{background:rgba(0,229,255,.15);color:var(--accent);font-size:10px;padding:2px 8px;border-radius:10px;margin-left:8px;}
+  .tab-content{display:none;padding:24px 28px;}
+  .tab-content.active{display:block;}
+
+  /* Toolbar inside each tab */
+  .toolbar{display:flex;gap:12px;align-items:center;margin-bottom:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--muted);}
+  .toolbar .meta{flex:1;}
+  .toolbar select,.toolbar input{background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);
+    font-family:var(--mono);font-size:12px;padding:5px 10px;outline:none;}
+
+  /* Card list */
+  .card-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;}
+  .feed-card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:14px 16px;
+    transition:border-color .15s;display:flex;flex-direction:column;gap:8px;}
+  .feed-card:hover{border-color:var(--accent);}
+  .feed-card.live{border-color:var(--accent2);background:rgba(57,255,20,.04);}
+  .feed-card .title{font-family:var(--head);font-size:15px;font-weight:700;color:var(--accent);letter-spacing:.5px;}
+  .feed-card .country{font-family:var(--head);font-size:13px;color:var(--gold);font-weight:600;}
+  .feed-card .meta{font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .feed-card .time{font-family:var(--mono);font-size:12px;color:var(--text);}
+  .feed-card .when-live{color:var(--accent2);font-weight:700;}
+  .feed-card .when-soon{color:var(--gold);}
+  .feed-card .desc{font-family:var(--mono);font-size:11px;color:var(--text);opacity:.85;line-height:1.5;
+    background:var(--surface);border-left:2px solid var(--border);padding:8px 10px;border-radius:3px;
+    max-height:90px;overflow:hidden;text-overflow:ellipsis;}
+  .feed-card .links{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-family:var(--mono);font-size:11px;}
+  .feed-card .links a{color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent);}
+  .feed-card .links a:hover{color:var(--accent2);border-color:var(--accent2);}
+
+  /* Callsign chips */
+  .calls-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .calls-label{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+  .call-chip{font-family:var(--mono);font-size:12px;font-weight:700;padding:4px 10px;border-radius:14px;
+    background:rgba(0,229,255,.10);color:var(--accent);border:1px solid var(--accent);
+    cursor:pointer;transition:all .12s;user-select:none;letter-spacing:.5px;}
+  .call-chip:hover{background:rgba(0,229,255,.22);}
+  .call-chip.in-list{background:rgba(255,23,68,.18);color:var(--hot);border-color:var(--hot);}
+  .call-chip.in-list::before{content:"✓ ";}
+  .call-chip.in-list:hover{background:rgba(255,23,68,.32);}
+  .add-all{font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:3px;
+    background:transparent;border:1px dashed var(--muted);color:var(--muted);cursor:pointer;}
+  .add-all:hover{border-color:var(--accent);color:var(--accent);}
+
+  .loading{padding:60px;text-align:center;font-family:var(--mono);color:var(--muted);}
+  .err{padding:14px 18px;background:rgba(255,68,68,.08);border:1px solid var(--red);border-radius:5px;
+    font-family:var(--mono);font-size:12px;color:var(--red);margin-bottom:14px;}
+  .stale{color:var(--gold);}
+
+  /* ── Font Scale (A− / A / A+) ─────────────────────────────────────────── */
+  .scale-toggle{display:inline-flex;gap:0;margin-left:12px;border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+  .scale-toggle button{font-family:var(--mono);background:var(--bg);color:var(--muted);border:none;
+    padding:4px 10px;cursor:pointer;letter-spacing:1px;font-weight:700;border-right:1px solid var(--border);transition:all .12s;}
+  .scale-toggle button:last-child{border-right:none;}
+  .scale-toggle button.active{background:var(--accent);color:var(--bg);}
+  .scale-toggle button:hover:not(.active){background:rgba(0,229,255,.1);color:var(--accent);}
+  .scale-toggle button:nth-child(1){font-size:11px;}
+  .scale-toggle button:nth-child(2){font-size:14px;}
+  .scale-toggle button:nth-child(3){font-size:17px;}
+  /* Scale classes: bump readability-critical text by 15% / 30% */
+  body.scale-lg .feed-card{padding:18px 20px;}
+  body.scale-lg .feed-card .title{font-size:17px;}
+  body.scale-lg .feed-card .country{font-size:15px;}
+  body.scale-lg .feed-card .meta,body.scale-lg .feed-card .time{font-size:13px;}
+  body.scale-lg .feed-card .desc{font-size:12.5px;max-height:120px;}
+  body.scale-lg .feed-card .links{font-size:12.5px;}
+  body.scale-lg .call-chip{font-size:14px;padding:5px 12px;}
+  body.scale-lg .calls-label{font-size:11px;}
+  body.scale-lg .feed-tab{font-size:17px;}
+  body.scale-lg .toolbar{font-size:13px;}
+  body.scale-lg .status-banner{font-size:16px;}
+  body.scale-lg .status-banner .pill{font-size:14px;}
+  body.scale-lg .card-list{grid-template-columns:repeat(auto-fill,minmax(420px,1fr));}
+
+  body.scale-xl .feed-card{padding:18px 20px;}
+  body.scale-xl .feed-card .title{font-size:18px;}
+  body.scale-xl .feed-card .country{font-size:16px;}
+  body.scale-xl .feed-card .meta,body.scale-xl .feed-card .time{font-size:14px;}
+  body.scale-xl .feed-card .desc{font-size:13.5px;max-height:138px;}
+  body.scale-xl .feed-card .links{font-size:13.5px;}
+  body.scale-xl .call-chip{font-size:15px;padding:5px 13px;}
+  body.scale-xl .calls-label{font-size:11.5px;}
+  body.scale-xl .feed-tab{font-size:18px;padding:13px 30px;}
+  body.scale-xl .toolbar{font-size:14px;}
+  body.scale-xl .status-banner{font-size:17px;}
+  body.scale-xl .status-banner .pill{font-size:14.5px;}
+  body.scale-xl .card-list{grid-template-columns:repeat(auto-fill,minmax(470px,1fr));}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SDR<span>Logger+</span></div>
+  <span class="logo-sub">FEEDS &amp; ALERTS</span>
+  <span class="nav-spacer"></span>
+  <span class="scale-toggle" title="Text size">
+    <button onclick="setUiScale('')"   id="scale-md">A</button>
+    <button onclick="setUiScale('lg')" id="scale-lg">A</button>
+    <button onclick="setUiScale('xl')" id="scale-xl">A</button>
+  </span>
+  <a href="/awards" class="nav-btn">Awards</a>
+  <a href="/stats" class="nav-btn">Stats</a>
+  <a href="/" class="nav-btn">← Back to Logger</a>
+</header>
+
+<div class="status-banner" id="status-banner">
+  <span>🔥 Hot List:</span>
+  <span class="pill pill-off" id="hot-status-pill">Loading…</span>
+  <span class="hint" id="hot-status-hint">— click any callsign chip below to add/remove from your watchlist. <em style="color:var(--muted);font-style:normal;">(Tip: only add real callsigns — auto-extractor may occasionally tag a band or power token.)</em></span>
+  <span style="margin-left:auto;margin-right:18px;" class="hint">Watchlist: <strong id="hot-count" title="" style="color:var(--accent);cursor:help;">0</strong></span>
+  <button id="hot-clear-btn" onclick="clearAllHotCalls()" title="Remove ALL callsigns from your Hot List"
+    style="font-family:var(--mono);font-size:12px;padding:5px 14px;border-radius:14px;
+    background:transparent;border:1px solid var(--red);color:var(--red);cursor:pointer;
+    letter-spacing:1px;font-weight:700;text-transform:uppercase;transition:all .12s;margin-right:18px;">✕ Clear All</button>
+</div>
+
+<div class="feed-tabs">
+  <button class="feed-tab active" data-tab="tab-contests" onclick="switchFeedTab('tab-contests')">🏆 Contests <span class="badge" id="cnt-contests">—</span></button>
+  <button class="feed-tab" data-tab="tab-dx" onclick="switchFeedTab('tab-dx')">🌍 DXpeditions <span class="badge" id="cnt-dx">—</span></button>
+</div>
+
+<!-- ─── Contests ─── -->
+<div class="tab-content active" id="tab-contests">
+  <div class="toolbar">
+    <span class="meta" id="contests-meta">Loading WA7BNM Contest Calendar…</span>
+    <label>Window:</label>
+    <select id="contest-window" onchange="renderContests()">
+      <option value="all">All upcoming</option>
+      <option value="now">Live right now</option>
+      <option value="48h">Next 48 hours</option>
+      <option value="weekend">This weekend</option>
+      <option value="7d">Next 7 days</option>
+    </select>
+    <button class="nav-btn" onclick="loadContests(true)">↻ Refresh</button>
+  </div>
+  <div id="contests-grid" class="card-list"><div class="loading">Loading contest feed…</div></div>
+</div>
+
+<!-- ─── DXpeditions ─── -->
+<div class="tab-content" id="tab-dx">
+  <div class="toolbar">
+    <span class="meta" id="dx-meta">Loading NG3K Announced DX Operations…</span>
+    <button class="nav-btn" onclick="loadDX(true)">↻ Refresh</button>
+  </div>
+  <div id="dx-grid" class="card-list"><div class="loading">Loading DXpedition feed…</div></div>
+</div>
+
+<script>
+// ─── Hot List sync (BroadcastChannel + localStorage + server) ───────────────
+const BROADCAST_CHANNEL = 'sdrlogger-hotlist';
+const LS_KEY = 'hamlog_settings';
+let hotCalls = [];           // current hot list (uppercase strings)
+let hotEnabled = false;
+let hotTtsEnabled = false;
+let bc = null;
+try { bc = new BroadcastChannel(BROADCAST_CHANNEL); } catch(e){ /* old browsers */ }
+
+function loadHotState() {
+  // Read from localStorage (main logger writes here on Save)
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e){ s = {}; }
+  hotEnabled    = !!s.hot_enabled;
+  hotTtsEnabled = !!s.hot_tts_enabled;
+  const raw = (s.hot_calls || '').toString();
+  hotCalls = raw ? raw.toUpperCase().split(',').map(c => c.trim()).filter(Boolean) : [];
+  renderHotStatus();
+}
+
+function renderHotStatus() {
+  const pill = document.getElementById('hot-status-pill');
+  const hint = document.getElementById('hot-status-hint');
+  const count = document.getElementById('hot-count');
+  const clearBtn = document.getElementById('hot-clear-btn');
+  count.textContent = hotCalls.length;
+  // Hover-peek: show full list (capped at 60 calls so it doesn't blow up)
+  if (hotCalls.length === 0) {
+    count.title = 'Hot List is empty. Click any DXpedition callsign chip below to add.';
+  } else if (hotCalls.length <= 60) {
+    count.title = 'Current Hot List:\n  ' + hotCalls.join(', ');
+  } else {
+    count.title = `${hotCalls.length} calls — first 60:\n  ` + hotCalls.slice(0,60).join(', ') + '\n  …';
+  }
+  if (clearBtn) clearBtn.style.display = hotCalls.length ? '' : 'none';
+  if (hotEnabled && hotTtsEnabled) {
+    pill.className = 'pill pill-on'; pill.textContent = 'Visual + Voice';
+    hint.textContent = '— matching spots will glow red on the panadapter and be announced.';
+  } else if (hotEnabled) {
+    pill.className = 'pill pill-on'; pill.textContent = 'Visual Only';
+    hint.textContent = '— matching spots will glow red on the panadapter (voice off).';
+  } else {
+    pill.className = 'pill pill-off'; pill.textContent = 'Off';
+    hint.textContent = '— enable in main logger Settings → Display → Hot List to get alerts.';
+  }
+}
+
+async function persistHotCalls() {
+  // 1. localStorage
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e){ s = {}; }
+  s.hot_calls = hotCalls.join(',');
+  try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch(e){}
+  // 2. Server (so it survives restart even if main logger never saves again)
+  try {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({hot_calls: hotCalls.join(',')})
+    });
+  } catch(e){ console.warn('hot_calls server persist failed', e); }
+  // 3. Broadcast to other open tabs (main logger)
+  if (bc) bc.postMessage({type:'hot_calls', calls: hotCalls.slice()});
+  renderHotStatus();
+}
+
+function clearAllHotCalls() {
+  if (!hotCalls.length) return;
+  const n = hotCalls.length;
+  if (!confirm(`Clear ALL ${n} callsign${n===1?'':'s'} from your Hot List?\n\nThis will also clear the list in the main logger via live sync.`)) return;
+  hotCalls = [];
+  persistHotCalls();
+  refreshChipsInPlace();
+}
+
+function toggleCall(call) {
+  call = (call||'').toUpperCase().trim();
+  if (!call) return;
+  const i = hotCalls.indexOf(call);
+  if (i >= 0) hotCalls.splice(i, 1);
+  else        hotCalls.push(call);
+  persistHotCalls();
+  // Re-render chips on whichever tabs are loaded
+  refreshChipsInPlace();
+}
+
+function addAllCalls(calls) {
+  let added = 0;
+  for (const c of calls) {
+    const u = (c||'').toUpperCase().trim();
+    if (u && !hotCalls.includes(u)) { hotCalls.push(u); added++; }
+  }
+  if (added) {
+    persistHotCalls();
+    refreshChipsInPlace();
+  }
+}
+
+function refreshChipsInPlace() {
+  document.querySelectorAll('.call-chip[data-call]').forEach(el => {
+    const c = el.getAttribute('data-call').toUpperCase();
+    if (hotCalls.includes(c)) el.classList.add('in-list');
+    else                       el.classList.remove('in-list');
+  });
+}
+
+// Listen for changes from main logger (rare — main logger doesn't broadcast yet,
+// but this future-proofs it)
+if (bc) bc.onmessage = (ev) => {
+  if (ev.data && ev.data.type === 'hot_calls') {
+    hotCalls = (ev.data.calls || []).map(c => c.toUpperCase());
+    refreshChipsInPlace();
+    renderHotStatus();
+  } else if (ev.data && ev.data.type === 'hot_enabled') {
+    hotEnabled    = !!ev.data.enabled;
+    hotTtsEnabled = !!ev.data.tts;
+    renderHotStatus();
+  }
+};
+
+// React to localStorage changes from other tabs (browser fires 'storage' event)
+window.addEventListener('storage', (e) => {
+  if (e.key === LS_KEY) loadHotState();
+});
+
+// ─── Tab switching ───────────────────────────────────────────────────────────
+function switchFeedTab(id) {
+  document.querySelectorAll('.feed-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.feed-tab[data-tab="${id}"]`).classList.add('active');
+  document.getElementById(id).classList.add('active');
+}
+
+// ─── Contests ────────────────────────────────────────────────────────────────
+let contestsData = [];
+let contestsFetchedAt = '';
+
+async function loadContests(force) {
+  document.getElementById('contests-grid').innerHTML = '<div class="loading">Fetching WA7BNM iCal…</div>';
+  try {
+    const r = await fetch('/api/feeds/contests' + (force ? '?force=1' : ''));
+    const d = await r.json();
+    if (!d.ok) {
+      document.getElementById('contests-grid').innerHTML =
+        `<div class="err">Failed to load: ${d.error || 'unknown error'}</div>`;
+      return;
+    }
+    contestsData = d.events || [];
+    contestsFetchedAt = d.fetched_at || '';
+    document.getElementById('cnt-contests').textContent = contestsData.length;
+    document.getElementById('contests-meta').innerHTML =
+      `<a href="${d.source_url}" target="_blank" style="color:var(--accent);text-decoration:none;">${d.source}</a> · ${contestsData.length} events · cached ${formatAge(d.cache_age_sec)}` +
+      (d.error ? ` <span class="stale">(stale — fetch failed: ${d.error})</span>` : '');
+    renderContests();
+  } catch(e) {
+    document.getElementById('contests-grid').innerHTML = `<div class="err">Network error: ${e.message}</div>`;
+  }
+}
+
+function formatAge(sec) {
+  if (sec == null) return 'just now';
+  if (sec < 60)  return `${sec}s ago`;
+  if (sec < 3600) return `${Math.floor(sec/60)}m ago`;
+  return `${Math.floor(sec/3600)}h ${Math.floor((sec%3600)/60)}m ago`;
+}
+
+function isWeekendUTC(d) {
+  const day = d.getUTCDay();
+  return day === 5 || day === 6 || day === 0;  // Fri/Sat/Sun
+}
+
+function renderContests() {
+  const win = document.getElementById('contest-window').value;
+  const now = new Date();
+  const filtered = contestsData.filter(e => {
+    if (!e.start || !e.end) return win === 'all';
+    const start = new Date(e.start);
+    const end   = new Date(e.end);
+    if (end < now) return false;  // already over
+    if (win === 'all') return true;
+    if (win === 'now') return start <= now && end >= now;
+    if (win === '48h') return start <= new Date(now.getTime() + 48*3600*1000);
+    if (win === '7d')  return start <= new Date(now.getTime() + 7*24*3600*1000);
+    if (win === 'weekend') {
+      // Find next Sat/Sun window: Fri 00Z this week through Mon 00Z
+      const d = new Date(now);
+      const day = d.getUTCDay();
+      const daysToFri = (5 - day + 7) % 7;
+      const fri = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + daysToFri, 0, 0, 0));
+      const mon = new Date(fri.getTime() + 3*24*3600*1000);
+      return start < mon && end > fri;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    document.getElementById('contests-grid').innerHTML =
+      '<div class="loading">No contests in this time window.</div>';
+    return;
+  }
+
+  let html = '';
+  for (const e of filtered) {
+    const start = e.start ? new Date(e.start) : null;
+    const end   = e.end   ? new Date(e.end)   : null;
+    const live  = start && end && start <= now && end >= now;
+    const soon  = !live && start && (start - now) < 24*3600*1000;
+    const startLocal = start ? start.toLocaleString() : '?';
+    const endLocal   = end   ? end.toLocaleString()   : '?';
+    const startUTC   = start ? start.toISOString().substring(0,16).replace('T',' ') + 'Z' : '?';
+    const endUTC     = end   ? end.toISOString().substring(0,16).replace('T',' ') + 'Z'   : '?';
+    let durationLbl = '';
+    if (live) durationLbl = '<span class="when-live">● LIVE NOW</span>';
+    else if (soon) durationLbl = '<span class="when-soon">⚡ Starts within 24h</span>';
+
+    html += `<div class="feed-card${live?' live':''}">
+      <div class="title">${escapeHTML(e.title)}</div>
+      <div class="time">${durationLbl}</div>
+      <div class="meta">UTC: ${startUTC} → ${endUTC}</div>
+      <div class="meta">Local: ${startLocal} → ${endLocal}</div>
+      <div class="links"><a href="${e.url}" target="_blank">Rules &amp; details ↗</a></div>
+    </div>`;
+  }
+  document.getElementById('contests-grid').innerHTML = html;
+}
+
+// ─── DXpeditions ─────────────────────────────────────────────────────────────
+async function loadDX(force) {
+  document.getElementById('dx-grid').innerHTML = '<div class="loading">Fetching NG3K RSS…</div>';
+  try {
+    const r = await fetch('/api/feeds/dxpeditions' + (force ? '?force=1' : ''));
+    const d = await r.json();
+    if (!d.ok) {
+      document.getElementById('dx-grid').innerHTML =
+        `<div class="err">Failed to load: ${d.error || 'unknown error'}</div>`;
+      return;
+    }
+    document.getElementById('cnt-dx').textContent = (d.items || []).length;
+    document.getElementById('dx-meta').innerHTML =
+      `<a href="${d.source_url}" target="_blank" style="color:var(--accent);text-decoration:none;">${d.source}</a> · ${(d.items||[]).length} items` +
+      (d.error ? ` <span class="stale">(stale — fetch failed: ${d.error})</span>` : '');
+    renderDX(d.items || []);
+  } catch(e) {
+    document.getElementById('dx-grid').innerHTML = `<div class="err">Network error: ${e.message}</div>`;
+  }
+}
+
+function renderDX(items) {
+  if (!items.length) {
+    document.getElementById('dx-grid').innerHTML = '<div class="loading">No DXpeditions in feed.</div>';
+    return;
+  }
+  let html = '';
+  for (const it of items) {
+    const calls = it.calls || [];
+    const chips = calls.map(c => {
+      const inList = hotCalls.includes(c.toUpperCase());
+      return `<span class="call-chip${inList?' in-list':''}" data-call="${escapeHTML(c)}" onclick="toggleCall('${escapeJS(c)}')" title="Click to ${inList?'remove from':'add to'} Hot List">${escapeHTML(c)}</span>`;
+    }).join('');
+    const addAllBtn = calls.length > 1
+      ? `<button class="add-all" onclick='addAllCalls(${JSON.stringify(calls)})'>+ All</button>`
+      : '';
+    html += `<div class="feed-card">
+      <div class="country">${escapeHTML(it.country || it.title || '')}</div>
+      <div class="time">${escapeHTML(it.daterange || '')}</div>
+      ${calls.length ? `<div class="calls-row"><span class="calls-label">Calls:</span>${chips}${addAllBtn}</div>` : ''}
+      ${it.qsl ? `<div class="meta">QSL: ${escapeHTML(it.qsl)}</div>` : ''}
+      ${it.description ? `<div class="desc">${escapeHTML(it.description)}</div>` : ''}
+      <div class="links"><a href="${it.link}" target="_blank">View on NG3K ↗</a></div>
+    </div>`;
+  }
+  document.getElementById('dx-grid').innerHTML = html;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function escapeHTML(s){return String(s||'').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function escapeJS(s){return String(s||'').replace(/['\\]/g, c => '\\'+c);}
+
+// ─── UI scale ────────────────────────────────────────────────────────────────
+function setUiScale(s) {
+  document.body.classList.remove('scale-lg','scale-xl');
+  if (s === 'lg') document.body.classList.add('scale-lg');
+  else if (s === 'xl') document.body.classList.add('scale-xl');
+  try { localStorage.setItem('sdrlogger_ui_scale', s || ''); } catch(e){}
+  ['scale-md','scale-lg','scale-xl'].forEach(id => document.getElementById(id).classList.remove('active'));
+  document.getElementById('scale-' + (s || 'md')).classList.add('active');
+}
+function loadUiScale() {
+  let s = '';
+  try { s = localStorage.getItem('sdrlogger_ui_scale') || ''; } catch(e){}
+  setUiScale(s);
+}
+loadUiScale();
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+loadHotState();
+loadContests(false);
+loadDX(false);
+</script>
+</body>
+</html>

@@ -162,6 +162,27 @@
   <h1>SDR<span style="color:var(--accent2);">Logger+</span> Quick Start Guide</h1>
   <p class="subtitle">v{{ version }} &nbsp;·&nbsp; Ham Radio Logging · DX Cluster · POTA Spots · RBN Band-Opening Alerts · TCI / Thetis SDR Integration · Solar Conditions · Rotator Control · CW Keyer / Decoder</p>
 
+  <div class="tip" style="margin-bottom:24px;">
+    <strong style="color:var(--accent2);letter-spacing:1px;">✦ What's New in v1.09-rc2</strong>
+    <ul style="margin:8px 0 2px 22px;">
+      <li>🔤 <strong>Three-step font scaling</strong> (A · A · A+) on the <code>/awards</code>, <code>/stats</code>, and <code>/feeds</code> pages — choice persists across pages via <code>localStorage</code>.</li>
+      <li>🔥 <strong>Hot List polish</strong> — brighter/larger status banner on <code>/feeds</code>, inline ✕ Clear-All buttons on both <code>/feeds</code> AND in main Settings → Display, and live cross-tab sync via <code>BroadcastChannel</code>.</li>
+      <li>📡 <strong>Smarter Feeds callsign extractor</strong> — now ignores band tokens (<code>10M</code>, <code>12M</code>, <code>70CM</code>), power tokens (<code>50W</code>, <code>100W</code>, <code>1KW</code>), and Maidenhead grid squares (<code>QL64XG</code>) so only real callsigns become clickable Hot-List chips.</li>
+    </ul>
+    <strong style="color:var(--accent2);letter-spacing:1px;">✦ What's New in v1.09-rc1</strong>
+    <ul style="margin:8px 0 2px 22px;">
+      <li>💾 <strong>Scheduled Auto-Backup</strong> — Daily / Weekly / On-Exit runs write .db + ADIF for both General and POTA logs to a timestamped folder, with retention pruning that only touches folders created by the scheduler.</li>
+      <li>🏆 <strong>New award trackers</strong> — VUCC (grids per VHF/UHF band), 5BWAS (50 states × 80/40/20/15/10), 5BDXCC (100+ entities × 80/40/20/15/10), and <strong>WAC</strong> (Worked All Continents — six base continents plus an Antarctica endorsement) added alongside DXCC/WAS/WAZ/WPX.</li>
+      <li>📊 <strong>Statistics Dashboard</strong> at <code>/stats</code> — six Chart.js visualizations (QSOs/year, by-band donut, by-mode donut, top-10 entities, cumulative-over-time, hour-of-day heatmap), source/range/mode controls, and a five-pill stat strip across the top.</li>
+      <li>📡 <strong>Feeds &amp; Alerts</strong> at <code>/feeds</code> — live WA7BNM contest calendar and NG3K DXpedition announcements. Click any DXpedition callsign chip to instantly add (or remove) it from your 🔥 Hot List, broadcast live to the running main logger.</li>
+      <li>🎙 <strong>Station Metadata + expanded CW macros</strong> — five new free-text Settings fields (Rig, Antenna, Power, State, County) feed an expanded 12-token CW keyer macro vocabulary (<code>{MYRIG}</code> <code>{MYANT}</code> <code>{MYPWR}</code> <code>{MYSTATE}</code> <code>{MYCNTY}</code> joined the existing five). Metadata is NOT stored per-QSO and NOT written to ADIF.</li>
+      <li>🌓 <strong>Gray Line overlay</strong> on the General/POTA distance maps — day/night terminator and night-side shading, recomputed every minute.</li>
+      <li>💨 <strong>High Wind Alerts</strong> promoted to a dedicated Weather Alerts tab in Settings — NWS warnings, nearest METAR, and Ambient PWS feeds, three-tier 💨 banner.</li>
+      <li>⏱ <strong>Idle timeout raised to 60 minutes</strong> with a browser pagehide beacon — walk-aways no longer kill the app, but closing the tab still releases the executable for installer updates.</li>
+      <li>⚙ <strong>Settings reorganized</strong> — Weather Alerts is now its own tab; Rotator Control moved from Cluster &amp; Integrations to Station &amp; Rig where the rest of the hardware lives.</li>
+    </ul>
+  </div>
+
   <div class="help-tabs" id="help-tab-bar">
     <button class="help-tab active" data-htab="htab-start" onclick="switchHelpTab('htab-start')">🚀 Getting Started</button>
     <button class="help-tab" data-htab="htab-logging" onclick="switchHelpTab('htab-logging')">📋 Logging &amp; QSO</button>
@@ -636,7 +657,14 @@
       <li><span class="badge badge-green">LP</span> Long-path bearing shown in <strong style="color:#39ff14">lime green</strong>.</li>
       <li>Distance displayed in km or miles (toggle in the map panel header).</li>
     </ul>
-    <p>The map also renders a <strong>greyline overlay</strong> — the day/night terminator — updated every 60 seconds, so you can see propagation conditions at a glance.</p>
+    <h3>🌓 Gray Line Overlay <span class="badge badge-green">v1.09</span></h3>
+    <p>An optional <strong>day/night terminator line and night-side shading polygon</strong> can be overlaid on both the General and POTA Leaflet maps. The line marks the solar terminator — where grayline propagation enhancement lives — and the shaded polygon covers the night hemisphere so you can see at a glance which paths are in darkness.</p>
+    <ul>
+      <li>The overlay <strong>auto-recomputes every minute</strong> from the current Sun declination and Greenwich Mean Sidereal Time — no external service, no API key.</li>
+      <li>Per-basemap styling — the line color, shading opacity, and contrast are tuned individually for Voyager, Positron, and Dark Matter so the overlay reads clearly on each.</li>
+      <li>Toggle under <strong>⚙ Settings → Station &amp; Rig → Show Gray Line</strong>. Off by default; the setting survives restarts.</li>
+      <li>The <strong>SAT tracking map is intentionally skipped</strong> — it uses its own azimuthal/polar projection and already draws its own illumination overlay.</li>
+    </ul>
     <p><strong>Map Style picker (v1.08+)</strong> — Settings → Station &amp; Rig → <em>Distance Map Style</em> swaps the basemap between three free EPSG:3857 tile sets:</p>
     <ul>
       <li><strong>Voyager</strong> <em>(default)</em> — bright, colorful, clear country/state borders and city labels.</li>
@@ -788,7 +816,8 @@
     </ul>
     <div class="tip">In PstRotator, go to <strong>Communication → UDP Control Port</strong> and ensure the port is set to <strong>12000</strong> (matching SDRLogger+ Settings). No TCP server setup is needed.</div>
     <h3>Settings</h3>
-    <p>Configure the rotator under <strong>⚙ Settings → Rotator Control</strong>:</p>
+    <p>Configure the rotator under <strong>⚙ Settings → Station &amp; Rig → Rotator Control</strong>. (As of v1.09 the rotator settings moved here from Cluster &amp; Integrations so all physical-hardware configuration — TCI, flrig, HamLib, WinKeyer, rotator — lives on one tab.)</p>
+    <p>Options:</p>
     <ul>
       <li>Enable/disable the rotator</li>
       <li>Select protocol (PstRotator, GS-232, or EasyComm II)</li>
@@ -816,13 +845,14 @@
     </ul>
     <p>Hover over the banner to see the last update time (UTC) and any active NOAA warning text.</p>
     <h3>Setup</h3>
-    <p>Go to <strong>⚙ Settings → Cluster &amp; Integrations → Lightning Detection</strong>:</p>
+    <p>Go to <strong>⚙ Settings → Weather Alerts → Lightning Detection</strong> (as of v1.09 Weather Alerts is its own top-level Settings tab — previously it lived as a subsection under Cluster &amp; Integrations):</p>
     <ul>
-      <li>Read and accept the disclaimer checkbox — this is required before the feature can be enabled</li>
+      <li>Read and accept the combined Weather Alerts disclaimer checkbox — one acceptance now covers both Lightning and High Wind alerts, required before either feature can be enabled</li>
       <li>Enable Lightning Alerts</li>
       <li>Set your alert range (default 50 miles)</li>
       <li>Choose which data sources to enable — you can use any combination</li>
     </ul>
+    <p>The close-lightning banner uses a brief bounce animation to emphasize the "CLOSE BY" tier — this is cosmetic only and has no effect on the data thresholds.</p>
     <h3>Ambient Weather API Keys</h3>
     <p>Ambient Weather requires <strong>two separate API keys</strong>, both created at <code>ambientweather.net/account/keys</code>:</p>
     <ol>
@@ -832,6 +862,42 @@
     <p>Both keys must be entered in the settings for Ambient Weather data to work.</p>
     <div class="tip">Your <strong>Grid Square</strong> (set in Station settings) is used to calculate distances. Make sure it is set correctly for accurate lightning alerts.</div>
     <div class="warn"><strong>Disclaimer:</strong> Lightning detection in SDRLogger+ is a <strong>convenience feature only</strong> and must not be relied upon for personal safety. Data from third-party sources may be delayed, incomplete, or unavailable. The absence of an alert does not mean conditions are safe. Always monitor official weather services independently.</div>
+  </div>
+
+  <h2>💨 High Wind Alerts</h2>
+  <div class="section-card">
+    <h3>Overview</h3>
+    <p>SDRLogger+ can warn you when sustained winds or gusts reach levels that put towers, yagis, and wire antennas at risk. A <strong>💨</strong> banner appears at the top of the page showing the current wind speed, gust, and source. Useful for deciding when to crank down a crank-up, rotate a beam into the wind, or pull up a wire antenna before the storm arrives. Added in v1.08.2-beta; promoted to a dedicated Settings tab in v1.09.</p>
+    <h3>Three Data Sources</h3>
+    <ul>
+      <li><strong>NWS Active Alerts</strong> — polls the U.S. National Weather Service alert feed for <em>High Wind Warning</em>, <em>High Wind Advisory</em>, <em>High Wind Watch</em>, and <em>Extreme Wind Warning</em> products in your county/zone. Free, no API key, US only.</li>
+      <li><strong>NWS METAR</strong> — pulls the latest hourly observation from the closest ICAO airport station you select. Provides real measured sustained speed and gust in knots (converted to mph). Works globally wherever an ICAO METAR feed exists.</li>
+      <li><strong>Ambient Weather PWS</strong> — if you already have Ambient Weather API keys configured for Lightning Detection, SDRLogger+ reuses them to pull live <code>windspeedmph</code> and <code>windgustmph</code> from your own personal weather station. Hyper-local, updates as fast as your station reports.</li>
+    </ul>
+    <h3>Banner Tiers</h3>
+    <ul>
+      <li><span style="color:#ffd700;font-weight:700;">Yellow — Elevated</span> — winds approaching your threshold (within ~10 mph below it). Heads-up only.</li>
+      <li><span style="color:#ff8c00;font-weight:700;">Orange — High</span> — sustained speed or gust at or above your configured threshold. Time to think about antennas.</li>
+      <li><span style="color:#ff4444;font-weight:700;">Red (bouncing) — Extreme</span> — NWS High Wind Warning / Extreme Wind Warning active, <em>or</em> observed wind 15+ mph above your threshold. Take action.</li>
+    </ul>
+    <h3>Setup</h3>
+    <p>Go to <strong>⚙ Settings → Weather Alerts → High Wind Alerts</strong>:</p>
+    <ul>
+      <li>Accept the shared Weather Alerts disclaimer (same one used for Lightning)</li>
+      <li>Enable High Wind Alerts</li>
+      <li>Set your <strong>sustained threshold</strong> (default 30 mph) and <strong>gust threshold</strong> (default 45 mph)</li>
+      <li>Set the <strong>cooldown</strong> between repeat notifications (default 20 minutes)</li>
+      <li>Enable the data sources you want. For NWS METAR, enter the 4-character ICAO of the airport nearest your QTH.</li>
+    </ul>
+    <p>The backend polls all enabled sources every <strong>2 minutes</strong> and the banner updates live — you do not need to reload.</p>
+    <h3>Picking a METAR Station</h3>
+    <p>Use one of these tools to find the closest ICAO to your QTH:</p>
+    <ul>
+      <li><a href="https://aviationweather.gov/data/metar/" target="_blank" rel="noopener" style="color:var(--accent)">aviationweather.gov/data/metar/ ↗</a> — official NWS Aviation Weather Center, browsable by region.</li>
+      <li><a href="https://metar-taf.com/" target="_blank" rel="noopener" style="color:var(--accent)">metar-taf.com ↗</a> — searchable secondary lookup with maps.</li>
+    </ul>
+    <div class="tip">Pick an airport within 20–30 miles for representative observations. Very small airfields may only report during daylight hours — a nearby regional airport is usually a better choice for 24/7 coverage.</div>
+    <div class="warn"><strong>Disclaimer:</strong> High Wind alerts in SDRLogger+ are a <strong>convenience feature only</strong>. NWS alerts, METAR observations, and PWS readings can all lag real conditions by minutes or longer. Absence of an alert does not mean it is safe to climb a tower, extend a crank-up, or leave antennas up. Always consult official forecasts and use your own judgement.</div>
   </div>
 
   </div><!-- /htab-cluster -->
@@ -936,22 +1002,29 @@
     <ul>
       <li><strong>Click</strong> a macro button to send it immediately</li>
       <li><strong>Right-click</strong> a macro button to open the <strong>macro editor</strong> — a modal dialog where you can type or paste the message text without triggering a send</li>
-      <li>Inside the editor, the <strong>token buttons</strong> at the top (<code>{MYCALL}</code>, <code>{MYNAME}</code>, <code>{CALL}</code>, <code>{NAME}</code>, <code>{RST}</code>, <code>{NR}</code>) insert the token at the cursor position — click any token button to insert it wherever your cursor is in the text field</li>
+      <li>Inside the editor, the <strong>token buttons</strong> at the top (<code>{MYCALL}</code>, <code>{MYNAME}</code>, <code>{MYGRID}</code>, <code>{MYRIG}</code>, <code>{MYANT}</code>, <code>{MYPWR}</code>, <code>{MYSTATE}</code>, <code>{MYCNTY}</code>, <code>{CALL}</code>, <code>{NAME}</code>, <code>{RST}</code>, <code>{NR}</code>) insert the token at the cursor position — click any token button to insert it wherever your cursor is in the text field</li>
       <li>Press <kbd>Enter</kbd> or click <strong>OK</strong> to save; press <kbd>Esc</kbd> or click outside the modal to cancel</li>
       <li>Macro text and labels are saved automatically in your browser</li>
       <li>Click <strong style="color:#ff4444">RESET</strong> in the Macros panel header to restore all 16 buttons to factory defaults (confirmation required)</li>
     </ul>
-    <p>Supported substitution tokens — values are pulled live from settings and the QSO entry form:</p>
+    <p>Supported substitution tokens (12 total as of v1.09-rc1) — all are <strong>case-insensitive</strong> and values are pulled live from Settings and the QSO entry form:</p>
     <table>
       <tr><th>Token</th><th>Replaced with</th></tr>
-      <tr><td><code>{MYCALL}</code></td><td>Your own callsign (SDRLogger+ Settings → My Callsign)</td></tr>
-      <tr><td><code>{MYNAME}</code></td><td>Your own operator name (SDRLogger+ Settings → Operator Name)</td></tr>
+      <tr><td><code>{MYCALL}</code></td><td>Your own callsign (Settings → My Station → Callsign)</td></tr>
+      <tr><td><code>{MYNAME}</code></td><td>Your own operator name (Settings → My Station → Name)</td></tr>
+      <tr><td><code>{MYGRID}</code></td><td>Your Maidenhead grid (Settings → My Station → Grid Square)</td></tr>
+      <tr><td><code>{MYRIG}</code> <span class="badge badge-green">v1.09</span></td><td>Your radio (Settings → My Station → Rig — free text, e.g. <em>IC-7300</em>)</td></tr>
+      <tr><td><code>{MYANT}</code> <span class="badge badge-green">v1.09</span></td><td>Your antenna (Settings → My Station → Antenna — free text, e.g. <em>HEXBEAM</em>)</td></tr>
+      <tr><td><code>{MYPWR}</code> <span class="badge badge-green">v1.09</span></td><td>Your power (Settings → My Station → Power — free text, sent verbatim — e.g. <em>100W</em> or <em>1KW</em>)</td></tr>
+      <tr><td><code>{MYSTATE}</code> <span class="badge badge-green">v1.09</span></td><td>Your state / province (Settings → My Station → State)</td></tr>
+      <tr><td><code>{MYCNTY}</code> <span class="badge badge-green">v1.09</span></td><td>Your county (Settings → My Station → County — useful for state QSO parties)</td></tr>
       <tr><td><code>{CALL}</code></td><td>Callsign of the station you are working (QSO entry Callsign field)</td></tr>
       <tr><td><code>{NAME}</code></td><td>Their name (QSO entry Name field — the station you are working)</td></tr>
       <tr><td><code>{RST}</code></td><td>My RST Sent — the signal report you are giving them (QSO entry My RST Sent field)</td></tr>
       <tr><td><code>{NR}</code></td><td>Current contest serial number (auto-increments after each send, persists across restarts)</td></tr>
     </table>
-    <div class="tip">Use <code>{MYCALL}</code> and <code>{MYNAME}</code> when identifying yourself (<em>MY NAME IS {MYNAME} DE {MYCALL} K</em>). Use <code>{CALL}</code> and <code>{NAME}</code> when addressing the other station. Use <code>{RST}</code> for the report you are sending them (<em>UR RST {RST} {RST}</em>).</div>
+    <div class="tip">Use <code>{MYCALL}</code> and <code>{MYNAME}</code> when identifying yourself (<em>MY NAME IS {MYNAME} DE {MYCALL} K</em>). Use <code>{CALL}</code> and <code>{NAME}</code> when addressing the other station. Use <code>{RST}</code> for the report you are sending them (<em>UR RST {RST} {RST}</em>). The five new <code>{MY*}</code> tokens are great for rag-chew openers — <em>RIG HR {MYRIG} ANT {MYANT} PWR {MYPWR} ES QTH {MYSTATE} {MYCNTY}</em>.</div>
+    <div class="tip"><strong>Station Metadata fields</strong> (Rig / Antenna / Power / State / County) are <strong>SOLELY</strong> the source for these CW macro tokens. They are <strong>NOT</strong> stored per-QSO and <strong>NOT</strong> written to ADIF — change your antenna at any time without rewriting log history.</div>
 
     <h3>Contest Serial Number ({NR})</h3>
     <p>The <code>{NR}</code> token inserts the current serial number, zero-padded to three digits (001, 002 … 999, 1000 …). It is designed for simple CW contests where an incrementing exchange number is required.</p>
@@ -1053,6 +1126,38 @@
     <p>The <strong>⚠ Danger Zone</strong> at the bottom of Backup &amp; Restore provides separate <strong>Delete General DB</strong> and <strong>Delete POTA DB</strong> buttons. Clicking either requires <em>two confirmation dialogs</em> to prevent accidents. Before deletion, a timestamped safety backup is automatically saved to the <code>backups</code> folder (e.g. <code>general_pre_delete_20260412_143000.db</code>). After deletion, a fresh empty database is created in its place.</p>
     <div class="warn">This permanently removes all QSO records from the selected database. The safety backup can be restored using <strong>Restore DB</strong> if needed.</div>
 
+    <h3>💾 Scheduled Auto-Backup <span class="badge badge-green">v1.09</span></h3>
+    <p>For operators who would rather not remember to click <strong>Backup DB</strong>, SDRLogger+ can run backups on a schedule. Configure under <strong>⚙ Settings → Backup &amp; Restore → Auto-Backup</strong>:</p>
+    <ul>
+      <li><strong>Enable Auto-Backup</strong> — master on/off checkbox.</li>
+      <li><strong>Interval</strong> — dropdown: <em>Daily</em>, <em>Weekly</em>, or <em>On-Exit</em> (runs when the app shuts down cleanly via the tray icon or explicit-close beacon).</li>
+      <li><strong>Retention</strong> — integer, minimum 1, default 14. Number of scheduled backup folders to keep; older ones are pruned after each successful new run.</li>
+    </ul>
+    <h3>What Gets Written</h3>
+    <p>Each run creates <strong>one timestamped folder</strong> containing <strong>both logs in both formats</strong> — raw SQLite copies <em>and</em> ADIF exports — so you have a portable human-readable backup alongside the exact database:</p>
+    <pre style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px 14px;font-family:var(--mono);font-size:11px;color:var(--accent);overflow-x:auto;">backups/SDRLoggerPlus-2026-04-18_0930/
+    general.db
+    general.adi
+    pota.db
+    pota.adi</pre>
+    <p>The destination honors the existing <strong>Database Backup Folder</strong> setting — default <code>%APPDATA%\SDRLoggerPlus\backups</code>. Point it at a NAS share, OneDrive folder, or mounted USB drive to get offsite copies for free.</p>
+    <h3>Retention Pruning — Safety Rules</h3>
+    <ul>
+      <li>Only folders with the prefix <code>SDRLoggerPlus-</code> are ever considered for pruning. Loose <code>.db</code> files, manual backups, and anything else in the folder are ignored.</li>
+      <li>Pruning happens <strong>only after a successful new write</strong> — if a scheduled run fails (disk full, network share offline), no prior backup is deleted. Your oldest good backup always survives a bad night.</li>
+      <li>The wipe-database safety backups (<code>{label}_pre_delete_*.db</code> and <code>{label}_pre_restore_*.db</code>) use a different prefix and are <strong>immune to retention pruning</strong> — they stay until you delete them yourself.</li>
+    </ul>
+    <h3>Persistence Across Restarts</h3>
+    <p>The schedule state is written to <code>auto_backup_state.json</code> alongside <code>app_settings.json</code>. Closing and reopening SDRLogger+ within 24 hours does <strong>not</strong> cause a Daily schedule to fire again — the next run waits for a full interval since the last <em>successful</em> write. This means you can restart the app freely during a session without spamming backups.</p>
+    <h3>UI Feedback</h3>
+    <p>The Auto-Backup panel shows:</p>
+    <ul>
+      <li><strong>Last run</strong> — timestamp plus ✓ or ✗ and a short status message (e.g. <em>"Wrote 4 files, pruned 2 old folders"</em> or <em>"Failed: destination not writable"</em>).</li>
+      <li><strong>Next due</strong> — countdown showing when the next scheduled run will fire.</li>
+      <li><strong>Run Backup Now</strong> — manual trigger that performs the same scheduled-format run immediately, updating the last-run status and respecting retention rules.</li>
+    </ul>
+    <div class="tip">Auto-Backup and the manual <strong>Backup DB</strong> button are independent — manual backups use the legacy <code>hamlog_backup_*.db</code> filename and do not touch Auto-Backup state. You can use either or both.</div>
+
     <h3>Settings Export &amp; Import</h3>
     <p>Your SDRLogger+ configuration (callsign, QRZ credentials, cluster servers, rotator settings, display preferences, etc.) is stored in your browser's local storage. To back it up or move it to a different browser or machine:</p>
     <ul>
@@ -1093,7 +1198,7 @@
         <tr><td>Hover over tray icon</td><td>Shows version, port, and LAN address (if network access is enabled)</td></tr>
       </tbody>
     </table>
-    <div class="tip"><strong>Closing the browser shuts down SDRLogger+ — with a safety window.</strong> SDRLogger+ uses a keepalive heartbeat: your browser silently checks in with the server every 20 seconds. If no check-in arrives for <strong>3 minutes</strong> (all tabs closed), the server exits and the tray icon disappears. This means <strong>navigating between SDRLogger+ pages — including opening this Help guide — will never trigger an accidental shutdown.</strong> The 3-minute window covers normal page-to-page navigation. To reopen SDRLogger+ without quitting, use the tray icon — double-click it or right-click → <strong>Open SDRLogger+</strong>.</div>
+    <div class="tip"><strong>⏱ Closing the browser shuts down SDRLogger+ — with a generous safety window.</strong> SDRLogger+ uses a keepalive heartbeat: your browser silently checks in with the server every 20 seconds. As of v1.08.2-beta the idle timeout is <strong>60 minutes</strong> (<code>KEEPALIVE_TIMEOUT</code> = 3600 s, raised from 180 s) so the app stays alive through long contest runs, rag-chews, PC sleep, screen lock, and Chrome's background-tab throttling. Navigating between SDRLogger+ pages — index ↔ this Help guide, F5 reloads — never triggers a shutdown because the destination page fires an immediate keepalive that cancels any pending close. When you <strong>actually close the tab or window</strong>, the browser sends a <code>navigator.sendBeacon('/api/explicit_close')</code> beacon so the server exits within ~10 seconds — fast enough for a Windows installer to overwrite <code>SDRLogger+.exe</code> on upgrade. If the browser crashes without sending the beacon, the app exits at the 60-minute idle mark. To reopen SDRLogger+ without quitting, use the tray icon — double-click it or right-click → <strong>Open SDRLogger+</strong>.</div>
 
     <h3>If you installed to a custom folder</h3>
     <p>If you changed the install location during setup, use that path instead. For example:<br>
@@ -1395,13 +1500,13 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
   <!-- AWARDS OVERVIEW -->
   <h2>🏆 Awards Dashboard</h2>
   <div class="section-card">
-    <p>The Awards Dashboard is a complete award-tracking system built into SDRLogger+. It analyses your QSO log to show progress against four major operating awards, all powered by the same DXCC entity / CQ zone / prefix lookups used elsewhere in the application.</p>
+    <p>The Awards Dashboard is a complete award-tracking system built into SDRLogger+. It analyses your QSO log to show progress against the major operating awards, all powered by the same DXCC entity / CQ zone / prefix / grid-square lookups used elsewhere in the application.</p>
     <p>Open the dashboard from the <strong>🏆 Awards</strong> link in the navigation bar, or by navigating to <code>/awards</code> in your browser.</p>
   </div>
 
-  <h2>The Four Trackers</h2>
+  <h2>The Trackers</h2>
   <div class="section-card">
-    <p>Each tab is independent — switching between them is instant, and your selected filter and sort options are preserved.</p>
+    <p>Each tab is independent — switching between them is instant, and your selected filter and sort options are preserved. As of v1.09 the dashboard has eight trackers:</p>
     <table>
       <thead><tr><th>Tab</th><th>Tracks</th><th>Total</th></tr></thead>
       <tbody>
@@ -1409,6 +1514,10 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
         <tr><td>🇺🇸 <strong>WAS</strong></td><td>US states worked (Worked All States)</td><td>50 states</td></tr>
         <tr><td>🌐 <strong>WAZ</strong></td><td>CQ Zones worked (Worked All Zones)</td><td>40 zones</td></tr>
         <tr><td>📞 <strong>WPX</strong></td><td>Unique callsign prefixes worked</td><td>Unlimited</td></tr>
+        <tr><td>📡 <strong>VUCC</strong> <span class="badge badge-green">v1.09</span></td><td>Unique 4-char Maidenhead grids per VHF/UHF band</td><td>Per-band threshold (see below)</td></tr>
+        <tr><td>🇺🇸 <strong>5BWAS</strong> <span class="badge badge-green">v1.09</span></td><td>All 50 states on each of 80 / 40 / 20 / 15 / 10 m</td><td>250 (50 × 5 bands)</td></tr>
+        <tr><td>🌍 <strong>5BDXCC</strong> <span class="badge badge-green">v1.09</span></td><td>100+ DXCC entities on each of 80 / 40 / 20 / 15 / 10 m</td><td>500+ (100 × 5 bands)</td></tr>
+        <tr><td>🌎 <strong>WAC</strong> <span class="badge badge-green">v1.09</span></td><td>Worked All Continents — NA / SA / EU / AS / AF / OC, plus Antarctica endorsement</td><td>6 base continents (+ AN endorsement)</td></tr>
       </tbody>
     </table>
   </div>
@@ -1497,15 +1606,129 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
     </ul>
   </div>
 
+  <h2>📡 VUCC Tracker (VHF/UHF Century Club)</h2>
+  <div class="section-card">
+    <p>Tracks unique 4-character <strong>Maidenhead grid squares</strong> worked on each VHF/UHF band for the ARRL VUCC award. The threshold for certification varies by band:</p>
+    <table>
+      <thead><tr><th>Band</th><th>Grids Required</th></tr></thead>
+      <tbody>
+        <tr><td>6 m</td><td>100</td></tr>
+        <tr><td>2 m</td><td>100</td></tr>
+        <tr><td>1.25 m</td><td>50</td></tr>
+        <tr><td>70 cm</td><td>50</td></tr>
+        <tr><td>33 cm</td><td>25</td></tr>
+        <tr><td>23 cm</td><td>25</td></tr>
+        <tr><td>13 cm and up</td><td>10</td></tr>
+      </tbody>
+    </table>
+    <p>Each band card shows current grid count vs. threshold, a progress bar, and completion status. Click a card to expand a detail pane listing every worked grid on that band.</p>
+    <h3>What Counts</h3>
+    <p>A QSO counts toward VUCC on a band only if the <strong>GRIDSQUARE</strong> field is populated in the QSO record (the 4-char portion is used — <code>EM79</code>, <code>FN20</code>, etc.). SDRLogger+ populates GRIDSQUARE from:</p>
+    <ul>
+      <li>QRZ.com and HamQTH callsign lookups (auto-filled at log time)</li>
+      <li>Digital app packets from WSJT-X / JTDX / MSHV (grid is in the QSO report)</li>
+      <li>Manual entry in the QSO form</li>
+      <li>ADIF imports — any GRIDSQUARE tag in the imported file is preserved</li>
+    </ul>
+    <div class="tip">If your VUCC totals look low, re-run QRZ lookups on older QSOs or re-import your ADIF with <em>Replace Duplicates</em> to back-fill GRIDSQUARE from lookup sources.</div>
+  </div>
+
+  <h2>🇺🇸 5BWAS Tracker (Five-Band WAS)</h2>
+  <div class="section-card">
+    <p>Tracks all <strong>50 US states on each of the five classic HF bands</strong> — 80, 40, 20, 15, and 10 meters — for the ARRL Five-Band Worked All States award.</p>
+    <p>The tracker shows a <strong>State × Band matrix</strong>: 50 rows (states, alphabetical) × 5 band columns. Each cell is cyan when the state/band combination has been worked and dim when not yet worked. Per-band totals and overall progress (out of 250) are shown at the top.</p>
+    <p>When you reach <strong>50 states on all five bands</strong>, a gold <em>5BWAS COMPLETE</em> banner appears above the matrix.</p>
+    <div class="tip">Uses the same STATE-field resolution as the single-band WAS tracker — make sure STATE is populated (QRZ lookup or ADIF import) for QSOs to count.</div>
+  </div>
+
+  <h2>🌍 5BDXCC Tracker (Five-Band DXCC)</h2>
+  <div class="section-card">
+    <p>Tracks <strong>100+ DXCC entities worked on each of 80 / 40 / 20 / 15 / 10 meters</strong> for the ARRL Five-Band DXCC award.</p>
+    <p>Each band card shows how many entities you have worked on that band, with a progress bar toward 100. The tracker also displays a <strong>union total</strong> across all five bands — the count of distinct entities that have been worked on at least one of the five classic bands (useful for planning which bands still need the entity).</p>
+    <p>When all five bands hit 100 entities, a gold <em>5BDXCC COMPLETE</em> banner appears. Partial progress (e.g. 80/40/20 complete but 15/10 short) is clearly visible so you can target the missing bands during the next sunspot peak.</p>
+    <div class="tip">Entity resolution uses the same <code>cty.dat</code> lookup as the main DXCC tracker — WARC bands (30m, 17m, 12m) are intentionally excluded by the 5BDXCC rule, but they still count toward the regular DXCC tab.</div>
+  </div>
+
+  <h2>🌎 WAC Tracker (Worked All Continents)</h2>
+  <div class="section-card">
+    <p>Tracks the six standard continents required for the IARU <strong>Worked All Continents</strong> award: <strong>North America (NA), South America (SA), Europe (EU), Asia (AS), Africa (AF), Oceania (OC)</strong>. Antarctica (AN) is shown below as a separate endorsement card and is <strong>not</strong> required for the base award.</p>
+    <p>Each continent card shows:</p>
+    <ul>
+      <li>Continent code and full name</li>
+      <li>Total worked QSO count for that continent</li>
+      <li>Worked-bands chip strip (160m → 70cm badges)</li>
+      <li>A sample of entity names worked on that continent (so you can see at a glance who you bagged)</li>
+    </ul>
+    <h3>Filters</h3>
+    <ul>
+      <li><strong>Band</strong> — restrict counting to a specific band (or All)</li>
+      <li><strong>Mode</strong> — restrict counting to a specific mode (or All)</li>
+    </ul>
+    <p>When all six base continents are confirmed a gold <em>WAC ACHIEVED — All 6 Continents Worked!</em> banner appears above the continent grid. Antarctica fills in independently and shows up in its own endorsement card whenever you log a QSO with an AN entity.</p>
+    <div class="tip">Continent assignment is taken straight from the bundled <code>cty.dat</code> lookup at log-time — the same one the DXCC tracker uses — so any QSO that resolves to a DXCC entity automatically counts toward WAC without any extra fields needing to be filled.</div>
+  </div>
+
+  <h2>📊 Statistics Dashboard <span class="badge badge-green">v1.09</span></h2>
+  <div class="section-card">
+    <p>The Statistics Dashboard is a standalone page at <code>/stats</code> that visualizes your full operating history. Open it from <strong>⚙ Settings → Awards tab → 📊 Statistics Dashboard</strong> card, or via the <strong>Stats</strong> cross-link button in the <code>/awards</code> and <code>/feeds</code> page headers.</p>
+    <h3>Top-of-page controls</h3>
+    <ul>
+      <li><strong>Source</strong> — General Only / POTA Only / General + POTA (combined).</li>
+      <li><strong>Range</strong> — All Time / This Year / Last 12 Months / Custom (with date pickers).</li>
+      <li><strong>Mode</strong> — optional filter to a single mode (SSB, CW, FT8, FT4, RTTY, AM, FM, JS8, PSK31, DIGI), or All Modes.</li>
+      <li><strong>Apply</strong> — re-renders every chart and the stat strip with the new filter.</li>
+    </ul>
+    <h3>Five-pill stat strip</h3>
+    <p>Across the top, in order: <strong>Total QSOs · Years Active · Unique Bands · Unique Modes · DXCC Entities</strong> (distinct entities seen across the filtered set).</p>
+    <h3>The six charts</h3>
+    <ol>
+      <li><strong>QSOs Per Year</strong> — bar chart, one bar per calendar year.</li>
+      <li><strong>By Band</strong> — donut chart of QSO share per band.</li>
+      <li><strong>By Mode</strong> — donut chart of QSO share per mode.</li>
+      <li><strong>Top 10 DXCC Entities</strong> — horizontal bar chart of your most-worked entities.</li>
+      <li><strong>Cumulative QSOs Over Time</strong> — gold filled-line chart showing your log's running total.</li>
+      <li><strong>Activity by Hour of Day (UTC)</strong> — 24-cell intensity heatmap so you can see when you actually operate.</li>
+    </ol>
+    <div class="tip">All aggregations run server-side in <code>/api/stats</code> with a single sweep over the chosen database(s) and a cached <code>cty.dat</code> entity lookup, so even very large logs render in well under a second.</div>
+  </div>
+
+  <h2>📡 Feeds &amp; Alerts <span class="badge badge-green">v1.09</span></h2>
+  <div class="section-card">
+    <p>The Feeds &amp; Alerts page (<code>/feeds</code>) wires SDRLogger+ into two live external sources. Open it from <strong>⚙ Settings → Awards tab → 📡 Feeds &amp; Alerts</strong> card, or via the <strong>Feeds</strong> cross-link button in the <code>/awards</code> and <code>/stats</code> page headers.</p>
+    <h3>🏆 Contests tab</h3>
+    <p>Live <a href="https://www.contestcalendar.com/" target="_blank" rel="noopener" style="color:var(--accent)">WA7BNM Contest Calendar</a> via their iCal feed. Each contest card shows:</p>
+    <ul>
+      <li>Contest name and sponsor</li>
+      <li>UTC + Local start / end times</li>
+      <li><strong>● LIVE NOW</strong> badge if the contest is currently in progress</li>
+      <li><strong>⚡ Starts within 24 h</strong> badge if it kicks off soon</li>
+    </ul>
+    <p>Time-window filter at the top: <em>All upcoming · Live right now · Next 48 hours · This weekend · Next 7 days</em>. A manual <strong>↻ Refresh</strong> button bypasses the cache when you really need fresh data.</p>
+    <h3>🌍 DXpeditions tab</h3>
+    <p>Live <a href="http://www.ng3k.com/Misc/adxo.html" target="_blank" rel="noopener" style="color:var(--accent)">NG3K Announced DX Operations</a> via RSS. Each card shows the country, date range, QSL info, description, and — critically — every callsign extracted from the announcement as a <strong>clickable chip</strong>.</p>
+    <p><strong>Click any callsign chip to TOGGLE that callsign in or out of your 🔥 Hot List.</strong> Already-in-list chips are red and prefixed with a ✓ checkmark; click again to remove. Multi-op DXpeditions get a <strong>+ All</strong> convenience button that adds every callsign on the card in one click.</p>
+    <p>Hot List sync is three-way and immediate — no reload required:</p>
+    <ul>
+      <li><code>localStorage</code> — survives page reloads</li>
+      <li><code>POST /api/settings</code> — persists across app restarts in <code>app_settings.json</code></li>
+      <li><code>BroadcastChannel("sdrlogger-hotlist")</code> — live-syncs to the running main logger and any other open tabs</li>
+    </ul>
+    <h3>Hot List status banner</h3>
+    <p>The banner at the top of <code>/feeds</code> shows your current Hot List behavior — <strong>Off · Visual Only · Visual + Voice</strong> — read from your existing Display settings. It is read-only here; the actual enable / TTS toggles still live in <strong>main logger Settings → Display → Hot List</strong>.</p>
+    <h3>Caching &amp; reliability</h3>
+    <p>Both feeds are cached server-side for <strong>30 minutes</strong> so we don't hammer the source sites. If a fetch fails (source down, network blip), the page falls back to the most recent cached payload and shows <em>(stale — fetch failed: ...)</em> on the meta line so you know what you're looking at.</p>
+    <div class="tip">The bonus workflow: open <code>/feeds</code> → spot an upcoming rare DXpedition → click its callsign chip → days later when that station hits the cluster, the spot glows red on your panadapter (and optionally TTS-announces) so you don't miss it.</div>
+  </div>
+
   <h2>Performance &amp; What's Counted</h2>
   <div class="section-card">
-    <p>All four trackers are powered by <strong>server-side worked caches</strong> built once at application startup and incrementally updated as new QSOs are logged. This means:</p>
+    <p>All trackers are powered by <strong>server-side worked caches</strong> built once at application startup and incrementally updated as new QSOs are logged. This means:</p>
     <ul>
       <li>Opening the Awards Dashboard is <strong>instant</strong>, even with thousands of QSOs</li>
       <li>Filtering and sorting happens <strong>in the browser</strong> with no server round-trips</li>
       <li>New QSOs appear in the dashboard the next time you reload it</li>
     </ul>
-    <p>All four trackers count QSOs from your <strong>General log database</strong> (<code>hamlog.db</code>). POTA contacts (in <code>pota.db</code>) and SAT contacts (in <code>hamlog.db</code> with <code>prop_mode='SAT'</code>) are also counted toward DXCC, WAS, WAZ, and WPX awards — they're just regular QSOs as far as the awards are concerned.</p>
+    <p>Every tracker counts QSOs from your <strong>General log database</strong> (<code>hamlog.db</code>). POTA contacts (in <code>pota.db</code>) and SAT contacts (in <code>hamlog.db</code> with <code>prop_mode='SAT'</code>) are also counted toward DXCC, WAS, WAZ, WPX, VUCC, 5BWAS, 5BDXCC, and WAC awards — they're just regular QSOs as far as the awards are concerned.</p>
   </div>
   </div><!-- /htab-awards -->
 
@@ -1659,8 +1882,18 @@ netsh advfirewall firewall add rule name="SDRLogger+ SAT ADIF" dir=in action=all
 </div>
 <script>
 // ── Keepalive heartbeat ───────────────────────────────────────────────────
+// Immediate fire on load cancels any explicit_close scheduled by index.html's
+// pagehide handler when the user navigated here.
 fetch('/api/keepalive', {method:'POST'}).catch(()=>{});
 setInterval(function(){ fetch('/api/keepalive', {method:'POST'}).catch(()=>{}); }, 20000);
+
+// Explicit tab-close beacon — fires when user actually closes the tab.
+// If they're just navigating back to index, index's immediate-on-load
+// keepalive cancels the scheduled shutdown.
+window.addEventListener('pagehide', function(e) {
+  if (e.persisted) return;
+  try { navigator.sendBeacon('/api/explicit_close'); } catch(_) {}
+});
 
 // ── Help Tab Switching ───────────────────────────────────────────────────
 function switchHelpTab(tabId) {

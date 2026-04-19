@@ -447,7 +447,7 @@
     <div class="panel-head">
       <span>▼ Macros</span>
       <span style="margin-left:auto;font-size:12px;color:#b0c4d4;font-weight:400;text-transform:none;letter-spacing:0;">
-        {MYCALL} {MYNAME} {CALL} {NAME} {RST} {NR} — click label to rename &bull; right-click to edit
+        {MYCALL} {MYNAME} {MYGRID} {MYRIG} {MYANT} {MYPWR} {MYSTATE} {MYCNTY} {CALL} {NAME} {RST} {NR} — click label to rename &bull; right-click to edit
       </span>
       <button onclick="resetMacros()" title="Reset all macros to factory defaults" style="margin-left:10px;background:var(--surface);border:1px solid var(--red);color:var(--red);padding:1px 7px;border-radius:3px;cursor:pointer;font-size:10px;letter-spacing:1px;flex-shrink:0;">RESET</button>
     </div>
@@ -455,13 +455,20 @@
       <div class="macro-grid" id="macro-grid"></div>
     </div>
     <div style="font-size:10px;color:#9fbdcc;padding:4px 12px 5px;border-top:1px solid var(--border);font-family:var(--mono);line-height:1.7;flex-shrink:0;background:var(--surface);">
-      <span style="color:var(--accent);font-weight:700;letter-spacing:1px;">TOKENS: </span>
-      <span title="Your callsign from Settings">{MYCALL}</span> = My Call &nbsp;·&nbsp;
-      <span title="Your operator name from Settings">{MYNAME}</span> = My Name &nbsp;·&nbsp;
-      <span title="Callsign in QSO entry panel">{CALL}</span> = Their Call &nbsp;·&nbsp;
-      <span title="Name in QSO entry panel">{NAME}</span> = Their Name &nbsp;·&nbsp;
-      <span title="My RST Sent field in QSO entry panel">{RST}</span> = RST Sent &nbsp;·&nbsp;
-      <span title="Contest serial number — auto-increments on send">{NR}</span> = Serial #
+      <span style="color:var(--accent);font-weight:700;letter-spacing:1px;">MY STATION: </span>
+      <span title="Your callsign from Settings → Station">{MYCALL}</span> Call &nbsp;·&nbsp;
+      <span title="Your operator name from Settings → Station">{MYNAME}</span> Name &nbsp;·&nbsp;
+      <span title="Your grid square from Settings → Station">{MYGRID}</span> Grid &nbsp;·&nbsp;
+      <span title="Your rig from Settings → Station">{MYRIG}</span> Rig &nbsp;·&nbsp;
+      <span title="Your antenna from Settings → Station">{MYANT}</span> Ant &nbsp;·&nbsp;
+      <span title="Your power from Settings → Station (e.g. 100W, 5W, 1KW)">{MYPWR}</span> Pwr &nbsp;·&nbsp;
+      <span title="Your state from Settings → Station">{MYSTATE}</span> State &nbsp;·&nbsp;
+      <span title="Your county from Settings → Station">{MYCNTY}</span> Cnty<br>
+      <span style="color:var(--accent);font-weight:700;letter-spacing:1px;">WORKED: </span>
+      <span title="Callsign in QSO entry panel">{CALL}</span> Their Call &nbsp;·&nbsp;
+      <span title="Name in QSO entry panel">{NAME}</span> Their Name &nbsp;·&nbsp;
+      <span title="My RST Sent field in QSO entry panel">{RST}</span> RST Sent &nbsp;·&nbsp;
+      <span title="Contest serial number — auto-increments on send">{NR}</span> Serial #
     </div>
   </div>
 
@@ -476,6 +483,12 @@
       <span>INSERT:</span>
       <button class="macro-tok-btn" data-tok="{MYCALL}">{MYCALL}</button>
       <button class="macro-tok-btn" data-tok="{MYNAME}">{MYNAME}</button>
+      <button class="macro-tok-btn" data-tok="{MYGRID}">{MYGRID}</button>
+      <button class="macro-tok-btn" data-tok="{MYRIG}">{MYRIG}</button>
+      <button class="macro-tok-btn" data-tok="{MYANT}">{MYANT}</button>
+      <button class="macro-tok-btn" data-tok="{MYPWR}">{MYPWR}</button>
+      <button class="macro-tok-btn" data-tok="{MYSTATE}">{MYSTATE}</button>
+      <button class="macro-tok-btn" data-tok="{MYCNTY}">{MYCNTY}</button>
       <button class="macro-tok-btn" data-tok="{CALL}">{CALL}</button>
       <button class="macro-tok-btn" data-tok="{NAME}">{NAME}</button>
       <button class="macro-tok-btn" data-tok="{RST}">{RST}</button>
@@ -529,6 +542,12 @@ let autoWpmEnabled = cfg.autoWpm;
 let afcEnabled = cfg.afcEnabled !== undefined ? cfg.afcEnabled : true;
 let myCAll = '';
 let myName = '';
+let myGrid = '';
+let myRig  = '';
+let myAnt  = '';
+let myPwr  = '';
+let myState = '';
+let myCnty = '';
 let cwSerial   = 1;
 let nrEnabled   = cfg.nrEnabled;
 let autoLog73   = cfg.autoLog73;
@@ -817,6 +836,12 @@ async function fetchStatus() {
       d.tci ? 'via TCI' : d.winkeyer ? 'via WinKeyer' : d.hamlib ? 'via HamLib' : '';
     if (d.mycall)  myCAll = d.mycall;
     if (d.myname !== undefined) myName = d.myname;
+    if (d.mygrid  !== undefined) myGrid  = d.mygrid;
+    if (d.myrig   !== undefined) myRig   = d.myrig;
+    if (d.myant   !== undefined) myAnt   = d.myant;
+    if (d.mypwr   !== undefined) myPwr   = d.mypwr;
+    if (d.mystate !== undefined) myState = d.mystate;
+    if (d.mycnty  !== undefined) myCnty  = d.mycnty;
     if (d.serial  !== undefined) { cwSerial = d.serial; updateNrDisplay(); }
     // Sync tone from Thetis on first TCI connect
     if (d.tci && !_wasTciConnected && d.cw_pitch) {
@@ -2026,14 +2051,22 @@ document.getElementById('macro-modal').addEventListener('click', e => {
 });
 
 function expandTokens(text) {
-  // {MYCALL}  = your own callsign from Settings
-  // {MYNAME}  = your own operator name from Settings
-  // {CALL}    = callsign in QSO entry panel (the station you're working)
-  // {NAME}    = their name in QSO entry panel
-  // {RST}     = My RST Sent (what you're reporting to them)
-  // {NR}      = current contest serial number (auto-increments after send)
-  let mycall = myCAll || '';
-  let myname = myName || '';
+  // Your-station tokens — pulled from Settings → Station section via /api/cw_status:
+  //   {MYCALL}  your callsign              {MYNAME}  your operator name
+  //   {MYGRID}  your grid square           {MYRIG}   your rig
+  //   {MYANT}   your antenna               {MYPWR}   your power (e.g. 100W, 1KW)
+  //   {MYSTATE} your state                 {MYCNTY}  your county
+  // Worked-station tokens — live-read from the main QSO entry panel:
+  //   {CALL}    their callsign             {NAME}    their name
+  //   {RST}     My RST Sent                {NR}      contest serial (auto-increments)
+  let mycall  = myCAll  || '';
+  let myname  = myName  || '';
+  let mygrid  = myGrid  || '';
+  let myrig   = myRig   || '';
+  let myant   = myAnt   || '';
+  let mypwr   = myPwr   || '';
+  let mystate = myState || '';
+  let mycnty  = myCnty  || '';
   let call = '', name = '', rst = '599';
   const nr = String(cwSerial).padStart(3, '0');
   try {
@@ -2045,8 +2078,14 @@ function expandTokens(text) {
     }
   } catch(e) {}
   return text
-    .replace(/\{MYCALL\}/gi,  mycall || '{MYCALL}')
-    .replace(/\{MYNAME\}/gi,  myname || '{MYNAME}')
+    .replace(/\{MYCALL\}/gi,  mycall  || '{MYCALL}')
+    .replace(/\{MYNAME\}/gi,  myname  || '{MYNAME}')
+    .replace(/\{MYGRID\}/gi,  mygrid  || '{MYGRID}')
+    .replace(/\{MYRIG\}/gi,   myrig   || '{MYRIG}')
+    .replace(/\{MYANT\}/gi,   myant   || '{MYANT}')
+    .replace(/\{MYPWR\}/gi,   mypwr   || '{MYPWR}')
+    .replace(/\{MYSTATE\}/gi, mystate || '{MYSTATE}')
+    .replace(/\{MYCNTY\}/gi,  mycnty  || '{MYCNTY}')
     .replace(/\{CALL\}/gi,    call   || '{CALL}')
     .replace(/\{NAME\}/gi,    name   || '{NAME}')
     .replace(/\{RST\}/gi,     rst)

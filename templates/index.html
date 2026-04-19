@@ -21,12 +21,25 @@
   header{background:var(--surface);border-bottom:1px solid var(--border);padding:5px 20px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;min-height:70px;}
   @keyframes updatePulse{0%,100%{opacity:1;}50%{opacity:.6;}}
   @keyframes lightningFlash{0%,100%{opacity:1;}50%{opacity:.3;}}
+  /* v1.08.2 — bounce + subtle glow attention-getter for CLOSE BY lightning */
+  @keyframes ltngBounce{
+    0%,100%{transform:translateY(0) scale(1);box-shadow:0 0 0 0 rgba(255,68,68,.6);}
+    25%{transform:translateY(-3px) scale(1.04);}
+    50%{transform:translateY(0) scale(1);box-shadow:0 0 14px 2px rgba(255,68,68,.55);}
+    75%{transform:translateY(-2px) scale(1.02);}
+  }
   #lightning-banner.ltng-far{background:rgba(255,215,0,.12);border-color:#ffd700;color:#ffd700;}
   #lightning-banner.ltng-mid{background:rgba(255,140,0,.15);border-color:#ff8c00;color:#ff8c00;}
-  #lightning-banner.ltng-close{background:rgba(255,50,50,.15);border-color:#ff4444;color:#ff4444;}
+  #lightning-banner.ltng-close{background:rgba(255,50,50,.15);border-color:#ff4444;color:#ff4444;
+    animation:ltngBounce 1.6s ease-in-out infinite;}
   #lightning-banner.ltng-close #lightning-bolt{animation:lightningFlash 2s ease-in-out infinite;}
   #lightning-banner.ltng-mid #lightning-bolt{animation:lightningFlash 3s ease-in-out infinite;}
   #lightning-banner.ltng-far #lightning-bolt{animation:lightningFlash 4s ease-in-out infinite;}
+  /* v1.08.2 — WIND BANNER (💨) — parallel to lightning, different palette */
+  #wind-banner.wind-elev{background:rgba(255,215,0,.12);border-color:#ffd700;color:#ffd700;}
+  #wind-banner.wind-high{background:rgba(255,140,0,.15);border-color:#ff8c00;color:#ff8c00;}
+  #wind-banner.wind-extreme{background:rgba(255,50,50,.15);border-color:#ff4444;color:#ff4444;
+    animation:ltngBounce 1.8s ease-in-out infinite;}
   .logo{font-family:var(--head);font-size:22px;font-weight:700;color:var(--accent);letter-spacing:3px;text-transform:uppercase;}
   .logo span{color:var(--accent2);}
   .header-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
@@ -426,6 +439,10 @@
   <div id="lightning-banner" style="display:none;font-family:var(--mono);font-size:12px;padding:4px 12px;border-radius:12px;white-space:nowrap;letter-spacing:.5px;font-weight:700;cursor:default;border:1px solid;transition:all .3s;" title="Lightning detected nearby">
     <span id="lightning-bolt" style="font-size:14px;">⚡</span>
     <span id="lightning-text">—</span>
+  </div>
+  <div id="wind-banner" style="display:none;font-family:var(--mono);font-size:12px;padding:4px 12px;border-radius:12px;white-space:nowrap;letter-spacing:.5px;font-weight:700;cursor:default;border:1px solid;transition:all .3s;" title="High wind alert">
+    <span id="wind-icon" style="font-size:14px;">💨</span>
+    <span id="wind-text">—</span>
   </div>
   <div class="solar-hdr" id="solar-hdr">
     <span title="Solar Flux Index">SFI<span class="sh-val" id="hdr-sfi">—</span></span>
@@ -882,7 +899,7 @@
       <!-- Bearing display -->
       <div class="rot-bearing-box">
         <div class="rot-bearing">
-          <div class="rb-label">Current AZ</div>
+          <div class="rb-label" id="rot-cur-lbl">Position</div>
           <div class="rb-val" id="rot-cur-val" style="color:var(--text);">—°</div>
         </div>
         <div class="rot-bearing">
@@ -908,8 +925,10 @@
       <!-- Status bar -->
       <div class="rot-status-row">
         <div class="rot-dot" id="rot-dot"></div>
+        <div class="rot-dot" id="rot-fault-dot" title="Fault flag (ARCO only)" style="display:none;"></div>
         <span id="rot-status-text" style="font-family:var(--mono);font-size:10px;color:var(--muted);">Not connected</span>
-        <button onclick="rotatorTestConnect()" style="margin-left:auto;font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;">Test</button>
+        <button id="rot-btn-copylog" onclick="rotatorCopyLog()" title="Copy last 100 rotator debug log lines to clipboard" style="margin-left:auto;font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;">📋 Logs</button>
+        <button onclick="rotatorTestConnect()" style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;">Test</button>
       </div>
     </div>
   </div><!-- dp-rotator -->
@@ -970,6 +989,7 @@
       <button class="settings-tab active" data-tab="tab-station" onclick="switchSettingsTab('tab-station')">📻 Station &amp; Rig</button>
       <button class="settings-tab" data-tab="tab-lookups" onclick="switchSettingsTab('tab-lookups')">🔍 Lookups &amp; Uploads</button>
       <button class="settings-tab" data-tab="tab-cluster" onclick="switchSettingsTab('tab-cluster')">📡 Cluster &amp; Integrations</button>
+      <button class="settings-tab" data-tab="tab-weather" onclick="switchSettingsTab('tab-weather')">🌩 Weather Alerts</button>
       <button class="settings-tab" data-tab="tab-display" onclick="switchSettingsTab('tab-display')">🎨 Display</button>
       <button class="settings-tab" data-tab="tab-pota" onclick="switchSettingsTab('tab-pota')">🏕 POTA</button>
       <button class="settings-tab" data-tab="tab-sat" onclick="switchSettingsTab('tab-sat')">🛰 Satellite</button>
@@ -989,6 +1009,21 @@
         <div class="settings-field"><label>Grid Square</label><input type="text" id="cfg-grid" placeholder="e.g. FN31"></div>
       </div>
       <div class="settings-row">
+        <div class="settings-field"><label>Rig <span style="font-size:9px;color:#8fafc0;font-weight:400;">— CW macro {MYRIG}</span></label><input type="text" id="cfg-myrig" placeholder="e.g. Expert SunSDR2 DX"></div>
+        <div class="settings-field"><label>Antenna <span style="font-size:9px;color:#8fafc0;font-weight:400;">— CW macro {MYANT}</span></label><input type="text" id="cfg-myantenna" placeholder="e.g. Hexbeam @ 50ft"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field"><label>Power <span style="font-size:9px;color:#8fafc0;font-weight:400;">— CW macro {MYPWR}</span></label><input type="text" id="cfg-mypower" placeholder="e.g. 100W, 5W, 1KW"></div>
+        <div class="settings-field"><label>State <span style="font-size:9px;color:#8fafc0;font-weight:400;">— CW macro {MYSTATE}</span></label><input type="text" id="cfg-mystate" placeholder="e.g. OH" maxlength="3" style="text-transform:uppercase;"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field"><label>County <span style="font-size:9px;color:#8fafc0;font-weight:400;">— CW macro {MYCNTY}</span></label><input type="text" id="cfg-mycounty" placeholder="e.g. Hamilton"></div>
+        <div class="settings-field"></div>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:#a8c3d6;margin:-6px 0 14px 0;line-height:1.55;background:rgba(0,229,255,.04);border-left:2px solid var(--accent);padding:8px 12px;border-radius:3px;">
+        ▲ Station info above is used ONLY as source for CW keyer macro tokens (<span style="color:var(--accent);">{MYRIG} {MYANT} {MYPWR} {MYSTATE} {MYCNTY} {MYGRID}</span>) and future light-contest exchange templates. It is NOT stored per QSO or written to ADIF.
+      </div>
+      <div class="settings-row">
         <div class="settings-field">
           <label>Distance Map Style <span style="font-size:9px;color:#8fafc0;font-weight:400;">— used in General &amp; POTA modes</span></label>
           <select id="cfg-map-style">
@@ -996,6 +1031,14 @@
             <option value="positron">Positron — very light, minimalist</option>
             <option value="dark">Dark Matter — dark theme to match SAT map</option>
           </select>
+        </div>
+      </div>
+      <div class="settings-row" style="margin-top:8px;">
+        <div class="settings-field" style="justify-content:flex-start;">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:12px;color:#eaf4ff;">
+            <input type="checkbox" id="cfg-greyline-enabled" style="width:auto;accent-color:var(--accent);cursor:pointer;">
+            Show Gray Line <span style="font-size:10px;color:#8fafc0;">— 🌓 terminator + night shading on the General/POTA map (auto-updates every minute)</span>
+          </label>
         </div>
       </div>
     </div>
@@ -1190,6 +1233,45 @@
       <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6;">
         Status: <span id="settings-winkeyer-status">—</span>
         &nbsp;·&nbsp; <a href="https://hamlib.sourceforge.net/manuals/hamlib.html" target="_blank" style="color:var(--accent);text-decoration:none;">K1EL WinKeyer ↗</a>
+      </div>
+    </div>
+    <!-- Rotator Control -->
+    <div class="settings-section">
+      <h4>Rotator Control <span style="font-size:9px;color:#8fafc0;font-weight:400;">— PstRotator · GS-232 · EasyComm II</span></h4>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+            <input type="checkbox" id="cfg-rot-enabled" style="width:auto;accent-color:var(--accent2);cursor:pointer;" onchange="document.getElementById('rot-enabled-hdr').checked=this.checked;toggleRotatorEnabled(this.checked);">
+            Enable Rotator Control
+          </label>
+        </div>
+        <div class="settings-field">
+          <label>Protocol</label>
+          <select id="cfg-rot-protocol" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 8px;outline:none;width:100%;">
+            <option value="pstrotator">PstRotator (XML)</option>
+            <option value="gs232">GS-232 / Yaesu</option>
+            <option value="easycomm">EasyComm II</option>
+            <option value="arco_tcp">microHAM ARCO (GS-232A over TCP) — beta</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label>Host</label>
+          <input type="text" id="cfg-rot-host" placeholder="127.0.0.1" spellcheck="false">
+        </div>
+        <div class="settings-field">
+          <label>Port</label>
+          <input type="number" id="cfg-rot-port" placeholder="12000" min="1" max="65535">
+        </div>
+      </div>
+      <div class="settings-row" style="margin-top:6px;">
+        <div class="settings-field" style="flex:1;">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-weight:normal;">
+            <input type="checkbox" id="cfg-rot-debug" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+            <span>Rotator Debug Logging <span style="color:var(--muted);font-size:10px;">(beta — writes %APPDATA%\SDRLoggerPlus\logs\rotator_debug.log)</span></span>
+          </label>
+        </div>
       </div>
     </div>
     </div><!-- /tab-station -->
@@ -1479,8 +1561,12 @@
             <span>Highlight Hot Stations</span>
             <span style="font-size:9px;color:#8fafc0">(red in cluster list)</span>
           </label>
-          <input type="text" id="cfg-hot-calls" placeholder="e.g. DX0DX,VK9XX,ZL9" spellcheck="false" style="margin-top:6px;" title="Comma-separated callsigns to highlight">
-          <span style="font-size:9px;color:#8fafc0;margin-top:3px;display:block;">Comma-separated watchlist callsigns</span>
+          <div style="display:flex;gap:6px;margin-top:6px;align-items:stretch;">
+            <input type="text" id="cfg-hot-calls" placeholder="e.g. DX0DX,VK9XX,ZL9" spellcheck="false" style="flex:1;" title="Comma-separated callsigns to highlight">
+            <button type="button" onclick="clearHotListFromSettings()" title="Remove ALL callsigns from your Hot List"
+              style="font-family:var(--mono);font-size:10px;padding:0 10px;border-radius:3px;background:transparent;border:1px solid var(--red);color:var(--red);cursor:pointer;font-weight:700;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;">✕ Clear</button>
+          </div>
+          <span style="font-size:9px;color:#8fafc0;margin-top:3px;display:block;">Comma-separated watchlist callsigns. Add via /feeds DXpedition chips, or type here directly.</span>
         </div>
         <div class="settings-field" style="justify-content:flex-start;padding-top:2px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -1568,7 +1654,7 @@
             Confirm before spot
           </label>
         </div>
-        <div style="font-family:var(--mono);font-size:9px;color:#8fafc0;margin-top:6px;line-height:1.6;">
+        <div style="font-family:var(--mono);font-size:12px;color:#eaf4ff;margin-top:6px;line-height:1.6;">
           Pick which cluster receives your <strong>📡 Spot</strong> sends. Switch between <strong style="color:var(--accent2)">C1 / C2 / C3</strong> if a cluster is down. Spothole is not listed because it is a <em>read-only</em> aggregator with no submit API — it still receives your spot via whichever cluster you send through.
         </div>
       </div>
@@ -1627,36 +1713,8 @@
         </div>
       </div>
     </div>
-    <!-- Rotator Control -->
-    <div class="settings-section">
-      <h4>Rotator Control <span style="font-size:9px;color:#8fafc0;font-weight:400;">— PstRotator · GS-232 · EasyComm II</span></h4>
-      <div class="settings-row">
-        <div class="settings-field">
-          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
-            <input type="checkbox" id="cfg-rot-enabled" style="width:auto;accent-color:var(--accent2);cursor:pointer;" onchange="document.getElementById('rot-enabled-hdr').checked=this.checked;toggleRotatorEnabled(this.checked);">
-            Enable Rotator Control
-          </label>
-        </div>
-        <div class="settings-field">
-          <label>Protocol</label>
-          <select id="cfg-rot-protocol" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 8px;outline:none;width:100%;">
-            <option value="pstrotator">PstRotator (XML)</option>
-            <option value="gs232">GS-232 / Yaesu</option>
-            <option value="easycomm">EasyComm II</option>
-          </select>
-        </div>
-      </div>
-      <div class="settings-row">
-        <div class="settings-field">
-          <label>Host</label>
-          <input type="text" id="cfg-rot-host" placeholder="127.0.0.1" spellcheck="false">
-        </div>
-        <div class="settings-field">
-          <label>Port</label>
-          <input type="number" id="cfg-rot-port" placeholder="12000" min="1" max="65535">
-        </div>
-      </div>
-    </div>
+    </div><!-- /tab-cluster -->
+    <div class="settings-tab-content" id="tab-weather">
     <!-- Lightning Detection -->
     <div class="settings-section">
       <h4>Lightning Detection <span style="font-size:9px;color:#8fafc0;font-weight:400;">— ⚡ banner alert when lightning is detected near your QTH</span></h4>
@@ -1665,10 +1723,10 @@
       </div>
       <div style="margin-bottom:12px;padding:10px 12px;border:1px solid rgba(255,140,0,.3);border-radius:6px;background:rgba(255,140,0,.06);">
         <div style="font-family:var(--mono);font-size:10px;color:#ff8c00;font-weight:700;margin-bottom:6px;">⚠ DISCLAIMER</div>
-        <div style="font-family:var(--mono);font-size:9px;color:#b0bec5;line-height:1.6;">
-          Lightning detection in SDRLogger+ is provided as a <b>convenience feature only</b> and must not be relied upon for personal safety. Data from third-party sources (Blitzortung, NOAA, Ambient Weather) may be delayed, incomplete, or unavailable. The absence of an alert does <b>not</b> mean conditions are safe. Always monitor official weather services independently. The developers of SDRLogger+ accept no liability for damage, injury, or loss arising from use of or reliance on this feature.
+        <div style="font-family:var(--mono);font-size:12px;color:#eaf4ff;line-height:1.6;">
+          Weather alerts (lightning and high wind) are provided as <b>informational awareness only</b>. They are approximations based on public data sources (NWS/NOAA, Blitzortung, Ambient Weather) and may be delayed, incomplete, or inaccurate. Do <b>NOT</b> rely on SDRLogger+ as your primary safety system. Always use official weather services and your own judgment. By enabling weather alerts you acknowledge this limitation and accept responsibility for your own station and antenna safety.
         </div>
-        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:10px;color:var(--text);margin-top:8px;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:12px;color:#eaf4ff;margin-top:8px;">
           <input type="checkbox" id="cfg-lightning-accepted" style="width:auto;accent-color:#ff8c00;cursor:pointer;" onchange="document.getElementById('cfg-lightning-enabled').disabled=!this.checked; if(!this.checked) document.getElementById('cfg-lightning-enabled').checked=false;">
           I understand — this is a convenience feature, not a safety system
         </label>
@@ -1726,7 +1784,67 @@
         </div>
       </div>
     </div>
-    </div><!-- /tab-cluster -->
+    <!-- High Wind Alerts (v1.08.2-beta) -->
+    <div class="settings-section">
+      <h4>High Wind Alerts <span style="font-size:9px;color:#8fafc0;font-weight:400;">— 💨 banner alert when high wind is detected at your QTH</span></h4>
+      <div style="font-family:var(--mono);font-size:10px;color:#8fafc0;margin-bottom:10px;line-height:1.6;">
+        Polls NOAA/NWS active alerts, your nearest METAR station, and/or your Ambient Weather PWS for sustained and gust wind data. Shows a 💨 banner at three severity tiers (yellow/orange/red) so you can make the call on parking antennas or disconnecting coax before a front arrives.
+      </div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+            <input type="checkbox" id="cfg-wind-enabled" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+            Enable High Wind Alerts <span style="font-size:9px;color:#8fafc0;">(requires weather-alerts disclaimer accepted above)</span>
+          </label>
+        </div>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--accent);margin:10px 0 6px;letter-spacing:1px;text-transform:uppercase;">Data Sources</div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="checkbox" id="cfg-wind-nws-alerts" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          NWS Wind Alerts <span style="font-size:9px;color:#8fafc0;">— High Wind Warning / Advisory / Watch / Extreme Wind (US only, free)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="checkbox" id="cfg-wind-nws-metar" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          NWS METAR Observation <span style="font-size:9px;color:#8fafc0;">— live wind / gust from your nearest ICAO station (free, no alert needed)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="checkbox" id="cfg-wind-ambient" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          Ambient Weather PWS <span style="font-size:9px;color:#8fafc0;">— sustained / gust / direction — uses same API+App keys as lightning</span>
+        </label>
+      </div>
+      <div class="settings-row" style="margin-top:10px;">
+        <div class="settings-field" style="flex:2;">
+          <label>METAR Station (4-letter ICAO)</label>
+          <input type="text" id="cfg-wind-metar-station" placeholder="e.g. KLUK, KCVG, KCMH" maxlength="6" spellcheck="false" style="text-transform:uppercase;">
+          <div style="font-family:var(--mono);font-size:12px;color:#eaf4ff;margin-top:6px;line-height:1.55;">
+            Look up your nearest station at
+            <a href="https://aviationweather.gov/data/metar/" target="_blank" style="color:var(--accent);">aviationweather.gov/data/metar</a>
+            or
+            <a href="https://metar-taf.com/" target="_blank" style="color:var(--accent);">metar-taf.com</a>
+            — any airport ATIS / ASOS within ~30 miles works.
+          </div>
+        </div>
+      </div>
+      <div class="settings-row" style="margin-top:6px;">
+        <div class="settings-field">
+          <label>Sustained Threshold (mph)</label>
+          <input type="number" id="cfg-wind-thresh-sust" placeholder="30" min="5" max="100" style="width:100px;">
+        </div>
+        <div class="settings-field">
+          <label>Gust Threshold (mph)</label>
+          <input type="number" id="cfg-wind-thresh-gust" placeholder="45" min="5" max="150" style="width:100px;">
+        </div>
+        <div class="settings-field">
+          <label>Cooldown (min)</label>
+          <input type="number" id="cfg-wind-cooldown" placeholder="20" min="1" max="120" style="width:100px;">
+        </div>
+      </div>
+      <div style="font-family:var(--mono);font-size:12px;color:#eaf4ff;margin-top:6px;line-height:1.55;">
+        Banner tiers: <span style="color:#ffd700;">elevated (yellow)</span> ~10 mph below threshold · <span style="color:#ff8c00;">high (orange)</span> at/above threshold · <span style="color:#ff4444;">extreme (red, bouncing)</span> on NWS High Wind / Extreme Wind Warning or 15+ mph above threshold.
+      </div>
+    </div>
+    </div><!-- /tab-weather -->
     <div class="settings-tab-content" id="tab-display">
     <!-- Display preferences -->
     <div class="settings-section">
@@ -1977,7 +2095,43 @@
           </div>
         </div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+
+      <!-- Auto-Backup (v1.09) -->
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:8px;">⏱ Scheduled Auto-Backup</span>
+        <div style="font-family:var(--mono);font-size:11px;color:#eaf4ff;margin-bottom:10px;line-height:1.55;">
+          Automatically snapshot <strong>both databases</strong> (General + POTA) as raw <code>.db</code> files AND <code>.adi</code> ADIF exports into one timestamped subfolder per run. Uses the backup folder above, or <code>%APPDATA%\SDRLoggerPlus\backups\</code> if blank. Safe-prune: oldest is only removed after a successful write.
+        </div>
+        <div class="settings-row" style="margin-bottom:6px;">
+          <div class="settings-field" style="justify-content:flex-start;">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:12px;color:#eaf4ff;">
+              <input type="checkbox" id="cfg-auto-backup-enabled" style="width:auto;accent-color:var(--accent);cursor:pointer;">
+              Enable Scheduled Auto-Backup
+            </label>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-field">
+            <label>Interval</label>
+            <select id="cfg-auto-backup-interval">
+              <option value="daily">Daily (every 24 h while app is running)</option>
+              <option value="weekly">Weekly (every 7 days)</option>
+              <option value="on_exit">On exit (when browser tab closes)</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label>Keep Last N Backups</label>
+            <input type="number" id="cfg-auto-backup-retention" min="1" max="365" step="1" placeholder="14">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+          <button type="button" onclick="autoBackupRunNow()" style="font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;transition:all .15s;font-weight:600;" onmouseover="this.style.background='rgba(0,229,255,.12)'" onmouseout="this.style.background='transparent'">▶ Run Backup Now</button>
+          <button type="button" onclick="autoBackupRefreshStatus()" style="font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:4px;border:1px solid var(--muted);background:transparent;color:var(--muted);cursor:pointer;transition:all .15s;font-weight:600;" onmouseover="this.style.color='var(--text)';this.style.borderColor='var(--text)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--muted)'">⟳ Refresh</button>
+        </div>
+        <div id="auto-backup-status" style="font-family:var(--mono);font-size:11px;color:#8fafc0;margin-top:10px;min-height:18px;line-height:1.6;">Last run: <em>never</em></div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center;">
         <span style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;width:100%;margin-bottom:2px;">Database</span>
         <button onclick="backupDatabase()" style="font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:4px;border:1px solid var(--accent2);background:transparent;color:var(--accent2);cursor:pointer;transition:all .15s;font-weight:600;" onmouseover="this.style.background='var(--accent2)';this.style.color='var(--bg)'" onmouseout="this.style.background='transparent';this.style.color='var(--accent2)'">Backup DB</button>
         <label style="font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:4px;border:1px solid var(--accent2);background:transparent;color:var(--accent2);cursor:pointer;font-weight:600;transition:all .15s;" onmouseover="this.style.background='var(--accent2)';this.style.color='var(--bg)'" onmouseout="this.style.background='transparent';this.style.color='var(--accent2)'">
@@ -2133,8 +2287,24 @@
           <button class="btn-test-qrz" onclick="window.open('/awards','_blank')">Open Dashboard</button>
         </div>
       </div>
+      <div style="display:flex;gap:10px;align-items:center;background:rgba(0,229,255,.06);border:1px solid var(--accent);border-radius:6px;padding:10px 14px;margin-top:14px;">
+        <span style="font-size:22px;">📊</span>
+        <div style="flex:1;">
+          <div style="font-family:var(--head);font-size:14px;font-weight:700;color:var(--accent);letter-spacing:1px;">Statistics Dashboard</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;">QSOs by year, band, mode, hour-of-day heatmap, top entities, cumulative timeline.</div>
+        </div>
+        <button class="btn-test-qrz" onclick="window.open('/stats','_blank')">Open Dashboard</button>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;background:rgba(57,255,20,.06);border:1px solid var(--accent2);border-radius:6px;padding:10px 14px;margin-top:10px;">
+        <span style="font-size:22px;">📡</span>
+        <div style="flex:1;">
+          <div style="font-family:var(--head);font-size:14px;font-weight:700;color:var(--accent2);letter-spacing:1px;">Feeds &amp; Alerts</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;">Live contest calendar (WA7BNM) + DXpedition announcements (NG3K). Click a DXpedition callsign to instantly add it to your 🔥 Hot List.</div>
+        </div>
+        <button class="btn-test-qrz" onclick="window.open('/feeds','_blank')" style="border-color:var(--accent2);color:var(--accent2);">Open Feeds</button>
+      </div>
       <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:14px;line-height:1.6;border-top:1px solid var(--border);padding-top:12px;">
-        More awards coming soon — VUCC, IOTA, and more.<br>
+        More awards coming soon — IOTA and more.<br>
         All award tracking is calculated from your QSO log in real time using cty.dat entity data.
       </div>
     </div>
@@ -2228,6 +2398,61 @@ let hotEnabled     = false;
 let hotCalls       = [];                   // uppercase callsign watchlist
 let hotTtsEnabled  = false;               // announce hot spots via speech synthesis
 const _hotTtsCooldown = new Map();        // callsign → last-announced timestamp (15-min gate)
+
+// ─── Hot List sync from /feeds page (BroadcastChannel) ──────────────────────
+// The Feeds & Alerts page (/feeds) lets users click DXpedition callsigns to
+// add them to the hot list. When that happens, it broadcasts on this channel
+// so this main logger updates its in-memory hotCalls without a page reload.
+let _hotListChannel = null;
+try {
+  _hotListChannel = new BroadcastChannel('sdrlogger-hotlist');
+  _hotListChannel.onmessage = (ev) => {
+    if (!ev.data) return;
+    if (ev.data.type === 'hot_calls' && Array.isArray(ev.data.calls)) {
+      hotCalls = ev.data.calls.map(c => String(c).toUpperCase().trim()).filter(Boolean);
+      // Also persist to localStorage so a page reload picks it up
+      try {
+        const s = JSON.parse(localStorage.getItem('hamlog_settings') || '{}');
+        s.hot_calls = hotCalls.join(',');
+        localStorage.setItem('hamlog_settings', JSON.stringify(s));
+      } catch(e){}
+    }
+  };
+} catch(e) { /* BroadcastChannel unsupported (very old browsers) */ }
+
+// Also fire a broadcast when Hot List enable/TTS settings change locally,
+// so /feeds page status banner stays accurate.
+function broadcastHotState() {
+  if (_hotListChannel) {
+    try { _hotListChannel.postMessage({type:'hot_enabled', enabled: hotEnabled, tts: hotTtsEnabled}); } catch(e){}
+  }
+}
+
+// Settings page Clear-All for Hot List — wipes input field, in-memory list,
+// localStorage, server-side runtime_settings, and broadcasts to /feeds tab.
+async function clearHotListFromSettings() {
+  const cur = (document.getElementById('cfg-hot-calls').value || '').trim();
+  const n = cur ? cur.split(',').filter(Boolean).length : 0;
+  if (!n) { alert('Hot List is already empty.'); return; }
+  if (!confirm(`Clear ALL ${n} callsign${n===1?'':'s'} from your Hot List?\n\nThis will also clear the list on the /feeds page via live sync.`)) return;
+  document.getElementById('cfg-hot-calls').value = '';
+  hotCalls = [];
+  // localStorage
+  try {
+    const s = JSON.parse(localStorage.getItem('hamlog_settings') || '{}');
+    s.hot_calls = '';
+    localStorage.setItem('hamlog_settings', JSON.stringify(s));
+  } catch(e){}
+  // Server
+  try {
+    await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({hot_calls: ''})});
+  } catch(e){}
+  // Broadcast to /feeds tab
+  if (_hotListChannel) {
+    try { _hotListChannel.postMessage({type:'hot_calls', calls: []}); } catch(e){}
+  }
+}
+
 // ─── RBN Band-Opening Alerts ────────────────────────────────────────────────
 let _rbnSocket       = null;
 let _rbnConnected    = false;
@@ -2235,11 +2460,24 @@ const _rbnBandCooldown = new Map();       // band → last-alert timestamp
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 // Keepalive heartbeat — tells the server this browser session is still active.
-// The server exits automatically if no keepalive arrives within 3 minutes.
+// The server exits automatically if no keepalive arrives within 60 minutes
+// (forgives coffee runs, dog walks, PC sleep, Chrome background-tab freeze).
+// Immediate-on-load also cancels any pending explicit_close scheduled by a
+// just-unloaded sibling page (index ↔ help intra-app navigation).
 fetch('/api/keepalive', {method:'POST'}).catch(()=>{});
 setInterval(function() {
   fetch('/api/keepalive', {method:'POST'}).catch(()=>{});
 }, 20000);
+
+// Explicit tab-close beacon — schedules a fast shutdown (~10 s grace) when the
+// user actually closes the tab/window. If they just navigated to /help, the
+// new page's immediate-on-load keepalive will cancel it before it fires.
+// sendBeacon survives the page unload where fetch() would be aborted.
+window.addEventListener('pagehide', function(e) {
+  // Skip if the page is going into bfcache — it can come back alive
+  if (e.persisted) return;
+  try { navigator.sendBeacon('/api/explicit_close'); } catch(_) {}
+});
 
 // ─── Update check (once at startup) ─────────────────────────────────────────
 (function checkForUpdate() {
@@ -3521,6 +3759,55 @@ async function backupDatabase() {
   }
 }
 
+// ─── Auto-Backup (v1.09) ────────────────────────────────────────────────────
+function _fmtLocal(iso) {
+  if (!iso) return 'never';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { year:'numeric', month:'short', day:'2-digit',
+                                         hour:'2-digit', minute:'2-digit', hour12:false });
+  } catch(e) { return iso; }
+}
+
+async function autoBackupRefreshStatus() {
+  const el = document.getElementById('auto-backup-status');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/auto_backup/status');
+    const s = await r.json();
+    const lastColor = (s.ok === false) ? '#ff4444' : (s.ok === true ? '#00e5ff' : '#8fafc0');
+    const lastLabel = (s.last_run)
+      ? `<span style="color:${lastColor};">Last run: ${_fmtLocal(s.last_run)} ${s.ok === false ? '⚠ FAILED' : '✓'}</span>`
+      : `<span style="color:#8fafc0;">Last run: <em>never</em></span>`;
+    const nextLabel = s.enabled
+      ? (s.interval === 'on_exit'
+          ? `Next: on tab close`
+          : `Next: ${_fmtLocal(s.next_due)}`)
+      : `<span style="color:var(--muted);">disabled</span>`;
+    const destLabel = s.dest ? `<span style="color:var(--muted);">Dest: ${s.dest}</span>` : '';
+    const msgLabel  = s.message ? `<div style="margin-top:2px;color:#8fafc0;font-size:10px;">${s.message}</div>` : '';
+    el.innerHTML = `${lastLabel} · ${nextLabel}<br>${destLabel}${msgLabel}`;
+  } catch(e) {
+    el.textContent = `Status unavailable: ${e.message}`;
+  }
+}
+
+async function autoBackupRunNow() {
+  const el = document.getElementById('auto-backup-status');
+  if (el) { el.innerHTML = '<span style="color:var(--accent);">Running backup…</span>'; }
+  try {
+    const r = await fetch('/api/auto_backup/run_now', { method:'POST' });
+    const j = await r.json();
+    if (!j.ok) {
+      if (el) el.innerHTML = `<span style="color:#ff4444;">Backup failed: ${j.message || 'unknown error'}</span>`;
+    } else {
+      autoBackupRefreshStatus();
+    }
+  } catch(e) {
+    if (el) el.innerHTML = `<span style="color:#ff4444;">Backup error: ${e.message}</span>`;
+  }
+}
+
 async function exportSettings() {
   const path   = document.getElementById('cfg-backup-path').value.trim();
   const status = document.getElementById('backup-status');
@@ -3706,9 +3993,20 @@ function openVoacap(callsign) {
 async function openSettings() {
   const s = loadSettings();
   document.getElementById('cfg-map-style').value        = s.map_style || 'voyager';
+  document.getElementById('cfg-greyline-enabled').checked = (s.greyline_enabled !== false);  // default on
+  // Auto-backup (v1.09)
+  document.getElementById('cfg-auto-backup-enabled').checked  = (s.auto_backup_enabled === true);
+  document.getElementById('cfg-auto-backup-interval').value   = s.auto_backup_interval || 'daily';
+  document.getElementById('cfg-auto-backup-retention').value  = s.auto_backup_retention || 14;
+  try { autoBackupRefreshStatus(); } catch(e) {}
   document.getElementById('cfg-callsign').value         = s.callsign||'';
   document.getElementById('cfg-opname').value           = s.opname||'';
   document.getElementById('cfg-grid').value             = s.grid||'';
+  document.getElementById('cfg-myrig').value            = s.myrig||'';
+  document.getElementById('cfg-myantenna').value        = s.myantenna||'';
+  document.getElementById('cfg-mypower').value          = s.mypower||'';
+  document.getElementById('cfg-mystate').value          = s.mystate||'';
+  document.getElementById('cfg-mycounty').value         = s.mycounty||'';
   document.getElementById('cfg-tci-enabled').checked    = s.tci_enabled !== false;  // default true
   document.getElementById('cfg-tci-host').value         = s.tci_host||'127.0.0.1';
   if (s.itu_region) document.getElementById('cfg-itu-region').value = s.itu_region;
@@ -3785,6 +4083,7 @@ async function openSettings() {
   document.getElementById('cfg-rot-protocol').value    = s.rotator_protocol  || 'pstrotator';
   document.getElementById('cfg-rot-host').value        = s.rotator_host      || '127.0.0.1';
   document.getElementById('cfg-rot-port').value        = s.rotator_port      || '12000';
+  if (document.getElementById('cfg-rot-debug')) document.getElementById('cfg-rot-debug').checked = s.rotator_debug === true;
   // Lightning settings
   document.getElementById('cfg-lightning-accepted').checked     = s.lightning_accepted === true;
   document.getElementById('cfg-lightning-enabled').disabled     = !s.lightning_accepted;
@@ -3796,6 +4095,17 @@ async function openSettings() {
   document.getElementById('cfg-lightning-ambient').checked      = s.lightning_ambient === true;
   document.getElementById('cfg-lightning-ambient-api-key').value = s.lightning_ambient_api_key || '';
   document.getElementById('cfg-lightning-ambient-app-key').value = s.lightning_ambient_app_key || '';
+  // Wind alerts (v1.08.2-beta)
+  if (document.getElementById('cfg-wind-enabled')) {
+    document.getElementById('cfg-wind-enabled').checked        = s.wind_enabled === true;
+    document.getElementById('cfg-wind-nws-alerts').checked     = s.wind_nws_alerts === true;
+    document.getElementById('cfg-wind-nws-metar').checked      = s.wind_nws_metar === true;
+    document.getElementById('cfg-wind-ambient').checked        = s.wind_ambient === true;
+    document.getElementById('cfg-wind-metar-station').value    = s.wind_metar_station || '';
+    document.getElementById('cfg-wind-thresh-sust').value      = s.wind_thresh_sust || '30';
+    document.getElementById('cfg-wind-thresh-gust').value      = s.wind_thresh_gust || '45';
+    document.getElementById('cfg-wind-cooldown').value         = s.wind_cooldown_min || '20';
+  }
   document.getElementById('cfg-flrig-enabled').checked  = s.flrig_enabled === true;
   document.getElementById('cfg-flrig-host').value         = s.flrig_host || '127.0.0.1';
   document.getElementById('cfg-flrig-port').value         = s.flrig_port || '12345';
@@ -3879,9 +4189,19 @@ async function openSettings() {
 async function saveSettings() {
   const s = {
     map_style:       document.getElementById('cfg-map-style').value || 'voyager',
+    greyline_enabled: document.getElementById('cfg-greyline-enabled').checked,
+    // Auto-backup (v1.09)
+    auto_backup_enabled:   document.getElementById('cfg-auto-backup-enabled').checked,
+    auto_backup_interval:  document.getElementById('cfg-auto-backup-interval').value || 'daily',
+    auto_backup_retention: (parseInt(document.getElementById('cfg-auto-backup-retention').value, 10) || 14),
     callsign:        document.getElementById('cfg-callsign').value.trim().toUpperCase(),
     opname:          document.getElementById('cfg-opname').value.trim(),
     grid:            document.getElementById('cfg-grid').value.trim().toUpperCase(),
+    myrig:           document.getElementById('cfg-myrig').value.trim(),
+    myantenna:       document.getElementById('cfg-myantenna').value.trim(),
+    mypower:         document.getElementById('cfg-mypower').value.trim(),
+    mystate:         document.getElementById('cfg-mystate').value.trim().toUpperCase(),
+    mycounty:        document.getElementById('cfg-mycounty').value.trim(),
     tci_enabled:     document.getElementById('cfg-tci-enabled').checked,
     itu_region:      parseInt(document.getElementById('cfg-itu-region').value) || 2,
     tci_host:        document.getElementById('cfg-tci-host').value.trim(),
@@ -3948,6 +4268,7 @@ async function saveSettings() {
     adif_mon_path_2:     document.getElementById('cfg-adif-mon-path-2').value.trim(),
     rotator_enabled:  document.getElementById('cfg-rot-enabled').checked,
     rotator_protocol: document.getElementById('cfg-rot-protocol').value,
+    rotator_debug:    document.getElementById('cfg-rot-debug') ? document.getElementById('cfg-rot-debug').checked : false,
     rotator_host:     document.getElementById('cfg-rot-host').value.trim() || '127.0.0.1',
     rotator_port:     document.getElementById('cfg-rot-port').value || '12000',
     // Lightning settings
@@ -3960,6 +4281,15 @@ async function saveSettings() {
     lightning_ambient:         document.getElementById('cfg-lightning-ambient').checked,
     lightning_ambient_api_key: document.getElementById('cfg-lightning-ambient-api-key').value.trim(),
     lightning_ambient_app_key: document.getElementById('cfg-lightning-ambient-app-key').value.trim(),
+    // Wind alerts (v1.08.2-beta)
+    wind_enabled:       document.getElementById('cfg-wind-enabled')       ? document.getElementById('cfg-wind-enabled').checked       : false,
+    wind_nws_alerts:    document.getElementById('cfg-wind-nws-alerts')    ? document.getElementById('cfg-wind-nws-alerts').checked    : false,
+    wind_nws_metar:     document.getElementById('cfg-wind-nws-metar')     ? document.getElementById('cfg-wind-nws-metar').checked     : false,
+    wind_ambient:       document.getElementById('cfg-wind-ambient')       ? document.getElementById('cfg-wind-ambient').checked       : false,
+    wind_metar_station: document.getElementById('cfg-wind-metar-station') ? document.getElementById('cfg-wind-metar-station').value.trim().toUpperCase() : '',
+    wind_thresh_sust:   parseInt(document.getElementById('cfg-wind-thresh-sust') ? document.getElementById('cfg-wind-thresh-sust').value : '30') || 30,
+    wind_thresh_gust:   parseInt(document.getElementById('cfg-wind-thresh-gust') ? document.getElementById('cfg-wind-thresh-gust').value : '45') || 45,
+    wind_cooldown_min:  parseInt(document.getElementById('cfg-wind-cooldown')    ? document.getElementById('cfg-wind-cooldown').value : '20') || 20,
     flrig_enabled:    document.getElementById('cfg-flrig-enabled').checked,
     flrig_host:         document.getElementById('cfg-flrig-host').value.trim() || '127.0.0.1',
     flrig_port:         parseInt(document.getElementById('cfg-flrig-port').value) || 12345,
@@ -4050,6 +4380,8 @@ async function saveSettings() {
 
   // Distance map: hot-swap the tile style if the user picked a different one.
   try { if (typeof applyMapTileStyle === 'function' && _map) applyMapTileStyle(s.map_style || 'voyager'); } catch(e) {}
+  // Gray line: repaint on toggle or basemap change.
+  try { if (typeof updateGreyline === 'function') updateGreyline(); } catch(e) {}
 
   // SAT map: refresh station marker so a grid edit takes effect immediately,
   // not on the next sat-state push.
@@ -5769,6 +6101,11 @@ let _greylineLayer = null;
 function updateGreyline() {
   if (!_map) return;
   if (_greylineLayer) { _map.removeLayer(_greylineLayer); _greylineLayer = null; }
+  // Honor user toggle — default on if unset (preserves prior behavior)
+  try {
+    const _gs = loadSettings();
+    if (_gs && _gs.greyline_enabled === false) return;
+  } catch(e) {}
   const now = new Date();
   const JD  = now.getTime() / 86400000 + 2440587.5;
   const n   = JD - 2451545.0;
@@ -5790,11 +6127,21 @@ function updateGreyline() {
     pts.push([lat, lon]);
   }
   const nightPole = dec > 0 ? -90 : 90;
+  // Per-basemap styling: night-shade reads heavy on bright basemaps, so
+  // lighten the fill on Voyager/Positron. Terminator stroke color also
+  // nudges for contrast: blue on light basemaps, warm yellow on dark.
+  let _bg = 'voyager';
+  try { _bg = (loadSettings().map_style) || 'voyager'; } catch(e) {}
+  const _gStyle = {
+    voyager:  { fill:'#0a1e3a', fillOpacity:0.32, stroke:'#2d5b85', strokeOpacity:0.85 },
+    positron: { fill:'#14283d', fillOpacity:0.28, stroke:'#3b6a95', strokeOpacity:0.85 },
+    dark:     { fill:'#001428', fillOpacity:0.52, stroke:'#ffb347', strokeOpacity:0.90 }
+  }[_bg] || { fill:'#001428', fillOpacity:0.52, stroke:'#4488bb', strokeOpacity:0.85 };
   _greylineLayer = L.layerGroup([
     L.polygon([...pts, [nightPole,180], [nightPole,-180]], {
-      color:'none', fillColor:'#001428', fillOpacity:0.52, weight:0, interactive:false
+      color:'none', fillColor:_gStyle.fill, fillOpacity:_gStyle.fillOpacity, weight:0, interactive:false
     }),
-    L.polyline(pts, { color:'#4488bb', weight:1.5, opacity:0.85, dashArray:'4 3', interactive:false })
+    L.polyline(pts, { color:_gStyle.stroke, weight:1.5, opacity:_gStyle.strokeOpacity, dashArray:'4 3', interactive:false })
   ]).addTo(_map);
 }
 
@@ -6499,23 +6846,82 @@ async function rotatorAzPoll() {
     const r = await fetch('/api/rotator_az', { cache: 'no-store' });
     if (!r.ok) return;
     const d = await r.json();
-    const el = document.getElementById('rot-cur-val');
+    const el     = document.getElementById('rot-cur-val');
+    const lbl    = document.getElementById('rot-cur-lbl');
+    const faultD = document.getElementById('rot-fault-dot');
     if (!el) return;
-    if (!d.enabled || d.protocol !== 'pstrotator' || d.az === null) {
+
+    // Only PstRotator and ARCO populate live AZ — others stay '—°'
+    const livePoll = d.enabled && (d.protocol === 'pstrotator' || d.protocol === 'arco_tcp');
+
+    // Fault dot — ARCO only; red if fault string non-empty, green if "", hidden otherwise
+    if (faultD) {
+      if (d.protocol === 'arco_tcp' && d.enabled) {
+        faultD.style.display = '';
+        if (d.fault === '' || d.fault === null) {
+          faultD.className = 'rot-dot ok';
+          faultD.title = 'ARCO link OK';
+        } else {
+          faultD.className = 'rot-dot err';
+          faultD.title = 'ARCO fault: ' + d.fault;
+        }
+      } else {
+        faultD.style.display = 'none';
+      }
+    }
+
+    if (!livePoll || d.az === null || d.az === undefined) {
       el.textContent = '—°';
       el.style.color = 'var(--text)';
+      if (lbl) lbl.textContent = (d.protocol === 'arco_tcp') ? 'Position' : 'Current AZ';
       _rotLastAz = null;
       return;
     }
-    const az  = d.az;
-    // Zero-pad to 3 digits to match hardware rotator display style (e.g. 045°, 003°)
+    const az = d.az;
     const azStr = String(Math.round(az)).padStart(3, '0');
-    // Detect motion — AZ changed by at least 0.5° since last poll
     const moving = _rotLastAz !== null && Math.abs(az - _rotLastAz) >= 0.5;
-    el.textContent = (moving ? '↻ ' : '') + azStr + '°';
+    let text = (moving ? '↻ ' : '') + azStr + '°';
+    // ARCO: append elevation when present
+    if (d.protocol === 'arco_tcp') {
+      if (lbl) lbl.textContent = 'Position';
+      if (d.el !== null && d.el !== undefined) {
+        text += ' / ' + String(Math.round(d.el)).padStart(2, '0') + '°';
+      }
+    } else {
+      if (lbl) lbl.textContent = 'Current AZ';
+    }
+    el.textContent  = text;
     el.style.color  = moving ? 'var(--accent)' : 'var(--accent2)';
     _rotLastAz = az;
   } catch(e) { /* silent — rotator offline */ }
+}
+
+// v1.08.1-beta — Copy last 100 rotator debug log lines to clipboard.
+// Used by ARCO beta testers to grab a snapshot for bug reports.
+async function rotatorCopyLog() {
+  try {
+    const r = await fetch('/api/rotator_debug_tail?n=100', { cache: 'no-store' });
+    if (!r.ok) { toast('Failed to fetch rotator log', 'error'); return; }
+    const d = await r.json();
+    const header =
+      `SDRLogger+ v${d.version || '?'} — Rotator Debug Snapshot\n` +
+      `Protocol: ${d.protocol}   Host: ${d.host}:${d.port}\n` +
+      `Debug logging: ${d.debug_enabled ? 'ENABLED' : 'disabled (enable in Settings → Cluster & Integrations → Rotator)'}\n` +
+      `Lines: ${(d.lines || []).length}\n` +
+      `${'─'.repeat(60)}\n`;
+    const body = (d.lines || []).join('\n') || '(no rotator activity logged yet)';
+    const text = header + body + '\n';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      toast(`📋 Copied ${(d.lines || []).length} log lines — paste into email/Discord`, 'success');
+    } else {
+      // Fallback: open a window with the text selectable
+      const w = window.open('', '_blank');
+      if (w) { w.document.write('<pre>' + text.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) + '</pre>'); w.document.title = 'Rotator Log'; }
+    }
+  } catch(e) {
+    toast('Copy log failed: ' + e.message, 'error');
+  }
 }
 
 // Start the 150ms live AZ polling loop
@@ -6747,6 +7153,83 @@ async function pollLightningStatus() {
 }
 setInterval(pollLightningStatus, 45000);
 setTimeout(pollLightningStatus, 5000);
+
+// ── High-Wind Detection polling (v1.08.2-beta) ─────────────────────────────
+// Lives side-by-side with the lightning banner in the header flex row.
+// When BOTH are active we: (a) de-sync bounce animations so they don't pulse
+// together (visually chaotic), (b) compact each banner's text so the header
+// doesn't wrap, (c) keep their colors independent so the operator can tell
+// which threat is what at a glance.
+async function pollWindStatus() {
+  try {
+    const r = await fetch('/api/wind_status');
+    if (!r.ok) return;
+    const ws = await r.json();
+    const banner = document.getElementById('wind-banner');
+    if (!banner) return;
+    if (!ws.active || !ws.severity) {
+      banner.style.display = 'none';
+      _coordinateBanners();
+      return;
+    }
+    banner.style.display = '';
+    let cls = 'wind-elev';
+    if (ws.severity === 'high')    cls = 'wind-high';
+    if (ws.severity === 'extreme') cls = 'wind-extreme';
+    banner.className = cls;
+
+    // Compose text — compact when both banners will be showing
+    const lightningActive = document.getElementById('lightning-banner').style.display !== 'none';
+    const parts = [];
+    if (ws.gust_mph !== null && ws.gust_mph !== undefined)       parts.push(`G${Math.round(ws.gust_mph)}`);
+    if (ws.sustained_mph !== null && ws.sustained_mph !== undefined) parts.push(`${Math.round(ws.sustained_mph)}mph`);
+    if (ws.direction)                                             parts.push(ws.direction);
+    let txt = parts.join(' ') || (ws.nws_alert ? 'NWS Alert' : 'Wind');
+    if (lightningActive && txt.length > 14) {
+      // compact mode — just show the worst number
+      txt = ws.gust_mph ? `G${Math.round(ws.gust_mph)}` :
+            ws.sustained_mph ? `${Math.round(ws.sustained_mph)}mph` : 'Wind';
+    }
+    document.getElementById('wind-text').textContent = txt;
+
+    // Tooltip: full story (sources, NWS alert headline, timestamp)
+    let tip = ws.nws_alert || 'High wind conditions detected at your QTH';
+    if (ws.sustained_mph !== null && ws.sustained_mph !== undefined) tip += `\nSustained: ${ws.sustained_mph} mph`;
+    if (ws.gust_mph !== null && ws.gust_mph !== undefined)           tip += `\nGust: ${ws.gust_mph} mph`;
+    if (ws.direction)                                                 tip += `\nDirection: ${ws.direction}`;
+    if (ws.sources && ws.sources.length)                              tip += `\nSources: ${ws.sources.join(', ')}`;
+    if (ws.last_update)                                               tip += `\nUpdated ${ws.last_update} UTC`;
+    tip += '\nConsider parking antennas or disconnecting coax.';
+    banner.title = tip;
+
+    _coordinateBanners();
+  } catch(e) {}
+}
+
+// When both lightning + wind banners are visible, stagger their bounce phases
+// so they don't visually sync up. Also compact the lightning text to keep the
+// header from wrapping on narrower screens.
+function _coordinateBanners() {
+  const lb = document.getElementById('lightning-banner');
+  const wb = document.getElementById('wind-banner');
+  if (!lb || !wb) return;
+  const both = (lb.style.display !== 'none') && (wb.style.display !== 'none');
+  // Offset the wind bounce by ~half a cycle (800 ms) when both are bouncing
+  if (both && wb.classList.contains('wind-extreme')) {
+    wb.style.animationDelay = '-0.8s';
+  } else {
+    wb.style.animationDelay = '';
+  }
+  // Same for lightning — negative delay so the bounce starts mid-phase
+  if (both && lb.classList.contains('ltng-close')) {
+    lb.style.animationDelay = '0s';
+  } else {
+    lb.style.animationDelay = '';
+  }
+}
+
+setInterval(pollWindStatus, 120000);    // 2 min — wind evolves slower than lightning
+setTimeout(pollWindStatus, 8000);
 
 function resetDockLayout() {
   const s = loadSettings();

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDRLogger+ — Statistics Dashboard</title>
+<link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600&display=swap');
+  :root{--bg:#0a0d12;--surface:#111620;--card:#161c28;--border:#1e2a3a;
+    --accent:#00e5ff;--accent2:#39ff14;--warn:#ff6b35;--text:#cdd9e5;
+    --muted:#5a7080;--gold:#ffd700;
+    --mono:'Share Tech Mono',monospace;--head:'Rajdhani',sans-serif;--body:'Exo 2',sans-serif;}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.6;}
+  body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px);pointer-events:none;z-index:9999;}
+
+  header{background:var(--surface);border-bottom:2px solid var(--accent);padding:14px 28px;
+    display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;}
+  .logo{font-family:var(--head);font-size:22px;font-weight:700;color:var(--accent);letter-spacing:3px;text-transform:uppercase;}
+  .logo span{color:var(--accent2);}
+  .logo-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:6px;letter-spacing:2px;}
+  .nav-btn{font-family:var(--mono);font-size:12px;padding:6px 16px;border-radius:3px;
+    border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;
+    text-decoration:none;transition:all .15s;margin-left:8px;}
+  .nav-btn:hover{background:rgba(0,229,255,.1);}
+  .nav-spacer{margin-left:auto;}
+
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:18px 32px;
+    background:var(--surface);border-bottom:1px solid var(--border);}
+  .controls label{font-family:var(--mono);font-size:12px;color:#8fafc0;letter-spacing:1px;text-transform:uppercase;font-weight:600;}
+  .controls select,.controls input[type=date]{background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);
+    font-family:var(--mono);font-size:13px;padding:5px 10px;outline:none;}
+  .controls select:focus,.controls input[type=date]:focus{border-color:var(--accent);}
+
+  .stat-strip{display:flex;gap:14px;padding:16px 32px;background:var(--bg);flex-wrap:wrap;}
+  .stat-pill{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 18px;flex:1;min-width:160px;text-align:center;}
+  .stat-pill .num{font-family:var(--head);font-size:26px;font-weight:700;color:var(--accent);line-height:1;}
+  .stat-pill .lbl{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:4px;}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:18px;padding:18px 32px 32px;}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px 20px;min-height:300px;display:flex;flex-direction:column;}
+  .panel h3{font-family:var(--head);font-size:16px;font-weight:600;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px;}
+  .panel .chart-wrap{position:relative;flex:1;min-height:240px;}
+  .panel.wide{grid-column:1/-1;}
+  .panel .empty{font-family:var(--mono);font-size:13px;color:var(--muted);text-align:center;padding:40px 0;}
+
+  /* Hour heatmap */
+  .heat-grid{display:grid;grid-template-columns:repeat(24,1fr);gap:3px;margin-top:12px;}
+  .heat-cell{aspect-ratio:1;border-radius:3px;background:var(--surface);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;color:var(--text);}
+  .heat-labels{display:grid;grid-template-columns:repeat(24,1fr);gap:3px;margin-top:4px;font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center;}
+
+  .loading{padding:40px;text-align:center;font-family:var(--mono);color:var(--muted);}
+
+  /* ── Font Scale (A− / A / A+) ─────────────────────────────────────────── */
+  .scale-toggle{display:inline-flex;gap:0;margin-left:12px;border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+  .scale-toggle button{font-family:var(--mono);background:var(--bg);color:var(--muted);border:none;
+    padding:4px 10px;cursor:pointer;letter-spacing:1px;font-weight:700;border-right:1px solid var(--border);transition:all .12s;}
+  .scale-toggle button:last-child{border-right:none;}
+  .scale-toggle button.active{background:var(--accent);color:var(--bg);}
+  .scale-toggle button:hover:not(.active){background:rgba(0,229,255,.1);color:var(--accent);}
+  .scale-toggle button:nth-child(1){font-size:11px;}
+  .scale-toggle button:nth-child(2){font-size:14px;}
+  .scale-toggle button:nth-child(3){font-size:17px;}
+  body.scale-lg .panel h3{font-size:18px;}
+  body.scale-lg .stat-pill .num{font-size:30px;}
+  body.scale-lg .stat-pill .lbl{font-size:13px;}
+  body.scale-lg .controls label{font-size:14px;}
+  body.scale-lg .controls select,body.scale-lg .controls input[type=date]{font-size:15px;padding:7px 14px;}
+  body.scale-lg .heat-cell{font-size:11px;}
+  body.scale-lg .heat-labels{font-size:11px;}
+  body.scale-lg .panel{min-height:340px;}
+  body.scale-lg .panel .chart-wrap{min-height:280px;}
+
+  body.scale-xl .panel h3{font-size:19px;}
+  body.scale-xl .stat-pill .num{font-size:32px;}
+  body.scale-xl .stat-pill .lbl{font-size:13.5px;}
+  body.scale-xl .controls label{font-size:14.5px;}
+  body.scale-xl .controls select,body.scale-xl .controls input[type=date]{font-size:15px;padding:7px 15px;}
+  body.scale-xl .heat-cell{font-size:12px;}
+  body.scale-xl .heat-labels{font-size:11.5px;}
+  body.scale-xl .panel{min-height:370px;padding:20px 22px;}
+  body.scale-xl .panel .chart-wrap{min-height:310px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SDR<span>Logger+</span></div>
+  <span class="logo-sub">STATISTICS DASHBOARD</span>
+  <span class="nav-spacer"></span>
+  <span class="scale-toggle" title="Text size">
+    <button onclick="setUiScale('')"   id="scale-md">A</button>
+    <button onclick="setUiScale('lg')" id="scale-lg">A</button>
+    <button onclick="setUiScale('xl')" id="scale-xl">A</button>
+  </span>
+  <a href="/awards" class="nav-btn">Awards</a>
+  <a href="/feeds" class="nav-btn">Feeds</a>
+  <a href="/" class="nav-btn">Back to Logger</a>
+</header>
+
+<div class="controls">
+  <label>Source:</label>
+  <select id="src">
+    <option value="combined">General + POTA</option>
+    <option value="general">General Only</option>
+    <option value="pota">POTA Only</option>
+  </select>
+  <label>Range:</label>
+  <select id="rng">
+    <option value="all">All Time</option>
+    <option value="year">This Year</option>
+    <option value="12mo">Last 12 Months</option>
+    <option value="custom">Custom</option>
+  </select>
+  <span id="custom-range" style="display:none;gap:8px;align-items:center;">
+    <label>From:</label><input type="date" id="d-from">
+    <label>To:</label><input type="date" id="d-to">
+  </span>
+  <label>Mode:</label>
+  <select id="mode-f">
+    <option value="">All Modes</option>
+    <option>SSB</option><option>CW</option><option>FT8</option><option>FT4</option>
+    <option>RTTY</option><option>AM</option><option>FM</option><option>JS8</option>
+    <option>PSK31</option><option>DIGI</option>
+  </select>
+  <button class="nav-btn" onclick="loadStats()">Apply</button>
+</div>
+
+<div class="stat-strip" id="stat-strip">
+  <div class="stat-pill"><div class="num" id="s-total">—</div><div class="lbl">Total QSOs</div></div>
+  <div class="stat-pill"><div class="num" id="s-years">—</div><div class="lbl">Years Active</div></div>
+  <div class="stat-pill"><div class="num" id="s-bands">—</div><div class="lbl">Unique Bands</div></div>
+  <div class="stat-pill"><div class="num" id="s-modes">—</div><div class="lbl">Unique Modes</div></div>
+  <div class="stat-pill"><div class="num" id="s-entities">—</div><div class="lbl">DXCC Entities</div></div>
+</div>
+
+<div class="grid">
+  <div class="panel"><h3>QSOs Per Year</h3><div class="chart-wrap"><canvas id="ch-year"></canvas></div></div>
+  <div class="panel"><h3>By Band</h3><div class="chart-wrap"><canvas id="ch-band"></canvas></div></div>
+  <div class="panel"><h3>By Mode</h3><div class="chart-wrap"><canvas id="ch-mode"></canvas></div></div>
+  <div class="panel"><h3>Top 10 DXCC Entities</h3><div class="chart-wrap"><canvas id="ch-entity"></canvas></div></div>
+  <div class="panel wide"><h3>Cumulative QSOs Over Time</h3><div class="chart-wrap"><canvas id="ch-cum"></canvas></div></div>
+  <div class="panel wide">
+    <h3>Activity by Hour of Day (UTC)</h3>
+    <div class="heat-grid" id="heat-grid"></div>
+    <div class="heat-labels" id="heat-labels"></div>
+  </div>
+</div>
+
+<script>
+const ACCENT  = '#00e5ff';
+const ACCENT2 = '#39ff14';
+const GOLD    = '#ffd700';
+const MUTED   = '#5a7080';
+const TEXT    = '#cdd9e5';
+const PALETTE = ['#00e5ff','#39ff14','#ffd700','#ff6b35','#a78bfa','#f472b6','#34d399','#60a5fa','#fbbf24','#f87171','#22d3ee','#c084fc','#4ade80'];
+
+// Common Chart.js global styling
+Chart.defaults.color = TEXT;
+Chart.defaults.font.family = "'Share Tech Mono', monospace";
+Chart.defaults.borderColor = '#1e2a3a';
+
+let charts = {};
+
+function destroyChart(key){ if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
+
+document.getElementById('rng').addEventListener('change', e => {
+  document.getElementById('custom-range').style.display = (e.target.value === 'custom') ? 'inline-flex' : 'none';
+});
+
+async function loadStats(){
+  const src  = document.getElementById('src').value;
+  const rng  = document.getElementById('rng').value;
+  const mode = document.getElementById('mode-f').value;
+  const dF   = document.getElementById('d-from').value;
+  const dT   = document.getElementById('d-to').value;
+  let url = `/api/stats?source=${encodeURIComponent(src)}&range=${encodeURIComponent(rng)}`;
+  if (mode) url += `&mode=${encodeURIComponent(mode)}`;
+  if (rng === 'custom'){
+    if (dF) url += `&from=${encodeURIComponent(dF)}`;
+    if (dT) url += `&to=${encodeURIComponent(dT)}`;
+  }
+  try {
+    const r = await fetch(url);
+    const data = await r.json();
+    if (!data.ok) return;
+    render(data);
+  } catch(e){
+    console.error('Stats load failed', e);
+  }
+}
+
+function render(d){
+  document.getElementById('s-total').textContent    = (d.total || 0).toLocaleString();
+  document.getElementById('s-years').textContent    = (d.years || []).length;
+  document.getElementById('s-bands').textContent    = (d.bands || []).length;
+  document.getElementById('s-modes').textContent    = (d.modes || []).length;
+  document.getElementById('s-entities').textContent = (d.top_entities || []).length >= 10 ? '10+' : (d.top_entities || []).length;
+
+  // ── QSOs per year (bar) ──
+  destroyChart('year');
+  const yLabels = (d.years || []).map(y => y.year);
+  const yData   = (d.years || []).map(y => y.count);
+  charts.year = new Chart(document.getElementById('ch-year'), {
+    type:'bar',
+    data:{ labels:yLabels, datasets:[{ label:'QSOs', data:yData, backgroundColor:ACCENT+'cc', borderColor:ACCENT, borderWidth:1 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{ x:{grid:{color:'#1e2a3a'}}, y:{beginAtZero:true,grid:{color:'#1e2a3a'}} }
+    }
+  });
+
+  // ── By Band (donut) ──
+  destroyChart('band');
+  const bLabels = (d.bands || []).map(x => x.band);
+  const bData   = (d.bands || []).map(x => x.count);
+  charts.band = new Chart(document.getElementById('ch-band'), {
+    type:'doughnut',
+    data:{ labels:bLabels, datasets:[{ data:bData, backgroundColor:bLabels.map((_,i)=>PALETTE[i%PALETTE.length]), borderColor:'#0a0d12', borderWidth:2 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'right', labels:{boxWidth:12,font:{size:11}}} }
+    }
+  });
+
+  // ── By Mode (donut) ──
+  destroyChart('mode');
+  const mLabels = (d.modes || []).map(x => x.mode);
+  const mData   = (d.modes || []).map(x => x.count);
+  charts.mode = new Chart(document.getElementById('ch-mode'), {
+    type:'doughnut',
+    data:{ labels:mLabels, datasets:[{ data:mData, backgroundColor:mLabels.map((_,i)=>PALETTE[i%PALETTE.length]), borderColor:'#0a0d12', borderWidth:2 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'right', labels:{boxWidth:12,font:{size:11}}} }
+    }
+  });
+
+  // ── Top 10 DXCC Entities (horizontal bar) ──
+  destroyChart('entity');
+  const eLabels = (d.top_entities || []).map(x => x.entity);
+  const eData   = (d.top_entities || []).map(x => x.count);
+  charts.entity = new Chart(document.getElementById('ch-entity'), {
+    type:'bar',
+    data:{ labels:eLabels, datasets:[{ label:'QSOs', data:eData, backgroundColor:ACCENT2+'cc', borderColor:ACCENT2, borderWidth:1 }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{ x:{beginAtZero:true,grid:{color:'#1e2a3a'}}, y:{grid:{color:'#1e2a3a'}} }
+    }
+  });
+
+  // ── Cumulative line ──
+  destroyChart('cum');
+  const cLabels = (d.cumulative || []).map(x => x.date);
+  const cData   = (d.cumulative || []).map(x => x.total);
+  charts.cum = new Chart(document.getElementById('ch-cum'), {
+    type:'line',
+    data:{ labels:cLabels, datasets:[{ label:'Cumulative QSOs', data:cData, borderColor:GOLD, backgroundColor:'rgba(255,215,0,.12)', fill:true, tension:.2, pointRadius:0 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{grid:{color:'#1e2a3a'}, ticks:{maxTicksLimit:12}},
+        y:{beginAtZero:true,grid:{color:'#1e2a3a'}}
+      }
+    }
+  });
+
+  // ── Hour heatmap ──
+  const hours = d.hours || new Array(24).fill(0);
+  const hMax = Math.max(1, ...hours);
+  const cells = hours.map((v,h) => {
+    const intensity = v / hMax;  // 0..1
+    const bg = intensity === 0 ? '#161c28' : `rgba(0,229,255,${0.12 + intensity*0.78})`;
+    const border = intensity === 0 ? '#1e2a3a' : ACCENT;
+    return `<div class="heat-cell" style="background:${bg};border-color:${border};" title="${String(h).padStart(2,'0')}Z — ${v} QSO${v===1?'':'s'}">${v||''}</div>`;
+  }).join('');
+  document.getElementById('heat-grid').innerHTML = cells;
+  document.getElementById('heat-labels').innerHTML =
+    Array.from({length:24}, (_,h) => `<div>${String(h).padStart(2,'0')}</div>`).join('');
+}
+
+// ─── UI scale ────────────────────────────────────────────────────────────────
+function setUiScale(s) {
+  document.body.classList.remove('scale-lg','scale-xl');
+  if (s === 'lg') document.body.classList.add('scale-lg');
+  else if (s === 'xl') document.body.classList.add('scale-xl');
+  try { localStorage.setItem('sdrlogger_ui_scale', s || ''); } catch(e){}
+  ['scale-md','scale-lg','scale-xl'].forEach(id => document.getElementById(id).classList.remove('active'));
+  document.getElementById('scale-' + (s || 'md')).classList.add('active');
+  // Charts need a resize trigger when panel size changes
+  Object.values(charts).forEach(c => { try { c.resize(); } catch(e){} });
+}
+function loadUiScale() {
+  let s = '';
+  try { s = localStorage.getItem('sdrlogger_ui_scale') || ''; } catch(e){}
+  setUiScale(s);
+}
+loadUiScale();
+
+loadStats();
+</script>
+</body>
+</html>

@@ -104,8 +104,8 @@
 
   /* ── Loading / Info ── */
   .loading{text-align:center;padding:40px;font-family:var(--mono);font-size:14px;color:var(--muted);}
-  .info-note{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7;
-    background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:12px 16px;}
+  .info-note{font-family:var(--mono);font-size:13.5px;color:#d5e3ef;margin-bottom:16px;line-height:1.7;
+    background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:14px 18px;}
   .info-note strong{color:var(--warn);}
 
   /* ── Completed award banner ── */
@@ -113,6 +113,46 @@
     padding:12px 20px;margin-bottom:20px;display:none;text-align:center;
     font-family:var(--head);font-size:18px;font-weight:700;color:var(--gold);letter-spacing:2px;}
   .award-complete-banner.show{display:block;}
+
+  /* ── Font Scale (A− / A / A+) shared across awards/stats/feeds ────────── */
+  .scale-toggle{display:inline-flex;gap:0;margin-left:12px;border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+  .scale-toggle button{font-family:var(--mono);background:var(--bg);color:var(--muted);border:none;
+    padding:4px 10px;cursor:pointer;letter-spacing:1px;font-weight:700;border-right:1px solid var(--border);transition:all .12s;}
+  .scale-toggle button:last-child{border-right:none;}
+  .scale-toggle button.active{background:var(--accent);color:var(--bg);}
+  .scale-toggle button:hover:not(.active){background:rgba(0,229,255,.1);color:var(--accent);}
+  .scale-toggle button:nth-child(1){font-size:11px;}
+  .scale-toggle button:nth-child(2){font-size:14px;}
+  .scale-toggle button:nth-child(3){font-size:17px;}
+  body.scale-lg .award-tab{font-size:17px;}
+  body.scale-lg .award-card-name{font-size:14.5px;}
+  body.scale-lg .award-card-detail{font-size:12.5px;}
+  body.scale-lg .band-chip{font-size:11.5px;padding:3px 8px;}
+  body.scale-lg .stat-box .stat-num{font-size:36px;}
+  body.scale-lg .stat-box .stat-label{font-size:13px;}
+  body.scale-lg .info-note{font-size:15px;line-height:1.7;}
+  body.scale-lg .filter-bar label{font-size:14px;}
+  body.scale-lg .filter-bar select{font-size:15px;padding:7px 14px;}
+  body.scale-lg .award-complete-banner{font-size:20px;}
+  body.scale-lg .cont-chip{font-size:14px;padding:6px 16px;}
+  body.scale-lg .award-grid{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));}
+  body.scale-lg .was-cell{font-size:14.5px;}
+  body.scale-lg .waz-cell{font-size:18px;}
+
+  body.scale-xl .award-tab{font-size:18px;padding:13px 30px;}
+  body.scale-xl .award-card-name{font-size:15.5px;}
+  body.scale-xl .award-card-detail{font-size:13.5px;}
+  body.scale-xl .band-chip{font-size:12.5px;padding:4px 9px;}
+  body.scale-xl .stat-box .stat-num{font-size:38px;}
+  body.scale-xl .stat-box .stat-label{font-size:13.5px;}
+  body.scale-xl .info-note{font-size:15.5px;line-height:1.7;padding:15px 19px;}
+  body.scale-xl .filter-bar label{font-size:14.5px;}
+  body.scale-xl .filter-bar select{font-size:15px;padding:7px 15px;}
+  body.scale-xl .award-complete-banner{font-size:21px;padding:13px 21px;}
+  body.scale-xl .cont-chip{font-size:14.5px;padding:6px 17px;}
+  body.scale-xl .award-grid{grid-template-columns:repeat(auto-fill,minmax(255px,1fr));}
+  body.scale-xl .was-cell{font-size:15.5px;}
+  body.scale-xl .waz-cell{font-size:19px;}
 
   @media print {
     body::after{display:none;}
@@ -129,14 +169,25 @@
 <header>
   <div class="logo">SDR<span>Logger+</span></div>
   <span class="logo-sub">AWARDS & STATISTICS</span>
-  <a href="/" class="back-btn">Back to Logger</a>
+  <span class="scale-toggle" style="margin-left:auto;" title="Text size">
+    <button onclick="setUiScale('')"   id="scale-md">A</button>
+    <button onclick="setUiScale('lg')" id="scale-lg">A</button>
+    <button onclick="setUiScale('xl')" id="scale-xl">A</button>
+  </span>
+  <a href="/stats" class="back-btn" style="margin-left:0;">Statistics</a>
+  <a href="/feeds" class="back-btn" style="margin-left:0;">Feeds</a>
+  <a href="/" class="back-btn" style="margin-left:0;">Back to Logger</a>
 </header>
 
 <div class="award-tabs" id="award-tab-bar">
   <button class="award-tab active" data-tab="tab-dxcc" onclick="switchAwardTab('tab-dxcc')">DXCC</button>
   <button class="award-tab" data-tab="tab-was" onclick="switchAwardTab('tab-was')">WAS</button>
   <button class="award-tab" data-tab="tab-waz" onclick="switchAwardTab('tab-waz')">WAZ</button>
+  <button class="award-tab" data-tab="tab-wac" onclick="switchAwardTab('tab-wac')">WAC</button>
   <button class="award-tab" data-tab="tab-wpx" onclick="switchAwardTab('tab-wpx')">WPX</button>
+  <button class="award-tab" data-tab="tab-vucc" onclick="switchAwardTab('tab-vucc')">VUCC</button>
+  <button class="award-tab" data-tab="tab-5bwas" onclick="switchAwardTab('tab-5bwas')">5BWAS</button>
+  <button class="award-tab" data-tab="tab-5bdxcc" onclick="switchAwardTab('tab-5bdxcc')">5BDXCC</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
@@ -284,6 +335,49 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- WAC TAB — Worked All Continents (6 base + Antarctica bonus)                -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-wac">
+  <div class="filter-bar">
+    <label>Band:</label>
+    <select id="wac-band-filter" onchange="loadWAC()">
+      <option value="">All Bands</option>
+      <option>160M</option><option>80M</option><option>60M</option><option>40M</option>
+      <option>30M</option><option>20M</option><option>17M</option><option>15M</option>
+      <option>12M</option><option>10M</option><option>6M</option><option>2M</option>
+    </select>
+    <label>Mode:</label>
+    <select id="wac-mode-filter" onchange="loadWAC()">
+      <option value="">All Modes</option>
+      <option>SSB</option><option>CW</option><option>FT8</option><option>FT4</option>
+      <option>RTTY</option><option>AM</option><option>FM</option>
+    </select>
+  </div>
+
+  <div class="award-complete-banner" id="wac-complete-banner">WAC ACHIEVED — All 6 Continents Worked!</div>
+
+  <div class="stats-row" id="wac-stats">
+    <div class="stat-box" id="wac-stat-worked"><div class="stat-num" id="wac-worked-num">—</div><div class="stat-label">Continents Worked</div></div>
+    <div class="stat-box"><div class="stat-num" id="wac-needed-num">—</div><div class="stat-label">Needed</div></div>
+    <div class="stat-box"><div class="stat-num" id="wac-pct-num">—</div><div class="stat-label">of 6 Continents</div></div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="wac-progress" style="width:0;"></div></div>
+  </div>
+
+  <div class="info-note">
+    WAC (Worked All Continents) requires confirmed contacts with all six continents: North America, South America, Europe, Asia, Africa, Oceania.
+    <strong>Antarctica</strong> is a separate endorsement — shown below the six base continents but not required for the base award.
+  </div>
+
+  <div id="wac-base-grid" class="award-grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr));"></div>
+
+  <h4 style="font-family:var(--mono);font-size:13px;color:#8fafc0;letter-spacing:2px;text-transform:uppercase;margin:28px 0 12px;">Endorsement — Antarctica</h4>
+  <div id="wac-extra-grid" class="award-grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr));"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <!-- WPX TAB                                                                    -->
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <div class="tab-content" id="tab-wpx">
@@ -331,6 +425,86 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- VUCC TAB — VHF/UHF Century Club: unique 4-char grids per band              -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-vucc">
+  <div class="filter-bar">
+    <label>Mode:</label>
+    <select id="vucc-mode-filter" onchange="loadVUCC()">
+      <option value="">All Modes</option>
+      <option>SSB</option><option>CW</option><option>FT8</option><option>FT4</option>
+      <option>MSK144</option><option>JT65</option><option>FM</option><option>AM</option>
+    </select>
+  </div>
+
+  <div class="info-note">
+    VUCC counts unique <strong>4-character grid squares</strong> (e.g., EN82) per band on VHF and up.
+    Grids are read from the <strong>GRIDSQUARE</strong> field — populate it via QRZ/HamQTH lookups or ADIF imports.
+    ARRL thresholds: 6m/2m=100 grids; 1.25m/70cm=50; 33cm/23cm=25; 13cm and up=10.
+  </div>
+
+  <div id="vucc-bands" class="award-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr));">
+    <div class="loading">Loading VUCC data...</div>
+  </div>
+
+  <h4 style="font-family:var(--mono);font-size:13px;color:#8fafc0;letter-spacing:2px;text-transform:uppercase;margin:24px 0 12px;">Grids by Band</h4>
+  <div id="vucc-grid-detail"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- 5BWAS TAB — All 50 states on EACH of 80/40/20/15/10                        -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-5bwas">
+  <div class="filter-bar">
+    <label>Mode:</label>
+    <select id="b5was-mode-filter" onchange="load5BWAS()">
+      <option value="">All Modes</option>
+      <option>SSB</option><option>CW</option><option>FT8</option><option>FT4</option>
+      <option>RTTY</option><option>AM</option><option>FM</option>
+    </select>
+  </div>
+
+  <div class="award-complete-banner" id="b5was-complete-banner">5-BAND WAS ACHIEVED — 50 States on 80/40/20/15/10!</div>
+
+  <div class="info-note">
+    5-Band WAS requires working all 50 US states on <strong>each</strong> of the five HF bands: 80m, 40m, 20m, 15m, 10m.
+    Per-band counts shown below; click a band to see its missing states.
+  </div>
+
+  <div id="b5was-bands" class="award-grid" style="grid-template-columns:repeat(5,1fr);">
+    <div class="loading">Loading 5BWAS data...</div>
+  </div>
+
+  <h4 style="font-family:var(--mono);font-size:13px;color:#8fafc0;letter-spacing:2px;text-transform:uppercase;margin:24px 0 12px;">State × Band Matrix</h4>
+  <div id="b5was-matrix"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- 5BDXCC TAB — 100+ DXCC entities on EACH of 80/40/20/15/10                  -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-5bdxcc">
+  <div class="filter-bar">
+    <label>Mode:</label>
+    <select id="b5dxcc-mode-filter" onchange="load5BDXCC()">
+      <option value="">All Modes</option>
+      <option>SSB</option><option>CW</option><option>FT8</option><option>FT4</option>
+      <option>RTTY</option><option>AM</option><option>FM</option>
+    </select>
+  </div>
+
+  <div class="award-complete-banner" id="b5dxcc-complete-banner">5-BAND DXCC ACHIEVED — 100+ Entities on 80/40/20/15/10!</div>
+
+  <div class="info-note">
+    5-Band DXCC requires working at least 100 DXCC entities on <strong>each</strong> of 80m, 40m, 20m, 15m, 10m.
+    Threshold per band is 100; the union across all five bands is shown for context.
+  </div>
+
+  <div id="b5dxcc-bands" class="award-grid" style="grid-template-columns:repeat(5,1fr);">
+    <div class="loading">Loading 5BDXCC data...</div>
+  </div>
+</div>
+
 <script>
 // ─── State ───────────────────────────────────────────────────────────────────
 let dxccData = null;
@@ -370,7 +544,11 @@ function switchAwardTab(tabId) {
   if (tabId === 'tab-dxcc' && !dxccData) loadDXCC();
   if (tabId === 'tab-was') loadWAS();
   if (tabId === 'tab-waz') loadWAZ();
+  if (tabId === 'tab-wac') loadWAC();
   if (tabId === 'tab-wpx') loadWPX();
+  if (tabId === 'tab-vucc') loadVUCC();
+  if (tabId === 'tab-5bwas') load5BWAS();
+  if (tabId === 'tab-5bdxcc') load5BDXCC();
 }
 
 // ─── DXCC ────────────────────────────────────────────────────────────────────
@@ -642,6 +820,75 @@ function renderWAZ(data) {
   document.getElementById('waz-grid').innerHTML = detailHtml;
 }
 
+// ─── WAC ─────────────────────────────────────────────────────────────────────
+async function loadWAC() {
+  const band = document.getElementById('wac-band-filter').value;
+  const mode = document.getElementById('wac-mode-filter').value;
+  let url = '/api/awards/wac?';
+  if (band) url += `band=${encodeURIComponent(band)}&`;
+  if (mode) url += `mode=${encodeURIComponent(mode)}&`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!data.ok) return;
+    renderWAC(data);
+  } catch(e) {
+    document.getElementById('wac-base-grid').innerHTML = '<div class="loading">Error loading WAC data</div>';
+  }
+}
+
+function renderWAC(data) {
+  const baseOrder  = data.base_cont_order  || ['NA','SA','EU','AS','AF','OC'];
+  const extraOrder = data.extra_cont_order || ['AN'];
+  const names      = data.names || {};
+  const conts      = data.continents || {};
+  const baseWorked = data.base_worked || 0;
+  const needed     = Math.max(0, 6 - baseWorked);
+  const pct        = ((baseWorked / 6) * 100).toFixed(1);
+  const achieved   = !!data.achieved;
+
+  document.getElementById('wac-worked-num').textContent = baseWorked;
+  document.getElementById('wac-needed-num').textContent = needed;
+  document.getElementById('wac-pct-num').textContent    = pct + '%';
+  document.getElementById('wac-progress').style.width   = pct + '%';
+
+  const banner = document.getElementById('wac-complete-banner');
+  const fill   = document.getElementById('wac-progress');
+  const stat   = document.getElementById('wac-stat-worked');
+  if (achieved) {
+    banner.classList.add('show');
+    fill.classList.add('complete');
+    stat.classList.add('complete');
+  } else {
+    banner.classList.remove('show');
+    fill.classList.remove('complete');
+    stat.classList.remove('complete');
+  }
+
+  const buildCard = (code, isExtra) => {
+    const cd = conts[code];
+    const name = names[code] || code;
+    if (cd) {
+      const bands = Object.keys(cd.bands || {});
+      const bandChips = bands.map(b => `<span class="band-chip">${b}</span>`).join('');
+      const ents = (cd.entities || []).slice(0,5).join(', ');
+      const cls = isExtra ? 'completed' : 'worked';
+      return `<div class="award-card ${cls}" title="${name} (${code}) — ${bands.length} band(s)">
+        <div class="award-card-name">${code} — ${name}${isExtra?' ★':''}</div>
+        <div class="award-card-detail">${bands.length} band(s)${ents ? ' · ' + ents : ''}</div>
+        <div class="award-card-bands">${bandChips}</div>
+      </div>`;
+    }
+    return `<div class="award-card not-worked" title="${name} (${code}) — NOT WORKED">
+      <div class="award-card-name">${code} — ${name}</div>
+      <div class="award-card-detail">${isExtra?'Endorsement — not worked':'Not worked'}</div>
+    </div>`;
+  };
+
+  document.getElementById('wac-base-grid').innerHTML  = baseOrder.map(c  => buildCard(c, false)).join('');
+  document.getElementById('wac-extra-grid').innerHTML = extraOrder.map(c => buildCard(c, true)).join('');
+}
+
 // ─── WPX ─────────────────────────────────────────────────────────────────────
 let wpxData = null;
 let wpxSortMode = 'alpha';
@@ -716,6 +963,161 @@ function sortWPX(mode) {
   document.querySelector(`#wpx-sort-controls .sort-btn[data-sort="${mode}"]`).classList.add('active');
   renderWPX();
 }
+
+// ─── VUCC ────────────────────────────────────────────────────────────────────
+async function loadVUCC() {
+  const mode = document.getElementById('vucc-mode-filter').value;
+  let url = '/api/awards/vucc';
+  if (mode) url += `?mode=${encodeURIComponent(mode)}`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    renderVUCC(data);
+  } catch(e) {
+    document.getElementById('vucc-bands').innerHTML = '<div class="loading">Error loading VUCC data</div>';
+  }
+}
+
+function renderVUCC(data) {
+  if (!data || !data.ok) {
+    document.getElementById('vucc-bands').innerHTML = '<div class="loading">No data</div>';
+    return;
+  }
+  const order = data.band_order || [];
+  let bandsHtml = '';
+  let detailHtml = '';
+  for (const b of order) {
+    const info = data.bands[b];
+    if (!info) continue;
+    const pct = info.threshold ? Math.min(100, Math.round((info.count / info.threshold) * 100)) : 0;
+    const cls = info.achieved ? 'completed' : (info.count > 0 ? 'worked' : 'not-worked');
+    bandsHtml += `
+      <div class="award-card ${cls}">
+        <div class="award-card-name">${b} ${info.achieved ? '★' : ''}</div>
+        <div class="award-card-detail">${info.count} / ${info.threshold} grids (${pct}%)</div>
+        <div class="progress-bar-bg" style="margin-top:8px;height:8px;">
+          <div class="progress-bar-fill ${info.achieved?'complete':''}" style="width:${pct}%;"></div>
+        </div>
+      </div>`;
+    if (info.grids && info.grids.length) {
+      const chips = info.grids.map(g => `<span class="band-chip">${g}</span>`).join('');
+      detailHtml += `
+        <div style="margin-bottom:18px;">
+          <div style="font-family:var(--mono);font-size:13px;color:var(--accent);margin-bottom:6px;">${b} — ${info.count} grids</div>
+          <div class="award-card-bands" style="gap:4px;">${chips}</div>
+        </div>`;
+    }
+  }
+  document.getElementById('vucc-bands').innerHTML = bandsHtml || '<div class="loading">No VHF/UHF QSOs with grid data</div>';
+  document.getElementById('vucc-grid-detail').innerHTML = detailHtml ||
+    '<div class="info-note">No grid data found in your VHF/UHF QSOs. Re-import ADIF or run callsign lookups to populate the GRIDSQUARE field.</div>';
+}
+
+// ─── 5BWAS ───────────────────────────────────────────────────────────────────
+async function load5BWAS() {
+  const mode = document.getElementById('b5was-mode-filter').value;
+  let url = '/api/awards/5bwas';
+  if (mode) url += `?mode=${encodeURIComponent(mode)}`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    render5BWAS(data);
+  } catch(e) {
+    document.getElementById('b5was-bands').innerHTML = '<div class="loading">Error loading 5BWAS data</div>';
+  }
+}
+
+function render5BWAS(data) {
+  if (!data || !data.ok) return;
+  document.getElementById('b5was-complete-banner').classList.toggle('show', !!data.achieved);
+  const order = data.band_order || [];
+  let html = '';
+  for (const b of order) {
+    const info = data.bands[b];
+    const pct = Math.min(100, Math.round((info.count / 50) * 100));
+    const cls = info.achieved ? 'completed' : (info.count > 0 ? 'worked' : 'not-worked');
+    html += `
+      <div class="award-card ${cls}">
+        <div class="award-card-name">${b} ${info.achieved ? '★' : ''}</div>
+        <div class="award-card-detail">${info.count} / 50 states (${pct}%)</div>
+        <div class="progress-bar-bg" style="margin-top:8px;height:8px;">
+          <div class="progress-bar-fill ${info.achieved?'complete':''}" style="width:${pct}%;"></div>
+        </div>
+      </div>`;
+  }
+  document.getElementById('b5was-bands').innerHTML = html;
+
+  // State × Band matrix
+  const worked = {};
+  for (const b of order) (data.bands[b].states || []).forEach(s => { (worked[s] = worked[s] || new Set()).add(b); });
+  let mhdr = '<tr><th style="text-align:left;padding:4px 8px;color:var(--muted);font-family:var(--mono);font-size:12px;">State</th>';
+  for (const b of order) mhdr += `<th style="padding:4px 8px;color:var(--accent);font-family:var(--mono);font-size:12px;">${b}</th>`;
+  mhdr += '</tr>';
+  let mrows = '';
+  for (const s of ALL_STATES) {
+    let row = `<tr><td style="padding:3px 8px;font-family:var(--mono);font-size:12px;color:var(--text);">${s}</td>`;
+    for (const b of order) {
+      const has = worked[s] && worked[s].has(b);
+      row += `<td style="padding:3px 8px;text-align:center;font-family:var(--mono);font-size:12px;color:${has?'var(--accent2)':'var(--muted)'};">${has?'●':'·'}</td>`;
+    }
+    row += '</tr>';
+    mrows += row;
+  }
+  document.getElementById('b5was-matrix').innerHTML =
+    `<table style="border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:5px;width:auto;">${mhdr}${mrows}</table>`;
+}
+
+// ─── 5BDXCC ──────────────────────────────────────────────────────────────────
+async function load5BDXCC() {
+  const mode = document.getElementById('b5dxcc-mode-filter').value;
+  let url = '/api/awards/5bdxcc';
+  if (mode) url += `?mode=${encodeURIComponent(mode)}`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    render5BDXCC(data);
+  } catch(e) {
+    document.getElementById('b5dxcc-bands').innerHTML = '<div class="loading">Error loading 5BDXCC data</div>';
+  }
+}
+
+function render5BDXCC(data) {
+  if (!data || !data.ok) return;
+  document.getElementById('b5dxcc-complete-banner').classList.toggle('show', !!data.achieved);
+  const order = data.band_order || [];
+  let html = '';
+  for (const b of order) {
+    const info = data.bands[b];
+    const pct = Math.min(100, Math.round((info.count / 100) * 100));
+    const cls = info.achieved ? 'completed' : (info.count > 0 ? 'worked' : 'not-worked');
+    html += `
+      <div class="award-card ${cls}">
+        <div class="award-card-name">${b} ${info.achieved ? '★' : ''}</div>
+        <div class="award-card-detail">${info.count} / 100 entities (${pct}%)</div>
+        <div class="progress-bar-bg" style="margin-top:8px;height:8px;">
+          <div class="progress-bar-fill ${info.achieved?'complete':''}" style="width:${pct}%;"></div>
+        </div>
+      </div>`;
+  }
+  html += `<div style="grid-column:1/-1;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:8px;">Union across all 5 bands: <strong style="color:var(--accent);">${data.union_count}</strong> entities</div>`;
+  document.getElementById('b5dxcc-bands').innerHTML = html;
+}
+
+// ─── UI scale ────────────────────────────────────────────────────────────────
+function setUiScale(s) {
+  document.body.classList.remove('scale-lg','scale-xl');
+  if (s === 'lg') document.body.classList.add('scale-lg');
+  else if (s === 'xl') document.body.classList.add('scale-xl');
+  try { localStorage.setItem('sdrlogger_ui_scale', s || ''); } catch(e){}
+  ['scale-md','scale-lg','scale-xl'].forEach(id => document.getElementById(id).classList.remove('active'));
+  document.getElementById('scale-' + (s || 'md')).classList.add('active');
+}
+function loadUiScale() {
+  let s = '';
+  try { s = localStorage.getItem('sdrlogger_ui_scale') || ''; } catch(e){}
+  setUiScale(s);
+}
+loadUiScale();
 
 // ─── Init ────────────────────────────────────────────────────────────────────
 loadDXCC();
