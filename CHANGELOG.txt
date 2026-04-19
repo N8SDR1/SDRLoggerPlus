@@ -1,6 +1,337 @@
 SDRLogger+ — Change Log
 =======================
 
+v1.09-rc2  (2026-04-18)
+------------------------------------------
+Polish / fix release on top of rc1.
+
+  ── 🔤 UI FONT SCALING ────────────────────────────────────────────────
+    Three-step font-scale toggle (A · A · A+) added to the page header
+    of /awards, /stats, and /feeds. Selection persists across pages via
+    localStorage key `sdrlogger_ui_scale`. Per-element px overrides
+    keep the layout intact at all three sizes.
+
+  ── 🔥 HOT LIST POLISH ────────────────────────────────────────────────
+    /feeds status banner: bumped text size + glow on the state pill and
+    Watchlist counter; Watchlist count and ✕ Clear-All button moved off
+    the right edge with 18px gutter; hover-peek tooltip + confirm on
+    Clear-All. Settings → Display → Hot List now shows an inline ✕ Clear
+    button next to the callsigns input, using the same 3-way persist
+    (localStorage + POST /api/settings + BroadcastChannel) so all open
+    tabs update immediately.
+
+  ── 📡 SMARTER FEEDS CALLSIGN EXTRACTOR ───────────────────────────────
+    The NG3K DXpedition extractor used to occasionally surface band /
+    power / grid-square tokens as clickable "callsigns". Three new regex
+    filters added to _looks_like_call():
+      • Bands:  ^\d{1,3}(M|CM|MM)$   → kills 10M, 12M, 160M, 70CM, 6M
+      • Power:  ^\d{1,4}(W|KW|MW)$   → kills 50W, 100W, 400W, 1KW, 5W
+      • Grids:  ^[A-R]{2}\d{2}([A-X]{2})?$ → kills EN82, FN20XR, QL64XG
+    Plus a few more blocklist tokens (EME / QRV / QRO / QRP / QTH /
+    STN / OPS / HRS / etc). A soft user-facing hint was also added to
+    the /feeds banner reminding users that the extractor is best-effort.
+
+  ── 🛠 INSTALLER ──────────────────────────────────────────────────────
+    Removed obsolete WizardResizable=yes directive from the .iss script
+    so Inno Setup 6 compiles cleanly with no warnings.
+
+v1.09-rc1  (2026-04-18)
+------------------------------------------
+Release-candidate build rolling forward all v1.08.1-beta (ARCO rotator
+interface) and v1.08.2-beta (60 min idle timeout, High Wind Alerts,
+CLOSE BY bounce animation) features unchanged. v1.09 adds a scheduled
+auto-backup subsystem, FOUR new award trackers (VUCC / 5BWAS / 5BDXCC
+/ WAC), a Statistics Dashboard, a Feeds & Alerts page (live contest
+calendar + DXpedition announcements with click-to-Hot-List), a gray-
+line overlay for the General/POTA map, station-metadata fields with
+new CW macro tokens, and a Settings reorg.
+
+  ── 💾 SCHEDULED AUTO-BACKUP ──────────────────────────────────────────
+- New Settings subsection under Backup & Restore. One checkbox to enable,
+  one dropdown for interval, one integer for retention.
+- Scope: every run writes BOTH raw .db copies AND ADIF exports for the
+  General and POTA databases into one timestamped folder:
+    backups/SDRLoggerPlus-YYYY-MM-DD_HHMM/
+      general.db  general.adi
+      pota.db     pota.adi
+- Destination: the existing Backup Path setting (defaults to
+  %APPDATA%\SDRLoggerPlus\backups). Point it at a NAS/USB stick to
+  get backups off the workstation.
+- Intervals: Daily / Weekly / On-Exit. Daily + Weekly fire from a
+  minute-tick daemon; On-Exit fires when the browser tab closes
+  (piggybacks on the existing explicit-close beacon).
+- Retention: "keep last N folders", minimum 1, default 14. Oldest
+  SDRLoggerPlus-* folder is pruned ONLY after a successful new write —
+  a failed run (NAS offline, USB unplugged) never destroys prior
+  backups. Retention only matches folders with the SDRLoggerPlus-
+  prefix, so the safety backup produced by Wipe Database is left
+  alone indefinitely.
+- Schedule persistence: last_run is written to auto_backup_state.json
+  alongside app_settings.json. Daily/Weekly schedules survive app
+  restarts — closing and reopening the app several times within a
+  24 h period does NOT cause Daily to refire; it waits for a full
+  interval since the last successful write.
+- UI: last-run status (timestamp + ok/failed + message), next-due
+  countdown, and a "Run Backup Now" button for on-demand verification.
+
+  ── 🏆 NEW AWARD TRACKERS ─────────────────────────────────────────────
+- **VUCC** — VHF/UHF Century Club. Counts unique 4-char Maidenhead
+  grids (e.g. EN82) per band on 6m / 2m / 1.25m / 70cm / 33cm / 23cm /
+  13cm and up. ARRL thresholds built in (100/100/50/50/25/25/10…).
+  Reads the GRIDSQUARE column; populate it via QRZ/HamQTH lookups
+  or ADIF import. Per-band cards show count / threshold / % bar, and
+  a detail pane lists every worked grid per band.
+- **5BWAS** — 5-Band Worked All States. State count per band on
+  80 / 40 / 20 / 15 / 10. Reuses the same state-resolution logic as
+  WAS (STATE field → QTH extraction → DXCC fallback for AK/HI).
+  Shows per-band progress cards plus a full State × Band matrix so
+  you can see at a glance which slots are still open. Gold "achieved"
+  banner when all five bands hit 50.
+- **5BDXCC** — 5-Band DXCC. DXCC entity count per band on the same
+  five HF bands, 100-entity threshold per band. Union count across
+  all five shown as context. Gold "achieved" banner when every band
+  crosses 100.
+- **WAC** — Worked All Continents. The six standard continents
+  (NA/SA/EU/AS/AF/OC) with a separate Antarctica endorsement card
+  shown below the base award. Per-continent cards display worked
+  bands and a sample of entity names; gold banner when all six base
+  continents are confirmed.
+- Accessible via a new tab row in /awards alongside DXCC/WAS/WAZ/WPX.
+- Triple Play DEFERRED to v1.10 (coupled to LoTW-download confirmed-
+  state plumbing).
+
+  ── 📊 STATISTICS DASHBOARD ──────────────────────────────────────────
+- Brand-new /stats page with six Chart.js visualizations:
+  • QSOs per year (bar)
+  • By band (donut)
+  • By mode (donut)
+  • Top 10 DXCC entities (horizontal bar)
+  • Cumulative QSOs over time (filled line)
+  • Activity by hour of day, UTC (24-cell intensity heatmap)
+- Top-of-page controls: source toggle (General / POTA / Combined),
+  date-range filter (All-time / This Year / Last 12 Months / Custom),
+  optional mode filter. All charts re-render live on Apply.
+- Five-pill stat strip across the top: total QSOs, years active,
+  unique bands, unique modes, DXCC entities seen.
+- Aggregations done server-side in /api/stats with a single sweep
+  over the chosen DB(s); cty.dat lookup cache used for entity
+  attribution so even very large logs render in well under a second.
+
+  ── 📡 FEEDS & ALERTS ────────────────────────────────────────────────
+- New /feeds page with two tabs:
+  • **🏆 Contests** — Live WA7BNM Contest Calendar via their iCal
+    feed. Each contest card shows UTC + Local start/end, a "● LIVE
+    NOW" badge for in-progress events, and a "⚡ Starts within 24h"
+    badge. Time-window filter (now / 48h / weekend / 7d / all) and
+    a manual refresh.
+  • **🌍 DXpeditions** — Live NG3K Announced DX Operations via their
+    RSS feed. Each card shows country, date range, QSL info, and
+    extracted callsigns as **clickable chips**. Click any chip to
+    add (or remove) that callsign from your 🔥 Hot List. Multi-op
+    DXpeditions get a "+ All" convenience button.
+- Server-side fetch + 30 min in-memory cache so we don't hammer the
+  source sites on every page load. Stale-data fallback when the
+  source is unreachable, with a clear "fetch failed" indicator on
+  the meta line.
+- Hot List sync is three-way: localStorage (for page reloads),
+  /api/settings POST (for restart persistence), and a BroadcastChannel
+  named "sdrlogger-hotlist" so the main logger picks up changes
+  live without needing to reload.
+- Status banner at the top of /feeds shows current Hot List state
+  (Off / Visual Only / Visual + Voice) read from the existing
+  Display settings — no new toggles.
+- Cross-link buttons added between /awards, /stats, and /feeds page
+  headers; matching access cards added to Settings → Awards tab.
+
+  ── 🎙 STATION METADATA + CW MACRO TOKENS ────────────────────────────
+- Five new Station fields in Settings: Rig, Antenna, Power, State,
+  County. All free-text — Power can be "100W" or "1KW" or whatever
+  you actually send.
+- These fields are NOT stored per-QSO and NOT written to ADIF — they
+  exist solely as the source for CW keyer macro substitution.
+- CW keyer expandTokens() extended from 4 → 12 tokens:
+    {MYCALL} {MYNAME} {MYGRID} {MYRIG} {MYANT} {MYPWR}
+    {MYSTATE} {MYCNTY} {CALL} {NAME} {RST} {NR}
+- All existing tokens substitute case-insensitively. New clickable
+  insert buttons in the macro editor modal for each token.
+- Header hint text in the CW window reorganized into MY STATION /
+  WORKED two-line reference with hover tooltips.
+
+  ── 🌓 GRAY LINE RENDER ──────────────────────────────────────────────
+- Optional terminator + day/night shading overlay on the General and
+  POTA Leaflet maps (SAT map has its own projection, skipped for now).
+- Auto-recomputes once a minute via a Sun-declination / GMST
+  calculation. Renders a polyline at the terminator plus a semi-
+  transparent polygon covering the night side.
+- Styling is per-basemap — Voyager / Positron / Dark Matter each get
+  their own fill + stroke palette so the overlay reads cleanly on
+  all three without overpowering the tiles.
+- Toggle lives in Settings → Station & Rig ("Show Gray Line"). Off by
+  default; survives across restarts via app_settings.json.
+
+  ── 🎨 UI / SETTINGS REORG ───────────────────────────────────────────
+- "High Wind Alerts" promoted to its own Weather Alerts settings tab
+  (previously nested under Lightning Detection inside Cluster &
+  Integrations). Lightning Detection moved over with it.
+- DISCLAIMER text rewritten to cover BOTH lightning and high-wind
+  features on the single shared acceptance gate.
+- Rotator Control section moved from Cluster & Integrations →
+  Station & Rig (sits with TCI / HamLib / flrig / WinKeyer — rotator
+  is hardware, not an integration).
+- Dead aviationweather.gov METAR link replaced with the working
+  /data/metar/ endpoint; weather.gov/wrh/timeseries (which was
+  rejecting all input) replaced with metar-taf.com for station lookup.
+- Awards page .info-note contrast bumped so the blurbs on every
+  award tab (VUCC threshold explainer, 5BWAS coverage note, etc.)
+  read cleanly against the dark surface.
+
+  ── DEFERRED ─────────────────────────────────────────────────────────
+- LoTW download + confirmation match → v1.10 (ships with Triple Play).
+- Triple Play tracker → v1.10 (needs LoTW confirmed-state plumbing).
+- Cabrillo export + contest module → deferred to the contest-support
+  release. Generic Cabrillo without contest templates is half a
+  feature; the whole arc lands together when we tackle Field Day /
+  CQ WW / ARRL DX / state QSO parties end-to-end.
+- Bandmap: current "spots on the band you're on" pre-sort retained;
+  open question for v1.10 whether to add a user toggle for full-
+  visual-bandmap mode + per-band include/exclude checkboxes.
+
+
+v1.08.2-beta  (2026-04-18)
+------------------------------------------
+*** PRIVATE LOCAL TEST — NOT FOR DISTRIBUTION ***
+Second v1.08 beta on top of 1.08.1-beta. All v1.08.1 features (ARCO
+rotator interface, rotator debug logging, beta banner) roll forward
+unchanged — this build adds the idle-timeout rework and a brand-new
+💨 High Wind Alerts subsystem that piggybacks on the existing
+Lightning Detection plumbing. Also a cosmetic bounce animation on
+CLOSE BY lightning alerts.
+
+  ── ⏱ IDLE TIMEOUT REWORK ──────────────────────────────────────────────
+- Raised KEEPALIVE_TIMEOUT from 180 s → 3600 s (60 min). Forgives
+  walk-aways during contests or rag-chew sessions, PC sleep /
+  screen-lock, and Chrome's aggressive background-tab timer
+  throttling (which can freeze setInterval after ~5 min of
+  tab-in-background).
+- New /api/explicit_close endpoint: on tab / window close, browser
+  fires navigator.sendBeacon('/api/explicit_close') from a pagehide
+  handler. Server rewinds last-keepalive so watchdog exits in ~10 s
+  — preserves the original "app vacates Task Manager after close so
+  installer updates can overwrite program files" behavior.
+- Intra-app navigation (index ↔ /help, F5 refresh, etc.) is safe:
+  the new page's immediate-on-load /api/keepalive arrives within
+  ~1 s and cancels the scheduled shutdown. No race.
+- Watchdog poll interval tightened 10 s → 2 s so the 10 s grace
+  window is honored cleanly on true tab close.
+- Result matrix:
+    • Walk away 45 min, tab open  → stays alive (was: died at 3 min)
+    • PC sleeps 30 min            → stays alive (was: died)
+    • Close the tab               → dies in ~10 s (was: ~3 min)
+    • Refresh tab / page-nav      → survives (was: survived)
+    • Browser crash no beacon     → dies at 60 min (was: 3 min)
+
+  ── 💨 NEW: HIGH WIND ALERTS ─────────────────────────────────────────
+- New Settings section (Cluster & Integrations tab, under Lightning
+  Detection): "High Wind Alerts". Gated behind the same lightning
+  disclaimer — no separate acceptance needed.
+- Three independent data sources, mix-and-match:
+  1. **NWS active alerts** — High Wind Warning / Wind Advisory /
+     High Wind Watch / Extreme Wind Warning. US only, free, no key.
+     Pulled from api.weather.gov/alerts/active?point=lat,lon —
+     same endpoint Lightning already uses.
+  2. **NWS nearest METAR observation** — user enters a 4-letter
+     ICAO station (e.g. KLUK, KCVG, KCMH). Live sustained + gust +
+     direction from api.weather.gov/stations/{ICAO}/observations/
+     latest. Link to aviationweather.gov/metar in the Settings UI
+     so users can pick their closest station.
+  3. **Ambient Weather PWS** — sustained (windspeedmph), gust
+     (windgustmph) and direction (winddir) from the user's own
+     station. Reuses the existing Ambient API key / App key so no
+     extra config needed.
+- Three-tier 💨 banner in the header (parallel to the ⚡ banner):
+    • **elevated** (yellow)  — ~10 mph below threshold
+    • **high**     (orange) — at/above user thresholds
+                               (defaults: 30 mph sustained, 45 mph gust)
+    • **extreme**  (red, bouncing) — NWS High Wind / Extreme Wind
+                               Warning, or 15+ mph above threshold
+- User-configurable sustained + gust thresholds + cooldown
+  (default 20 min — wind fronts are chronic so re-alerting is
+  dampened to avoid nag fatigue).
+- Backend poller runs every 2 min, independent of lightning.
+- Banner tooltip shows: NWS headline (if any), sustained/gust/
+  direction numbers, contributing sources, last-update UTC, and a
+  reminder to park antennas / disconnect coax.
+
+  ── 🎭 DUAL-BANNER COORDINATION ───────────────────────────────────────
+- When BOTH ⚡ lightning AND 💨 wind banners are visible at once:
+    • Bounce animations are phase-offset (800 ms delay on wind) so
+      they don't pulse in sync — would otherwise be visually noisy
+    • Wind banner's text compacts to the single worst figure
+      (e.g. "G52" = gust 52 mph) to prevent header wrap on narrow
+      windows; full breakdown remains in the tooltip
+- Independent colors preserved — operator can tell at a glance
+  which threat is what.
+
+  ── ⚡ COSMETIC: CLOSE BY LIGHTNING BOUNCE ─────────────────────────────
+- Red-tier lightning banner (strikes ≤10 mi) now bounces every
+  1.6 s with a subtle red glow ring in addition to the existing
+  2-second flash on the ⚡ icon. Draws the eye without being a
+  flashing distraction — subtle enough to ignore during a QSO,
+  obvious enough to register in peripheral vision.
+
+
+v1.08.1-beta  (2026-04-18)
+------------------------------------------
+*** PRIVATE BETA — NOT FOR PUBLIC DISTRIBUTION ***
+First-cut microHAM ARCO rotator support. Sent to invited ARCO owners
+for hardware validation before merging into the next public release
+(planned as v1.09). All v1.08 features ship unchanged — this build is
+purely additive on the rotator side.
+
+  ── 🧭 NEW: microHAM ARCO ROTATOR INTERFACE (BETA) ──────────────────────
+- New protocol option in Settings → Cluster & Integrations → Rotator:
+  "microHAM ARCO (GS-232A over TCP) — beta"
+- Backend: dedicated ARCO TCP poller that speaks GS-232A emulation
+  (combined "C2" AZ+EL query at ~5 Hz). Up to 4 simultaneous TCP
+  connections supported by ARCO firmware, so this driver does not
+  starve the S.A.T. controller or any other client sharing the unit.
+- Live AZ + EL display: the existing "Current AZ" field is renamed to
+  "Position" when ARCO is selected and shows "327° / 12°" format. EL is
+  hidden for non-ARCO protocols (PstRotator etc. unchanged).
+- New fault dot beside the connection-status dot: green when the ARCO
+  TCP link is healthy, red with a tooltip when the poller raises an
+  exception. Auto-clears on reconnect.
+- Set / Stop commands: M<azimuth>\\r to set, S\\r to stop all motion
+  (covers both AZ and EL).
+- All existing PstRotator / GS-232 / EasyComm code paths and the
+  Active toggle / Auto-rotate-on-spot behavior are untouched.
+
+  ── 🐞 NEW: ROTATOR DEBUG LOGGING (BETA) ────────────────────────────────
+- New Settings checkbox: "Rotator Debug Logging" (off by default).
+  When on, every TX/RX byte string and every poller event is written
+  to %APPDATA%\\SDRLoggerPlus\\logs\\rotator_debug.log.
+- New "📋 Logs" button on the Rotator Control panel header (next to
+  Test). One-click copies the last 100 lines of the in-memory ring
+  buffer to the clipboard, prefixed with version / protocol / host
+  header — paste straight into email or Discord for triage.
+- The ring buffer is always populated (last 200 lines kept in memory)
+  even with file logging off, so a tester can hit Logs immediately
+  after seeing odd behavior without having to reproduce.
+
+  ── ⚠ KNOWN LIMITATIONS (BETA) ──────────────────────────────────────────
+- ARCO native protocol fault flags (motor temp, current, stall) are
+  not yet exposed — fault dot only reflects TCP link health for now.
+- ARCO TCP port is user-specified — no auto-discover yet.
+- SAT mode unchanged: the Rotator panel is still hidden when in 🛰
+  SAT mode. CSN Technologies S.A.T. controller continues to own
+  satellite tracking. ARCO support is General / POTA only for v1.08.1.
+
+  ── 🛰 BETA BANNER ──────────────────────────────────────────────────────
+- /changelog page now shows an amber "PRIVATE BETA BUILD" banner when
+  VERSION contains "beta" so testers always know they are not on a
+  public release.
+
+
 v1.08  (2026-04-17)
 ------------------------------------------
 Map upgrade release: new Distance Map style picker for General / POTA

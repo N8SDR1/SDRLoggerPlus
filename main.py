@@ -9,13 +9,14 @@ import re
 import sqlite3
 import socket
 import threading
+import time
 import json
 import os
 import shutil
 import struct
 import zipfile
 import requests
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from flask import Flask, render_template, request, jsonify, send_file, Response
 from flask_sock import Sock
 import io
@@ -56,6 +57,36 @@ _srv_cfg = _load_server_cfg()
 # every restart, meaning features like digital UDP auto-log would never activate.
 _APP_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_settings.json")
 
+# Auto-backup schedule persistence — survives restarts so a Daily run that
+# already completed today won't fire again just because the app was restarted.
+_AUTO_BACKUP_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "auto_backup_state.json")
+
+def _save_auto_backup_state():
+    """Persist _auto_backup_status to disk (last_run survives restarts)."""
+    try:
+        with open(_AUTO_BACKUP_STATE_FILE, "w") as _f:
+            json.dump({
+                "last_run": _auto_backup_status.get("last_run"),
+                "ok":       _auto_backup_status.get("ok"),
+                "message":  _auto_backup_status.get("message", ""),
+                "path":     _auto_backup_status.get("path", ""),
+            }, _f, indent=2)
+    except Exception as _e:
+        print(f"Auto-backup state save error: {_e}")
+
+def _load_auto_backup_state():
+    """Read persisted schedule state into _auto_backup_status (call at startup)."""
+    try:
+        if not os.path.exists(_AUTO_BACKUP_STATE_FILE):
+            return
+        with open(_AUTO_BACKUP_STATE_FILE, "r") as _f:
+            data = json.load(_f) or {}
+        for _k in ("last_run", "ok", "message", "path"):
+            if _k in data:
+                _auto_backup_status[_k] = data[_k]
+    except Exception as _e:
+        print(f"Auto-backup state load error: {_e}")
+
 def _save_app_settings():
     """Write runtime_settings to disk so they survive restarts."""
     try:
@@ -72,8 +103,9 @@ def _load_app_settings():
     global CLUBLOG_EMAIL, CLUBLOG_PASSWORD, CLUBLOG_CALLSIGN, CLUBLOG_UPLOAD_ENABLED, CLUBLOG_UPLOAD_DESIGNATOR
     global TELNET_ENABLED, TELNET_SERVER, TELNET_PORT, MY_CALLSIGN, MY_NAME, TCI_ENABLED, TCI_HOST, TCI_PORT, ITU_REGION
     global DIGITAL_UDP_ENABLED, DIGITAL_UDP_PORT, DIGITAL_TCP_ENABLED, DIGITAL_TCP_PORT
-    global ROTATOR_ENABLED, ROTATOR_HOST, ROTATOR_PORT, ROTATOR_PROTOCOL, ROTATOR_AUTO
+    global ROTATOR_ENABLED, ROTATOR_HOST, ROTATOR_PORT, ROTATOR_PROTOCOL, ROTATOR_AUTO, ROTATOR_DEBUG
     global BACKUP_PATH, FLRIG_ENABLED, FLRIG_HOST, FLRIG_PORT, FLRIG_DIGITAL_MODE, FLRIG_RTTY_MODE
+    global AUTO_BACKUP_ENABLED, AUTO_BACKUP_INTERVAL, AUTO_BACKUP_RETENTION
     global HAMLIB_ENABLED, HAMLIB_HOST, HAMLIB_PORT
     global WINKEYER_ENABLED, WINKEYER_PORT, WINKEYER_WPM, WINKEYER_KEY_OUT, WINKEYER_MODE, WINKEYER_PTT, WINKEYER_PTT_LEAD, WINKEYER_PTT_TAIL
     global EQSL_USER, EQSL_PASS, EQSL_UPLOAD_ENABLED
@@ -81,6 +113,8 @@ def _load_app_settings():
     global SAT_UDP_ENABLED, SAT_UDP_PORT, SAT_ADIF_PORT, SAT_CONTROLLER_IP
     global LIGHTNING_ACCEPTED, LIGHTNING_ENABLED, LIGHTNING_RANGE, LIGHTNING_UNIT, LIGHTNING_BLITZORTUNG, LIGHTNING_NOAA
     global LIGHTNING_AMBIENT, LIGHTNING_AMBIENT_API_KEY, LIGHTNING_AMBIENT_APP_KEY
+    global WIND_ENABLED, WIND_NWS_ALERTS, WIND_NWS_METAR, WIND_AMBIENT
+    global WIND_THRESH_SUST, WIND_THRESH_GUST, WIND_COOLDOWN_MIN, WIND_METAR_STATION
     try:
         with open(_APP_SETTINGS_FILE) as _f:
             data = json.load(_f)
@@ -117,7 +151,17 @@ def _load_app_settings():
         if data.get("rotator_port"):            ROTATOR_PORT              = int(data["rotator_port"])
         if data.get("rotator_protocol"):        ROTATOR_PROTOCOL          = data["rotator_protocol"]
         if "rotator_auto" in data:              ROTATOR_AUTO              = bool(data["rotator_auto"])
+        if "rotator_debug" in data:             ROTATOR_DEBUG             = bool(data["rotator_debug"])
         if "backup_path" in data:               BACKUP_PATH               = data["backup_path"].strip()
+        if "auto_backup_enabled"   in data:     AUTO_BACKUP_ENABLED       = bool(data["auto_backup_enabled"])
+        if "auto_backup_interval"  in data:
+            _v = str(data["auto_backup_interval"]).lower().strip()
+            if _v in ("daily", "weekly", "on_exit"): AUTO_BACKUP_INTERVAL = _v
+        if "auto_backup_retention" in data:
+            try:
+                _n = int(data["auto_backup_retention"])
+                if _n >= 1: AUTO_BACKUP_RETENTION = _n
+            except Exception: pass
         if "flrig_enabled" in data:             FLRIG_ENABLED             = bool(data["flrig_enabled"])
         if data.get("flrig_host"):              FLRIG_HOST                = data["flrig_host"].strip()
         if data.get("flrig_port"):              FLRIG_PORT                = int(data["flrig_port"])
@@ -155,6 +199,15 @@ def _load_app_settings():
         if "lightning_ambient"         in data: LIGHTNING_AMBIENT         = bool(data["lightning_ambient"])
         if data.get("lightning_ambient_api_key"): LIGHTNING_AMBIENT_API_KEY = data["lightning_ambient_api_key"].strip()
         if data.get("lightning_ambient_app_key"): LIGHTNING_AMBIENT_APP_KEY = data["lightning_ambient_app_key"].strip()
+        # Wind alerts (v1.08.2-beta) — gated behind lightning acceptance
+        if "wind_enabled"         in data: WIND_ENABLED        = bool(data["wind_enabled"]) and LIGHTNING_ACCEPTED
+        if "wind_nws_alerts"      in data: WIND_NWS_ALERTS     = bool(data["wind_nws_alerts"])
+        if "wind_nws_metar"       in data: WIND_NWS_METAR      = bool(data["wind_nws_metar"])
+        if "wind_ambient"         in data: WIND_AMBIENT        = bool(data["wind_ambient"])
+        if "wind_thresh_sust"     in data: WIND_THRESH_SUST    = int(data["wind_thresh_sust"])
+        if "wind_thresh_gust"     in data: WIND_THRESH_GUST    = int(data["wind_thresh_gust"])
+        if "wind_cooldown_min"    in data: WIND_COOLDOWN_MIN   = int(data["wind_cooldown_min"])
+        if data.get("wind_metar_station"): WIND_METAR_STATION  = data["wind_metar_station"].strip().upper()
         print(f"Settings restored from {_APP_SETTINGS_FILE}")
     except FileNotFoundError:
         pass  # First run — no saved settings yet, defaults stand
@@ -201,7 +254,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.08"
+VERSION  = "1.09-rc2"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -213,16 +266,70 @@ DIGITAL_TCP_PORT    = 52001       # Standard TCP ADIF port used by N1MM/DXKeeper
 ROTATOR_ENABLED  = False
 ROTATOR_HOST     = "127.0.0.1"
 ROTATOR_PORT     = 12000          # PstRotator default
-ROTATOR_PROTOCOL = "pstrotator"  # pstrotator | gs232 | easycomm
+ROTATOR_PROTOCOL = "pstrotator"  # pstrotator | gs232 | easycomm | arco_tcp
 ROTATOR_AUTO     = True           # Auto-rotate when clicking a DX spot or entering a callsign
+ROTATOR_DEBUG    = False          # v1.08.1-beta — verbose ARCO/rotator debug log
 
 # Live azimuth updated by the PstRotator background poller thread.
 # None until the first successful status read.
 _rot_live_az     = None
 _rot_live_az_lock = threading.Lock()
 
+# v1.08.1-beta — ARCO live elevation + fault flag (only set by ARCO poller).
+_rot_live_el     = None
+_rot_fault       = None       # None = unknown, "" = OK, str = fault description
+_rot_state_lock  = threading.Lock()
+
+# v1.08.1-beta — Rotator debug ring buffer (last 200 lines) + file logger.
+import collections as _collections
+_rot_debug_buf  = _collections.deque(maxlen=200)
+_rot_debug_lock = threading.Lock()
+
+def _rot_dbg(msg):
+    """Append a timestamped line to the rotator debug buffer (and file when enabled).
+    Safe to call from any thread; never raises."""
+    try:
+        line = time.strftime("%Y-%m-%d %H:%M:%S") + " " + str(msg)
+    except Exception:
+        line = str(msg)
+    try:
+        with _rot_debug_lock:
+            _rot_debug_buf.append(line)
+        if ROTATOR_DEBUG:
+            try:
+                appdata = os.environ.get("SDRLOGGERPLUS_DATA") or os.path.join(
+                    os.environ.get("APPDATA", os.path.expanduser("~")), "SDRLoggerPlus")
+                logdir = os.path.join(appdata, "logs")
+                os.makedirs(logdir, exist_ok=True)
+                with open(os.path.join(logdir, "rotator_debug.log"), "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 # ─── Backup ───────────────────────────────────────────────────────────────────
 BACKUP_PATH = ""   # User-configured local folder for DB backups (empty = browser download)
+
+# ─── Auto-Backup Scheduler (v1.09) ────────────────────────────────────────────
+# Scheduled backup that bundles all three databases (General, POTA, SAT) as
+# BOTH raw .db files AND ADIF exports, dumped into one timestamped subfolder
+# per run. Retention is a rolling "keep last N" — the oldest folder is pruned
+# only AFTER a new backup writes successfully, so a failed write (NAS offline,
+# USB unplugged, etc.) never destroys the last known-good backup.
+AUTO_BACKUP_ENABLED   = False
+AUTO_BACKUP_INTERVAL  = "daily"   # one of: "daily", "weekly", "on_exit"
+AUTO_BACKUP_RETENTION = 14        # keep last N timestamped folders
+_auto_backup_lock     = threading.Lock()
+_auto_backup_status   = {
+    "last_run":   None,   # ISO-8601 UTC string
+    "ok":         None,   # True / False / None (never run)
+    "message":    "",     # success detail or error text
+    "path":       "",     # path written on success
+    "next_due":   None,   # ISO-8601 UTC string for next scheduled run
+}
+# Load persisted schedule state so Daily/Weekly intervals survive app restarts.
+_load_auto_backup_state()
 
 # ─── flrig (W1HKJ) XML-RPC Integration ───────────────────────────────────────
 FLRIG_ENABLED      = False
@@ -278,6 +385,30 @@ _lightning_status = {
     "last_update": "",
 }
 _lightning_lock = threading.Lock()
+
+# ─── High-Wind Alerts (v1.08.2-beta) ─────────────────────────────────────────
+# Piggybacks on the lightning disclaimer — wind is gated behind the same
+# "this is a convenience feature, not a safety system" acceptance.
+WIND_ENABLED        = False
+WIND_NWS_ALERTS     = False     # NWS active-alerts API: High Wind Warning/Advisory/Watch
+WIND_NWS_METAR      = False     # NWS nearest-METAR observation (wind + gust)
+WIND_AMBIENT        = False     # User's Ambient Weather PWS wind readings
+WIND_THRESH_SUST    = 30        # Sustained wind MPH to trigger HIGH banner
+WIND_THRESH_GUST    = 45        # Gust MPH to trigger HIGH banner
+WIND_COOLDOWN_MIN   = 20        # Minutes before re-alerting after clearing
+WIND_METAR_STATION  = ""        # 4-letter ICAO METAR station (e.g. KLUK, KCVG)
+
+_wind_status = {
+    "active": False,
+    "severity": "",      # "" | "elevated" | "high" | "extreme"
+    "sustained_mph": None,
+    "gust_mph": None,
+    "direction": "",     # compass e.g. "WSW"
+    "sources": [],
+    "nws_alert": "",     # event headline e.g. "High Wind Warning"
+    "last_update": "",
+}
+_wind_lock = threading.Lock()
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ─── POTA (Parks on the Air) ──────────────────────────────────────────────────
@@ -1544,6 +1675,116 @@ threading.Thread(target=_pstrotator_poller, daemon=True,
                  name="PstRotatorPoller").start()
 
 
+# ─── ARCO TCP poller (v1.08.1-beta) ──────────────────────────────────────────
+def _arco_tcp_poller():
+    """
+    Daemon thread: polls live AZ + EL from a microHAM ARCO controller via TCP
+    using its GS-232A emulation mode.
+
+    Protocol (GS-232A over TCP):
+      Query  : "C2\\r"            (combined AZ + EL query)
+      Reply  : "+0nnn+0eee\\r\\n"  (AZ then EL, both 3-digit)
+
+    ARCO supports up to 4 simultaneous TCP connections so this poller will not
+    starve the S.A.T. controller or any other client.
+
+    On any I/O error the poller raises the fault flag (visible as a red dot in
+    the UI) and reconnects after a short backoff.
+    """
+    global _rot_live_az, _rot_live_el, _rot_fault
+    import time as _t
+    import re as _re
+
+    LINE_RE = _re.compile(r"([+\-]?\d{3,4})\s*([+\-]?\d{3,4})?")
+
+    while True:
+        if not ROTATOR_ENABLED or ROTATOR_PROTOCOL != "arco_tcp":
+            with _rot_state_lock:
+                _rot_live_az = None
+                _rot_live_el = None
+                _rot_fault   = None
+            _t.sleep(2)
+            continue
+
+        sock = None
+        try:
+            _rot_dbg(f"ARCO: connecting to {ROTATOR_HOST}:{ROTATOR_PORT}")
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(3.0)
+            sock.connect((ROTATOR_HOST, ROTATOR_PORT))
+            sock.settimeout(1.5)
+            _rot_dbg("ARCO: connected")
+            with _rot_state_lock:
+                _rot_fault = ""   # connection good
+
+            buf = b""
+            while ROTATOR_ENABLED and ROTATOR_PROTOCOL == "arco_tcp":
+                # Send combined AZ+EL query
+                try:
+                    sock.sendall(b"C2\r")
+                    if ROTATOR_DEBUG:
+                        _rot_dbg("ARCO TX: C2")
+                except Exception as e:
+                    _rot_dbg(f"ARCO TX error: {e}")
+                    raise
+
+                # Read reply (may need multiple recv calls)
+                try:
+                    chunk = sock.recv(256)
+                    if not chunk:
+                        _rot_dbg("ARCO: socket closed by peer")
+                        raise OSError("peer closed")
+                    buf += chunk
+                except socket.timeout:
+                    _rot_dbg("ARCO: recv timeout (no reply to C2)")
+                    chunk = b""
+
+                # Parse any complete lines
+                while b"\r" in buf or b"\n" in buf:
+                    # split on first CR or LF
+                    for sep in (b"\r\n", b"\r", b"\n"):
+                        if sep in buf:
+                            line, buf = buf.split(sep, 1)
+                            break
+                    else:
+                        break
+                    text = line.decode("ascii", errors="ignore").strip()
+                    if not text:
+                        continue
+                    if ROTATOR_DEBUG:
+                        _rot_dbg(f"ARCO RX: {text}")
+                    m = LINE_RE.search(text)
+                    if m:
+                        try:
+                            az = float(m.group(1))
+                            el = float(m.group(2)) if m.group(2) else None
+                            with _rot_state_lock:
+                                _rot_live_az = az
+                                if el is not None:
+                                    _rot_live_el = el
+                        except ValueError:
+                            pass
+
+                _t.sleep(0.20)   # ~5 Hz poll
+
+        except Exception as exc:
+            _rot_dbg(f"ARCO poller error: {exc}")
+            with _rot_state_lock:
+                _rot_live_az = None
+                _rot_live_el = None
+                _rot_fault   = str(exc) or "Connection lost"
+        finally:
+            if sock:
+                try: sock.close()
+                except: pass
+
+        _t.sleep(3)   # backoff before reconnect
+
+
+threading.Thread(target=_arco_tcp_poller, daemon=True,
+                 name="ArcoTcpPoller").start()
+
+
 # ─── Rotator Control ──────────────────────────────────────────────────────────
 def rotator_send_azimuth(azimuth):
     """
@@ -1567,6 +1808,15 @@ def rotator_send_azimuth(azimuth):
             s.connect((ROTATOR_HOST, ROTATOR_PORT))
             s.sendall(f"M{int(az):03d}\r\n".encode())
             s.close()
+        elif ROTATOR_PROTOCOL == "arco_tcp":
+            # microHAM ARCO — GS-232A emulation over TCP. M command sets azimuth.
+            cmd = f"M{int(az):03d}\r".encode()
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(3.0)
+            s.connect((ROTATOR_HOST, ROTATOR_PORT))
+            s.sendall(cmd)
+            s.close()
+            _rot_dbg(f"ARCO TX: M{int(az):03d}  (set AZ={az:.1f})")
         elif ROTATOR_PROTOCOL == "easycomm":
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(3.0)
@@ -1625,6 +1875,18 @@ def changelog():
             break
     if text is None:
         text = "CHANGELOG.txt not found."
+    # Beta banner — shown only when VERSION contains "beta"
+    beta_banner = ""
+    if "beta" in VERSION.lower():
+        beta_banner = (
+            '<div style="background:#3a1f00;border:1px solid #ffae00;color:#ffd17a;'
+            'padding:12px 16px;border-radius:6px;margin-bottom:20px;'
+            'font-family:sans-serif;font-size:13px;line-height:1.5;">'
+            '<strong style="color:#ffae00;">⚠ PRIVATE BETA BUILD — ' + VERSION + '</strong><br>'
+            'This build is for invited testers only. Not for public distribution. '
+            'Please report issues with the rotator <em>📋 Logs</em> snapshot to N8SDR.'
+            '</div>'
+        )
     # Serve as a styled pre-formatted HTML page
     html = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <title>SDRLogger+ — Change Log</title>
@@ -1638,6 +1900,7 @@ def changelog():
 </style></head><body>
 <h1>SDRLogger+ — Change Log</h1>
 <p class="sub"><a href="/help">← Back to Quick Start Guide</a></p>
+{beta_banner}
 <pre>{text}</pre>
 </body></html>"""
     return html
@@ -1953,12 +2216,22 @@ def api_cw_breakin():
 
 @app.route("/api/cw_status")
 def api_cw_status():
+    # Station-metadata fields are macro-source-only — pulled from runtime_settings,
+    # used solely by the CW keyer's {MYRIG}/{MYANT}/{MYPWR}/{MYSTATE}/{MYCNTY}/{MYGRID}
+    # token expander. They are NEVER stamped onto QSO records or ADIF exports.
     return jsonify({"tci":      tci_ws_connected,
                     "flrig":    bool(FLRIG_ENABLED and flrig_connected),
                     "hamlib":   bool(HAMLIB_ENABLED and hamlib_connected),
                     "winkeyer": bool(WINKEYER_ENABLED and _wk_is_open),
                     "wpm": _cw_wpm, "breakin": _cw_break_in,
-                    "mycall": MY_CALLSIGN, "myname": MY_NAME,
+                    "mycall":  MY_CALLSIGN,
+                    "myname":  MY_NAME,
+                    "mygrid":  runtime_settings.get("grid", ""),
+                    "myrig":   runtime_settings.get("myrig", ""),
+                    "myant":   runtime_settings.get("myantenna", ""),
+                    "mypwr":   runtime_settings.get("mypower", ""),
+                    "mystate": runtime_settings.get("mystate", ""),
+                    "mycnty":  runtime_settings.get("mycounty", ""),
                     "serial": _cw_serial,
                     "cw_pitch": _tci_cw_pitch})
 
@@ -2564,8 +2837,9 @@ def update_settings():
     global LOTW_TQSL_PATH, LOTW_STATION_LOCATION, LOTW_UPLOAD_ENABLED
     global CLUBLOG_EMAIL, CLUBLOG_PASSWORD, CLUBLOG_CALLSIGN, CLUBLOG_UPLOAD_ENABLED, CLUBLOG_UPLOAD_DESIGNATOR, _clublog_blocked
     global DIGITAL_UDP_ENABLED, DIGITAL_UDP_PORT, DIGITAL_TCP_ENABLED, DIGITAL_TCP_PORT
-    global ROTATOR_ENABLED, ROTATOR_HOST, ROTATOR_PORT, ROTATOR_PROTOCOL, ROTATOR_AUTO
+    global ROTATOR_ENABLED, ROTATOR_HOST, ROTATOR_PORT, ROTATOR_PROTOCOL, ROTATOR_AUTO, ROTATOR_DEBUG
     global BACKUP_PATH
+    global AUTO_BACKUP_ENABLED, AUTO_BACKUP_INTERVAL, AUTO_BACKUP_RETENTION
     global FLRIG_ENABLED, FLRIG_HOST, FLRIG_PORT, FLRIG_DIGITAL_MODE, FLRIG_RTTY_MODE
     global HAMLIB_ENABLED, HAMLIB_HOST, HAMLIB_PORT
     global WINKEYER_ENABLED, WINKEYER_PORT, WINKEYER_WPM, WINKEYER_KEY_OUT, WINKEYER_MODE, WINKEYER_PTT, WINKEYER_PTT_LEAD, WINKEYER_PTT_TAIL
@@ -2574,6 +2848,8 @@ def update_settings():
     global SAT_UDP_ENABLED, SAT_UDP_PORT, SAT_ADIF_PORT, SAT_CONTROLLER_IP
     global LIGHTNING_ACCEPTED, LIGHTNING_ENABLED, LIGHTNING_RANGE, LIGHTNING_UNIT, LIGHTNING_BLITZORTUNG, LIGHTNING_NOAA
     global LIGHTNING_AMBIENT, LIGHTNING_AMBIENT_API_KEY, LIGHTNING_AMBIENT_APP_KEY
+    global WIND_ENABLED, WIND_NWS_ALERTS, WIND_NWS_METAR, WIND_AMBIENT
+    global WIND_THRESH_SUST, WIND_THRESH_GUST, WIND_COOLDOWN_MIN, WIND_METAR_STATION
     data = request.json or {}
     runtime_settings.update(data)
     if data.get("qrz_user"):
@@ -2640,7 +2916,17 @@ def update_settings():
     if data.get("rotator_port"):    ROTATOR_PORT     = int(data["rotator_port"])
     if data.get("rotator_protocol"):ROTATOR_PROTOCOL = data["rotator_protocol"]
     if "rotator_auto"     in data: ROTATOR_AUTO     = bool(data["rotator_auto"])
+    if "rotator_debug"    in data: ROTATOR_DEBUG    = bool(data["rotator_debug"])
     if "backup_path"      in data: BACKUP_PATH      = data["backup_path"].strip()
+    if "auto_backup_enabled"   in data: AUTO_BACKUP_ENABLED   = bool(data["auto_backup_enabled"])
+    if "auto_backup_interval"  in data:
+        _v = str(data["auto_backup_interval"]).lower().strip()
+        if _v in ("daily", "weekly", "on_exit"): AUTO_BACKUP_INTERVAL = _v
+    if "auto_backup_retention" in data:
+        try:
+            _n = int(data["auto_backup_retention"])
+            if _n >= 1: AUTO_BACKUP_RETENTION = _n
+        except Exception: pass
     # flrig settings
     if "flrig_enabled"      in data: FLRIG_ENABLED      = bool(data["flrig_enabled"])
     if data.get("flrig_host"):       FLRIG_HOST          = data["flrig_host"].strip()
@@ -2683,7 +2969,16 @@ def update_settings():
     if "lightning_ambient"         in data: LIGHTNING_AMBIENT         = bool(data["lightning_ambient"])
     if data.get("lightning_ambient_api_key"): LIGHTNING_AMBIENT_API_KEY = data["lightning_ambient_api_key"].strip()
     if data.get("lightning_ambient_app_key"): LIGHTNING_AMBIENT_APP_KEY = data["lightning_ambient_app_key"].strip()
-    # Immediately clear lightning status so banner hides when sources change
+    # Wind alerts (v1.08.2-beta)
+    if "wind_enabled"         in data: WIND_ENABLED        = bool(data["wind_enabled"]) and LIGHTNING_ACCEPTED
+    if "wind_nws_alerts"      in data: WIND_NWS_ALERTS     = bool(data["wind_nws_alerts"])
+    if "wind_nws_metar"       in data: WIND_NWS_METAR      = bool(data["wind_nws_metar"])
+    if "wind_ambient"         in data: WIND_AMBIENT        = bool(data["wind_ambient"])
+    if "wind_thresh_sust"     in data: WIND_THRESH_SUST    = int(data["wind_thresh_sust"])
+    if "wind_thresh_gust"     in data: WIND_THRESH_GUST    = int(data["wind_thresh_gust"])
+    if "wind_cooldown_min"    in data: WIND_COOLDOWN_MIN   = int(data["wind_cooldown_min"])
+    if data.get("wind_metar_station"): WIND_METAR_STATION  = data["wind_metar_station"].strip().upper()
+    # Immediately clear lightning/wind status so banners hide when sources change
     if any(k in data for k in ("lightning_enabled", "lightning_blitzortung", "lightning_noaa", "lightning_ambient")):
         with _lightning_lock:
             _lightning_status["active"] = False
@@ -2693,6 +2988,15 @@ def update_settings():
             _lightning_status["strikes_1hr"] = 0
             _lightning_status["sources"] = []
             _lightning_status["noaa_warning"] = ""
+    if any(k in data for k in ("wind_enabled", "wind_nws_alerts", "wind_nws_metar", "wind_ambient")):
+        with _wind_lock:
+            _wind_status["active"] = False
+            _wind_status["severity"] = ""
+            _wind_status["sustained_mph"] = None
+            _wind_status["gust_mph"] = None
+            _wind_status["direction"] = ""
+            _wind_status["sources"] = []
+            _wind_status["nws_alert"] = ""
     _save_app_settings()
     return jsonify({"ok": True})
 
@@ -2775,6 +3079,275 @@ def backup_db():
     return send_file(db_src, as_attachment=True,
                      download_name=filename,
                      mimetype="application/octet-stream")
+
+
+# ─── Auto-Backup Runner (v1.09) ───────────────────────────────────────────────
+def _adif_tag(name, val):
+    val = str(val) if val else ""
+    return f"<{name}:{len(val)}>{val} " if val else ""
+
+
+def _export_db_to_adif(db_path, label):
+    """Read a database file and render its qso_log rows as ADIF text.
+
+    label is either "general" or "pota" — used only for the ADIF header
+    comment. Returns the ADIF text as a string (empty on error)."""
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM qso_log ORDER BY date_worked, time_worked").fetchall()
+        conn.close()
+    except Exception:
+        return ""
+
+    is_pota = (label == "pota")
+    prog_id = "SDRLogger+"
+    lines = [f"SDRLogger+ ADIF Export — {'POTA Activation' if is_pota else 'General Log'}",
+             f"<PROGRAMID:{len(prog_id)}>{prog_id}\n<EOH>\n"]
+    for r in rows:
+        pota_ref = ((r["pota_ref"] if "pota_ref" in r.keys() else "") or "").strip() if is_pota else ""
+        pota_p2p = ((r["pota_p2p"] if "pota_p2p" in r.keys() else "") or "").strip() if is_pota else ""
+        keys = set(r.keys())
+        def _col(name):
+            return r[name] if name in keys else ""
+        line = (
+            _adif_tag("CALL", r["callsign"]) +
+            _adif_tag("QSO_DATE", (r["date_worked"] or "").replace("-", "")) +
+            _adif_tag("TIME_ON", (r["time_worked"] or "").replace(":", "")[:6]) +
+            _adif_tag("BAND", r["band"]) +
+            _adif_tag("MODE", r["mode"]) +
+            _adif_tag("FREQ", r["freq_mhz"]) +
+            _adif_tag("RST_SENT", r["my_rst_sent"]) +
+            _adif_tag("RST_RCVD", r["their_rst_rcvd"]) +
+            _adif_tag("COMMENT", r["remarks"]) +
+            _adif_tag("CONTEST_ID", r["contest_name"]) +
+            (_adif_tag("MY_SIG", "POTA") + _adif_tag("MY_SIG_INFO", pota_ref) if pota_ref else "") +
+            (_adif_tag("SIG", "POTA") + _adif_tag("SIG_INFO", pota_p2p) if pota_p2p else "") +
+            _adif_tag("NAME", r["name"]) +
+            _adif_tag("QTH", r["qth"]) +
+            _adif_tag("STATE", _col("state")) +
+            _adif_tag("COUNTRY", _col("country")) +
+            _adif_tag("GRIDSQUARE", _col("gridsquare")) +
+            (_adif_tag("PROP_MODE", _col("prop_mode")) if _col("prop_mode") else "") +
+            (_adif_tag("SAT_NAME", _col("sat_name")) if _col("sat_name") else "") +
+            (_adif_tag("FREQ_RX", _col("uplink_freq")) if _col("uplink_freq") else "") +
+            "<EOR>"
+        )
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _auto_backup_default_dir():
+    """Fallback auto-backup destination when user hasn't configured one."""
+    try:
+        appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(appdata, "SDRLoggerPlus", "backups")
+    except Exception:
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), "backups")
+
+
+def _run_auto_backup(trigger="scheduled"):
+    """Run one scheduled auto-backup pass.
+
+    Bundles all databases (General + POTA) as BOTH raw .db files AND ADIF
+    exports into a single timestamped subfolder. Retention prune runs ONLY
+    after a successful write, so a failed run never destroys prior backups.
+
+    trigger is a free-form label ("scheduled", "manual", "on_exit") recorded
+    in the status dict for UI display.
+    """
+    global _auto_backup_status
+    with _auto_backup_lock:
+        dest_root = (BACKUP_PATH or "").strip() or _auto_backup_default_dir()
+        ts = datetime.utcnow().strftime("%Y-%m-%d_%H%M")
+        folder = os.path.join(dest_root, f"SDRLoggerPlus-{ts}")
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except Exception as e:
+            msg = f"Cannot create backup folder: {e}"
+            _auto_backup_status.update({
+                "last_run": datetime.utcnow().isoformat() + "Z",
+                "ok": False, "message": msg, "path": folder
+            })
+            _save_auto_backup_state()
+            try: _rot_dbg(f"[auto-backup] {trigger} FAILED: {msg}")
+            except Exception: pass
+            return False, msg
+
+        written = []
+        failures = []
+
+        # General DB + ADIF
+        try:
+            gen_src = os.path.abspath(DATABASE)
+            if os.path.exists(gen_src):
+                shutil.copy2(gen_src, os.path.join(folder, "general.db"))
+                written.append("general.db")
+                adif = _export_db_to_adif(gen_src, "general")
+                if adif:
+                    with open(os.path.join(folder, "general.adi"), "w", encoding="utf-8") as _af:
+                        _af.write(adif)
+                    written.append("general.adi")
+        except Exception as e:
+            failures.append(f"general: {e}")
+
+        # POTA DB + ADIF
+        try:
+            pota_src = os.path.abspath(POTA_DATABASE)
+            if os.path.exists(pota_src):
+                shutil.copy2(pota_src, os.path.join(folder, "pota.db"))
+                written.append("pota.db")
+                adif = _export_db_to_adif(pota_src, "pota")
+                if adif:
+                    with open(os.path.join(folder, "pota.adi"), "w", encoding="utf-8") as _af:
+                        _af.write(adif)
+                    written.append("pota.adi")
+        except Exception as e:
+            failures.append(f"pota: {e}")
+
+        if not written:
+            msg = "No databases written. " + (" ; ".join(failures) if failures else "")
+            _auto_backup_status.update({
+                "last_run": datetime.utcnow().isoformat() + "Z",
+                "ok": False, "message": msg, "path": folder
+            })
+            _save_auto_backup_state()
+            try: _rot_dbg(f"[auto-backup] {trigger} FAILED: {msg}")
+            except Exception: pass
+            return False, msg
+
+        # Retention prune — ONLY runs after a successful write above.
+        pruned = 0
+        try:
+            if AUTO_BACKUP_RETENTION >= 1 and os.path.isdir(dest_root):
+                sibs = []
+                for name in os.listdir(dest_root):
+                    if not name.startswith("SDRLoggerPlus-"):
+                        continue
+                    full = os.path.join(dest_root, name)
+                    if os.path.isdir(full):
+                        sibs.append((os.path.getmtime(full), full))
+                sibs.sort(reverse=True)  # newest first
+                for _mt, path in sibs[AUTO_BACKUP_RETENTION:]:
+                    try:
+                        shutil.rmtree(path)
+                        pruned += 1
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        ok_msg = f"Wrote {len(written)} file(s): {', '.join(written)}"
+        if failures:
+            ok_msg += f"  (partial — {' ; '.join(failures)})"
+        if pruned:
+            ok_msg += f"  [pruned {pruned} old folder(s)]"
+
+        _auto_backup_status.update({
+            "last_run": datetime.utcnow().isoformat() + "Z",
+            "ok": True, "message": ok_msg, "path": folder
+        })
+        _save_auto_backup_state()
+        try: _rot_dbg(f"[auto-backup] {trigger} OK → {folder}")
+        except Exception: pass
+        return True, ok_msg
+
+
+def _auto_backup_interval_td():
+    """Return the configured interval as a timedelta (None for on_exit)."""
+    if AUTO_BACKUP_INTERVAL == "on_exit":
+        return None
+    if AUTO_BACKUP_INTERVAL == "weekly":
+        return timedelta(days=7)
+    return timedelta(days=1)  # daily default
+
+
+def _auto_backup_parse_last_run():
+    """Return last_run as a naive UTC datetime, or None if never run / unparseable."""
+    raw = _auto_backup_status.get("last_run")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw).rstrip("Z"))
+    except Exception:
+        return None
+
+
+def _auto_backup_compute_next_due(from_dt=None):
+    """Return ISO-8601 UTC timestamp of next scheduled run.
+
+    Schedule is anchored to the last successful run (persisted across
+    restarts), NOT to app boot time — so a Daily backup that already fired
+    today won't fire again just because the user reopened the app.
+
+    If no prior run exists, next_due is "now" (i.e. fire on next tick).
+    """
+    td = _auto_backup_interval_td()
+    if td is None:
+        return None
+    # Explicit from_dt anchors next_due to that moment (used right after a run)
+    if from_dt is not None:
+        return (from_dt + td).isoformat() + "Z"
+    last = _auto_backup_parse_last_run()
+    if last is None:
+        return datetime.utcnow().isoformat() + "Z"
+    return (last + td).isoformat() + "Z"
+
+
+def _auto_backup_daemon():
+    """Wake once a minute; fire when (now - last_run) >= interval.
+
+    On first-enable with no prior run history, fires on the next tick.
+    """
+    global _auto_backup_status
+    # Seed next_due on boot so the UI has a meaningful display
+    _auto_backup_status["next_due"] = _auto_backup_compute_next_due()
+    while True:
+        try:
+            time.sleep(60)
+            if not AUTO_BACKUP_ENABLED:
+                continue
+            td = _auto_backup_interval_td()
+            if td is None:
+                continue  # on_exit — fires only via /api/explicit_close
+            now = datetime.utcnow()
+            last = _auto_backup_parse_last_run()
+            if last is None or (now - last) >= td:
+                _run_auto_backup(trigger="scheduled")
+            # Always refresh next_due so the UI countdown stays accurate
+            _auto_backup_status["next_due"] = _auto_backup_compute_next_due()
+        except Exception:
+            pass
+
+
+threading.Thread(target=_auto_backup_daemon, daemon=True).start()
+
+
+@app.route("/api/auto_backup/status", methods=["GET"])
+def auto_backup_status():
+    return jsonify({
+        "enabled":   AUTO_BACKUP_ENABLED,
+        "interval":  AUTO_BACKUP_INTERVAL,
+        "retention": AUTO_BACKUP_RETENTION,
+        "dest":      (BACKUP_PATH or "").strip() or _auto_backup_default_dir(),
+        "last_run":  _auto_backup_status.get("last_run"),
+        "ok":        _auto_backup_status.get("ok"),
+        "message":   _auto_backup_status.get("message"),
+        "path":      _auto_backup_status.get("path"),
+        "next_due":  _auto_backup_status.get("next_due"),
+    })
+
+
+@app.route("/api/auto_backup/run_now", methods=["POST"])
+def auto_backup_run_now():
+    ok, msg = _run_auto_backup(trigger="manual")
+    st = _auto_backup_status
+    return jsonify({
+        "ok": ok, "message": msg,
+        "path": st.get("path"),
+        "last_run": st.get("last_run"),
+        "next_due": st.get("next_due"),
+    })
 
 
 @app.route("/api/restore_db", methods=["POST"])
@@ -3260,6 +3833,15 @@ def rotator_send_stop():
             s.close()
             print("Rotator: sent GS-232 STOP (A\\r)")
 
+        elif ROTATOR_PROTOCOL == "arco_tcp":
+            # microHAM ARCO — 'S' = stop ALL motion (AZ + EL), GS-232A emulation
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(3.0)
+            s.connect((ROTATOR_HOST, ROTATOR_PORT))
+            s.sendall(b"S\r")
+            s.close()
+            _rot_dbg("ARCO TX: S  (STOP all motion)")
+
         elif ROTATOR_PROTOCOL == "easycomm":
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(3.0)
@@ -3314,14 +3896,45 @@ def digital_events():
 
 @app.route("/api/rotator_az")
 def rotator_az():
-    """Return the live azimuth read by the PstRotator background poller.
-    Returns null when the protocol is not pstrotator or the poller has not
-    yet connected.  The frontend polls this every second to animate the
-    Current AZ display while the antenna is moving."""
+    """Return live AZ (and EL + fault flag for ARCO) read by the background poller.
+    Returns null fields when the protocol's poller has not yet connected.
+    Frontend polls every 150 ms to animate Position display while antenna moves."""
+    if ROTATOR_PROTOCOL == "arco_tcp":
+        with _rot_state_lock:
+            az    = _rot_live_az
+            el    = _rot_live_el
+            fault = _rot_fault
+        return jsonify({"az": az, "el": el, "fault": fault,
+                        "protocol": ROTATOR_PROTOCOL,
+                        "enabled": ROTATOR_ENABLED})
+    # Legacy PstRotator path
     with _rot_live_az_lock:
         az = _rot_live_az
-    return jsonify({"az": az, "protocol": ROTATOR_PROTOCOL,
+    return jsonify({"az": az, "el": None, "fault": None,
+                    "protocol": ROTATOR_PROTOCOL,
                     "enabled": ROTATOR_ENABLED})
+
+
+@app.route("/api/rotator_debug_tail")
+def rotator_debug_tail():
+    """Return the last N lines of the rotator debug ring buffer (v1.08.1-beta).
+    Used by the Rotator panel's '📋 Copy Logs' button to grab a snapshot
+    for ARCO beta testers to send back."""
+    try:
+        n = int(request.args.get("n", "100"))
+    except Exception:
+        n = 100
+    n = max(1, min(n, 200))
+    with _rot_debug_lock:
+        lines = list(_rot_debug_buf)[-n:]
+    return jsonify({
+        "lines": lines,
+        "debug_enabled": ROTATOR_DEBUG,
+        "protocol": ROTATOR_PROTOCOL,
+        "host": ROTATOR_HOST,
+        "port": ROTATOR_PORT,
+        "version": VERSION,
+    })
 
 
 @app.route("/api/digital_status")
@@ -3331,7 +3944,7 @@ def digital_status():
         "tcp_enabled": DIGITAL_TCP_ENABLED, "tcp_port": DIGITAL_TCP_PORT,
         "rotator_enabled": ROTATOR_ENABLED, "rotator_host": ROTATOR_HOST,
         "rotator_port": ROTATOR_PORT, "rotator_protocol": ROTATOR_PROTOCOL,
-        "rotator_auto": ROTATOR_AUTO,
+        "rotator_auto": ROTATOR_AUTO, "rotator_debug": ROTATOR_DEBUG,
     })
 
 
@@ -3345,22 +3958,53 @@ def digital_status():
 
 import time as _time
 
-KEEPALIVE_TIMEOUT = 180   # seconds — 3 min; covers normal page-to-page navigation
+KEEPALIVE_TIMEOUT = 3600   # seconds — 60 min; forgives walk-aways, PC sleep, Chrome background-tab freeze
+EXPLICIT_CLOSE_GRACE = 10  # seconds — on tab-close beacon, schedule shutdown this far out so
+                           #           intra-app navigation (index↔help) can cancel it via the
+                           #           immediate-on-load keepalive fired by the new page
 _last_keepalive   = _time.monotonic()
 _keepalive_lock   = threading.Lock()
 
 @app.route("/api/keepalive", methods=["POST"])
 def api_keepalive():
-    """Heartbeat sent by every page every 20 s to keep the server alive."""
+    """Heartbeat sent by every page every 20 s (and immediately on page load)
+    to keep the server alive. Immediate-on-load call also cancels any pending
+    explicit_close shutdown scheduled by a just-unloaded sibling page."""
     global _last_keepalive
     with _keepalive_lock:
         _last_keepalive = _time.monotonic()
     return "", 204
 
+
+@app.route("/api/explicit_close", methods=["POST"])
+def api_explicit_close():
+    """Tab close beacon (navigator.sendBeacon on pagehide).
+    We do NOT exit immediately — instead we rewind the last-keepalive timestamp
+    so the watchdog's next check (up to 10 s later) will see us as idle past
+    the EXPLICIT_CLOSE_GRACE window. If another page of our app loads within
+    that window (page-to-page nav, browser refresh), its immediate-on-load
+    /api/keepalive call resets the clock and we stay alive. Only a true tab
+    close with nothing replacing it results in shutdown."""
+    global _last_keepalive
+    with _keepalive_lock:
+        # Arrange for watchdog to fire shortly after EXPLICIT_CLOSE_GRACE
+        _last_keepalive = _time.monotonic() - (KEEPALIVE_TIMEOUT - EXPLICIT_CLOSE_GRACE)
+    # Fire an on-exit auto-backup if the user has chosen that interval.
+    # Runs in a daemon thread so we can still return the 204 quickly and let
+    # the browser beacon close cleanly.
+    try:
+        if AUTO_BACKUP_ENABLED and AUTO_BACKUP_INTERVAL == "on_exit":
+            threading.Thread(target=_run_auto_backup, args=("on_exit",), daemon=True).start()
+    except Exception:
+        pass
+    return "", 204
+
 def _keepalive_watchdog():
-    """Exit the process when no keepalive has arrived for KEEPALIVE_TIMEOUT s."""
+    """Exit the process when no keepalive has arrived for KEEPALIVE_TIMEOUT s.
+    Polls every 2 s so an explicit_close tab-beacon results in shutdown within
+    ~EXPLICIT_CLOSE_GRACE seconds (default 10 s) of the user closing the tab."""
     while True:
-        _time.sleep(10)   # check every 10 s
+        _time.sleep(2)    # check every 2 s — tight enough for the grace window
         with _keepalive_lock:
             idle = _time.monotonic() - _last_keepalive
         if idle >= KEEPALIVE_TIMEOUT:
@@ -4810,6 +5454,214 @@ def lightning_status():
         return jsonify(dict(_lightning_status))
 
 
+# ─── High-Wind Alerts (v1.08.2-beta) ─────────────────────────────────────────
+# Three sources:
+#  1. NWS active-alerts API (reuses the lightning NWS endpoint, filters for
+#     wind products: High Wind Warning, Wind Advisory, High Wind Watch,
+#     Extreme Wind Warning).
+#  2. NWS nearest-METAR observation — api.weather.gov/stations/{ICAO}/observations/latest.
+#     User picks their nearest METAR station (e.g. KLUK for Cincinnati-Lunken).
+#  3. Ambient Weather station — reuses the LIGHTNING_AMBIENT_*_KEY credentials.
+#
+# Severity tiers:
+#  - "elevated" (yellow): sustained >= WIND_THRESH_SUST-10 OR gust >= WIND_THRESH_GUST-10
+#  - "high"     (orange): sustained >= WIND_THRESH_SUST OR gust >= WIND_THRESH_GUST
+#  - "extreme"  (red):    NWS High Wind Warning OR Extreme Wind Warning OR
+#                         sustained >= WIND_THRESH_SUST+15 OR gust >= WIND_THRESH_GUST+15
+
+WIND_PRODUCTS = (
+    "high wind warning",
+    "high wind watch",
+    "wind advisory",
+    "extreme wind warning",
+)
+
+_wind_last_clear = 0.0   # monotonic timestamp of last "below threshold" observation
+
+def _fetch_nws_wind_alerts(my_lat, my_lon):
+    """Return (headline_str, is_extreme) from NWS active-alerts for our point.
+    headline_str is '' when no wind-related alert is active."""
+    try:
+        url = f"https://api.weather.gov/alerts/active?point={my_lat:.4f},{my_lon:.4f}"
+        resp = requests.get(url, timeout=10,
+            headers={"User-Agent": "SDRLogger+ Ham Radio Logger (contact: n8sdr@arrl.net)"})
+        if resp.status_code == 200:
+            data = resp.json()
+            for feat in data.get("features", []):
+                event = (feat.get("properties", {}).get("event", "") or "").lower()
+                for prod in WIND_PRODUCTS:
+                    if prod in event:
+                        is_extreme = ("high wind warning" in event or "extreme wind" in event)
+                        return feat["properties"]["event"], is_extreme
+    except Exception as e:
+        print(f"Wind: NWS alerts error: {e}")
+    return "", False
+
+
+def _fetch_nws_metar(station):
+    """Return (sustained_mph, gust_mph, dir_deg) from the latest METAR obs.
+    Any field can be None when not reported."""
+    if not station or len(station) < 3:
+        return None, None, None
+    try:
+        url = f"https://api.weather.gov/stations/{station}/observations/latest"
+        resp = requests.get(url, timeout=10,
+            headers={"User-Agent": "SDRLogger+ Ham Radio Logger (contact: n8sdr@arrl.net)"})
+        if resp.status_code != 200:
+            print(f"Wind: METAR {station} HTTP {resp.status_code}")
+            return None, None, None
+        props = resp.json().get("properties", {}) or {}
+        # NWS reports speeds in km/h (value + unitCode wmoUnit:km_h-1)
+        def _mph(field):
+            f = props.get(field) or {}
+            v = f.get("value")
+            if v is None:
+                return None
+            uc = f.get("unitCode", "")
+            if "km_h" in uc or "kmh" in uc:
+                return float(v) * 0.621371
+            if "m_s" in uc:
+                return float(v) * 2.23694
+            return float(v)   # assume mph as last resort
+        sust = _mph("windSpeed")
+        gust = _mph("windGust")
+        d    = (props.get("windDirection") or {}).get("value")
+        print(f"Wind: METAR {station} — sust={sust} gust={gust} dir={d}")
+        return sust, gust, d
+    except Exception as e:
+        print(f"Wind: METAR {station} error: {e}")
+        return None, None, None
+
+
+def _fetch_ambient_wind():
+    """Return (sustained_mph, gust_mph, dir_deg) from Ambient Weather station.
+    Reuses the LIGHTNING_AMBIENT_*_KEY credentials (same account/station)."""
+    if not LIGHTNING_AMBIENT_API_KEY or not LIGHTNING_AMBIENT_APP_KEY:
+        return None, None, None
+    try:
+        url = (f"https://rt.ambientweather.net/v1/devices"
+               f"?apiKey={LIGHTNING_AMBIENT_API_KEY}"
+               f"&applicationKey={LIGHTNING_AMBIENT_APP_KEY}")
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            devices = resp.json()
+            if devices and isinstance(devices, list):
+                last = devices[0].get("lastData", {}) or {}
+                sust = last.get("windspeedmph")
+                gust = last.get("windgustmph")
+                d    = last.get("winddir")
+                print(f"Wind: Ambient — sust={sust} gust={gust} dir={d}")
+                return (float(sust) if sust is not None else None,
+                        float(gust) if gust is not None else None,
+                        float(d)    if d    is not None else None)
+    except Exception as e:
+        print(f"Wind: Ambient error: {e}")
+    return None, None, None
+
+
+def _wind_severity(sust, gust, nws_event, nws_is_extreme):
+    """Classify into "" | "elevated" | "high" | "extreme"."""
+    if nws_is_extreme:
+        return "extreme"
+    # Numeric thresholds (use whichever field is present)
+    s = sust or 0.0
+    g = gust or 0.0
+    if s >= WIND_THRESH_SUST + 15 or g >= WIND_THRESH_GUST + 15:
+        return "extreme"
+    if s >= WIND_THRESH_SUST or g >= WIND_THRESH_GUST:
+        return "high"
+    if nws_event:   # advisory / watch without extreme flag → "high"
+        return "high"
+    if s >= max(10, WIND_THRESH_SUST - 10) or g >= max(15, WIND_THRESH_GUST - 10):
+        return "elevated"
+    return ""
+
+
+def wind_thread():
+    """Background poller (v1.08.2-beta): NWS alerts + METAR + Ambient, every 2 min."""
+    import time
+    global _wind_last_clear
+    time.sleep(15)
+    while True:
+        try:
+            if not WIND_ENABLED:
+                with _wind_lock:
+                    _wind_status["active"] = False
+                    _wind_status["severity"] = ""
+                time.sleep(30)
+                continue
+
+            grid = runtime_settings.get("grid", "")
+            my_lat, my_lon = _grid_to_latlon(grid)
+            if my_lat is None and (WIND_NWS_ALERTS or WIND_NWS_METAR):
+                print("Wind: no grid configured — NWS sources need lat/lon")
+
+            best_sust = None
+            best_gust = None
+            best_dir  = None
+            sources   = []
+            nws_event = ""
+            nws_is_extreme = False
+
+            if WIND_NWS_ALERTS and my_lat is not None:
+                nws_event, nws_is_extreme = _fetch_nws_wind_alerts(my_lat, my_lon)
+                if nws_event:
+                    sources.append("nws_alert")
+
+            if WIND_NWS_METAR and WIND_METAR_STATION:
+                s, g, d = _fetch_nws_metar(WIND_METAR_STATION)
+                if s is not None or g is not None:
+                    sources.append(f"metar/{WIND_METAR_STATION}")
+                    if s is not None and (best_sust is None or s > best_sust):
+                        best_sust, best_dir = s, d
+                    if g is not None and (best_gust is None or g > best_gust):
+                        best_gust = g
+
+            if WIND_AMBIENT:
+                s, g, d = _fetch_ambient_wind()
+                if s is not None or g is not None:
+                    sources.append("ambient")
+                    if s is not None and (best_sust is None or s > best_sust):
+                        best_sust, best_dir = s, d
+                    if g is not None and (best_gust is None or g > best_gust):
+                        best_gust = g
+
+            severity = _wind_severity(best_sust, best_gust, nws_event, nws_is_extreme)
+
+            # Cooldown: once conditions clear, suppress re-alerting for WIND_COOLDOWN_MIN
+            now = time.monotonic()
+            if severity == "":
+                _wind_last_clear = now
+            else:
+                # If we recently cleared and the new severity is just "elevated", hold off.
+                if (now - _wind_last_clear) < (WIND_COOLDOWN_MIN * 60) and severity == "elevated":
+                    severity = ""
+
+            direction = _bearing_to_compass(best_dir) if best_dir is not None else ""
+            with _wind_lock:
+                _wind_status["active"]         = severity != ""
+                _wind_status["severity"]       = severity
+                _wind_status["sustained_mph"]  = round(best_sust, 1) if best_sust is not None else None
+                _wind_status["gust_mph"]       = round(best_gust, 1) if best_gust is not None else None
+                _wind_status["direction"]      = direction
+                _wind_status["sources"]        = sources
+                _wind_status["nws_alert"]      = nws_event
+                _wind_status["last_update"]    = datetime.utcnow().strftime("%H:%M:%S")
+        except Exception as e:
+            print(f"Wind thread error: {e}")
+        time.sleep(120)   # 2 min — wind evolves slower than lightning
+
+
+threading.Thread(target=wind_thread, daemon=True, name="WindThread").start()
+
+
+@app.route("/api/wind_status")
+def wind_status():
+    """Return current high-wind alert status for the banner."""
+    with _wind_lock:
+        return jsonify(dict(_wind_status))
+
+
 # ─── ADIF File Monitor ────────────────────────────────────────────────────────
 # Watches up to 2 external ADIF files (e.g. VarAC, MSHV) for new QSOs.
 # Uses byte-offset tracking — only reads bytes appended since last check.
@@ -5303,6 +6155,634 @@ def api_awards_wpx():
         "ok": True,
         "total_worked": len(out),
         "prefixes": out
+    })
+
+
+# ─── WAC — Worked All Continents (v1.09) ──────────────────────────────────────
+# Six standard continents (ARRL/IARU WAC). Antarctica recognized as a 7th
+# "bonus" endorsement — rendered separately so it doesn't gate the base award.
+_WAC_CONTS  = ["NA", "SA", "EU", "AS", "AF", "OC"]
+_WAC_EXTRAS = ["AN"]
+
+_WAC_NAMES = {
+    "NA": "North America", "SA": "South America", "EU": "Europe",
+    "AS": "Asia",          "AF": "Africa",        "OC": "Oceania",
+    "AN": "Antarctica",
+}
+
+@app.route("/api/awards/wac")
+def api_awards_wac():
+    """WAC: continents worked. 6 standard + Antarctica as bonus endorsement."""
+    band_filter = request.args.get("band", "").strip().upper()
+    mode_filter = request.args.get("mode", "").strip().upper()
+    try:
+        conn = get_db()
+        rows = conn.execute("SELECT callsign, band, mode FROM qso_log").fetchall()
+        conn.close()
+    except Exception:
+        return jsonify({"ok": False, "error": "Database error"})
+
+    conts = {}  # {cont_code: {"bands": {band: [modes]}, "entities": set()}}
+    for row in rows:
+        call = str(row["callsign"] or "").strip().upper()
+        if not call:
+            continue
+        info = dxcc_lookup(call)
+        if not info or not info.get("cont"):
+            continue
+        c = str(info["cont"]).strip().upper()
+        b = str(row["band"] or "").strip().upper()
+        m = str(row["mode"] or "").strip().upper()
+        if band_filter and b != band_filter:
+            continue
+        if mode_filter and m != mode_filter:
+            continue
+        if c not in conts:
+            conts[c] = {"bands": {}, "entities": set()}
+        conts[c]["bands"].setdefault(b, []).append(m)
+        conts[c]["entities"].add(info["entity"])
+
+    out = {}
+    for c, data in conts.items():
+        out[c] = {
+            "bands": data["bands"],
+            "entities": sorted(data["entities"])[:8],
+            "name": _WAC_NAMES.get(c, c),
+        }
+    base_worked  = sum(1 for c in _WAC_CONTS if c in out)
+    extra_worked = sum(1 for c in _WAC_EXTRAS if c in out)
+    return jsonify({
+        "ok": True,
+        "base_cont_order":  _WAC_CONTS,
+        "extra_cont_order": _WAC_EXTRAS,
+        "names": _WAC_NAMES,
+        "continents": out,
+        "base_worked":  base_worked,
+        "extra_worked": extra_worked,
+        "achieved":     base_worked >= 6,
+    })
+
+
+# ─── VUCC / 5BWAS / 5BDXCC (v1.09) ───────────────────────────────────────────
+# VHF/UHF Century Club: unique 4-character grid squares per band, VHF and up.
+# ARRL thresholds vary per band (6m=100, 2m=100, 222=50, 432=50, 902=25, 1296=25,
+# 2.3GHz+=10). We report per-band counts; the UI shows the threshold + bar.
+_VUCC_BANDS = ["6M", "2M", "1.25M", "70CM", "33CM", "23CM", "13CM", "9CM", "6CM", "3CM"]
+_VUCC_THRESHOLDS = {
+    "6M": 100, "2M": 100, "1.25M": 50, "70CM": 50,
+    "33CM": 25, "23CM": 25, "13CM": 10, "9CM": 10, "6CM": 10, "3CM": 10,
+}
+
+def _grid4(g):
+    """Normalize a Maidenhead grid to its 4-char field+square (e.g. 'EN82bm' -> 'EN82')."""
+    if not g:
+        return ""
+    g = str(g).strip().upper()
+    if len(g) < 4:
+        return ""
+    a, b, c, d = g[0], g[1], g[2], g[3]
+    if not (a.isalpha() and b.isalpha() and c.isdigit() and d.isdigit()):
+        return ""
+    return a + b + c + d
+
+
+@app.route("/api/awards/vucc")
+def api_awards_vucc():
+    """VUCC: unique 4-char grids per band, VHF/UHF only."""
+    mode_filter = request.args.get("mode", "").strip().upper()
+    try:
+        conn = get_db()
+        rows = conn.execute("SELECT band, mode, gridsquare FROM qso_log").fetchall()
+        conn.close()
+    except Exception:
+        return jsonify({"ok": False, "error": "Database error"})
+
+    bands = {b: {"grids": set(), "threshold": _VUCC_THRESHOLDS[b]} for b in _VUCC_BANDS}
+    for row in rows:
+        b = str(row["band"] or "").strip().upper()
+        if b not in bands:
+            continue
+        m = str(row["mode"] or "").strip().upper()
+        if mode_filter and m != mode_filter:
+            continue
+        g = _grid4(_safe_col(row, "gridsquare"))
+        if not g:
+            continue
+        bands[b]["grids"].add(g)
+
+    out = {}
+    for b, data in bands.items():
+        gl = sorted(data["grids"])
+        out[b] = {
+            "count": len(gl),
+            "threshold": data["threshold"],
+            "achieved": len(gl) >= data["threshold"],
+            "grids": gl,
+        }
+    return jsonify({"ok": True, "bands": out, "band_order": _VUCC_BANDS})
+
+
+# 5-Band WAS — all 50 states on EACH of 80/40/20/15/10
+_5B_BANDS = ["80M", "40M", "20M", "15M", "10M"]
+
+@app.route("/api/awards/5bwas")
+def api_awards_5bwas():
+    """5-Band WAS: per-band count of US states worked on 80/40/20/15/10."""
+    mode_filter = request.args.get("mode", "").strip().upper()
+    try:
+        conn = get_db()
+        rows = conn.execute("SELECT callsign, qth, band, mode, state FROM qso_log").fetchall()
+        conn.close()
+    except Exception:
+        return jsonify({"ok": False, "error": "Database error"})
+
+    bands = {b: set() for b in _5B_BANDS}
+    for row in rows:
+        b = str(row["band"] or "").strip().upper()
+        if b not in bands:
+            continue
+        m = str(row["mode"] or "").strip().upper()
+        if mode_filter and m != mode_filter:
+            continue
+        call = str(row["callsign"] or "").strip().upper()
+        # Reuse WAS state-resolution logic
+        state = None
+        raw_state = _safe_col(row, "state").strip().upper()
+        if raw_state and raw_state in _US_STATES:
+            state = raw_state
+        elif raw_state and raw_state in _US_STATE_NAMES:
+            state = _US_STATE_NAMES[raw_state]
+        if not state:
+            state = _extract_us_state(_safe_col(row, "qth"))
+        info = dxcc_lookup(call) if call else None
+        if state:
+            if not info or info["entity"] not in ("United States", "Alaska", "Hawaii"):
+                continue
+        else:
+            if not info:
+                continue
+            if info["entity"] == "Alaska":
+                state = "AK"
+            elif info["entity"] == "Hawaii":
+                state = "HI"
+            else:
+                continue
+        bands[b].add(state)
+
+    out = {}
+    all_states = set()
+    for b in _5B_BANDS:
+        sl = sorted(bands[b])
+        all_states.update(sl)
+        out[b] = {"count": len(sl), "states": sl, "achieved": len(sl) >= 50}
+    achieved_5b = all(out[b]["achieved"] for b in _5B_BANDS)
+    return jsonify({
+        "ok": True,
+        "bands": out,
+        "band_order": _5B_BANDS,
+        "achieved": achieved_5b,
+        "union_count": len(all_states),
+    })
+
+
+@app.route("/api/awards/5bdxcc")
+def api_awards_5bdxcc():
+    """5-Band DXCC: per-band count of DXCC entities worked on 80/40/20/15/10."""
+    mode_filter = request.args.get("mode", "").strip().upper()
+    try:
+        conn = get_db()
+        rows = conn.execute("SELECT callsign, band, mode FROM qso_log").fetchall()
+        conn.close()
+    except Exception:
+        return jsonify({"ok": False, "error": "Database error"})
+
+    bands = {b: set() for b in _5B_BANDS}
+    for row in rows:
+        b = str(row["band"] or "").strip().upper()
+        if b not in bands:
+            continue
+        m = str(row["mode"] or "").strip().upper()
+        if mode_filter and m != mode_filter:
+            continue
+        call = str(row["callsign"] or "").strip().upper()
+        if not call:
+            continue
+        info = dxcc_lookup(call)
+        if not info:
+            continue
+        bands[b].add(info["entity"])
+
+    out = {}
+    union = set()
+    for b in _5B_BANDS:
+        el = sorted(bands[b])
+        union.update(el)
+        out[b] = {"count": len(el), "entities": el, "achieved": len(el) >= 100}
+    achieved_5b = all(out[b]["achieved"] for b in _5B_BANDS)
+    return jsonify({
+        "ok": True,
+        "bands": out,
+        "band_order": _5B_BANDS,
+        "achieved": achieved_5b,
+        "union_count": len(union),
+    })
+
+
+# ─── Statistics Dashboard (v1.09) ────────────────────────────────────────────
+@app.route("/stats")
+def stats_page():
+    return render_template("stats.html", version=VERSION)
+
+
+@app.route("/api/stats")
+def api_stats():
+    """Aggregate QSO statistics for the dashboard.
+    Query params:
+      source = general | pota | combined  (default: combined)
+      range  = all | year | 12mo | custom (default: all)
+      from, to = ISO dates YYYY-MM-DD when range=custom
+      mode   = optional mode filter (e.g. CW, SSB, FT8)
+    """
+    source = (request.args.get("source") or "combined").strip().lower()
+    rng    = (request.args.get("range")  or "all").strip().lower()
+    mode_f = (request.args.get("mode")   or "").strip().upper()
+    d_from = (request.args.get("from")   or "").strip()
+    d_to   = (request.args.get("to")     or "").strip()
+
+    # Resolve date window
+    today = datetime.utcnow().date()
+    start_date = end_date = None
+    if rng == "year":
+        start_date = today.replace(month=1, day=1)
+        end_date   = today
+    elif rng == "12mo":
+        end_date = today
+        # roughly 365 days back
+        start_date = today - timedelta(days=365)
+    elif rng == "custom":
+        try:
+            if d_from: start_date = datetime.strptime(d_from, "%Y-%m-%d").date()
+        except Exception: start_date = None
+        try:
+            if d_to:   end_date   = datetime.strptime(d_to,   "%Y-%m-%d").date()
+        except Exception: end_date = None
+
+    # Pick DBs
+    db_paths = []
+    if source == "general": db_paths = [DATABASE]
+    elif source == "pota":  db_paths = [POTA_DATABASE]
+    else:                   db_paths = [DATABASE, POTA_DATABASE]
+
+    rows = []
+    for p in db_paths:
+        try:
+            conn = get_db(p)
+            rs = conn.execute(
+                "SELECT date_worked, time_worked, band, mode, callsign FROM qso_log"
+            ).fetchall()
+            conn.close()
+            for r in rs:
+                rows.append(dict(r))
+        except Exception:
+            continue
+
+    # Aggregations
+    by_year   = {}   # "2024" -> count
+    by_band   = {}
+    by_mode   = {}
+    by_hour   = [0]*24
+    by_entity = {}
+    cumulative_per_day = {}  # YYYY-MM-DD -> count
+
+    total = 0
+    for r in rows:
+        d_raw = (r.get("date_worked") or "").strip()
+        if not d_raw:
+            continue
+        # date_worked is typically YYYY-MM-DD
+        try:
+            dt = datetime.strptime(d_raw[:10], "%Y-%m-%d").date()
+        except Exception:
+            continue
+        if start_date and dt < start_date: continue
+        if end_date   and dt > end_date:   continue
+
+        m = (r.get("mode") or "").strip().upper()
+        if mode_f and m != mode_f: continue
+
+        b = (r.get("band") or "").strip().upper()
+        call = (r.get("callsign") or "").strip().upper()
+        t = (r.get("time_worked") or "").strip()
+        # Hour
+        try:
+            hr = int(t[:2]) if len(t) >= 2 else None
+        except Exception:
+            hr = None
+
+        total += 1
+        y = str(dt.year)
+        by_year[y] = by_year.get(y, 0) + 1
+        if b: by_band[b] = by_band.get(b, 0) + 1
+        if m: by_mode[m] = by_mode.get(m, 0) + 1
+        if hr is not None and 0 <= hr < 24: by_hour[hr] += 1
+
+        if call:
+            info = dxcc_lookup(call)
+            if info and info.get("entity"):
+                ent = info["entity"]
+                by_entity[ent] = by_entity.get(ent, 0) + 1
+
+        ds = dt.isoformat()
+        cumulative_per_day[ds] = cumulative_per_day.get(ds, 0) + 1
+
+    # Order years ascending
+    year_keys = sorted(by_year.keys())
+    years_out = [{"year": y, "count": by_year[y]} for y in year_keys]
+
+    # Bands sorted by canonical wavelength order if known, else by count
+    band_order = ["160M","80M","60M","40M","30M","20M","17M","15M","12M","10M","6M","2M","1.25M","70CM","33CM","23CM","13CM"]
+    bands_out = []
+    for b in band_order:
+        if b in by_band: bands_out.append({"band": b, "count": by_band.pop(b)})
+    for b, c in sorted(by_band.items(), key=lambda x: -x[1]):
+        bands_out.append({"band": b, "count": c})
+
+    modes_out = [{"mode": m, "count": c} for m, c in sorted(by_mode.items(), key=lambda x: -x[1])]
+    top_entities = [{"entity": e, "count": c} for e, c in sorted(by_entity.items(), key=lambda x: -x[1])[:10]]
+
+    # Cumulative timeline (sorted by date)
+    cum_dates = sorted(cumulative_per_day.keys())
+    running = 0
+    cumulative_out = []
+    for d in cum_dates:
+        running += cumulative_per_day[d]
+        cumulative_out.append({"date": d, "total": running})
+
+    return jsonify({
+        "ok": True,
+        "source": source,
+        "range": rng,
+        "mode": mode_f,
+        "from": start_date.isoformat() if start_date else None,
+        "to":   end_date.isoformat()   if end_date   else None,
+        "total": total,
+        "years": years_out,
+        "bands": bands_out,
+        "modes": modes_out,
+        "hours": by_hour,
+        "top_entities": top_entities,
+        "cumulative": cumulative_out,
+    })
+
+
+# ─── Feeds & Alerts (v1.09): Contests + DXpeditions ──────────────────────────
+# WA7BNM Contest Calendar (iCal) + NG3K DXpedition announcements (RSS).
+# Server fetches + caches for 30 min so we don't hammer their hobby sites.
+_FEED_CACHE_TTL = 30 * 60  # seconds
+_feed_cache = {
+    "contests":     {"data": None, "fetched_at": 0, "error": None},
+    "dxpeditions":  {"data": None, "fetched_at": 0, "error": None},
+}
+_feed_cache_lock = threading.Lock()
+
+_WA7BNM_ICAL_URL = "https://www.contestcalendar.com/weeklycontcustom.php"
+_NG3K_RSS_URL    = "http://www.ng3k.com/adxo.xml"
+
+# Conservative ITU-style amateur callsign regex (with optional /suffix tokens).
+# Avoids common false positives like QSL, LoTW, IOTA, OQRS, etc. via blocklist.
+_CALL_RE = re.compile(r'\b[A-Z0-9]{1,3}\d[A-Z]{1,4}(?:/[A-Z0-9]{1,4})*\b')
+_CALL_BLOCKLIST = {
+    "QSL","LOTW","IOTA","OQRS","SOTA","WWFF","POTA","SSB","CW","FT8","FT4","RTTY",
+    "JT65","JT9","PSK","DIGI","UTC","ADIF","CQDX","CQWW","ARRL","DXCC","WAS","WAZ",
+    "WPX","HF","VHF","UHF","HAM","RIT","XIT","TX","RX","QSO","DX","PWR","ANT","NA",
+    "SA","EU","AS","AF","OC","AN","USA","UK","SP","JA","ZL","VK","HQ","ID","OK",
+    "EME","QRV","QRO","QRP","QRT","QTH","QSY","STN","STNS","OPS","OP","HRS","MIN",
+    "QSOS","UTC","GMT","LOC","LOG","NIL",
+}
+
+# Band designators (e.g. 10M, 12M, 160M, 70CM, 23CM, 6M, 2M)
+_BAND_RE = re.compile(r'^\d{1,3}(M|CM|MM)$')
+# Power designators (e.g. 50W, 100W, 400W, 1KW, 5W)
+_POWER_RE = re.compile(r'^\d{1,4}(W|KW|MW)$')
+# Maidenhead grid squares (e.g. EN82, FN20XR, QL64XG) — 2 letters + 2 digits + optional 2 letters
+_GRID_RE = re.compile(r'^[A-R]{2}\d{2}([A-X]{2})?$')
+
+def _looks_like_call(tok):
+    if not tok or tok in _CALL_BLOCKLIST:
+        return False
+    # Need at least one digit and total length 3-12
+    if not (3 <= len(tok) <= 12):
+        return False
+    if not any(c.isdigit() for c in tok):
+        return False
+    # Reject pure-numeric tokens
+    if tok.isdigit():
+        return False
+    # Reject band / power / grid-square false positives
+    if _BAND_RE.match(tok) or _POWER_RE.match(tok) or _GRID_RE.match(tok):
+        return False
+    return True
+
+def _extract_calls(text):
+    """Return ordered, de-duped list of likely amateur callsigns from text."""
+    if not text:
+        return []
+    seen = set()
+    out = []
+    for m in _CALL_RE.findall(text.upper()):
+        if _looks_like_call(m) and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+def _parse_ical(text):
+    """Minimal VEVENT extractor — returns list of {summary, dtstart, dtend, url, description}.
+    Handles line-folding (lines starting with space/tab continue previous line)."""
+    if not text:
+        return []
+    # Unfold continuation lines
+    lines = []
+    for raw in text.splitlines():
+        if raw.startswith((" ", "\t")) and lines:
+            lines[-1] += raw[1:]
+        else:
+            lines.append(raw)
+    events = []
+    cur = None
+    for ln in lines:
+        if ln.startswith("BEGIN:VEVENT"):
+            cur = {}
+        elif ln.startswith("END:VEVENT") and cur is not None:
+            events.append(cur)
+            cur = None
+        elif cur is not None:
+            if ":" not in ln:
+                continue
+            key, _, val = ln.partition(":")
+            key = key.split(";", 1)[0].upper()
+            if key == "SUMMARY":     cur["summary"] = val.strip()
+            elif key == "DTSTART":   cur["dtstart"] = val.strip()
+            elif key == "DTEND":     cur["dtend"]   = val.strip()
+            elif key == "URL":       cur["url"]     = val.strip()
+            elif key == "DESCRIPTION": cur["description"] = val.strip()
+    return events
+
+def _ical_dt_to_iso(s):
+    """Convert iCal DTSTART/DTEND like 20260416T000000Z to ISO 8601 UTC."""
+    if not s or len(s) < 8:
+        return None
+    try:
+        if "T" in s:
+            d = datetime.strptime(s.replace("Z",""), "%Y%m%dT%H%M%S")
+        else:
+            d = datetime.strptime(s, "%Y%m%d")
+        return d.strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        return None
+
+def _fetch_contests():
+    """Fetch + parse WA7BNM iCal. Returns list of contest dicts."""
+    try:
+        r = requests.get(_WA7BNM_ICAL_URL, timeout=12,
+                         headers={"User-Agent": "SDRLogger+/1.09 (ham logger)"})
+        r.raise_for_status()
+        events = _parse_ical(r.text)
+        out = []
+        for e in events:
+            out.append({
+                "title": e.get("summary", "").strip(),
+                "start": _ical_dt_to_iso(e.get("dtstart", "")),
+                "end":   _ical_dt_to_iso(e.get("dtend", "")),
+                "url":   e.get("url", "").strip() or "https://www.contestcalendar.com/weeklycont.php",
+            })
+        # Sort by start date
+        out.sort(key=lambda x: x["start"] or "")
+        return out
+    except Exception as e:
+        raise RuntimeError(f"WA7BNM fetch failed: {e}")
+
+def _parse_rss(text):
+    """Minimal RSS 2.0 item extractor. Returns list of {title, description, link}."""
+    if not text:
+        return []
+    try:
+        import xml.etree.ElementTree as ET
+        # Strip BOM if present
+        if text.startswith("\ufeff"):
+            text = text[1:]
+        root = ET.fromstring(text)
+        items = []
+        for it in root.iter("item"):
+            d = {"title": "", "description": "", "link": ""}
+            for child in it:
+                tag = child.tag.split("}", 1)[-1].lower()
+                if tag in d and (child.text or "").strip():
+                    d[tag] = child.text.strip()
+            items.append(d)
+        return items
+    except Exception:
+        return []
+
+# Match NG3K title: "Country: Date Range -- CALL -- QSL via: ..."
+_NG3K_TITLE_RE = re.compile(r'^(.*?):\s*(.+?)\s*--\s*([A-Z0-9/]+)\s*--\s*(.*)$', re.IGNORECASE)
+
+def _fetch_dxpeditions():
+    """Fetch + parse NG3K RSS. Returns list of DXpedition dicts with extracted callsigns."""
+    try:
+        r = requests.get(_NG3K_RSS_URL, timeout=12,
+                         headers={"User-Agent": "SDRLogger+/1.09 (ham logger)"})
+        r.raise_for_status()
+        items = _parse_rss(r.text)
+        out = []
+        for it in items:
+            title = it.get("title", "")
+            desc  = it.get("description", "")
+            link  = it.get("link", "") or "http://www.ng3k.com/Misc/adxo.html"
+            country = ""
+            daterange = ""
+            primary_call = ""
+            qsl = ""
+            m = _NG3K_TITLE_RE.match(title)
+            if m:
+                country     = m.group(1).strip()
+                daterange   = m.group(2).strip()
+                primary_call = m.group(3).strip().upper()
+                qsl         = m.group(4).strip()
+                if qsl.lower().startswith("qsl via:"):
+                    qsl = qsl[8:].strip()
+            # All callsigns: primary + any others found in description
+            calls = []
+            if primary_call and _looks_like_call(primary_call):
+                calls.append(primary_call)
+            for c in _extract_calls(desc):
+                if c not in calls:
+                    calls.append(c)
+            out.append({
+                "title":     title,
+                "country":   country,
+                "daterange": daterange,
+                "qsl":       qsl,
+                "calls":     calls,
+                "description": desc,
+                "link":      link,
+            })
+        return out
+    except Exception as e:
+        raise RuntimeError(f"NG3K fetch failed: {e}")
+
+def _get_feed(kind, fetcher, force=False):
+    """Cached feed access. kind = 'contests' | 'dxpeditions'."""
+    import time as _t
+    now = _t.time()
+    with _feed_cache_lock:
+        c = _feed_cache[kind]
+        if not force and c["data"] is not None and (now - c["fetched_at"]) < _FEED_CACHE_TTL:
+            return c["data"], c["fetched_at"], None
+    # Fetch outside lock (network call)
+    try:
+        data = fetcher()
+        with _feed_cache_lock:
+            _feed_cache[kind] = {"data": data, "fetched_at": now, "error": None}
+        return data, now, None
+    except Exception as e:
+        # Return stale cache if any, with error flag
+        with _feed_cache_lock:
+            c = _feed_cache[kind]
+            c["error"] = str(e)
+            return c["data"], c["fetched_at"], str(e)
+
+
+@app.route("/feeds")
+def feeds_page():
+    return render_template("feeds.html", version=VERSION)
+
+
+@app.route("/api/feeds/contests")
+def api_feeds_contests():
+    force = request.args.get("force", "0") == "1"
+    data, fetched_at, err = _get_feed("contests", _fetch_contests, force=force)
+    return jsonify({
+        "ok": data is not None,
+        "events": data or [],
+        "fetched_at": datetime.utcfromtimestamp(fetched_at).isoformat() + "Z" if fetched_at else None,
+        "cache_age_sec": int(time.time() - fetched_at) if fetched_at else None,
+        "error": err,
+        "source": "WA7BNM Contest Calendar",
+        "source_url": "https://www.contestcalendar.com/",
+    })
+
+
+@app.route("/api/feeds/dxpeditions")
+def api_feeds_dxpeditions():
+    force = request.args.get("force", "0") == "1"
+    data, fetched_at, err = _get_feed("dxpeditions", _fetch_dxpeditions, force=force)
+    return jsonify({
+        "ok": data is not None,
+        "items": data or [],
+        "fetched_at": datetime.utcfromtimestamp(fetched_at).isoformat() + "Z" if fetched_at else None,
+        "error": err,
+        "source": "NG3K Announced DX Operations",
+        "source_url": "http://www.ng3k.com/Misc/adxo.html",
     })
 
 

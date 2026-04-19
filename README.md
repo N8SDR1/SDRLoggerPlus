@@ -4,7 +4,7 @@
   # SDR**Logger+**
   ### Ham Radio SDR Logbook — Built by Hams, for Hams
 
-  ![Version](https://img.shields.io/badge/version-1.08-00e5ff?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-1.09--rc1-00e5ff?style=flat-square)
   ![Platform](https://img.shields.io/badge/platform-Windows-39ff14?style=flat-square)
   ![License](https://img.shields.io/badge/license-MIT-00e5ff?style=flat-square)
   ![Status](https://img.shields.io/badge/status-Release-39ff14?style=flat-square)
@@ -17,17 +17,41 @@
 
 ## Overview
 
-SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineered for operators running TCI (Transceiver Control Interface®) by Expert Electronics — SDR applications such as the popular EESDR and Thetis SDR — or any HamLib-compatible radio. **Now with full satellite operating support** via the CSN Technologies S.A.T. controller, plus a complete Awards Dashboard for tracking DXCC, WAS, WAZ, and WPX. Log contacts, work DX, work satellites, decode CW, control your rotator, and upload QSOs to every major service — all from a single, stunning interface.
+SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineered for operators running TCI (Transceiver Control Interface®) by Expert Electronics — SDR applications such as the popular EESDR and Thetis SDR — or any HamLib-compatible radio. **Now with full satellite operating support** via the CSN Technologies S.A.T. controller, a complete Awards Dashboard tracking DXCC / WAS / WAZ / WPX / VUCC / 5BWAS / 5BDXCC / WAC, a live Statistics Dashboard, and a Feeds & Alerts page wired to the WA7BNM contest calendar and NG3K DXpedition announcements. Log contacts, work DX, work satellites, decode CW, control your rotator, and upload QSOs to every major service — all from a single, stunning interface.
 
 ---
 
-## 🆕 What's New in v1.08
+## 🆕 What's New in v1.09-rc2
 
-> **Map Upgrade Release** — Distance Map style picker, full SAT map projection rewrite for pixel-perfect alignment, smarter footprint sizing, plus everything from v1.07's Propagation Forecast and v1.06.1's SAT panel.
+> **Polish release** — three font-scale buttons (A · A · A+) on `/awards`, `/stats`, and `/feeds`; brighter/larger 🔥 Hot List status banner with inline ✕ Clear-All on `/feeds` AND on Settings → Display; smarter Feeds callsign extractor that now ignores band tokens (`10M`, `12M`, `70CM`), power tokens (`50W`, `100W`, `1KW`), and Maidenhead grid squares (`QL64XG`); cross-tab live sync hardening for the Hot List via `BroadcastChannel`. All v1.09-rc1 features below remain.
+
+---
+
+## 🆕 What's New in v1.09-rc1
+
+> **Backup + Awards + Stats + Live Feeds Release** — scheduled auto-backup with retention, FOUR new award trackers (VUCC, 5BWAS, 5BDXCC, WAC), brand-new Statistics Dashboard with six interactive charts, brand-new Feeds & Alerts page with live contest calendar and DXpedition announcements (click any DXpedition callsign to add it instantly to your Hot List!), gray-line day/night terminator on the map, station metadata fields driving an expanded CW macro token system, and the 60-minute idle timeout from v1.08.2-beta rolled forward.
+
+- 💾 **Scheduled Auto-Backup** — Settings → Backup & Restore. Daily / Weekly / On-Exit intervals; rolling "keep last N" retention with safe-prune (a failed write never destroys prior backups); each run bundles raw .db copies AND ADIF exports for both General and POTA databases into one timestamped folder. Schedule persists across restarts — closing and reopening within 24 h will NOT retrigger a Daily backup.
+- 🏆 **VUCC Tracker** — unique 4-character Maidenhead grids per band, 6 m through 3 cm. ARRL thresholds built in (100 / 100 / 50 / 50 / 25 / 25 / 10…). Per-band progress bars + detail pane listing every worked grid.
+- 🏆 **5BWAS Tracker** — all-50-states count on each of 80 / 40 / 20 / 15 / 10. Gold-achieved banner when every band hits 50. Includes a full State × Band matrix so every open slot is visible at a glance.
+- 🏆 **5BDXCC Tracker** — DXCC entity count per band on the same five HF bands, 100-entity threshold per band.
+- 🏆 **WAC Tracker** — Worked All Continents. Six standard continents (NA / SA / EU / AS / AF / OC) plus a separate Antarctica endorsement card. Per-continent worked-bands display with sample entity names.
+- 📊 **Statistics Dashboard** (`/stats`) — six Chart.js visualizations: QSOs/year bar, by-band donut, by-mode donut, top-10 entities horizontal bar, cumulative-over-time filled line, and a 24-cell hour-of-day activity heatmap. Source toggle (General / POTA / Combined), date-range filter (All / This Year / Last 12 Mo / Custom), and optional mode filter.
+- 📡 **Feeds & Alerts** (`/feeds`) — Two live tabs:
+  - 🏆 **Contests** — WA7BNM Contest Calendar via iCal feed. Cards show UTC + Local times, "● LIVE NOW" / "⚡ Starts within 24 h" badges, and a time-window filter (now / 48 h / weekend / 7 d / all).
+  - 🌍 **DXpeditions** — NG3K Announced DX Operations via RSS. **Click any callsign chip to add it to your 🔥 Hot List instantly** — works across multi-op DXpeditions with a "+ All" convenience button. Live-syncs to the running main logger via BroadcastChannel.
+  - 30-min in-memory cache with stale-data fallback when sources are unreachable. Status banner reads your existing Hot List enable / TTS settings.
+- 🎙 **Station Metadata + Expanded CW Macros** — five new free-text Station fields (Rig, Antenna, Power, State, County) used SOLELY as the source for CW keyer macro tokens. Token vocabulary expanded from 4 → 12: `{MYCALL} {MYNAME} {MYGRID} {MYRIG} {MYANT} {MYPWR} {MYSTATE} {MYCNTY} {CALL} {NAME} {RST} {NR}`. Power can be "100W" or "1KW" — sent verbatim. NOT stored per-QSO and NOT written to ADIF.
+- 🌓 **Gray Line Overlay** — optional day/night terminator + night-side shading on the General/POTA distance map, auto-recomputed every minute. Per-basemap styling so it reads cleanly on Voyager / Positron / Dark Matter. Off by default; toggle in Settings → Station & Rig.
+- 💨 **Weather Alerts Tab (from v1.08.2-beta)** — High Wind Alerts promoted to its own Settings tab alongside Lightning Detection. Three data sources (NWS alerts, NWS METAR, Ambient PWS), three-tier 💨 banner.
+- ⏱ **60-Minute Idle Timeout (from v1.08.2-beta)** — walk-aways, PC sleep, and Chrome background-throttling no longer kill the app; explicit browser-close still shuts down in ~10 s via sendBeacon.
+- 📡 **ARCO Rotator Interface (from v1.08.1-beta)** — rolled forward.
+
+### v1.08 features (rolled forward)
 
 - 🗺 **Distance Map Style Picker** — Settings → Station & Rig → choose between **Voyager** (bright color borders, default), **Positron** (very light minimalist), or **Dark Matter** (dark theme with brightness boost) for the General/POTA distance map. Hot-swaps in place — no reload, no impact on distance/bearing/marker math.
-- 🛰 **SAT Map Accuracy Pass** — switched to standard Web Mercator + CartoDB Dark Matter tiles for pixel-perfect station-marker alignment (no more ND drift for Ohio stations), footprint now prefers the controller's own value (matches your S.A.T. controller's MAP panel exactly) with 5°-elevation geodesic-polygon fallback, satellite-name label refreshes when the tracked bird changes (no stale "AO-07" sticking around when you switch to CATSAT), station marker always honors your typed grid square (S.A.T. GPS used only as last-resort fallback), and marker tooltip now shows source + computed lat/lon for at-a-glance verification.
-- 🛰 **RBN Band Filter Fix** — band-opening alerts now respect live Settings checkboxes immediately on save (no more stale-socket spots from a band you just unchecked). WebSocket handlers detached before close to kill the async-close race.
+- 🛰 **SAT Map Accuracy Pass** — switched to standard Web Mercator + CartoDB Dark Matter tiles for pixel-perfect station-marker alignment, footprint prefers the controller's own value with 5°-elevation geodesic-polygon fallback, satellite-name label refreshes when the tracked bird changes, station marker always honors your typed grid square, and marker tooltip shows source + computed lat/lon for at-a-glance verification.
+- 🛰 **RBN Band Filter Fix** — band-opening alerts respect live Settings checkboxes immediately on save.
 
 ### v1.07 features (rolled forward)
 
@@ -199,6 +223,6 @@ With development assistance by **Claude AI** (Anthropic)
 ---
 
 <div align="center">
-  <sub>SDRLogger+ v1.08 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
+  <sub>SDRLogger+ v1.09-rc2 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
   <sub>73 de N8SDR — good DX and happy logging!</sub>
 </div>

@@ -16,7 +16,7 @@
 ; ============================================================
 
 #define AppName      "SDRLogger+"
-#define AppVersion   "1.08"
+#define AppVersion   "1.09-rc2"
 #define AppPublisher "Rick N8SDR"
 #define AppURL       "https://www.qrz.com/db/N8SDR"
 #define AppExeName   "SDRLoggerPlus.exe"
@@ -61,7 +61,6 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Wizard appearance
 WizardStyle=modern
-WizardResizable=yes
 DisableWelcomePage=no
 DisableDirPage=no
 DisableProgramGroupPage=no
