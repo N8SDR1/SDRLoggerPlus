@@ -21,6 +21,12 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ---
 
+## 🆕 What's New in v1.11
+
+> **Quality-of-life pass.** A new ☕ donate button now sits to the right of the ⚙ gear in the header (warm amber, low-key 0.55 opacity, full opacity on hover; opens the project PayPal page in a new tab). On the **7th launch only**, a friendly centered DonateNudge dialog appears asking whether SDRLogger+ has been useful enough to deserve a coffee — every dismissal path (Maybe later, Buy me a coffee, Esc, X, backdrop click) marks the flag and the dialog never returns. The Rotator Control panel finally stops bouncing every ~15 s: tester debug logs proved the ARCO link was rock-solid, so we eliminated the actual culprit (position-string width changes + fault-dot toggling between `display:none`/`''` causing flex reflows). Position now displays AZ-only (the `/ NN°` elevation suffix is gone), the fault dot uses `visibility:hidden` so it always reserves space, and `.rb-val` got a `min-width: 5.5ch` so the position string can no longer push siblings around as it changes length. v1.10's SAT-map footprint formula carries forward unchanged.
+
+---
+
 ## 🆕 What's New in v1.10
 
 > **SAT map footprint accuracy fix** — the yellow coverage circle on the Satellite map was rendering ~2× too large across every bird because we were treating the CSN S.A.T. controller's `satFootprint` value as a radius when it's actually the DIAMETER (inheriting the predict/Gpredict convention). Rewrote the sizing math to compute the radius directly from satellite altitude using the 0° geometric-horizon formula `r = R · acos(R / (R + h))`, so our circle now matches the S.A.T. controller's own MAP panel. Validated against live SO-50 telemetry: alt 605.9 km → 2,679 km radius, matching CSN's reported diameter 5,352.8 km to 0.1%. All v1.09-rc2 / rc1 features below roll forward unchanged.
@@ -229,6 +235,6 @@ With development assistance by **Claude AI** (Anthropic)
 ---
 
 <div align="center">
-  <sub>SDRLogger+ v1.10 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
+  <sub>SDRLogger+ v1.11 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
   <sub>73 de N8SDR — good DX and happy logging!</sub>
 </div>

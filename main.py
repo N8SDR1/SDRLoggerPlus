@@ -254,7 +254,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.10"
+VERSION  = "1.11"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -3974,6 +3974,21 @@ def api_keepalive():
     with _keepalive_lock:
         _last_keepalive = _time.monotonic()
     return "", 204
+
+
+@app.route("/api/donate_nudge", methods=["GET", "POST"])
+def api_donate_nudge():
+    """v1.11 — DonateNudgeDialog state.
+    GET  → {launchCount, donateNudgeShown}
+    POST → marks donateNudgeShown = True (called when user dismisses modal)."""
+    if request.method == "POST":
+        runtime_settings["donateNudgeShown"] = True
+        _save_app_settings()
+        return jsonify({"ok": True})
+    return jsonify({
+        "launchCount": int(runtime_settings.get("launchCount", 0) or 0),
+        "donateNudgeShown": bool(runtime_settings.get("donateNudgeShown", False)),
+    })
 
 
 @app.route("/api/explicit_close", methods=["POST"])
@@ -7782,6 +7797,14 @@ if __name__ == "__main__":
     _load_cty_dat()
     _rebuild_worked_cache()
     _load_app_settings()
+    # v1.11 — increment launch counter (drives 7th-launch DonateNudgeDialog)
+    try:
+        runtime_settings["launchCount"] = int(runtime_settings.get("launchCount", 0) or 0) + 1
+        if "donateNudgeShown" not in runtime_settings:
+            runtime_settings["donateNudgeShown"] = False
+        _save_app_settings()
+    except Exception as _e:
+        print(f"Launch counter error: {_e}")
     _load_cw_serial()
     # Start TCI WebSocket client in background thread
     tci_thread = threading.Thread(target=tci_ws_client, daemon=True)

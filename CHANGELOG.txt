@@ -1,6 +1,65 @@
 SDRLogger+ — Change Log
 =======================
 
+v1.11  (2026-04-21)
+------------------------------------------
+Quality-of-life pass — header donate button, friendly one-time
+DonateNudge dialog on the 7th launch, and a pair of polish fixes
+to the Rotator Control panel (ARCO + PstRotator).
+
+  ── ☕ HEADER DONATE BUTTON ───────────────────────────────────────
+    A new ☕ icon now sits to the right of the ⚙ gear in the header
+    row. Warm amber, low-key 0.55 opacity at rest and full opacity
+    on hover. One click opens the project PayPal page in a new tab
+    (target="_blank" rel="noopener"). Same destination as the donate
+    button at the bottom of the in-app help guide. Tooltip:
+    "Support this project — 73 de N8SDR".
+
+  ── 🌟 7TH-LAUNCH DONATE NUDGE ────────────────────────────────────
+    Two new keys are persisted in app_settings.json:
+        launchCount        (int,  incremented once per main.py boot)
+        donateNudgeShown   (bool, flips to true on first dismissal)
+    On the 7th launch — and only that one launch — a centered modal
+    appears on page load:
+
+        ☕ Enjoying SDRLogger+?
+        You've launched it a few times now — clearly something's
+        working for you. SDRLogger+ is free and always will be, but
+        if it's saved you time logging or made satellite work easier,
+        a small coffee would help keep development going.
+        73 de N8SDR
+        [ Maybe later ]    [ ☕ Buy me a coffee ]
+
+    Every dismissal path (Maybe later, Buy me a coffee, Esc, X,
+    backdrop click) sets donateNudgeShown=true so the dialog never
+    returns. New endpoint POST /api/donate_nudge persists the flag.
+
+  ── 🧭 ROTATOR PANEL — EL DROPPED + BOUNCE ELIMINATED ─────────────
+    Tester reports of a ~15 s "bounce" in the Rotator Control panel
+    (cosmetic only — ARCO tracking worked perfectly throughout) led
+    us to a 1559-line ARCO TCP debug capture that showed *zero*
+    timeouts, disconnects, or fault transitions. So the bounce
+    wasn't a network/socket issue — it was the position display
+    string changing width on the page (—°, 245°, ↻ 245°,
+    ↻ 245° / 30°), and the fault dot toggling in/out of the flex
+    row. Both caused the panel to reflow every poll cycle.
+
+    Fixes:
+      • EL display dropped — Position now shows AZ-only (e.g.
+        "↻ 245°") for both PstRotator and ARCO. Backend still emits
+        elevation for diagnostics; SAT-mode AZ/EL handling is
+        untouched.
+      • Fault dot now uses visibility:hidden instead of display:none,
+        so it always reserves space and never causes a reflow when
+        toggling.
+      • .rb-val gets min-width: 5.5ch so the position string can no
+        longer push siblings around as it changes length.
+
+  ── No new dependencies. v1.10 SAT-map footprint formula carried
+     forward unchanged. Option 3 (EPSG:4326 marker-alignment)
+     remains deferred for a later release.
+
+
 v1.10  (2026-04-19)
 ------------------------------------------
 SAT-map footprint accuracy fix on top of v1.09-rc2. Rolls forward
