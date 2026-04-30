@@ -1773,6 +1773,10 @@
           <input type="checkbox" id="cfg-lightning-ambient" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
           Ambient Weather <span style="font-size:9px;color:#8fafc0;">— personal weather station with lightning sensor (requires both API keys below)</span>
         </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="checkbox" id="cfg-lightning-ecowitt" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          Ecowitt <span style="font-size:9px;color:#8fafc0;">— v1.12 — Ecowitt PWS with lightning sensor (requires App Key + API Key + MAC below)</span>
+        </label>
       </div>
       <div style="margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
         <div style="font-family:var(--mono);font-size:10px;color:var(--accent);margin-bottom:8px;letter-spacing:1px;">AMBIENT WEATHER API KEYS <span style="color:#8fafc0;letter-spacing:0;">— from <a href="https://ambientweather.net/account/keys" target="_blank" style="color:var(--accent);">ambientweather.net/account/keys</a></span></div>
@@ -1787,6 +1791,29 @@
           <div class="settings-field">
             <label>Application Key</label>
             <input type="password" id="cfg-lightning-ambient-app-key" placeholder="Your Ambient Weather App Key" autocomplete="off">
+          </div>
+        </div>
+      </div>
+      <!-- v1.12 — Ecowitt credentials (shared by lightning + wind) -->
+      <div style="margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--accent);margin-bottom:8px;letter-spacing:1px;">ECOWITT API CREDENTIALS <span style="color:#8fafc0;letter-spacing:0;">— from <a href="https://www.ecowitt.net/" target="_blank" style="color:var(--accent);">ecowitt.net</a> account → API Setting (the gateway MAC is on the same page or in the WS View Plus app under Devices)</span></div>
+        <div style="font-family:var(--mono);font-size:9px;color:#8fafc0;margin-bottom:8px;line-height:1.5;">
+          Three values are required: <b style="color:var(--text);">Application Key</b>, <b style="color:var(--text);">API Key</b>, and your gateway's <b style="color:var(--text);">MAC address</b> (e.g. <code>34:94:54:AB:CD:EF</code>). Same credentials power both Lightning and the Wind source below.
+        </div>
+        <div class="settings-row">
+          <div class="settings-field">
+            <label>Application Key</label>
+            <input type="password" id="cfg-ecowitt-app-key" placeholder="Your Ecowitt Application Key" autocomplete="off">
+          </div>
+          <div class="settings-field">
+            <label>API Key</label>
+            <input type="password" id="cfg-ecowitt-api-key" placeholder="Your Ecowitt API Key" autocomplete="off">
+          </div>
+        </div>
+        <div class="settings-row" style="margin-top:6px;">
+          <div class="settings-field" style="flex:2;">
+            <label>Gateway MAC Address</label>
+            <input type="text" id="cfg-ecowitt-mac" placeholder="34:94:54:AB:CD:EF" autocomplete="off" spellcheck="false" style="text-transform:uppercase;font-family:var(--mono);">
           </div>
         </div>
       </div>
@@ -1819,6 +1846,10 @@
           <input type="checkbox" id="cfg-wind-ambient" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
           Ambient Weather PWS <span style="font-size:9px;color:#8fafc0;">— sustained / gust / direction — uses same API+App keys as lightning</span>
         </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--text);">
+          <input type="checkbox" id="cfg-wind-ecowitt" style="width:auto;accent-color:var(--accent2);cursor:pointer;">
+          Ecowitt PWS <span style="font-size:9px;color:#8fafc0;">— v1.12 — sustained / gust / direction — uses same Ecowitt credentials as lightning</span>
+        </label>
       </div>
       <div class="settings-row" style="margin-top:10px;">
         <div class="settings-field" style="flex:2;">
@@ -1835,19 +1866,26 @@
       </div>
       <div class="settings-row" style="margin-top:6px;">
         <div class="settings-field">
-          <label>Sustained Threshold (mph)</label>
-          <input type="number" id="cfg-wind-thresh-sust" placeholder="30" min="5" max="100" style="width:100px;">
+          <label>Display Unit</label>
+          <select id="cfg-wind-unit" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 10px;outline:none;width:120px;">
+            <option value="mph">mph</option>
+            <option value="kph">kph (km/h)</option>
+          </select>
         </div>
         <div class="settings-field">
-          <label>Gust Threshold (mph)</label>
-          <input type="number" id="cfg-wind-thresh-gust" placeholder="45" min="5" max="150" style="width:100px;">
+          <label><span id="cfg-wind-sust-label">Sustained Threshold (mph)</span></label>
+          <input type="number" id="cfg-wind-thresh-sust" placeholder="30" min="5" max="200" style="width:100px;">
+        </div>
+        <div class="settings-field">
+          <label><span id="cfg-wind-gust-label">Gust Threshold (mph)</span></label>
+          <input type="number" id="cfg-wind-thresh-gust" placeholder="45" min="5" max="250" style="width:100px;">
         </div>
         <div class="settings-field">
           <label>Cooldown (min)</label>
           <input type="number" id="cfg-wind-cooldown" placeholder="20" min="1" max="120" style="width:100px;">
         </div>
       </div>
-      <div style="font-family:var(--mono);font-size:12px;color:#eaf4ff;margin-top:6px;line-height:1.55;">
+      <div style="font-family:var(--mono);font-size:12px;color:#eaf4ff;margin-top:6px;line-height:1.55;" id="cfg-wind-tier-help">
         Banner tiers: <span style="color:#ffd700;">elevated (yellow)</span> ~10 mph below threshold · <span style="color:#ff8c00;">high (orange)</span> at/above threshold · <span style="color:#ff4444;">extreme (red, bouncing)</span> on NWS High Wind / Extreme Wind Warning or 15+ mph above threshold.
       </div>
     </div>
@@ -4102,16 +4140,37 @@ async function openSettings() {
   document.getElementById('cfg-lightning-ambient').checked      = s.lightning_ambient === true;
   document.getElementById('cfg-lightning-ambient-api-key').value = s.lightning_ambient_api_key || '';
   document.getElementById('cfg-lightning-ambient-app-key').value = s.lightning_ambient_app_key || '';
-  // Wind alerts (v1.08.2-beta)
+  // v1.12 — Ecowitt
+  if (document.getElementById('cfg-lightning-ecowitt')) {
+    document.getElementById('cfg-lightning-ecowitt').checked     = s.lightning_ecowitt === true;
+    document.getElementById('cfg-ecowitt-app-key').value          = s.ecowitt_app_key || '';
+    document.getElementById('cfg-ecowitt-api-key').value          = s.ecowitt_api_key || '';
+    document.getElementById('cfg-ecowitt-mac').value              = s.ecowitt_mac     || '';
+  }
+  // Wind alerts (v1.08.2-beta + v1.12 unit toggle)
   if (document.getElementById('cfg-wind-enabled')) {
     document.getElementById('cfg-wind-enabled').checked        = s.wind_enabled === true;
     document.getElementById('cfg-wind-nws-alerts').checked     = s.wind_nws_alerts === true;
     document.getElementById('cfg-wind-nws-metar').checked      = s.wind_nws_metar === true;
     document.getElementById('cfg-wind-ambient').checked        = s.wind_ambient === true;
+    if (document.getElementById('cfg-wind-ecowitt'))
+      document.getElementById('cfg-wind-ecowitt').checked      = s.wind_ecowitt === true;
     document.getElementById('cfg-wind-metar-station').value    = s.wind_metar_station || '';
-    document.getElementById('cfg-wind-thresh-sust').value      = s.wind_thresh_sust || '30';
-    document.getElementById('cfg-wind-thresh-gust').value      = s.wind_thresh_gust || '45';
     document.getElementById('cfg-wind-cooldown').value         = s.wind_cooldown_min || '20';
+    // v1.12 — unit + threshold display conversion. Backend stores mph.
+    const _windUnit = (s.wind_unit === 'kph') ? 'kph' : 'mph';
+    if (document.getElementById('cfg-wind-unit'))
+      document.getElementById('cfg-wind-unit').value = _windUnit;
+    const _sustMph = parseFloat(s.wind_thresh_sust || 30);
+    const _gustMph = parseFloat(s.wind_thresh_gust || 45);
+    if (_windUnit === 'kph') {
+      document.getElementById('cfg-wind-thresh-sust').value = Math.round(_sustMph * 1.60934);
+      document.getElementById('cfg-wind-thresh-gust').value = Math.round(_gustMph * 1.60934);
+    } else {
+      document.getElementById('cfg-wind-thresh-sust').value = Math.round(_sustMph);
+      document.getElementById('cfg-wind-thresh-gust').value = Math.round(_gustMph);
+    }
+    _windRefreshLabels();
   }
   document.getElementById('cfg-flrig-enabled').checked  = s.flrig_enabled === true;
   document.getElementById('cfg-flrig-host').value         = s.flrig_host || '127.0.0.1';
@@ -4288,14 +4347,33 @@ async function saveSettings() {
     lightning_ambient:         document.getElementById('cfg-lightning-ambient').checked,
     lightning_ambient_api_key: document.getElementById('cfg-lightning-ambient-api-key').value.trim(),
     lightning_ambient_app_key: document.getElementById('cfg-lightning-ambient-app-key').value.trim(),
-    // Wind alerts (v1.08.2-beta)
+    // v1.12 — Ecowitt
+    lightning_ecowitt: document.getElementById('cfg-lightning-ecowitt') ? document.getElementById('cfg-lightning-ecowitt').checked : false,
+    ecowitt_app_key:   document.getElementById('cfg-ecowitt-app-key')   ? document.getElementById('cfg-ecowitt-app-key').value.trim()   : '',
+    ecowitt_api_key:   document.getElementById('cfg-ecowitt-api-key')   ? document.getElementById('cfg-ecowitt-api-key').value.trim()   : '',
+    ecowitt_mac:       document.getElementById('cfg-ecowitt-mac')       ? document.getElementById('cfg-ecowitt-mac').value.trim().toUpperCase() : '',
+    // Wind alerts (v1.08.2-beta + v1.12 unit toggle)
     wind_enabled:       document.getElementById('cfg-wind-enabled')       ? document.getElementById('cfg-wind-enabled').checked       : false,
     wind_nws_alerts:    document.getElementById('cfg-wind-nws-alerts')    ? document.getElementById('cfg-wind-nws-alerts').checked    : false,
     wind_nws_metar:     document.getElementById('cfg-wind-nws-metar')     ? document.getElementById('cfg-wind-nws-metar').checked     : false,
     wind_ambient:       document.getElementById('cfg-wind-ambient')       ? document.getElementById('cfg-wind-ambient').checked       : false,
+    wind_ecowitt:       document.getElementById('cfg-wind-ecowitt')       ? document.getElementById('cfg-wind-ecowitt').checked       : false,
     wind_metar_station: document.getElementById('cfg-wind-metar-station') ? document.getElementById('cfg-wind-metar-station').value.trim().toUpperCase() : '',
-    wind_thresh_sust:   parseInt(document.getElementById('cfg-wind-thresh-sust') ? document.getElementById('cfg-wind-thresh-sust').value : '30') || 30,
-    wind_thresh_gust:   parseInt(document.getElementById('cfg-wind-thresh-gust') ? document.getElementById('cfg-wind-thresh-gust').value : '45') || 45,
+    wind_unit:          (document.getElementById('cfg-wind-unit') && document.getElementById('cfg-wind-unit').value === 'kph') ? 'kph' : 'mph',
+    // Threshold values are sent in MPH regardless of UI unit. If user is
+    // in kph mode, convert their kph entry back to mph before persisting
+    // so all internal compares (severity, NWS, METAR, Ambient, Ecowitt)
+    // keep working in their native unit.
+    wind_thresh_sust:   (function(){
+      const u = (document.getElementById('cfg-wind-unit') && document.getElementById('cfg-wind-unit').value) || 'mph';
+      const v = parseFloat((document.getElementById('cfg-wind-thresh-sust')||{}).value || '30') || 30;
+      return Math.round(u === 'kph' ? v / 1.60934 : v);
+    })(),
+    wind_thresh_gust:   (function(){
+      const u = (document.getElementById('cfg-wind-unit') && document.getElementById('cfg-wind-unit').value) || 'mph';
+      const v = parseFloat((document.getElementById('cfg-wind-thresh-gust')||{}).value || '45') || 45;
+      return Math.round(u === 'kph' ? v / 1.60934 : v);
+    })(),
     wind_cooldown_min:  parseInt(document.getElementById('cfg-wind-cooldown')    ? document.getElementById('cfg-wind-cooldown').value : '20') || 20,
     flrig_enabled:    document.getElementById('cfg-flrig-enabled').checked,
     flrig_host:         document.getElementById('cfg-flrig-host').value.trim() || '127.0.0.1',
@@ -7171,24 +7249,32 @@ async function pollWindStatus() {
     if (ws.severity === 'extreme') cls = 'wind-extreme';
     banner.className = cls;
 
+    // v1.12 — pick mph or kph based on user's saved unit preference. The
+    // backend always populates BOTH unit families on _wind_status so we just
+    // alias the right pair here and the rest of the rendering code is unit-
+    // agnostic.
+    const _wu   = (ws.unit === 'kph') ? 'kph' : 'mph';
+    const _sust = _wu === 'kph' ? ws.sustained_kph : ws.sustained_mph;
+    const _gust = _wu === 'kph' ? ws.gust_kph      : ws.gust_mph;
+
     // Compose text — compact when both banners will be showing
     const lightningActive = document.getElementById('lightning-banner').style.display !== 'none';
     const parts = [];
-    if (ws.gust_mph !== null && ws.gust_mph !== undefined)       parts.push(`G${Math.round(ws.gust_mph)}`);
-    if (ws.sustained_mph !== null && ws.sustained_mph !== undefined) parts.push(`${Math.round(ws.sustained_mph)}mph`);
-    if (ws.direction)                                             parts.push(ws.direction);
+    if (_gust !== null && _gust !== undefined) parts.push(`G${Math.round(_gust)}`);
+    if (_sust !== null && _sust !== undefined) parts.push(`${Math.round(_sust)}${_wu}`);
+    if (ws.direction)                          parts.push(ws.direction);
     let txt = parts.join(' ') || (ws.nws_alert ? 'NWS Alert' : 'Wind');
     if (lightningActive && txt.length > 14) {
       // compact mode — just show the worst number
-      txt = ws.gust_mph ? `G${Math.round(ws.gust_mph)}` :
-            ws.sustained_mph ? `${Math.round(ws.sustained_mph)}mph` : 'Wind';
+      txt = (_gust !== null && _gust !== undefined) ? `G${Math.round(_gust)}` :
+            (_sust !== null && _sust !== undefined) ? `${Math.round(_sust)}${_wu}` : 'Wind';
     }
     document.getElementById('wind-text').textContent = txt;
 
     // Tooltip: full story (sources, NWS alert headline, timestamp)
     let tip = ws.nws_alert || 'High wind conditions detected at your QTH';
-    if (ws.sustained_mph !== null && ws.sustained_mph !== undefined) tip += `\nSustained: ${ws.sustained_mph} mph`;
-    if (ws.gust_mph !== null && ws.gust_mph !== undefined)           tip += `\nGust: ${ws.gust_mph} mph`;
+    if (_sust !== null && _sust !== undefined) tip += `\nSustained: ${_sust} ${_wu}`;
+    if (_gust !== null && _gust !== undefined) tip += `\nGust: ${_gust} ${_wu}`;
     if (ws.direction)                                                 tip += `\nDirection: ${ws.direction}`;
     if (ws.sources && ws.sources.length)                              tip += `\nSources: ${ws.sources.join(', ')}`;
     if (ws.last_update)                                               tip += `\nUpdated ${ws.last_update} UTC`;
@@ -7355,6 +7441,53 @@ function initRowResize(handle, topPanel) {
 }
 
 window.addEventListener('DOMContentLoaded', insertRowHandles);
+
+// ═══ v1.12 — Wind unit (mph/kph) live label + threshold conversion ══════════
+// Updates the threshold labels and tier-help text whenever the unit changes,
+// and converts the threshold input numbers in place so the user sees their
+// current settings in the new unit without reopening Settings.
+function _windRefreshLabels() {
+  const sel = document.getElementById('cfg-wind-unit');
+  if (!sel) return;
+  const u = sel.value === 'kph' ? 'kph' : 'mph';
+  const sustLbl = document.getElementById('cfg-wind-sust-label');
+  const gustLbl = document.getElementById('cfg-wind-gust-label');
+  const help    = document.getElementById('cfg-wind-tier-help');
+  if (sustLbl) sustLbl.textContent = `Sustained Threshold (${u})`;
+  if (gustLbl) gustLbl.textContent = `Gust Threshold (${u})`;
+  if (help) {
+    help.innerHTML = `Banner tiers: <span style="color:#ffd700;">elevated (yellow)</span> ~10 ${u} below threshold · <span style="color:#ff8c00;">high (orange)</span> at/above threshold · <span style="color:#ff4444;">extreme (red, bouncing)</span> on NWS High Wind / Extreme Wind Warning or 15+ ${u} above threshold.`;
+  }
+}
+function _windUnitChanged() {
+  const sel = document.getElementById('cfg-wind-unit');
+  if (!sel) return;
+  const newU = sel.value === 'kph' ? 'kph' : 'mph';
+  // Read current numeric thresholds in the OLD unit (we stash it on the
+  // <select> via a data-prev attribute) and rescale.
+  const oldU = sel.dataset.prev || 'mph';
+  if (oldU !== newU) {
+    const sustEl = document.getElementById('cfg-wind-thresh-sust');
+    const gustEl = document.getElementById('cfg-wind-thresh-gust');
+    if (sustEl && sustEl.value) {
+      const v = parseFloat(sustEl.value) || 0;
+      sustEl.value = Math.round(newU === 'kph' ? v * 1.60934 : v / 1.60934);
+    }
+    if (gustEl && gustEl.value) {
+      const v = parseFloat(gustEl.value) || 0;
+      gustEl.value = Math.round(newU === 'kph' ? v * 1.60934 : v / 1.60934);
+    }
+  }
+  sel.dataset.prev = newU;
+  _windRefreshLabels();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('cfg-wind-unit');
+  if (sel) {
+    sel.dataset.prev = sel.value || 'mph';
+    sel.addEventListener('change', _windUnitChanged);
+  }
+});
 
 // ═══ v1.11 — 7th-launch DonateNudgeDialog ═══════════════════════════════════
 // Server tracks launchCount + donateNudgeShown in app_settings.json. On the

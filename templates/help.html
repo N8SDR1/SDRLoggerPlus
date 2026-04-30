@@ -848,11 +848,12 @@
   <div class="section-card">
     <h3>Overview</h3>
     <p>SDRLogger+ can alert you when lightning is detected near your QTH. A flashing <strong>⚡</strong> bolt appears in the banner bar with distance and direction. Useful for HF band noise awareness and as a reminder to disconnect antennas during storms.</p>
-    <h3>Three Data Sources</h3>
+    <h3>Four Data Sources</h3>
     <ul>
       <li><strong>Blitzortung.org</strong> — community-driven, real-time global lightning detection network. Free, no API key required. Provides individual strike locations with distance and compass direction from your QTH.</li>
       <li><strong>NOAA / NWS</strong> — U.S. National Weather Service severe thunderstorm warnings for your area. Free, no API key. US coverage only. <strong>Note:</strong> NOAA provides alert-only notifications (Watch / Warning) — no distance or direction information is available from this source.</li>
       <li><strong>Ambient Weather</strong> — if you have a compatible personal weather station with a lightning sensor (e.g. WS-2000, WS-5000), SDRLogger+ can pull lightning data directly from your station via the Ambient Weather REST API. Hyper-local accuracy (~40 km / 25 mi range). <strong>Requires two separate keys</strong> — see setup below.</li>
+      <li><strong>Ecowitt</strong> <em>(v1.12)</em> — Ecowitt is the OEM behind Ambient Weather and uses the same outdoor sensor families. If your station is registered with the Ecowitt cloud, SDRLogger+ can pull live lightning data via the v3 cloud API. <strong>Requires three credentials</strong> (Application Key + API Key + Gateway MAC) which also power the Ecowitt source on the High Wind Alerts panel — one set of keys, both subsystems. See setup below.</li>
     </ul>
     <h3>Banner Colours</h3>
     <ul>
@@ -877,6 +878,15 @@
       <li><strong>Application Key</strong> — a separate developer key. On the same keys page, look for <em>"Developers: Click here to create one"</em> and provide a short app description (e.g. "SDRLogger+"). This is a different key from your API Key.</li>
     </ol>
     <p>Both keys must be entered in the settings for Ambient Weather data to work.</p>
+    <h3>Ecowitt API Credentials <em>(v1.12)</em></h3>
+    <p>Ecowitt requires <strong>three values</strong>, all from your Ecowitt cloud account at <code>ecowitt.net</code>:</p>
+    <ol>
+      <li><strong>Application Key</strong> — created on the API Setting page of your Ecowitt account.</li>
+      <li><strong>API Key</strong> — created on the same API Setting page (separate from the Application Key).</li>
+      <li><strong>Gateway MAC address</strong> — the MAC of your gateway (e.g. GW1100, GW2000, WS90). Found on the same API Setting page or in the WS View Plus mobile app under Devices. Format: <code>34:94:54:AB:CD:EF</code> (case-insensitive).</li>
+    </ol>
+    <p>The same three credentials feed both the Ecowitt lightning source AND the Ecowitt source on the High Wind Alerts panel — enter them once.</p>
+    <div class="tip">SDRLogger+ caches the Ecowitt response for 30 seconds, so enabling both lightning + wind from Ecowitt makes only one cloud call per 60-second poll cycle. Stays well under Ecowitt's 1-call/min/MAC free-tier rate limit.</div>
     <div class="tip">Your <strong>Grid Square</strong> (set in Station settings) is used to calculate distances. Make sure it is set correctly for accurate lightning alerts.</div>
     <div class="warn"><strong>Disclaimer:</strong> Lightning detection in SDRLogger+ is a <strong>convenience feature only</strong> and must not be relied upon for personal safety. Data from third-party sources may be delayed, incomplete, or unavailable. The absence of an alert does not mean conditions are safe. Always monitor official weather services independently.</div>
   </div>
@@ -885,12 +895,15 @@
   <div class="section-card">
     <h3>Overview</h3>
     <p>SDRLogger+ can warn you when sustained winds or gusts reach levels that put towers, yagis, and wire antennas at risk. A <strong>💨</strong> banner appears at the top of the page showing the current wind speed, gust, and source. Useful for deciding when to crank down a crank-up, rotate a beam into the wind, or pull up a wire antenna before the storm arrives. Added in v1.08.2-beta; promoted to a dedicated Settings tab in v1.09.</p>
-    <h3>Three Data Sources</h3>
+    <h3>Four Data Sources</h3>
     <ul>
       <li><strong>NWS Active Alerts</strong> — polls the U.S. National Weather Service alert feed for <em>High Wind Warning</em>, <em>High Wind Advisory</em>, <em>High Wind Watch</em>, and <em>Extreme Wind Warning</em> products in your county/zone. Free, no API key, US only.</li>
-      <li><strong>NWS METAR</strong> — pulls the latest hourly observation from the closest ICAO airport station you select. Provides real measured sustained speed and gust in knots (converted to mph). Works globally wherever an ICAO METAR feed exists.</li>
+      <li><strong>NWS METAR</strong> — pulls the latest hourly observation from the closest ICAO airport station you select. Provides real measured sustained speed and gust in knots (converted internally to mph). Works globally wherever an ICAO METAR feed exists.</li>
       <li><strong>Ambient Weather PWS</strong> — if you already have Ambient Weather API keys configured for Lightning Detection, SDRLogger+ reuses them to pull live <code>windspeedmph</code> and <code>windgustmph</code> from your own personal weather station. Hyper-local, updates as fast as your station reports.</li>
+      <li><strong>Ecowitt PWS</strong> <em>(v1.12)</em> — if you have Ecowitt cloud credentials configured for Lightning Detection, SDRLogger+ reuses the same Application Key + API Key + Gateway MAC to pull live wind speed, gust, and direction from your Ecowitt station. One set of keys, both subsystems.</li>
     </ul>
+    <h3>Display Unit <em>(v1.12)</em></h3>
+    <p>The Display Unit dropdown next to the threshold inputs lets you choose between <strong>mph</strong> and <strong>kph (km/h)</strong>. Internal severity math always runs in mph (so the existing thresholds and saved configs keep working), but switching the dropdown live-rescales the threshold values you see, re-labels the input fields, updates the tier-help text, and changes the 💨 banner readout and tooltip to your chosen unit. Defaults to mph for backward compatibility.</p>
     <h3>Banner Tiers</h3>
     <ul>
       <li><span style="color:#ffd700;font-weight:700;">Yellow — Elevated</span> — winds approaching your threshold (within ~10 mph below it). Heads-up only.</li>
