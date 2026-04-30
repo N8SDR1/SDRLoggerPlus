@@ -21,6 +21,12 @@ SDRLogger+ is a next-generation, browser-based Ham Radio contact logger engineer
 
 ---
 
+## 🆕 What's New in v1.12
+
+> **Ecowitt support + wind unit toggle.** Weather Alerts gains a second personal-weather-station vendor: **Ecowitt** is now a selectable source under both Lightning Detection AND High Wind Alerts, alongside the existing Ambient Weather option. One set of three credentials (Application Key + API Key + Gateway MAC) drives both subsystems via a shared 30-second cache. Built specifically for users who run SDRLogger+ alongside the Ecowitt-aware wx-dashboard desktop app and want the same feed in both. Also fixed a long-standing gap: **High Wind Alerts is no longer mph-only.** A new Display Unit dropdown (mph / kph) sits next to the threshold inputs in Settings → Weather Alerts → High Wind Alerts. Switching it live-rescales the threshold numbers and re-labels the input fields, the tier-help line, and the 💨 banner text + tooltip — so a non-imperial operator finally sees `G72kph 48kph WSW` instead of `G45 30mph WSW`. Internal severity math still runs in mph (so existing thresholds and saved configs keep working), and the backend now publishes both unit families on `/api/wind_status` so the frontend renders without a second fetch. v1.11's ☕ donate button, 7th-launch DonateNudge, and rotator panel polish carry forward unchanged.
+
+---
+
 ## 🆕 What's New in v1.11
 
 > **Quality-of-life pass.** A new ☕ donate button now sits to the right of the ⚙ gear in the header (warm amber, low-key 0.55 opacity, full opacity on hover; opens the project PayPal page in a new tab). On the **7th launch only**, a friendly centered DonateNudge dialog appears asking whether SDRLogger+ has been useful enough to deserve a coffee — every dismissal path (Maybe later, Buy me a coffee, Esc, X, backdrop click) marks the flag and the dialog never returns. The Rotator Control panel finally stops bouncing every ~15 s: tester debug logs proved the ARCO link was rock-solid, so we eliminated the actual culprit (position-string width changes + fault-dot toggling between `display:none`/`''` causing flex reflows). Position now displays AZ-only (the `/ NN°` elevation suffix is gone), the fault dot uses `visibility:hidden` so it always reserves space, and `.rb-val` got a `min-width: 5.5ch` so the position string can no longer push siblings around as it changes length. v1.10's SAT-map footprint formula carries forward unchanged.
@@ -235,6 +241,6 @@ With development assistance by **Claude AI** (Anthropic)
 ---
 
 <div align="center">
-  <sub>SDRLogger+ v1.11 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
+  <sub>SDRLogger+ v1.12 · Free Software · MIT License · Copyright © 2026 Rick Langford N8SDR</sub><br>
   <sub>73 de N8SDR — good DX and happy logging!</sub>
 </div>

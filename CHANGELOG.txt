@@ -1,6 +1,74 @@
 SDRLogger+ — Change Log
 =======================
 
+v1.12  (2026-04-22)
+------------------------------------------
+Weather Alerts gets a second personal-weather-station vendor and a
+proper imperial/metric unit switch for High Wind Alerts. Built on
+request from a user who runs SDRLogger+ alongside the wx-dashboard
+desktop app and wants the same Ecowitt feed surfaced in both.
+
+  ── 🌩 ECOWITT SUPPORT (LIGHTNING + WIND) ─────────────────────────
+    Lightning Detection and High Wind Alerts both gain a new
+    "Ecowitt" data source toggle alongside the existing Ambient
+    Weather toggles. Ecowitt is the OEM behind Ambient and uses
+    the same outdoor sensor families, so the lightning + wind
+    fields line up almost 1:1 once we flatten the v3 API response.
+
+    Three credentials are required (vs Ambient's two):
+        Application Key
+        API Key
+        Gateway MAC address  (e.g. 34:94:54:AB:CD:EF)
+    All three live in their own card under Settings → Weather
+    Alerts → Lightning Detection. The same credentials feed both
+    the lightning fetcher and the wind fetcher, sharing a single
+    30-second in-process cache so we stay well under Ecowitt's
+    free-tier 1-call/min/MAC limit even when both subsystems are
+    enabled together.
+
+    Endpoint: https://api.ecowitt.net/api/v3/device/real_time
+    Imperial units forced on the request side
+    (temp °F, pressure inHg, wind mph, rainfall in) so the
+    flat dict drops directly into the existing Ambient code path
+    with zero unit conversion.
+
+    Lightning fields: count_hour → strikes_per_hour;
+    distance (km) → distance_km. Wind fields: wind_speed →
+    windspeedmph; wind_gust → windgustmph; wind_direction →
+    winddir.
+
+  ── 🌬 WIND-ALERTS UNIT TOGGLE (MPH / KPH) ────────────────────────
+    Lightning Detection has had a mi/km switch since v1.06. High
+    Wind Alerts has been mph-only this whole time, which left
+    non-imperial users guessing at thresholds. Fixed:
+
+      • New WIND_UNIT setting ("mph" | "kph"), persisted in
+        app_settings.json, defaults to "mph" for backward
+        compatibility.
+      • Settings UI gets a Display Unit dropdown next to the
+        threshold inputs. Switching the unit live-rescales the
+        threshold numbers AND re-labels the input fields and the
+        tier-help line so the user always sees what they're
+        actually configuring.
+      • Threshold values are still stored INTERNALLY in mph (so
+        the existing severity logic, NWS METAR conversion,
+        Ambient/Ecowitt fetchers, and saved configs all keep
+        working unchanged), but submitted kph values are
+        converted to mph on save and rendered back in kph on
+        load.
+      • _wind_status now publishes BOTH unit families
+        (sustained_mph + sustained_kph, gust_mph + gust_kph) so
+        the banner picks the right pair without a second fetch.
+      • The 💨 banner text and tooltip now read in the user's
+        chosen unit (e.g. "G72kph 48kph WSW" instead of
+        "G45 30mph WSW").
+
+  ── No new dependencies. v1.11 features (☕ donate button, 7th-
+     launch DonateNudge, rotator EL removal + bounce fix) carry
+     forward unchanged. Existing Ambient credentials and existing
+     wind thresholds are preserved on upgrade.
+
+
 v1.11  (2026-04-21)
 ------------------------------------------
 Quality-of-life pass — header donate button, friendly one-time

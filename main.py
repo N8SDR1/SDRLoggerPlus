@@ -113,7 +113,8 @@ def _load_app_settings():
     global SAT_UDP_ENABLED, SAT_UDP_PORT, SAT_ADIF_PORT, SAT_CONTROLLER_IP
     global LIGHTNING_ACCEPTED, LIGHTNING_ENABLED, LIGHTNING_RANGE, LIGHTNING_UNIT, LIGHTNING_BLITZORTUNG, LIGHTNING_NOAA
     global LIGHTNING_AMBIENT, LIGHTNING_AMBIENT_API_KEY, LIGHTNING_AMBIENT_APP_KEY
-    global WIND_ENABLED, WIND_NWS_ALERTS, WIND_NWS_METAR, WIND_AMBIENT
+    global LIGHTNING_ECOWITT, ECOWITT_APP_KEY, ECOWITT_API_KEY, ECOWITT_MAC
+    global WIND_ENABLED, WIND_NWS_ALERTS, WIND_NWS_METAR, WIND_AMBIENT, WIND_ECOWITT, WIND_UNIT
     global WIND_THRESH_SUST, WIND_THRESH_GUST, WIND_COOLDOWN_MIN, WIND_METAR_STATION
     try:
         with open(_APP_SETTINGS_FILE) as _f:
@@ -199,11 +200,19 @@ def _load_app_settings():
         if "lightning_ambient"         in data: LIGHTNING_AMBIENT         = bool(data["lightning_ambient"])
         if data.get("lightning_ambient_api_key"): LIGHTNING_AMBIENT_API_KEY = data["lightning_ambient_api_key"].strip()
         if data.get("lightning_ambient_app_key"): LIGHTNING_AMBIENT_APP_KEY = data["lightning_ambient_app_key"].strip()
+        # v1.12 — Ecowitt (shared keys for lightning + wind)
+        if "lightning_ecowitt"   in data: LIGHTNING_ECOWITT   = bool(data["lightning_ecowitt"])
+        if data.get("ecowitt_app_key"):   ECOWITT_APP_KEY     = data["ecowitt_app_key"].strip()
+        if data.get("ecowitt_api_key"):   ECOWITT_API_KEY     = data["ecowitt_api_key"].strip()
+        if data.get("ecowitt_mac"):       ECOWITT_MAC         = data["ecowitt_mac"].strip()
         # Wind alerts (v1.08.2-beta) — gated behind lightning acceptance
         if "wind_enabled"         in data: WIND_ENABLED        = bool(data["wind_enabled"]) and LIGHTNING_ACCEPTED
         if "wind_nws_alerts"      in data: WIND_NWS_ALERTS     = bool(data["wind_nws_alerts"])
         if "wind_nws_metar"       in data: WIND_NWS_METAR      = bool(data["wind_nws_metar"])
         if "wind_ambient"         in data: WIND_AMBIENT        = bool(data["wind_ambient"])
+        if "wind_ecowitt"         in data: WIND_ECOWITT        = bool(data["wind_ecowitt"])
+        if "wind_unit" in data and data["wind_unit"] in ("mph", "kph"):
+            WIND_UNIT = data["wind_unit"]
         if "wind_thresh_sust"     in data: WIND_THRESH_SUST    = int(data["wind_thresh_sust"])
         if "wind_thresh_gust"     in data: WIND_THRESH_GUST    = int(data["wind_thresh_gust"])
         if "wind_cooldown_min"    in data: WIND_COOLDOWN_MIN   = int(data["wind_cooldown_min"])
@@ -254,7 +263,7 @@ ITU_REGION  = 2             # ITU Region: 1=Europe/Africa/Russia, 2=Americas, 3=
 TCI_HOST = "127.0.0.1"      # Thetis SDR host
 TCI_PORT = 50001            # Thetis TCI WebSocket port (set in SDR: Setup → Network → TCI Server)
 DATABASE = "hamlog.db"
-VERSION  = "1.11"
+VERSION  = "1.12"
 
 # ─── Digital App Integration (WSJT-X / JTDX / MSHV / VarAC etc.) ─────────────
 DIGITAL_UDP_ENABLED = False       # Listen for UDP QSOLogged packets (WSJT-X binary / ADIF text)
@@ -374,6 +383,15 @@ LIGHTNING_NOAA             = False  # NOAA/NWS severe thunderstorm warnings
 LIGHTNING_AMBIENT          = False  # Ambient Weather personal station
 LIGHTNING_AMBIENT_API_KEY  = ""
 LIGHTNING_AMBIENT_APP_KEY  = ""
+# v1.12 — Ecowitt personal weather station (parallels Ambient; same field
+# semantics after we flatten the v3 cloud response). Three credentials:
+# application_key + api_key + MAC (Ecowitt accounts can have multiple
+# stations so MAC selects one). Lightning + Wind share these keys via
+# the cached _fetch_ecowitt_lastdata() helper.
+LIGHTNING_ECOWITT          = False
+ECOWITT_APP_KEY            = ""
+ECOWITT_API_KEY            = ""
+ECOWITT_MAC                = ""
 _lightning_status = {
     "active": False,
     "closest_mi": None,
@@ -393,8 +411,10 @@ WIND_ENABLED        = False
 WIND_NWS_ALERTS     = False     # NWS active-alerts API: High Wind Warning/Advisory/Watch
 WIND_NWS_METAR      = False     # NWS nearest-METAR observation (wind + gust)
 WIND_AMBIENT        = False     # User's Ambient Weather PWS wind readings
-WIND_THRESH_SUST    = 30        # Sustained wind MPH to trigger HIGH banner
-WIND_THRESH_GUST    = 45        # Gust MPH to trigger HIGH banner
+WIND_ECOWITT        = False     # v1.12 — User's Ecowitt PWS wind readings
+WIND_UNIT           = "mph"     # v1.12 — display unit: "mph" or "kph"
+WIND_THRESH_SUST    = 30        # Sustained wind threshold (stored as MPH; UI converts on save/load)
+WIND_THRESH_GUST    = 45        # Gust threshold (stored as MPH; UI converts on save/load)
 WIND_COOLDOWN_MIN   = 20        # Minutes before re-alerting after clearing
 WIND_METAR_STATION  = ""        # 4-letter ICAO METAR station (e.g. KLUK, KCVG)
 
@@ -403,6 +423,8 @@ _wind_status = {
     "severity": "",      # "" | "elevated" | "high" | "extreme"
     "sustained_mph": None,
     "gust_mph": None,
+    "sustained_kph": None,   # v1.12 — populated alongside mph for non-imperial UI
+    "gust_kph": None,        # v1.12
     "direction": "",     # compass e.g. "WSW"
     "sources": [],
     "nws_alert": "",     # event headline e.g. "High Wind Warning"
@@ -2848,7 +2870,8 @@ def update_settings():
     global SAT_UDP_ENABLED, SAT_UDP_PORT, SAT_ADIF_PORT, SAT_CONTROLLER_IP
     global LIGHTNING_ACCEPTED, LIGHTNING_ENABLED, LIGHTNING_RANGE, LIGHTNING_UNIT, LIGHTNING_BLITZORTUNG, LIGHTNING_NOAA
     global LIGHTNING_AMBIENT, LIGHTNING_AMBIENT_API_KEY, LIGHTNING_AMBIENT_APP_KEY
-    global WIND_ENABLED, WIND_NWS_ALERTS, WIND_NWS_METAR, WIND_AMBIENT
+    global LIGHTNING_ECOWITT, ECOWITT_APP_KEY, ECOWITT_API_KEY, ECOWITT_MAC
+    global WIND_ENABLED, WIND_NWS_ALERTS, WIND_NWS_METAR, WIND_AMBIENT, WIND_ECOWITT, WIND_UNIT
     global WIND_THRESH_SUST, WIND_THRESH_GUST, WIND_COOLDOWN_MIN, WIND_METAR_STATION
     data = request.json or {}
     runtime_settings.update(data)
@@ -2969,17 +2992,27 @@ def update_settings():
     if "lightning_ambient"         in data: LIGHTNING_AMBIENT         = bool(data["lightning_ambient"])
     if data.get("lightning_ambient_api_key"): LIGHTNING_AMBIENT_API_KEY = data["lightning_ambient_api_key"].strip()
     if data.get("lightning_ambient_app_key"): LIGHTNING_AMBIENT_APP_KEY = data["lightning_ambient_app_key"].strip()
+    # v1.12 — Ecowitt
+    if "lightning_ecowitt"   in data: LIGHTNING_ECOWITT   = bool(data["lightning_ecowitt"])
+    if data.get("ecowitt_app_key") is not None: ECOWITT_APP_KEY = str(data["ecowitt_app_key"]).strip()
+    if data.get("ecowitt_api_key") is not None: ECOWITT_API_KEY = str(data["ecowitt_api_key"]).strip()
+    if data.get("ecowitt_mac")     is not None: ECOWITT_MAC     = str(data["ecowitt_mac"]).strip()
     # Wind alerts (v1.08.2-beta)
     if "wind_enabled"         in data: WIND_ENABLED        = bool(data["wind_enabled"]) and LIGHTNING_ACCEPTED
     if "wind_nws_alerts"      in data: WIND_NWS_ALERTS     = bool(data["wind_nws_alerts"])
     if "wind_nws_metar"       in data: WIND_NWS_METAR      = bool(data["wind_nws_metar"])
     if "wind_ambient"         in data: WIND_AMBIENT        = bool(data["wind_ambient"])
+    if "wind_ecowitt"         in data: WIND_ECOWITT        = bool(data["wind_ecowitt"])
+    if "wind_unit"            in data and data["wind_unit"] in ("mph", "kph"):
+        WIND_UNIT = data["wind_unit"]
+    # Threshold values are stored as MPH internally. UI submits "wind_thresh_*"
+    # already converted to MPH if user is in kph mode.
     if "wind_thresh_sust"     in data: WIND_THRESH_SUST    = int(data["wind_thresh_sust"])
     if "wind_thresh_gust"     in data: WIND_THRESH_GUST    = int(data["wind_thresh_gust"])
     if "wind_cooldown_min"    in data: WIND_COOLDOWN_MIN   = int(data["wind_cooldown_min"])
     if data.get("wind_metar_station"): WIND_METAR_STATION  = data["wind_metar_station"].strip().upper()
     # Immediately clear lightning/wind status so banners hide when sources change
-    if any(k in data for k in ("lightning_enabled", "lightning_blitzortung", "lightning_noaa", "lightning_ambient")):
+    if any(k in data for k in ("lightning_enabled", "lightning_blitzortung", "lightning_noaa", "lightning_ambient", "lightning_ecowitt")):
         with _lightning_lock:
             _lightning_status["active"] = False
             _lightning_status["closest_km"] = None
@@ -2988,12 +3021,14 @@ def update_settings():
             _lightning_status["strikes_1hr"] = 0
             _lightning_status["sources"] = []
             _lightning_status["noaa_warning"] = ""
-    if any(k in data for k in ("wind_enabled", "wind_nws_alerts", "wind_nws_metar", "wind_ambient")):
+    if any(k in data for k in ("wind_enabled", "wind_nws_alerts", "wind_nws_metar", "wind_ambient", "wind_ecowitt")):
         with _wind_lock:
             _wind_status["active"] = False
             _wind_status["severity"] = ""
             _wind_status["sustained_mph"] = None
             _wind_status["gust_mph"] = None
+            _wind_status["sustained_kph"] = None
+            _wind_status["gust_kph"] = None
             _wind_status["direction"] = ""
             _wind_status["sources"] = []
             _wind_status["nws_alert"] = ""
@@ -5372,6 +5407,123 @@ def _fetch_noaa_warnings(my_lat, my_lon):
         print(f"Lightning: NOAA error: {e}")
     return warning
 
+# v1.12 — Ecowitt v3 Cloud API (parallels Ambient). One real-time call returns
+# every sensor on the gateway, so lightning_thread + wind_thread share a single
+# 30-second in-process cache to stay well under the 1-call/min/MAC free-tier
+# limit and avoid double-polling.
+_ecowitt_cache = {"ts": 0.0, "data": None, "error": ""}
+_ecowitt_lock = threading.Lock()
+
+def _fetch_ecowitt_lastdata():
+    """Return Ecowitt 'real_time' sensor dict in flat (Ambient-shaped) form,
+    or None on failure. Cached for 30 s. Required keys: APP_KEY, API_KEY, MAC.
+
+    Maps the nested {time,unit,value} v3 response into the same flat schema
+    Ambient uses (windspeedmph, windgustmph, winddir, lightning_distance in
+    miles, lightning_hour) so callers can pretend nothing changed.
+    """
+    import time as _t
+    if not (ECOWITT_APP_KEY and ECOWITT_API_KEY and ECOWITT_MAC):
+        return None
+    with _ecowitt_lock:
+        if _ecowitt_cache["data"] is not None and (_t.time() - _ecowitt_cache["ts"]) < 30:
+            return _ecowitt_cache["data"]
+    try:
+        url = "https://api.ecowitt.net/api/v3/device/real_time"
+        params = {
+            "application_key": ECOWITT_APP_KEY,
+            "api_key":         ECOWITT_API_KEY,
+            "mac":             ECOWITT_MAC,
+            "call_back":       "all",
+            "temp_unitid":     "2",   # °F
+            "pressure_unitid": "4",   # inHg
+            "wind_unitid":     "9",   # mph (matches Ambient native)
+            "rainfall_unitid": "13",  # in
+        }
+        resp = requests.get(url, params=params, timeout=12)
+        if resp.status_code != 200:
+            print(f"Ecowitt: HTTP {resp.status_code}")
+            with _ecowitt_lock:
+                _ecowitt_cache["error"] = f"HTTP {resp.status_code}"
+            return None
+        j = resp.json() or {}
+        if str(j.get("code")) not in ("0",):
+            print(f"Ecowitt: API code={j.get('code')} msg={j.get('msg')}")
+            with _ecowitt_lock:
+                _ecowitt_cache["error"] = f"API {j.get('code')}: {j.get('msg')}"
+            return None
+        data = j.get("data") or {}
+        def _leaf(d, *path):
+            cur = d
+            for p in path:
+                if not isinstance(cur, dict): return None
+                cur = cur.get(p)
+                if cur is None: return None
+            if isinstance(cur, dict):
+                cur = cur.get("value")
+            return cur
+        def _num(v):
+            if v in (None, ""): return None
+            try: return float(v)
+            except (TypeError, ValueError): return None
+        flat = {
+            "windspeedmph":      _num(_leaf(data, "wind", "wind_speed")),
+            "windgustmph":       _num(_leaf(data, "wind", "wind_gust")),
+            "winddir":           _num(_leaf(data, "wind", "wind_direction")),
+            # Ecowitt lightning distance unit follows the gateway's user
+            # setting; we don't pass distance_unitid in v3 because there
+            # isn't one — the value is reported in km on most firmwares.
+            # We expose it as `lightning_distance_km` so the lightning
+            # consumer can decide. For convenience we also derive the
+            # mile-equivalent under Ambient's `lightning_distance` key
+            # (Ambient is miles).
+            "lightning_distance_km": _num(_leaf(data, "lightning", "distance")),
+            "lightning_hour":        _num(_leaf(data, "lightning", "count_hour")),
+            "lightning_day":         _num(_leaf(data, "lightning", "count")),
+        }
+        # Mirror the km value into Ambient-style miles so the lightning
+        # fetcher only has to do its existing mi→km step at one site.
+        if flat["lightning_distance_km"] is not None:
+            flat["lightning_distance"] = flat["lightning_distance_km"] / 1.60934
+        with _ecowitt_lock:
+            _ecowitt_cache["ts"]    = _t.time()
+            _ecowitt_cache["data"]  = flat
+            _ecowitt_cache["error"] = ""
+        return flat
+    except Exception as e:
+        print(f"Ecowitt: error: {e}")
+        with _ecowitt_lock:
+            _ecowitt_cache["error"] = str(e)
+        return None
+
+
+def _fetch_ecowitt_lightning():
+    """Lightning data from Ecowitt PWS. Returns (distance_km, strikes_per_hour)
+    or (None, 0). Mirrors _fetch_ambient_weather()'s contract."""
+    flat = _fetch_ecowitt_lastdata()
+    if not flat:
+        return None, 0
+    dist_km = flat.get("lightning_distance_km")
+    hour    = flat.get("lightning_hour") or 0
+    if dist_km is not None and hour and hour > 0:
+        try:
+            return float(dist_km), int(hour)
+        except (TypeError, ValueError):
+            return None, 0
+    return None, 0
+
+
+def _fetch_ecowitt_wind():
+    """Wind data from Ecowitt PWS. Returns (sustained_mph, gust_mph, dir_deg)
+    or (None, None, None). Mirrors _fetch_ambient_wind()'s contract."""
+    flat = _fetch_ecowitt_lastdata()
+    if not flat:
+        return None, None, None
+    return (flat.get("windspeedmph"),
+            flat.get("windgustmph"),
+            flat.get("winddir"))
+
+
 def _fetch_ambient_weather():
     """Fetch lightning data from Ambient Weather station REST API.
     Returns (distance_km, strikes_per_hour) or (None, 0)."""
@@ -5448,6 +5600,15 @@ def lightning_thread():
                     if closest_km is None or amb_dist < closest_km:
                         closest_km = amb_dist
                         # Ambient Weather doesn't provide bearing
+            # Source 4: Ecowitt (v1.12) — same contract as Ambient
+            if LIGHTNING_ECOWITT:
+                eco_dist, eco_count = _fetch_ecowitt_lightning()
+                if eco_dist is not None and eco_count > 0:
+                    sources.append("ecowitt")
+                    total_strikes += eco_count
+                    if closest_km is None or eco_dist < closest_km:
+                        closest_km = eco_dist
+                        # Ecowitt v3 doesn't expose bearing either
             direction = _bearing_to_compass(closest_brg) if closest_brg is not None else ""
             with _lightning_lock:
                 _lightning_status["active"] = (closest_km is not None and closest_km <= range_km) or bool(noaa_warn)
@@ -5641,6 +5802,15 @@ def wind_thread():
                     if g is not None and (best_gust is None or g > best_gust):
                         best_gust = g
 
+            if WIND_ECOWITT:
+                s, g, d = _fetch_ecowitt_wind()
+                if s is not None or g is not None:
+                    sources.append("ecowitt")
+                    if s is not None and (best_sust is None or s > best_sust):
+                        best_sust, best_dir = s, d
+                    if g is not None and (best_gust is None or g > best_gust):
+                        best_gust = g
+
             severity = _wind_severity(best_sust, best_gust, nws_event, nws_is_extreme)
 
             # Cooldown: once conditions clear, suppress re-alerting for WIND_COOLDOWN_MIN
@@ -5658,6 +5828,10 @@ def wind_thread():
                 _wind_status["severity"]       = severity
                 _wind_status["sustained_mph"]  = round(best_sust, 1) if best_sust is not None else None
                 _wind_status["gust_mph"]       = round(best_gust, 1) if best_gust is not None else None
+                # v1.12 — kph mirrors so the frontend can render whichever
+                # unit the user picked without a second source call.
+                _wind_status["sustained_kph"]  = round(best_sust * 1.60934, 1) if best_sust is not None else None
+                _wind_status["gust_kph"]       = round(best_gust * 1.60934, 1) if best_gust is not None else None
                 _wind_status["direction"]      = direction
                 _wind_status["sources"]        = sources
                 _wind_status["nws_alert"]      = nws_event
@@ -5674,7 +5848,13 @@ threading.Thread(target=wind_thread, daemon=True, name="WindThread").start()
 def wind_status():
     """Return current high-wind alert status for the banner."""
     with _wind_lock:
-        return jsonify(dict(_wind_status))
+        d = dict(_wind_status)
+    # v1.12 — include unit preference + threshold values so the frontend can
+    # render the banner in the user's chosen unit without a separate fetch.
+    d["unit"] = WIND_UNIT
+    d["thresh_sust_mph"] = WIND_THRESH_SUST
+    d["thresh_gust_mph"] = WIND_THRESH_GUST
+    return jsonify(d)
 
 
 # ─── ADIF File Monitor ────────────────────────────────────────────────────────
