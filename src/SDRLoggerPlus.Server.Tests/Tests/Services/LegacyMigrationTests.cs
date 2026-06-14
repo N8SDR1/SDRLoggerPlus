@@ -63,6 +63,30 @@ public class LegacyMigrationTests : IDisposable
     }
 
     [Fact]
+    public void NewDirExistsWithoutDb_StillMigratesFromLegacy()
+    {
+        // Repro of the rebrand bug: the SDRLoggerPlus config dir already existed
+        // (an older Log4YM install left hamlog.db behind), so the previous
+        // Directory.Exists(newConfigDir) guard skipped the QSOThief migration
+        // entirely and the user started on an empty database with the default
+        // panel layout.
+        SeedLegacyInstall();
+        Directory.CreateDirectory(NewDir);
+        File.WriteAllText(Path.Combine(NewDir, "hamlog.db"), "OLD-LOG4YM");      // pre-existing, unrelated
+        File.WriteAllText(Path.Combine(NewDir, "config.json"), "{\"keep\":1}");  // pre-existing config
+
+        var migrated = LegacyMigration.MigrateIfNeeded(NewDir);
+
+        // The QSOThief database is brought over (renamed)...
+        migrated.Should().Contain("sdrloggerplus.db");
+        File.ReadAllText(Path.Combine(NewDir, "sdrloggerplus.db")).Should().Be("DB-CONTENT");
+        // ...without clobbering anything already present.
+        migrated.Should().NotContain("config.json");
+        File.ReadAllText(Path.Combine(NewDir, "config.json")).Should().Be("{\"keep\":1}");
+        File.ReadAllText(Path.Combine(NewDir, "hamlog.db")).Should().Be("OLD-LOG4YM");
+    }
+
+    [Fact]
     public void PartialLegacyDir_CopiesWhatExists()
     {
         Directory.CreateDirectory(LegacyDir);
