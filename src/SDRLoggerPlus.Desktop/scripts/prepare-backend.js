@@ -25,17 +25,28 @@ const webDir = path.resolve(desktopDir, '..', 'SDRLoggerPlus.Web');
 const serverDir = path.resolve(desktopDir, '..', 'SDRLoggerPlus.Server');
 const backendDir = path.join(desktopDir, 'backend');
 
-// Auto-increment the patch version on every packaging run (skipped in CI,
-// which stamps the version from the release tag instead). The bump persists
-// in package.json so the installer name, About dialog and Add/Remove entry
-// all advance together: 1.0.1, 1.0.2, …
+// Local packaging produces dev (prerelease) builds versioned <base>-dev.<N>
+// (e.g. 2.0.1-dev.1). Each run increments N so successive dev installers are
+// uniquely versioned; the base X.Y.Z is bumped by hand when cutting a real
+// release. The version persists in package.json so the installer name, About
+// dialog and Add/Remove entry all advance together. Skipped in CI, which
+// stamps a clean release version from the git tag instead.
 const pkgPath = path.join(desktopDir, 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 if (!process.env.CI) {
-  const [major, minor, patch] = pkg.version.split('.').map(Number);
-  pkg.version = `${major}.${minor}.${patch + 1}`;
+  const m = pkg.version.match(/^(\d+\.\d+\.\d+)(?:-dev\.(\d+))?$/);
+  if (!m) {
+    console.error(
+      `Cannot parse version "${pkg.version}" (expected X.Y.Z or X.Y.Z-dev.N). ` +
+      `Set package.json "version" to a plain X.Y.Z to start a new dev series.`
+    );
+    process.exit(1);
+  }
+  const base = m[1];
+  const nextDev = m[2] ? Number(m[2]) + 1 : 1;
+  pkg.version = `${base}-dev.${nextDev}`;
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
-  console.log(`Version bumped to ${pkg.version}`);
+  console.log(`Dev version set to ${pkg.version}`);
 }
 const version = pkg.version;
 

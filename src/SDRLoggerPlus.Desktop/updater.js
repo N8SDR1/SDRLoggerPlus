@@ -17,12 +17,15 @@ const RELEASES_PAGE = `https://github.com/${GITHUB_REPO}/releases/latest`;
  * Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
  */
 function compareVersions(v1, v2) {
-  // Strip leading 'v' if present
-  const clean1 = v1.replace(/^v/, '');
-  const clean2 = v2.replace(/^v/, '');
+  // Strip a leading 'v' and any prerelease/build suffix before comparing the
+  // numeric X.Y.Z core. Dev builds carry versions like "2.0.1-dev.3"; without
+  // stripping, Number("1-dev") is NaN and the comparison silently breaks. A
+  // dev build therefore treats the matching stable release as "not newer" and
+  // a later stable X.Y.Z as an available upgrade.
+  const core = (v) => v.replace(/^v/, '').split('-')[0];
 
-  const parts1 = clean1.split('.').map(Number);
-  const parts2 = clean2.split('.').map(Number);
+  const parts1 = core(v1).split('.').map(Number);
+  const parts2 = core(v2).split('.').map(Number);
 
   for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
     const num1 = parts1[i] || 0;
