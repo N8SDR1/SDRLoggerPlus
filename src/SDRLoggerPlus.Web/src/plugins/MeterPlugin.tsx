@@ -9,6 +9,14 @@ import { dbmToSUnit } from '../utils/smeter';
 
 const NO_DATA_MSG = 'No meter data — connect a TCI radio (Thetis) in the Rig panel';
 const ROUND_CONFIG_STORAGE_KEY = 'sdrloggerplus-round-meter-config';
+// S-meter calibration: TCI reports a dBm that can sit well above the rig's own
+// S-meter (e.g. a Hermes Lite 2 / Thetis reads ~20 dB high). This offset is added
+// to the RX dBm before display so the needle/readout match the radio. Adjust in
+// the Meters settings; persisted per install.
+const SMETER_CAL_STORAGE_KEY = 'sdrloggerplus-smeter-cal-db';
+// Default tuned against a Hermes Lite 2 / Thetis (TCI dBm reads ~15 dB above the
+// rig's S-meter); other radios can adjust it in the Meters settings.
+const DEFAULT_SMETER_CAL_DB = -15;
 const DEFAULT_ROUND_CONFIG: RoundMeterConfig = {
   peakHold: true,
   centerSpectrum: true,
@@ -104,6 +112,10 @@ export function MeterPlugin() {
   const [view, setView] = useState<MeterView>('analog');
   const [roundConfig, setRoundConfig] = useState(loadRoundMeterConfig);
   const [showSettings, setShowSettings] = useState(false);
+  const [calibrationDb, setCalibrationDb] = useState<number>(loadSMeterCalibration);
+  // The meters callback closure (mounted once) reads the latest calibration
+  // through a ref so changes take effect without re-subscribing.
+  const calibrationRef = useRef(calibrationDb);
 
   // Tile values come through React state at most 10 Hz (server-coalesced);
   // only the needle bypasses state via refs + rAF.
@@ -114,6 +126,11 @@ export function MeterPlugin() {
   useEffect(() => {
     localStorage.setItem(ROUND_CONFIG_STORAGE_KEY, JSON.stringify(roundConfig));
   }, [roundConfig]);
+
+  useEffect(() => {
+    calibrationRef.current = calibrationDb;
+    localStorage.setItem(SMETER_CAL_STORAGE_KEY, String(calibrationDb));
+  }, [calibrationDb]);
 
   useEffect(() => {
     // Non-finite numbers can't come from our server (parser drops them),
@@ -132,14 +149,17 @@ export function MeterPlugin() {
         radioIdRef.current = evt.radioId;
       }
 
+      // Calibration offset aligns the RX signal with the rig's S-meter; TX
+      // power/SWR/mic are unaffected.
+      const cal = calibrationRef.current;
       const rx = num(evt.rxSignalDbm);
       const rxAvg = num(evt.rxAvgSignalDbm);
       const pwr = num(evt.txPowerWatts);
       const peak = num(evt.txPeakPowerWatts);
       const swr = num(evt.txSwr);
       const mic = num(evt.txMicDbm);
-      if (rx !== null) s.rxDbm = rx;
-      if (rxAvg !== null) s.rxAvgDbm = rxAvg;
+      if (rx !== null) s.rxDbm = rx + cal;
+      if (rxAvg !== null) s.rxAvgDbm = rxAvg + cal;
       if (pwr !== null) s.txPowerW = pwr;
       if (peak !== null) s.txPeakW = peak;
       if (swr !== null) s.swr = swr;
@@ -219,16 +239,14 @@ export function MeterPlugin() {
       icon={<Gauge className="w-4 h-4" />}
       actions={
         <div className="flex items-center gap-2">
-          {view === 'round' && (
-            <button
-              type="button"
-              onClick={() => setShowSettings((s) => !s)}
-              className={`glass-button p-1.5 ${showSettings ? 'text-accent-primary' : 'text-dark-300'}`}
-              title="Meter settings"
-            >
-              <SettingsIcon className="w-4 h-4" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowSettings((s) => !s)}
+            className={`glass-button p-1.5 ${showSettings ? 'text-accent-primary' : 'text-dark-300'}`}
+            title="Meter settings"
+          >
+            <SettingsIcon className="w-4 h-4" />
+          </button>
           <div className="flex rounded bg-black/25 p-0.5 text-[10px] font-ui uppercase">
             <button
               type="button"
@@ -266,24 +284,28 @@ export function MeterPlugin() {
             />
           </div>
           {showSettings && (
-            <div className="absolute top-2 right-2 z-20 w-56 rounded-lg border border-glass-200 bg-dark-800/95 shadow-lg p-2">
-              <div className="flex items-center justify-between mb-1.5 px-0.5">
-                <span className="text-[10px] font-ui uppercase tracking-wide text-dark-300">Meter Settings</span>
-                <button
-                  type="button"
-                  onClick={() => setShowSettings(false)}
-                  className="text-dark-300 hover:text-dark-100"
-                  title="Close"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <RoundMeterControls config={roundConfig} onChange={setRoundConfig} />
-            </div>
+            <MeterSettingsPopover
+              calibrationDb={calibrationDb}
+              onCalibrationChange={setCalibrationDb}
+              showRoundControls
+              roundConfig={roundConfig}
+              onRoundConfigChange={setRoundConfig}
+              onClose={() => setShowSettings(false)}
+            />
           )}
         </div>
       ) : (
-        <div className="flex flex-col h-full p-2 gap-2" style={dimmed} data-testid="meter-content">
+        <div className="flex flex-col h-full p-2 gap-2 relative" style={dimmed} data-testid="meter-content">
+          {showSettings && (
+            <MeterSettingsPopover
+              calibrationDb={calibrationDb}
+              onCalibrationChange={setCalibrationDb}
+              showRoundControls={false}
+              roundConfig={roundConfig}
+              onRoundConfigChange={setRoundConfig}
+              onClose={() => setShowSettings(false)}
+            />
+          )}
           <div className="flex-1 min-h-0 flex items-center justify-center">
             <canvas
               ref={canvasRef}
@@ -317,6 +339,57 @@ export function MeterPlugin() {
         </div>
       )}
     </GlassPanel>
+  );
+}
+
+function loadSMeterCalibration(): number {
+  const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SMETER_CAL_STORAGE_KEY) : null;
+  if (raw === null) return DEFAULT_SMETER_CAL_DB;
+  const v = Number(raw);
+  return Number.isFinite(v) ? v : DEFAULT_SMETER_CAL_DB;
+}
+
+function MeterSettingsPopover({
+  calibrationDb,
+  onCalibrationChange,
+  showRoundControls,
+  roundConfig,
+  onRoundConfigChange,
+  onClose,
+}: {
+  calibrationDb: number;
+  onCalibrationChange: (db: number) => void;
+  showRoundControls: boolean;
+  roundConfig: RoundMeterConfig;
+  onRoundConfigChange: (config: RoundMeterConfig) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute top-2 right-2 z-20 w-56 rounded-lg border border-glass-200 bg-dark-800/95 shadow-lg p-2">
+      <div className="flex items-center justify-between mb-1.5 px-0.5">
+        <span className="text-[10px] font-ui uppercase tracking-wide text-dark-300">Meter Settings</span>
+        <button type="button" onClick={onClose} className="text-dark-300 hover:text-dark-100" title="Close">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <label className="flex items-center justify-between gap-2 text-[10px] font-ui uppercase mb-2">
+        <span>S-meter cal</span>
+        <span className="flex items-center gap-1">
+          <input
+            type="number"
+            step={1}
+            value={calibrationDb}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isFinite(value)) onCalibrationChange(value);
+            }}
+            className="w-16 rounded border border-glass-100 bg-black/30 px-1 py-0.5 font-mono normal-case text-right"
+          />
+          <span className="opacity-50 normal-case">dB</span>
+        </span>
+      </label>
+      {showRoundControls && <RoundMeterControls config={roundConfig} onChange={onRoundConfigChange} />}
+    </div>
   );
 }
 
