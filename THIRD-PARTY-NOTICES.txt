@@ -1,0 +1,117 @@
+SDRLoggerPlus — Third-Party Notices
+==============================
+
+SDRLoggerPlus is licensed under the MIT License (see LICENSE). It incorporates and,
+where noted, redistributes the third-party components listed below, each under
+its own license. Full license texts referenced here are in the licenses/
+directory distributed alongside this file.
+
+Origin of the codebase
+-----------------------
+SDRLoggerPlus originates from Log4YM by Brian Keating (EI6LF), released into the
+public domain. Several feature designs were re-implemented based on SDRLogger+
+(awards tracking, weather alerts, S.A.T. integration, Hot List, scheduled
+backups); no SDRLogger+ source code is included.
+
+
+========================================================================
+1. Bundled native libraries (shipped in the installer)
+========================================================================
+
+These native libraries are distributed UNMODIFIED, as separate dynamically
+loaded files. The application loads them at run time and they may be replaced
+by the user with a compatible version.
+
+Hamlib
+  Files:    libhamlib-4.dll (Windows), libhamlib.4.dylib (macOS),
+            libhamlib.so.4 (Linux)
+  License:  GNU Lesser General Public License, version 2.1 or later (LGPL-2.1+)
+  Copyright: (C) The Hamlib Group and contributors
+  Source:   https://github.com/Hamlib/Hamlib  (official release binaries)
+  Full text: licenses/LGPL-2.1.txt
+
+libusb
+  Files:    libusb-1.0.dll (Windows), libusb-1.0.0.dylib (macOS),
+            libusb-1.0.so.0 (Linux)
+  License:  GNU Lesser General Public License, version 2.1 or later (LGPL-2.1+)
+  Copyright: (C) libusb contributors
+  Source:   https://github.com/libusb/libusb
+  Full text: licenses/LGPL-2.1.txt
+
+libgcc (GCC support runtime)
+  Files:    libgcc_s_seh-1.dll (Windows, via MinGW-w64)
+  License:  GNU GPL version 3 WITH the GCC Runtime Library Exception 3.1,
+            which permits distribution together with software under other
+            licenses, including this application.
+  Copyright: (C) Free Software Foundation, Inc.
+  Source:   https://gcc.gnu.org/  ·  MinGW-w64: https://www.mingw-w64.org/
+  Full text: licenses/GCC-Runtime-Library-Exception-3.1.txt
+            (GPLv3: https://www.gnu.org/licenses/gpl-3.0.html)
+
+libwinpthread (MinGW-w64 winpthreads)
+  Files:    libwinpthread-1.dll (Windows)
+  License:  Permissive MinGW-w64 runtime license (MIT/BSD/Zope-style).
+  Copyright: (C) The MinGW-w64 Project and contributors
+  Source/license: https://sourceforge.net/p/mingw-w64/mingw-w64/ci/master/tree/COPYING
+
+
+========================================================================
+2. Bundled data
+========================================================================
+
+cty.dat (Country Files / DXCC prefix data)
+  Author:   Jim Reisert (AD1C)
+  Terms:    Free to use for amateur radio purposes; attribution requested;
+            not to be sold as a standalone product.
+  Source:   https://www.country-files.com/
+
+
+========================================================================
+3. Bundled application frameworks / runtimes
+========================================================================
+
+Electron
+  License:  MIT.  Source: https://github.com/electron/electron
+  Electron also redistributes Chromium and Node.js; their license notices
+  (LICENSE.electron.txt, LICENSES.chromium.html) are included in the
+  packaged application by electron-builder.
+
+.NET runtime (self-contained backend publish)
+  License:  MIT.  Copyright (C) .NET Foundation and contributors.
+  Source:   https://github.com/dotnet/runtime
+
+
+========================================================================
+4. Fonts (NOT bundled — loaded at run time from Google Fonts)
+========================================================================
+
+JetBrains Mono, Orbitron, and Space Grotesk are served from the Google Fonts
+CDN at run time and are NOT redistributed in this application. Each is licensed
+under the SIL Open Font License 1.1 (https://scripts.sil.org/OFL).
+
+
+========================================================================
+5. Server libraries (NuGet) — permissive licenses
+========================================================================
+
+  LiteDB                              MIT
+  MongoDB.Driver                      Apache-2.0
+  Serilog.AspNetCore, Serilog sinks   Apache-2.0
+  FluentValidation.AspNetCore         Apache-2.0
+  Swashbuckle.AspNetCore              MIT
+  System.IO.Ports                     MIT (.NET Foundation)
+  System.ServiceModel.Syndication     MIT (.NET Foundation)
+
+
+========================================================================
+6. Web libraries (npm) — permissive licenses
+========================================================================
+
+The web frontend incorporates open-source libraries under permissive licenses
+(MIT, ISC, BSD, Apache-2.0), including but not limited to: React and ReactDOM
+(MIT), @microsoft/signalr (MIT), @tanstack/react-query (MIT), ag-grid-community
+and ag-grid-react (MIT), three (MIT), globe.gl (MIT), satellite.js (MIT),
+zustand (MIT), react-markdown (MIT), lucide-react (ISC), Leaflet (BSD-2-Clause),
+react-leaflet, flexlayout-react, and the d3-* family (ISC/BSD). Each retains its
+respective copyright and license; a complete inventory can be produced from the
+project's package manifests.

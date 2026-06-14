@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.suo
+*.user
+
+# Build output
+**/bin
+**/obj
+**/out
+**/dist
+**/node_modules
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Test results
+**/TestResults
+**/coverage
+
+# Logs
+*.log
+logs/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+docs/
+*.md
+!README.md

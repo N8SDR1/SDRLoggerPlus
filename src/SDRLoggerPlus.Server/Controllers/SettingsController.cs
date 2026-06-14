@@ -1,0 +1,200 @@
+using Microsoft.AspNetCore.Mvc;
+using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Services;
+
+namespace SDRLoggerPlus.Server.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class SettingsController : ControllerBase
+{
+    private readonly ISettingsService _settingsService;
+    private readonly IHotListService _hotListService;
+    private readonly ILogger<SettingsController> _logger;
+
+    public SettingsController(ISettingsService settingsService, IHotListService hotListService, ILogger<SettingsController> logger)
+    {
+        _settingsService = settingsService;
+        _hotListService = hotListService;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Get user settings
+    /// </summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(UserSettings), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<UserSettings>> GetSettings()
+    {
+        try
+        {
+            var settings = await _settingsService.GetSettingsAsync();
+            return Ok(settings);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Database not available when retrieving settings");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                error = "Database not connected. Please configure your database connection in Settings > Database."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve settings");
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                error = "Failed to retrieve settings: " + ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Save user settings
+    /// </summary>
+    [HttpPost]
+    [ProducesResponseType(typeof(UserSettings), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<UserSettings>> SaveSettings([FromBody] UserSettings settings)
+    {
+        if (settings == null)
+        {
+            return BadRequest("Settings cannot be null");
+        }
+
+        _logger.LogInformation("Saving settings for station: {Callsign}", settings.Station?.Callsign);
+
+        try
+        {
+            var saved = await _settingsService.SaveSettingsAsync(settings);
+            // Hot list matching runs off an in-memory set — refresh it so
+            // edits made through the settings panel take effect immediately
+            await _hotListService.ReloadAsync();
+            return Ok(saved);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Database not available when saving settings");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                error = "Database not connected. Please configure your database connection in Settings > Database."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save settings");
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                error = "Failed to save settings: " + ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Update station settings only
+    /// </summary>
+    [HttpPut("station")]
+    [ProducesResponseType(typeof(UserSettings), StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserSettings>> UpdateStationSettings([FromBody] StationSettings stationSettings)
+    {
+        var settings = await _settingsService.GetSettingsAsync();
+        settings.Station = stationSettings;
+        var saved = await _settingsService.SaveSettingsAsync(settings);
+        return Ok(saved);
+    }
+
+    /// <summary>
+    /// Update QRZ settings only
+    /// </summary>
+    [HttpPut("qrz")]
+    [ProducesResponseType(typeof(UserSettings), StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserSettings>> UpdateQrzSettings([FromBody] QrzSettings qrzSettings)
+    {
+        var settings = await _settingsService.GetSettingsAsync();
+        settings.Qrz = qrzSettings;
+        var saved = await _settingsService.SaveSettingsAsync(settings);
+        return Ok(saved);
+    }
+
+    /// <summary>
+    /// Update appearance settings only
+    /// </summary>
+    [HttpPut("appearance")]
+    [ProducesResponseType(typeof(UserSettings), StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserSettings>> UpdateAppearanceSettings([FromBody] AppearanceSettings appearanceSettings)
+    {
+        var settings = await _settingsService.GetSettingsAsync();
+        settings.Appearance = appearanceSettings;
+        var saved = await _settingsService.SaveSettingsAsync(settings);
+        return Ok(saved);
+    }
+
+    /// <summary>
+    /// Update map settings only
+    /// </summary>
+    [HttpPut("map")]
+    [ProducesResponseType(typeof(UserSettings), StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserSettings>> UpdateMapSettings([FromBody] MapSettings mapSettings)
+    {
+        var settings = await _settingsService.GetSettingsAsync();
+        settings.Map = mapSettings;
+        var saved = await _settingsService.SaveSettingsAsync(settings);
+        return Ok(saved);
+    }
+
+    /// <summary>
+    /// Update AI settings only
+    /// </summary>
+    [HttpPut("ai")]
+    [ProducesResponseType(typeof(UserSettings), StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserSettings>> UpdateAiSettings([FromBody] AiSettings aiSettings)
+    {
+        var settings = await _settingsService.GetSettingsAsync();
+        settings.Ai = aiSettings;
+        var saved = await _settingsService.SaveSettingsAsync(settings);
+        return Ok(saved);
+    }
+
+    /// <summary>
+    /// Update grid column state for a specific table
+    /// </summary>
+    [HttpPut("grid-state/{tableId}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult> UpdateGridState(string tableId, [FromBody] string columnStateJson)
+    {
+        var settings = await _settingsService.GetSettingsAsync();
+        settings.GridStates ??= new Dictionary<string, string>();
+        settings.GridStates[tableId] = columnStateJson;
+        await _settingsService.SaveSettingsAsync(settings);
+        return Ok();
+    }
+
+    /// <summary>
+    /// Update layout JSON only
+    /// </summary>
+    [HttpPut("layout")]
+    [ProducesResponseType(typeof(UserSettings), StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserSettings>> UpdateLayout([FromBody] string layoutJson)
+    {
+        _logger.LogInformation("Updating layout configuration");
+        var settings = await _settingsService.GetSettingsAsync();
+        settings.LayoutJson = layoutJson;
+        var saved = await _settingsService.SaveSettingsAsync(settings);
+        return Ok(saved);
+    }
+
+    /// <summary>
+    /// Update desktop window geometry only
+    /// </summary>
+    [HttpPut("window")]
+    [ProducesResponseType(typeof(UserSettings), StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserSettings>> UpdateWindow([FromBody] WindowState window)
+    {
+        var settings = await _settingsService.GetSettingsAsync();
+        settings.Window = window;
+        var saved = await _settingsService.SaveSettingsAsync(settings);
+        return Ok(saved);
+    }
+}

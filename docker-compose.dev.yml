@@ -1,0 +1,52 @@
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - sdrloggerplus-network
+
+  # Backend uses an embedded LiteDB single-file database (no external DB server).
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5050
+    volumes:
+      - ./src/SDRLoggerPlus.Server:/app/src/SDRLoggerPlus.Server:ro
+      - ./src/SDRLoggerPlus.Contracts:/app/src/SDRLoggerPlus.Contracts:ro
+      - sdrloggerplus-config-dev:/root/.config/SDRLoggerPlus
+    networks:
+      - sdrloggerplus-network
+    # Expose for debugging but not required for nginx proxy
+    expose:
+      - "5050"
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    environment:
+      - VITE_API_URL=http://localhost:8080
+    volumes:
+      - ./src/SDRLoggerPlus.Web:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host"
+    networks:
+      - sdrloggerplus-network
+    # Expose for debugging but not required for nginx proxy
+    expose:
+      - "5173"
+
+volumes:
+  sdrloggerplus-config-dev:
+
+networks:
+  sdrloggerplus-network:
+    driver: bridge

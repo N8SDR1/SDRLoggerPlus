@@ -1,0 +1,202 @@
+using LiteDB;
+using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Services;
+using Serilog;
+
+namespace SDRLoggerPlus.Server.Core.Database.LiteDb;
+
+public class LiteDbContext : IDbContext, IDisposable
+{
+    private LiteDatabase? _database;
+    private readonly IUserConfigService _userConfigService;
+    private readonly BsonMapper _mapper;
+    private readonly object _initLock = new();
+    private bool _isInitialized;
+    private string? _dbPath;
+
+    public LiteDbContext(IUserConfigService userConfigService)
+    {
+        _userConfigService = userConfigService;
+
+        // Create a dedicated mapper and pre-warm entity registrations to avoid
+        // concurrent first-access races during startup deserialization
+        _mapper = new BsonMapper();
+
+        // Register custom serializer for MongoDB.Bson.BsonDocument so that the
+        // Qso.AdifExtra property (which stores unmapped ADIF fields) can be
+        // persisted in LiteDB without type-cast errors between MongoDB BSON types.
+        _mapper.RegisterType<MongoDB.Bson.BsonDocument>(
+            serialize: mongoDoc =>
+            {
+                var liteDoc = new BsonDocument();
+                foreach (var element in mongoDoc)
+                {
+                    liteDoc[element.Name] = new LiteDB.BsonValue(element.Value?.ToString() ?? string.Empty);
+                }
+                return liteDoc;
+            },
+            deserialize: bson =>
+            {
+                var mongoDoc = new MongoDB.Bson.BsonDocument();
+                if (bson is BsonDocument liteDoc)
+                {
+                    foreach (var kvp in liteDoc)
+                    {
+                        if (kvp.Key != "_type")
+                            mongoDoc[kvp.Key] = kvp.Value.AsString;
+                    }
+                }
+                return mongoDoc;
+            }
+        );
+
+        _mapper.Entity<UserSettings>();
+        _mapper.Entity<Qso>();
+        _mapper.Entity<CallsignMapImage>();
+        _mapper.Entity<RadioConfigEntity>();
+
+        TryInitialize();
+    }
+
+    public bool IsConnected => _isInitialized && _database != null;
+
+    public string? DatabaseName => _dbPath != null ? Path.GetFileName(_dbPath) : null;
+
+    /// <summary>Full path of the LiteDB file, or null before initialization.</summary>
+    public string? DatabaseFilePath => _dbPath;
+
+    public bool TryInitialize()
+    {
+        if (_isInitialized) return true;
+
+        lock (_initLock)
+        {
+            if (_isInitialized) return true;
+
+            try
+            {
+                _dbPath = GetDatabasePath();
+                var directory = Path.GetDirectoryName(_dbPath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                Log.Information("LiteDB opening database at: {DbPath}", _dbPath);
+
+                // Use Shared mode with WAL journal. Writes go to the WAL
+                // (durable on disk), then Checkpoint() in each repository
+                // merges them into the main file. This survives SIGKILL because
+                // WAL recovery replays committed transactions on next startup.
+                _database = new LiteDatabase($"Filename={_dbPath};Connection=shared", _mapper);
+                _isInitialized = true;
+
+                CreateIndexes();
+
+                Log.Information("LiteDB initialized successfully");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to initialize LiteDB");
+                _database?.Dispose();
+                _database = null;
+                return false;
+            }
+        }
+    }
+
+    public async Task<bool> ReinitializeAsync(string connectionString, string databaseName)
+    {
+        lock (_initLock)
+        {
+            _isInitialized = false;
+            _database?.Dispose();
+            _database = null;
+            _dbPath = null;
+        }
+
+        await _userConfigService.SaveConfigAsync(new UserConfig
+        {
+            Provider = DatabaseProvider.Local,
+        });
+
+        return TryInitialize();
+    }
+
+    internal LiteDatabase Database
+    {
+        get
+        {
+            EnsureConnected();
+            return _database!;
+        }
+    }
+
+    internal ILiteCollection<Qso> Qsos
+    {
+        get { EnsureConnected(); return _database!.GetCollection<Qso>("qsos"); }
+    }
+
+    internal ILiteCollection<UserSettings> Settings
+    {
+        get { EnsureConnected(); return _database!.GetCollection<UserSettings>("settings"); }
+    }
+
+
+    internal ILiteCollection<CallsignMapImage> CallsignMapImages
+    {
+        get { EnsureConnected(); return _database!.GetCollection<CallsignMapImage>("callsign_images"); }
+    }
+
+    internal ILiteCollection<RadioConfigEntity> RadioConfigs
+    {
+        get { EnsureConnected(); return _database!.GetCollection<RadioConfigEntity>("radio_configs"); }
+    }
+
+    private void EnsureConnected()
+    {
+        if (!_isInitialized || _database == null)
+        {
+            throw new InvalidOperationException(
+                "LiteDB is not initialized. Please complete the setup wizard.");
+        }
+    }
+
+    private string GetDatabasePath()
+    {
+        var configPath = _userConfigService.GetConfigPath();
+        var configDir = Path.GetDirectoryName(configPath)!;
+        return Path.Combine(configDir, "sdrloggerplus.db");
+    }
+
+    private void CreateIndexes()
+    {
+        // QSO indexes
+        Qsos.EnsureIndex(q => q.Callsign);
+        Qsos.EnsureIndex(q => q.QsoDate);
+        Qsos.EnsureIndex(q => q.Band);
+        Qsos.EnsureIndex(q => q.Mode);
+        Qsos.EnsureIndex(q => q.QrzSyncStatus);
+
+        // Composite index for duplicate detection during ADIF import
+        // This significantly speeds up ExistsAsync queries
+        Qsos.EnsureIndex("idx_duplicate_check",
+            "$.Callsign + '|' + $.QsoDate + '|' + $.TimeOn + '|' + $.Band + '|' + $.Mode");
+
+        // Callsign map image indexes
+        CallsignMapImages.EnsureIndex(i => i.Callsign, true);
+        CallsignMapImages.EnsureIndex(i => i.SavedAt);
+
+        // Radio config indexes
+        RadioConfigs.EnsureIndex(r => r.RadioId, true);
+        RadioConfigs.EnsureIndex(r => r.RadioType);
+    }
+
+    public void Dispose()
+    {
+        _database?.Dispose();
+        _database = null;
+        _isInitialized = false;
+    }
+}

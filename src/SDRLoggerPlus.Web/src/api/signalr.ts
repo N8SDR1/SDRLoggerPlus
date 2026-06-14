@@ -1,0 +1,1293 @@
+import * as signalR from '@microsoft/signalr';
+import { useToastStore } from '../store/toastStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { announceBandOpening } from '../utils/bandOpeningAnnouncer';
+import { createCallbackSet } from '../utils/callbackSet';
+
+export interface CallsignFocusedEvent {
+  callsign: string;
+  source: string;
+  grid?: string;
+  frequency?: number;
+  mode?: string;
+}
+
+export interface CallsignLookedUpEvent {
+  callsign: string;
+  name?: string;
+  grid?: string;
+  latitude?: number;
+  longitude?: number;
+  country?: string;
+  dxcc?: number;
+  cqZone?: number;
+  ituZone?: number;
+  state?: string;
+  imageUrl?: string;
+  bearing?: number;
+  distance?: number;
+}
+
+export interface QsoLoggedEvent {
+  id: string;
+  callsign: string;
+  qsoDate: string;
+  timeOn: string;
+  band: string;
+  mode: string;
+  frequency?: number;
+  rstSent?: string;
+  rstRcvd?: string;
+  grid?: string;
+}
+
+export interface SpotReceivedEvent {
+  id: string;
+  dxCall: string;
+  spotter: string;
+  frequency: number;
+  mode?: string;
+  comment?: string;
+  timestamp: string;
+  source: string;
+  country?: string;
+  dxcc?: number;
+  grid?: string;
+  spotterCountry?: string;
+  spotterDxcc?: number;
+  spotterGrid?: string;
+  spotterContinent?: string;
+  spotStatus?: 'newDxcc' | 'newBand' | 'worked';
+  isHot?: boolean;
+}
+
+export interface SatPassQso {
+  satName: string;
+  callsign: string;
+  grid: string;
+  mode: string;
+  timeUtc: string;
+}
+
+export interface SatEvent {
+  timeUtc: string;
+  kind: string;
+  detail: string;
+}
+
+export interface SatMapInfo {
+  lat: number;
+  lon: number;
+  altKm: number;
+  footprintRadiusKm: number;
+}
+
+export interface SatState {
+  active: boolean;
+  status: string;
+  serial?: string | null;
+  firmware?: string | null;
+  satellite?: string | null;
+  catalogNumber?: string | null;
+  transponder?: string | null;
+  uplinkFreq?: string | null;
+  uplinkMode?: string | null;
+  downlinkFreq?: string | null;
+  downlinkMode?: string | null;
+  aosAzimuth?: string | null;
+  losAzimuth?: string | null;
+  aosTimeUtc?: string | null;
+  lastHeardUtc?: string | null;
+  passQsos: SatPassQso[];
+  events: SatEvent[];
+  map?: SatMapInfo | null;
+  error?: string | null;
+}
+
+export interface HotListChangedEvent {
+  enabled: boolean;
+  ttsEnabled: boolean;
+  callsigns: string[];
+}
+
+export interface SpotSelectedEvent {
+  dxCall: string;
+  frequency: number;
+  mode?: string;
+  grid?: string;
+}
+
+export interface RotatorPositionEvent {
+  rotatorId: string;
+  currentAzimuth: number;
+  isMoving: boolean;
+  targetAzimuth?: number;
+}
+
+export interface RotatorCommandEvent {
+  rotatorId: string;
+  targetAzimuth: number;
+  source: string;
+}
+
+export interface RigStatusEvent {
+  rigId: string;
+  frequency: number;
+  mode: string;
+  isTransmitting: boolean;
+}
+
+/** Live meter readings from a TCI radio (Thetis sensor streams), ≤10 Hz. */
+export interface TciMetersEvent {
+  radioId: string;
+  rxSignalDbm: number | null;
+  rxAvgSignalDbm: number | null;
+  txMicDbm: number | null;
+  txPowerWatts: number | null;
+  txPeakPowerWatts: number | null;
+  txSwr: number | null;
+  isTransmitting: boolean;
+  timestampUtc: string;
+}
+
+// Antenna Genius types
+export interface AntennaGeniusDiscoveredEvent {
+  ipAddress: string;
+  port: number;
+  version: string;
+  serial: string;
+  name: string;
+  radioPorts: number;
+  antennaPorts: number;
+  mode: string;
+  uptime: number;
+}
+
+export interface AntennaGeniusDisconnectedEvent {
+  serial: string;
+}
+
+export interface AntennaGeniusAntennaInfo {
+  id: number;
+  name: string;
+  txBandMask: number;
+  rxBandMask: number;
+  inbandMask: number;
+}
+
+export interface AntennaGeniusBandInfo {
+  id: number;
+  name: string;
+  freqStart: number;
+  freqStop: number;
+}
+
+export interface AntennaGeniusPortStatus {
+  portId: number;
+  auto: boolean;
+  source: string;
+  band: number;
+  rxAntenna: number;
+  txAntenna: number;
+  isTransmitting: boolean;
+  isInhibited: boolean;
+}
+
+export interface AntennaGeniusStatusEvent {
+  deviceSerial: string;
+  deviceName: string;
+  ipAddress: string;
+  version: string;
+  isConnected: boolean;
+  antennas: AntennaGeniusAntennaInfo[];
+  bands: AntennaGeniusBandInfo[];
+  portA: AntennaGeniusPortStatus;
+  portB: AntennaGeniusPortStatus;
+}
+
+export interface AntennaGeniusPortChangedEvent {
+  deviceSerial: string;
+  portId: number;
+  auto: boolean;
+  source: string;
+  band: number;
+  rxAntenna: number;
+  txAntenna: number;
+  isTransmitting: boolean;
+  isInhibited: boolean;
+}
+
+export interface SelectAntennaCommand {
+  deviceSerial: string;
+  portId: number;
+  antennaId: number;
+}
+
+// PGXL Amplifier types
+export interface PgxlDiscoveredEvent {
+  ipAddress: string;
+  port: number;
+  serial: string;
+  model: string;
+}
+
+export interface PgxlDisconnectedEvent {
+  serial: string;
+}
+
+export interface PgxlMeters {
+  forwardPowerDbm: number;
+  forwardPowerWatts: number;
+  returnLossDb: number;
+  swrRatio: number;
+  drivePowerDbm: number;
+  paCurrent: number;
+  temperatureC: number;
+}
+
+export interface PgxlSetup {
+  bandSource: string;
+  selectedAntenna: number;
+  attenuatorEnabled: boolean;
+  biasOffset: number;
+  pttDelay: number;
+  keyDelay: number;
+  highSwr: boolean;
+  overTemp: boolean;
+  overCurrent: boolean;
+}
+
+export interface PgxlStatusEvent {
+  serial: string;
+  ipAddress: string;
+  isConnected: boolean;
+  isOperating: boolean;
+  isTransmitting: boolean;
+  band: string;
+  biasA: string;
+  biasB: string;
+  meters: PgxlMeters;
+  setup: PgxlSetup;
+}
+
+export interface SetPgxlOperateCommand {
+  serial: string;
+}
+
+export interface SetPgxlStandbyCommand {
+  serial: string;
+}
+
+// Tuner Genius types
+export interface TunerGeniusDiscoveredEvent {
+  ipAddress: string;
+  port: number;
+  version: string;
+  serial: string;
+  name: string;
+  model: string;  // "SO2R" or "AntennaSwitch"
+  uptime: number;
+}
+
+export interface TunerGeniusDisconnectedEvent {
+  serial: string;
+}
+
+export interface TunerGeniusPortStatus {
+  portId: number;
+  auto: boolean;
+  band: string;
+  frequencyMhz: number;
+  swr: number;           // SWR * 10 (e.g., 15 = 1.5:1)
+  isTuning: boolean;
+  isTransmitting: boolean;
+  selectedAntenna?: number;  // null/undefined if not in antenna switch mode
+  tuneResult: string;    // "OK", "HighSWR", "Timeout", etc.
+}
+
+export interface TunerGeniusStatusEvent {
+  deviceSerial: string;
+  deviceName: string;
+  ipAddress: string;
+  version: string;
+  model: string;
+  isConnected: boolean;
+  // Tuner state
+  isOperating: boolean;
+  isBypassed: boolean;
+  isTuning: boolean;
+  activeRadio: number;          // 1 or 2
+  // Metering
+  forwardPowerWatts: number;
+  swr: number;                  // e.g. 1.5 (double)
+  // Matching network positions (0–255)
+  l: number;
+  c1: number;
+  c2: number;
+  // Per-radio frequency inputs
+  freqAMhz: number;
+  freqBMhz: number;
+  // Legacy port wrappers (portA = Radio 1, portB = Radio 2)
+  portA: TunerGeniusPortStatus;
+  portB?: TunerGeniusPortStatus;  // null for non-SO2R models
+}
+
+export interface TunerGeniusPortChangedEvent {
+  deviceSerial: string;
+  portId: number;
+  auto: boolean;
+  band: string;
+  frequencyMhz: number;
+  swr: number;              // SWR * 10 (int, legacy)
+  isTuning: boolean;
+  isTransmitting: boolean;
+  selectedAntenna?: number;
+  tuneResult: string;
+  // Tuner-level fields (mirrored from TunerGeniusStatusEvent)
+  isBypassed: boolean;
+  isOperating: boolean;
+  forwardPowerWatts: number;
+  swrDecimal: number;       // SWR as double e.g. 1.5
+  l: number;
+  c1: number;
+  c2: number;
+  activeRadio: number;
+}
+
+export interface TuneTunerGeniusCommand {
+  deviceSerial: string;
+  portId: number;
+}
+
+export interface BypassTunerGeniusCommand {
+  deviceSerial: string;
+  portId: number;
+  bypass: boolean;
+}
+
+export interface OperateTunerGeniusCommand {
+  deviceSerial: string;
+  operate: boolean;
+}
+
+export interface ActivateChannelTunerGeniusCommand {
+  deviceSerial: string;
+  channel: number;
+}
+
+// Radio CAT Control types
+export type RadioType = 'Tci' | 'Hamlib';
+
+export type RadioConnectionState =
+  | 'Disconnected'
+  | 'Discovering'
+  | 'Connecting'
+  | 'Connected'
+  | 'Monitoring'
+  | 'Error';
+
+export interface RadioDiscoveredEvent {
+  id: string;
+  type: RadioType;
+  model: string;
+  ipAddress: string;
+  port: number;
+  nickname?: string;
+  slices?: string[];
+}
+
+export interface RadioRemovedEvent {
+  id: string;
+}
+
+export interface RadioConnectionStateChangedEvent {
+  radioId: string;
+  state: RadioConnectionState;
+  errorMessage?: string;
+}
+
+export interface RadioStateChangedEvent {
+  radioId: string;
+  frequencyHz: number;
+  mode: string;
+  isTransmitting: boolean;
+  band: string;
+  sliceOrInstance?: string;
+}
+
+// CW Keyer types
+export interface CwKeyerStatusEvent {
+  radioId: string;
+  isKeying: boolean;
+  speedWpm: number;
+  currentMessage?: string;
+}
+
+export interface SendCwKeyCommand {
+  radioId: string;
+  message: string;
+  speedWpm?: number;
+}
+
+export interface StopCwKeyCommand {
+  radioId: string;
+}
+
+export interface SetCwSpeedCommand {
+  radioId: string;
+  speedWpm: number;
+}
+
+export interface StartRadioDiscoveryCommand {
+  type: RadioType;
+}
+
+export interface StopRadioDiscoveryCommand {
+  type: RadioType;
+}
+
+export interface ConnectRadioCommand {
+  radioId: string;
+}
+
+export interface DisconnectRadioCommand {
+  radioId: string;
+}
+
+export interface SelectRadioInstanceCommand {
+  radioId: string;
+  instance: number;
+}
+
+// Hamlib Configuration types
+export type HamlibConnectionType = 'Serial' | 'Network';
+export type HamlibDataBits = 5 | 6 | 7 | 8;
+export type HamlibStopBits = 1 | 2;
+export type HamlibFlowControl = 'None' | 'Hardware' | 'Software';
+export type HamlibParity = 'None' | 'Even' | 'Odd' | 'Mark' | 'Space';
+export type HamlibPttType = 'None' | 'Rig' | 'Dtr' | 'Rts';
+
+export interface HamlibRigModelInfo {
+  modelId: number;
+  manufacturer: string;
+  model: string;
+  version: string;
+  displayName: string;
+}
+
+export interface HamlibRigCapabilities {
+  canGetFreq: boolean;
+  canGetMode: boolean;
+  canGetVfo: boolean;
+  canGetPtt: boolean;
+  canGetPower: boolean;
+  canGetRit: boolean;
+  canGetXit: boolean;
+  canGetKeySpeed: boolean;
+  canSendMorse: boolean;
+  defaultDataBits: number;
+  defaultStopBits: number;
+  isNetworkOnly: boolean;
+  supportsSerial: boolean;
+  supportsNetwork: boolean;
+}
+
+export interface HamlibRigConfigDto {
+  modelId: number;
+  modelName: string;
+  connectionType: HamlibConnectionType;
+  serialPort?: string;
+  baudRate: number;
+  dataBits: HamlibDataBits;
+  stopBits: HamlibStopBits;
+  flowControl: HamlibFlowControl;
+  parity: HamlibParity;
+  hostname?: string;
+  networkPort: number;
+  pttType: HamlibPttType;
+  pttPort?: string;
+  getFrequency: boolean;
+  getMode: boolean;
+  getVfo: boolean;
+  getPtt: boolean;
+  getPower: boolean;
+  getRit: boolean;
+  getXit: boolean;
+  getKeySpeed: boolean;
+  pollIntervalMs: number;
+}
+
+export interface HamlibRigListEvent {
+  rigs: HamlibRigModelInfo[];
+}
+
+export interface HamlibRigCapsEvent {
+  modelId: number;
+  capabilities: HamlibRigCapabilities;
+}
+
+export interface HamlibSerialPortsEvent {
+  ports: string[];
+}
+
+export interface HamlibConfigLoadedEvent {
+  config: HamlibRigConfigDto | null;
+}
+
+export interface HamlibStatusEvent {
+  isInitialized: boolean;
+  isConnected: boolean;
+  radioId: string | null;
+  errorMessage: string | null;
+}
+
+export const HAMLIB_BAUD_RATES = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200] as const;
+
+// QRZ Sync types
+export interface QrzSyncProgressEvent {
+  total: number;
+  completed: number;
+  successful: number;
+  failed: number;
+  isComplete: boolean;
+  currentCallsign: string | null;
+  message: string | null;
+}
+
+// LOTW Upload types
+export interface LotwUploadProgressEvent {
+  stage: string; // "preparing" | "signing" | "uploading" | "done" | "error"
+  qsoCount: number;
+  isComplete: boolean;
+  tqslExitCode: number | null;
+  message: string | null;
+}
+
+// ADIF Import types
+export interface AdifImportProgressEvent {
+  total: number;
+  processed: number;
+  imported: number;
+  skipped: number;
+  failed: number;
+  isComplete: boolean;
+  currentCallsign: string | null;
+  message: string | null;
+}
+
+// DX Cluster types
+export interface ClusterStatusChangedEvent {
+  clusterId: string;
+  name: string;
+  status: 'connected' | 'connecting' | 'disconnected' | 'error';
+  errorMessage: string | null;
+}
+
+// Spectrum types
+export interface SpectrumDataEvent {
+  lowFrequencyHz: number;
+  highFrequencyHz: number;
+  data: number[];
+}
+
+// Direct callbacks for spectrum data (bypasses React state for 20fps performance)
+const spectrumDataCallbacks = createCallbackSet<SpectrumDataEvent>();
+
+export function setSpectrumDataCallback(cb: ((evt: SpectrumDataEvent) => void) | null): void {
+  if (cb) spectrumDataCallbacks.add(cb);
+  else spectrumDataCallbacks.clear();
+}
+
+export function clearSpectrumDataCallback(cb: (evt: SpectrumDataEvent) => void): void {
+  spectrumDataCallbacks.remove(cb);
+}
+
+// Direct callback for TCI meter data (bypasses React state, ≤12 Hz needle updates)
+let tciMetersCallback: ((evt: TciMetersEvent) => void) | null = null;
+
+export function setTciMetersCallback(cb: ((evt: TciMetersEvent) => void) | null): void {
+  tciMetersCallback = cb;
+}
+
+/** Clears the callback only if it is still the given one — prevents an
+ * unmounting duplicate panel from killing the surviving panel's feed. */
+export function clearTciMetersCallback(cb: (evt: TciMetersEvent) => void): void {
+  if (tciMetersCallback === cb) tciMetersCallback = null;
+}
+
+// Connection state for tracking
+export type SignalRConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'rehydrating';
+
+type ConnectionStateCallback = (state: SignalRConnectionState, attempt: number) => void;
+
+type EventHandlers = {
+  onCallsignFocused?: (evt: CallsignFocusedEvent) => void;
+  onCallsignLookedUp?: (evt: CallsignLookedUpEvent) => void;
+  onQsoLogged?: (evt: QsoLoggedEvent) => void;
+  onSpotReceived?: (evt: SpotReceivedEvent) => void;
+  onHotListChanged?: (evt: HotListChangedEvent) => void;
+  onSatState?: (state: SatState) => void;
+  onSpotSelected?: (evt: SpotSelectedEvent) => void;
+  onRotatorPosition?: (evt: RotatorPositionEvent) => void;
+  onRigStatus?: (evt: RigStatusEvent) => void;
+  // Antenna Genius handlers
+  onAntennaGeniusDiscovered?: (evt: AntennaGeniusDiscoveredEvent) => void;
+  onAntennaGeniusDisconnected?: (evt: AntennaGeniusDisconnectedEvent) => void;
+  onAntennaGeniusStatus?: (evt: AntennaGeniusStatusEvent) => void;
+  onAntennaGeniusPortChanged?: (evt: AntennaGeniusPortChangedEvent) => void;
+  // PGXL handlers
+  onPgxlDiscovered?: (evt: PgxlDiscoveredEvent) => void;
+  onPgxlDisconnected?: (evt: PgxlDisconnectedEvent) => void;
+  onPgxlStatus?: (evt: PgxlStatusEvent) => void;
+  // Tuner Genius handlers
+  onTunerGeniusDiscovered?: (evt: TunerGeniusDiscoveredEvent) => void;
+  onTunerGeniusDisconnected?: (evt: TunerGeniusDisconnectedEvent) => void;
+  onTunerGeniusStatus?: (evt: TunerGeniusStatusEvent) => void;
+  onTunerGeniusPortChanged?: (evt: TunerGeniusPortChangedEvent) => void;
+  // Radio CAT Control handlers
+  onRadioDiscovered?: (evt: RadioDiscoveredEvent) => void;
+  onRadioRemoved?: (evt: RadioRemovedEvent) => void;
+  onRadioConnectionStateChanged?: (evt: RadioConnectionStateChangedEvent) => void;
+  onRadioStateChanged?: (evt: RadioStateChangedEvent) => void;  // CW Keyer handlers
+  onCwKeyerStatus?: (evt: CwKeyerStatusEvent) => void;
+  // Hamlib configuration handlers
+  onHamlibRigList?: (evt: HamlibRigListEvent) => void;
+  onHamlibRigCaps?: (evt: HamlibRigCapsEvent) => void;
+  onHamlibSerialPorts?: (evt: HamlibSerialPortsEvent) => void;
+  onHamlibConfigLoaded?: (evt: HamlibConfigLoadedEvent) => void;
+  onHamlibStatus?: (evt: HamlibStatusEvent) => void;  // QRZ Sync handlers
+  onQrzSyncProgress?: (evt: QrzSyncProgressEvent) => void;
+  // LOTW Upload handlers
+  onLotwUploadProgress?: (evt: LotwUploadProgressEvent) => void;
+  // ADIF Import handlers
+  onAdifImportProgress?: (evt: AdifImportProgressEvent) => void;
+  // DX Cluster handlers
+  onClusterStatusChanged?: (evt: ClusterStatusChangedEvent) => void;
+  // Spectrum handlers
+  onSpectrumData?: (evt: SpectrumDataEvent) => void;
+};
+
+class SignalRService {
+  private connection: signalR.HubConnection | null = null;
+  private handlers: EventHandlers = {};
+  private connectPromise: Promise<void> | null = null;
+  private disconnectPending = false;
+  private connectionStateCallback: ConnectionStateCallback | null = null;
+  private onConnectedCallback: (() => Promise<void>) | null = null;
+  private reconnectAttempt = 0;
+  private isManualDisconnect = false;
+  private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  // Set callback for connection state changes
+  setConnectionStateCallback(callback: ConnectionStateCallback): void {
+    this.connectionStateCallback = callback;
+  }
+
+  // Set callback to run when connection is established (initial or reconnect)
+  setOnConnectedCallback(callback: () => Promise<void>): void {
+    this.onConnectedCallback = callback;
+  }
+
+  private notifyStateChange(state: SignalRConnectionState, attempt = 0): void {
+    this.connectionStateCallback?.(state, attempt);
+  }
+
+  private async notifyConnected(): Promise<void> {
+    if (this.onConnectedCallback) {
+      try {
+        await this.onConnectedCallback();
+      } catch (err) {
+        console.error('Error in onConnected callback:', err);
+      }
+    }
+  }
+
+  async connect(): Promise<void> {
+    // Cancel any pending disconnect (handles React StrictMode double-render)
+    this.disconnectPending = false;
+    this.isManualDisconnect = false;
+
+    // Clear any pending reconnect timeout
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
+
+    // If already connected, return immediately
+    if (this.connection?.state === signalR.HubConnectionState.Connected) {
+      this.notifyStateChange('connected', 0);
+      return;
+    }
+
+    // If currently connecting, wait for that attempt to complete
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
+
+    // Notify connecting state
+    const isReconnect = this.reconnectAttempt > 0;
+    this.notifyStateChange(isReconnect ? 'reconnecting' : 'connecting', this.reconnectAttempt);
+
+    // If there's an existing connection in a bad state, clean it up
+    if (this.connection &&
+        this.connection.state !== signalR.HubConnectionState.Disconnected &&
+        this.connection.state !== signalR.HubConnectionState.Connecting) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore stop errors
+      }
+      this.connection = null;
+    }
+
+    // Only create new connection if we don't have one
+    if (!this.connection) {
+      this.connection = new signalR.HubConnectionBuilder()
+        .withUrl('/hubs/log')
+        .withAutomaticReconnect({
+          nextRetryDelayInMilliseconds: (retryContext) => {
+            // Built-in reconnect: try up to 5 times with exponential backoff
+            // After that, we fall back to our own unlimited reconnection loop
+            if (retryContext.previousRetryCount >= 5) {
+              return null;
+            }
+            const delay = Math.min(1000 * Math.pow(2, retryContext.previousRetryCount), 30000);
+            this.reconnectAttempt = retryContext.previousRetryCount + 1;
+            this.notifyStateChange('reconnecting', this.reconnectAttempt);
+            return delay;
+          }
+        })
+        .configureLogging(signalR.LogLevel.Warning) // Reduce log noise
+        .build();
+
+      this.setupEventHandlers();
+
+      this.connection.onreconnecting(() => {
+        console.log('SignalR reconnecting...');
+        this.notifyStateChange('reconnecting', this.reconnectAttempt);
+      });
+
+      this.connection.onreconnected(async () => {
+        console.log('SignalR reconnected, starting rehydration...');
+        this.reconnectAttempt = 0;
+        // Go to rehydrating state - callback will set to connected when done
+        this.notifyStateChange('rehydrating', 0);
+        // Rehydrate all data - callback is responsible for setting 'connected' when done
+        await this.notifyConnected();
+      });
+
+      this.connection.onclose((error) => {
+        console.log('SignalR connection closed', error ? `Error: ${error.message}` : '');
+        this.connectPromise = null;
+
+        // If this wasn't a manual disconnect, start our own reconnection loop
+        if (!this.isManualDisconnect && !this.disconnectPending) {
+          this.notifyStateChange('disconnected', this.reconnectAttempt);
+          this.scheduleReconnect();
+        }
+      });
+    }
+
+    // Store the connection promise so concurrent calls can wait on it
+    this.connectPromise = this.connection.start()
+      .then(async () => {
+        console.log('SignalR connected, starting rehydration...');
+        this.reconnectAttempt = 0;
+        // Go to rehydrating state - callback will set to connected when done
+        this.notifyStateChange('rehydrating', 0);
+        // Rehydrate all data - callback is responsible for setting 'connected' when done
+        await this.notifyConnected();
+      })
+      .catch((err) => {
+        // Only log non-abort errors (aborts happen during HMR/StrictMode)
+        if (!(err instanceof Error && err.name === 'AbortError')) {
+          console.error('SignalR connection error:', err);
+        }
+        this.connectPromise = null;
+
+        // Schedule reconnection on failure (unless manually disconnecting)
+        if (!this.isManualDisconnect && !this.disconnectPending) {
+          this.notifyStateChange('disconnected', this.reconnectAttempt);
+          this.scheduleReconnect();
+        }
+
+        throw err;
+      });
+
+    return this.connectPromise;
+  }
+
+  private scheduleReconnect(): void {
+    // Don't schedule if manually disconnected or already scheduling
+    if (this.isManualDisconnect || this.disconnectPending || this.reconnectTimeoutId) {
+      return;
+    }
+
+    this.reconnectAttempt++;
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempt - 1), 30000);
+
+    console.log(`SignalR scheduling reconnect attempt ${this.reconnectAttempt} in ${delay}ms`);
+    this.notifyStateChange('reconnecting', this.reconnectAttempt);
+
+    this.reconnectTimeoutId = setTimeout(async () => {
+      this.reconnectTimeoutId = null;
+
+      if (this.isManualDisconnect || this.disconnectPending) {
+        return;
+      }
+
+      try {
+        // Clean up the old connection before reconnecting
+        if (this.connection) {
+          try {
+            await this.connection.stop();
+          } catch {
+            // Ignore
+          }
+          this.connection = null;
+        }
+
+        await this.connect();
+      } catch {
+        // connect() will schedule another reconnect on failure
+      }
+    }, delay);
+  }
+
+  private setupEventHandlers(): void {
+    if (!this.connection) return;
+
+    this.connection.on('OnCallsignFocused', (evt: CallsignFocusedEvent) => {
+      this.handlers.onCallsignFocused?.(evt);
+    });
+
+    this.connection.on('OnCallsignLookedUp', (evt: CallsignLookedUpEvent) => {
+      console.log('QRZ Lookup received:', evt);
+      this.handlers.onCallsignLookedUp?.(evt);
+    });
+
+    this.connection.on('OnQsoLogged', (evt: QsoLoggedEvent) => {
+      this.handlers.onQsoLogged?.(evt);
+    });
+
+    this.connection.on('OnBandOpening', (evt: { band: string; dxCall: string; skimmer: string; distance: number; unit: string; snr: number; mode: string }) => {
+      useToastStore.getState().push(
+        `Band Opening! ${evt.band.toUpperCase()} — ${evt.dxCall} heard by ${evt.skimmer} (${evt.distance} ${evt.unit}) ${evt.snr}dB ${evt.mode}`,
+        'success',
+        15000
+      );
+      if (useSettingsStore.getState().settings.rbnAlerts.voice) {
+        announceBandOpening(evt.band, evt.dxCall, evt.mode, evt.distance, evt.unit, evt.snr);
+      }
+    });
+
+    this.connection.on('OnAdifMonitorImport', (evt: { fileName: string; imported: number; skippedDuplicates: number }) => {
+      // Direct toast — no per-component handler needed for a notification
+      const skipped = evt.skippedDuplicates > 0 ? ` (${evt.skippedDuplicates} duplicate${evt.skippedDuplicates === 1 ? '' : 's'} skipped)` : '';
+      useToastStore.getState().push(
+        `ADIF Monitor: imported ${evt.imported} QSO${evt.imported === 1 ? '' : 's'} from ${evt.fileName}${skipped}`,
+        'success'
+      );
+    });
+
+    this.connection.on('OnHotListChanged', (evt: HotListChangedEvent) => {
+      this.handlers.onHotListChanged?.(evt);
+    });
+
+    this.connection.on('OnSatState', (state: SatState) => {
+      this.handlers.onSatState?.(state);
+    });
+
+    this.connection.on('OnSpotReceived', (evt: SpotReceivedEvent) => {
+      this.handlers.onSpotReceived?.(evt);
+    });
+
+    this.connection.on('OnSpotSelected', (evt: SpotSelectedEvent) => {
+      this.handlers.onSpotSelected?.(evt);
+    });
+
+    this.connection.on('OnRotatorPosition', (evt: RotatorPositionEvent) => {
+      this.handlers.onRotatorPosition?.(evt);
+    });
+
+    this.connection.on('OnRigStatus', (evt: RigStatusEvent) => {
+      this.handlers.onRigStatus?.(evt);
+    });
+
+    // Antenna Genius events
+    this.connection.on('OnAntennaGeniusDiscovered', (evt: AntennaGeniusDiscoveredEvent) => {
+      this.handlers.onAntennaGeniusDiscovered?.(evt);
+    });
+
+    this.connection.on('OnAntennaGeniusDisconnected', (evt: AntennaGeniusDisconnectedEvent) => {
+      this.handlers.onAntennaGeniusDisconnected?.(evt);
+    });
+
+    this.connection.on('OnAntennaGeniusStatus', (evt: AntennaGeniusStatusEvent) => {
+      this.handlers.onAntennaGeniusStatus?.(evt);
+    });
+
+    this.connection.on('OnAntennaGeniusPortChanged', (evt: AntennaGeniusPortChangedEvent) => {
+      this.handlers.onAntennaGeniusPortChanged?.(evt);
+    });
+
+    // PGXL events
+    this.connection.on('OnPgxlDiscovered', (evt: PgxlDiscoveredEvent) => {
+      this.handlers.onPgxlDiscovered?.(evt);
+    });
+
+    this.connection.on('OnPgxlDisconnected', (evt: PgxlDisconnectedEvent) => {
+      this.handlers.onPgxlDisconnected?.(evt);
+    });
+
+    this.connection.on('OnPgxlStatus', (evt: PgxlStatusEvent) => {
+      this.handlers.onPgxlStatus?.(evt);
+    });
+
+    // Tuner Genius events
+    this.connection.on('OnTunerGeniusDiscovered', (evt: TunerGeniusDiscoveredEvent) => {
+      this.handlers.onTunerGeniusDiscovered?.(evt);
+    });
+
+    this.connection.on('OnTunerGeniusDisconnected', (evt: TunerGeniusDisconnectedEvent) => {
+      this.handlers.onTunerGeniusDisconnected?.(evt);
+    });
+
+    this.connection.on('OnTunerGeniusStatus', (evt: TunerGeniusStatusEvent) => {
+      this.handlers.onTunerGeniusStatus?.(evt);
+    });
+
+    this.connection.on('OnTunerGeniusPortChanged', (evt: TunerGeniusPortChangedEvent) => {
+      this.handlers.onTunerGeniusPortChanged?.(evt);
+    });
+
+    // Radio CAT Control events
+    this.connection.on('OnRadioDiscovered', (evt: RadioDiscoveredEvent) => {
+      this.handlers.onRadioDiscovered?.(evt);
+    });
+
+    this.connection.on('OnRadioRemoved', (evt: RadioRemovedEvent) => {
+      this.handlers.onRadioRemoved?.(evt);
+    });
+
+    this.connection.on('OnRadioConnectionStateChanged', (evt: RadioConnectionStateChangedEvent) => {
+      this.handlers.onRadioConnectionStateChanged?.(evt);
+    });
+
+    this.connection.on('OnRadioStateChanged', (evt: RadioStateChangedEvent) => {
+      this.handlers.onRadioStateChanged?.(evt);
+    });
+
+    // CW Keyer events
+    this.connection.on('OnCwKeyerStatus', (evt: CwKeyerStatusEvent) => {
+      this.handlers.onCwKeyerStatus?.(evt);
+    });
+
+    // Hamlib configuration events
+    this.connection.on('OnHamlibRigList', (evt: HamlibRigListEvent) => {
+      this.handlers.onHamlibRigList?.(evt);
+    });
+
+    this.connection.on('OnHamlibRigCaps', (evt: HamlibRigCapsEvent) => {
+      this.handlers.onHamlibRigCaps?.(evt);
+    });
+
+    this.connection.on('OnHamlibSerialPorts', (evt: HamlibSerialPortsEvent) => {
+      this.handlers.onHamlibSerialPorts?.(evt);
+    });
+
+    this.connection.on('OnHamlibConfigLoaded', (evt: HamlibConfigLoadedEvent) => {
+      this.handlers.onHamlibConfigLoaded?.(evt);
+    });
+
+    this.connection.on('OnHamlibStatus', (evt: HamlibStatusEvent) => {
+      this.handlers.onHamlibStatus?.(evt);
+    });
+
+    // QRZ Sync events
+    this.connection.on('OnQrzSyncProgress', (evt: QrzSyncProgressEvent) => {
+      this.handlers.onQrzSyncProgress?.(evt);
+    });
+
+    // LOTW Upload events
+    this.connection.on('OnLotwUploadProgress', (evt: LotwUploadProgressEvent) => {
+      this.handlers.onLotwUploadProgress?.(evt);
+    });
+
+    // ADIF Import events
+    this.connection.on('OnAdifImportProgress', (evt: AdifImportProgressEvent) => {
+      this.handlers.onAdifImportProgress?.(evt);
+    });
+
+    // DX Cluster events
+    this.connection.on('OnClusterStatusChanged', (evt: ClusterStatusChangedEvent) => {
+      this.handlers.onClusterStatusChanged?.(evt);
+    });
+
+    // Spectrum events (direct callback, bypasses React state)
+    this.connection.on('OnSpectrumData', (evt: SpectrumDataEvent) => {
+      spectrumDataCallbacks.emit(evt);
+      this.handlers.onSpectrumData?.(evt);
+    });
+
+    // TCI meter events (direct callback, bypasses React state)
+    this.connection.on('OnTciMeters', (evt: TciMetersEvent) => {
+      tciMetersCallback?.(evt);
+    });
+  }
+
+  setHandlers(handlers: EventHandlers): void {
+    this.handlers = { ...this.handlers, ...handlers };
+  }
+
+  // Client-to-server methods
+  async focusCallsign(evt: CallsignFocusedEvent): Promise<void> {
+    console.log('Sending FocusCallsign:', evt);
+    await this.connection?.invoke('FocusCallsign', evt);
+  }
+
+  async selectSpot(evt: SpotSelectedEvent): Promise<void> {
+    await this.connection?.invoke('SelectSpot', evt);
+  }
+
+  async persistCallsignMapImage(image: { callsign: string; imageUrl?: string; latitude: number; longitude: number; name?: string; country?: string; grid?: string }): Promise<void> {
+    await this.connection?.invoke('PersistCallsignMapImage', image);
+  }
+
+  async commandRotator(evt: RotatorCommandEvent): Promise<void> {
+    await this.connection?.invoke('CommandRotator', evt);
+  }
+
+  // Antenna Genius methods
+  async selectAntenna(deviceSerial: string, portId: number, antennaId: number): Promise<void> {
+    const cmd: SelectAntennaCommand = { deviceSerial, portId, antennaId };
+    await this.connection?.invoke('SelectAntenna', cmd);
+  }
+
+  async requestAntennaGeniusStatus(): Promise<void> {
+    await this.connection?.invoke('RequestAntennaGeniusStatus');
+  }
+
+  // PGXL methods
+  async setPgxlOperate(serial: string): Promise<void> {
+    const cmd: SetPgxlOperateCommand = { serial };
+    await this.connection?.invoke('SetPgxlOperate', cmd);
+  }
+
+  async setPgxlStandby(serial: string): Promise<void> {
+    const cmd: SetPgxlStandbyCommand = { serial };
+    await this.connection?.invoke('SetPgxlStandby', cmd);
+  }
+
+  async requestPgxlStatus(): Promise<void> {
+    await this.connection?.invoke('RequestPgxlStatus');
+  }
+
+  // Tuner Genius methods
+  async tuneTunerGenius(deviceSerial: string, portId: number): Promise<void> {
+    const cmd: TuneTunerGeniusCommand = { deviceSerial, portId };
+    await this.connection?.invoke('TuneTunerGenius', cmd);
+  }
+
+  async bypassTunerGenius(deviceSerial: string, portId: number, bypass: boolean): Promise<void> {
+    const cmd: BypassTunerGeniusCommand = { deviceSerial, portId, bypass };
+    await this.connection?.invoke('BypassTunerGenius', cmd);
+  }
+
+  async operateTunerGenius(deviceSerial: string, operate: boolean): Promise<void> {
+    const cmd: OperateTunerGeniusCommand = { deviceSerial, operate };
+    await this.connection?.invoke('OperateTunerGenius', cmd);
+  }
+
+  async activateChannelTunerGenius(deviceSerial: string, channel: number): Promise<void> {
+    const cmd: ActivateChannelTunerGeniusCommand = { deviceSerial, channel };
+    await this.connection?.invoke('ActivateChannelTunerGenius', cmd);
+  }
+
+  async requestTunerGeniusStatus(): Promise<void> {
+    await this.connection?.invoke('RequestTunerGeniusStatus');
+  }
+
+  // Radio CAT Control methods
+  async startRadioDiscovery(type: RadioType): Promise<void> {
+    const cmd: StartRadioDiscoveryCommand = { type };
+    await this.connection?.invoke('StartRadioDiscovery', cmd);
+  }
+
+  async stopRadioDiscovery(type: RadioType): Promise<void> {
+    const cmd: StopRadioDiscoveryCommand = { type };
+    await this.connection?.invoke('StopRadioDiscovery', cmd);
+  }
+
+  async connectRadio(radioId: string): Promise<void> {
+    const cmd: ConnectRadioCommand = { radioId };
+    await this.connection?.invoke('ConnectRadio', cmd);
+  }
+
+  async disconnectRadio(radioId: string): Promise<void> {
+    const cmd: DisconnectRadioCommand = { radioId };
+    await this.connection?.invoke('DisconnectRadio', cmd);
+  }
+
+  async selectRadioInstance(radioId: string, instance: number): Promise<void> {
+    const cmd: SelectRadioInstanceCommand = { radioId, instance };
+    await this.connection?.invoke('SelectRadioInstance', cmd);
+  }
+
+  async requestRadioStatus(): Promise<void> {
+    await this.connection?.invoke('RequestRadioStatus');
+  }
+
+  // CW Keyer methods
+  async sendCwKey(radioId: string, message: string, speedWpm?: number): Promise<void> {
+    const cmd: SendCwKeyCommand = { radioId, message, speedWpm };
+    await this.connection?.invoke('SendCwKey', cmd);
+  }
+
+  async stopCwKey(radioId: string): Promise<void> {
+    const cmd: StopCwKeyCommand = { radioId };
+    await this.connection?.invoke('StopCwKey', cmd);
+  }
+
+  async setCwSpeed(radioId: string, speedWpm: number): Promise<void> {
+    const cmd: SetCwSpeedCommand = { radioId, speedWpm };
+    await this.connection?.invoke('SetCwSpeed', cmd);
+  }
+
+  async requestCwKeyerStatus(radioId: string): Promise<void> {
+    await this.connection?.invoke('RequestCwKeyerStatus', radioId);
+  }
+
+  // Hamlib configuration methods
+  async getHamlibRigList(): Promise<void> {
+    await this.connection?.invoke('GetHamlibRigList');
+  }
+
+  async getHamlibRigCaps(modelId: number): Promise<void> {
+    await this.connection?.invoke('GetHamlibRigCaps', modelId);
+  }
+
+  async getHamlibSerialPorts(): Promise<void> {
+    await this.connection?.invoke('GetHamlibSerialPorts');
+  }
+
+  async getHamlibConfig(): Promise<void> {
+    await this.connection?.invoke('GetHamlibConfig');
+  }
+
+  async getHamlibStatus(): Promise<void> {
+    await this.connection?.invoke('GetHamlibStatus');
+  }
+
+  async connectHamlibRig(config: HamlibRigConfigDto): Promise<void> {
+    await this.connection?.invoke('ConnectHamlibRig', config);
+  }
+
+  async saveHamlibConfig(config: HamlibRigConfigDto): Promise<void> {
+    await this.connection?.invoke('SaveHamlibConfig', config);
+  }
+
+  async disconnectHamlibRig(): Promise<void> {
+    await this.connection?.invoke('DisconnectHamlibRig');
+  }
+
+  async deleteHamlibConfig(): Promise<void> {
+    await this.connection?.invoke('DeleteHamlibConfig');
+  }
+
+  async saveTciConfig(host: string, port: number, name?: string): Promise<void> {
+    await this.connection?.invoke('SaveTciConfig', host, port, name ?? null);
+  }
+
+  async deleteTciConfig(radioId?: string): Promise<void> {
+    await this.connection?.invoke('DeleteTciConfig', radioId ?? null);
+  }
+
+  // TCI direct connection methods
+  async connectTci(host: string, port: number = 50001, name?: string): Promise<void> {
+    await this.connection?.invoke('ConnectTci', host, port, name);
+  }
+
+  async disconnectTci(radioId: string): Promise<void> {
+    await this.connection?.invoke('DisconnectTci', radioId);
+  }
+
+  // Spectrum methods
+  async tuneToFrequency(frequencyHz: number): Promise<void> {
+    await this.connection?.invoke('TuneToFrequency', frequencyHz);
+  }
+
+  // Rotator methods
+  async requestRotatorStatus(): Promise<void> {
+    await this.connection?.invoke('RequestRotatorStatus');
+  }
+
+  get isConnected(): boolean {
+    return this.connection?.state === signalR.HubConnectionState.Connected;
+  }
+
+  async disconnect(): Promise<void> {
+    // Set pending flag - if connect() is called before timeout, it will cancel
+    this.disconnectPending = true;
+    this.isManualDisconnect = true;
+
+    // Clear any pending reconnect timeout
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
+
+    // Small delay to allow React StrictMode's immediate re-mount
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // If connect() was called during the delay, don't disconnect
+    if (!this.disconnectPending) {
+      this.isManualDisconnect = false;
+      return;
+    }
+
+    this.disconnectPending = false;
+    this.connectPromise = null;
+    this.reconnectAttempt = 0;
+
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore errors when stopping (might already be disconnected)
+      }
+      this.connection = null;
+    }
+
+    this.notifyStateChange('disconnected', 0);
+  }
+
+  // Manual reconnect - reset attempt counter and try immediately
+  async reconnect(): Promise<void> {
+    this.isManualDisconnect = false;
+    this.reconnectAttempt = 0;
+
+    // Clear any pending reconnect timeout
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
+
+    // Clean up existing connection
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore
+      }
+      this.connection = null;
+    }
+    this.connectPromise = null;
+
+    // Start fresh connection
+    await this.connect();
+  }
+}
+
+export const signalRService = new SignalRService();

@@ -1,0 +1,26 @@
+version: '3.8'
+
+# SDRLoggerPlus runs on an embedded LiteDB single-file database (no external DB
+# server). The database and config persist in the mounted config volume.
+services:
+  sdrloggerplus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5050:5050"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    volumes:
+      # LiteDB database file + user config live here
+      - sdrloggerplus-config:/home/sdrloggerplus/.config/SDRLoggerPlus
+    networks:
+      - sdrloggerplus-network
+    restart: unless-stopped
+
+volumes:
+  sdrloggerplus-config:
+
+networks:
+  sdrloggerplus-network:
+    driver: bridge

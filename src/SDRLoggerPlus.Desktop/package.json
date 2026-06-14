@@ -1,0 +1,36 @@
+{
+  "name": "sdrloggerplus-desktop",
+  "productName": "SDRLoggerPlus",
+  "version": "2.0.0",
+  "description": "SDRLoggerPlus - Amateur Radio Logging Desktop Application",
+  "homepage": "https://github.com/n9bc/SDRLoggerPlus",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/n9bc/SDRLoggerPlus.git"
+  },
+  "main": "main.js",
+  "author": {
+    "name": "Brent Crier",
+    "email": "bcrier@gmail.com"
+  },
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "dev:vite": "electron . --dev --vite",
+    "prepare:backend:win": "node scripts/prepare-backend.js win-x64",
+    "package:win": "node scripts/prepare-backend.js win-x64 && electron-builder --win --x64 --publish never",
+    "package:mac": "node scripts/prepare-backend.js osx-arm64 && electron-builder --mac --arm64 --publish never",
+    "package:linux": "node scripts/prepare-backend.js linux-x64 && electron-builder --linux --x64 --publish never"
+  },
+  "dependencies": {
+    "electron-log": "^5.1.7"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^26.15.2"
+  },
+  "build": {
+    "extends": "electron-builder.yml"
+  }
+}

@@ -1,0 +1,92 @@
+# .NET
+bin/
+obj/
+*.user
+*.userosscache
+*.suo
+*.nupkg
+*.snupkg
+*.locks.json
+project.lock.json
+.nuget/packages/
+.nuget/
+packages/
+TestResults/
+[Rr]eleases/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.ncrunchproject
+*.ncrunchsolution
+_ReSharper*/
+*.DotSettings.user
+*.log
+*.tlb
+*.tlbimp
+*.obj
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+.pnpm-debug.log
+
+# Vite
+dist/
+dist-ssr/
+*.local
+
+# Environment
+.env
+.env.local
+.env.*.local
+appsettings.Development.json
+appsettings.Local.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+*.orig
+
+# Build
+out/
+build/
+coverage/
+*.coverage
+
+# Frontend build artifacts in backend (run frontend separately)
+**/wwwroot/
+
+# MongoDB
+data/
+!src/SDRLoggerPlus.Server/Data/
+
+# Local LiteDB databases (legacy log4ym.db and sdrloggerplus.db dev copies)
+src/SDRLoggerPlus.Server/*.db
+.playwright-mcp/
+
+# Electron Desktop build artifacts
+src/SDRLoggerPlus.Desktop/backend/
+src/SDRLoggerPlus.Desktop/dist/
+.superpowers/

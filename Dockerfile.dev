@@ -1,0 +1,21 @@
+# Development Dockerfile for hot reload
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dev
+WORKDIR /app
+
+# Install tools
+RUN dotnet tool install --global dotnet-watch
+ENV PATH="${PATH}:/root/.dotnet/tools"
+
+# Copy csproj and restore
+COPY SDRLoggerPlus.sln ./
+COPY src/SDRLoggerPlus.Server/SDRLoggerPlus.Server.csproj ./src/SDRLoggerPlus.Server/
+COPY src/SDRLoggerPlus.Contracts/SDRLoggerPlus.Contracts.csproj ./src/SDRLoggerPlus.Contracts/
+RUN dotnet restore
+
+# Copy source
+COPY src/ ./src/
+
+EXPOSE 5050
+
+# Run with hot reload
+ENTRYPOINT ["dotnet", "watch", "run", "--project", "src/SDRLoggerPlus.Server", "--urls", "http://+:5050"]

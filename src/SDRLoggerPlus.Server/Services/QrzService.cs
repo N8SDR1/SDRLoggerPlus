@@ -1,0 +1,639 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
+using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Core.Database;
+
+namespace SDRLoggerPlus.Server.Services;
+
+public class QrzService : IQrzService
+{
+    private readonly ISettingsRepository _settingsRepository;
+    private readonly HttpClient _httpClient;
+    private readonly ILogger<QrzService> _logger;
+
+    private const string QrzXmlApiUrl = "https://xmldata.qrz.com/xml/current/";
+    private const string QrzLogbookApiUrl = "https://logbook.qrz.com/api";
+
+    private string? _sessionKey;
+    private DateTime? _sessionExpiry;
+
+    private readonly ConcurrentDictionary<string, (string Text, DateTime FetchedAt)> _bioCache = new();
+    private static readonly TimeSpan BioCacheTtl = TimeSpan.FromHours(24);
+
+    public QrzService(
+        ISettingsRepository settingsRepository,
+        IHttpClientFactory httpClientFactory,
+        ILogger<QrzService> logger)
+    {
+        _settingsRepository = settingsRepository;
+        _httpClient = httpClientFactory.CreateClient("QRZ");
+        _logger = logger;
+    }
+
+    public async Task<QrzSubscriptionStatus> CheckSubscriptionAsync()
+    {
+        var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
+        var qrz = settings.Qrz;
+
+        if (string.IsNullOrEmpty(qrz.Username) || string.IsNullOrEmpty(qrz.Password))
+        {
+            return new QrzSubscriptionStatus(false, false, null, "QRZ credentials not configured", null);
+        }
+
+        try
+        {
+            var sessionKey = await GetSessionKeyAsync(qrz.Username, qrz.Password);
+            if (sessionKey == null)
+            {
+                return new QrzSubscriptionStatus(false, false, qrz.Username, "Failed to authenticate with QRZ", null);
+            }
+
+            // Session obtained successfully means valid subscription
+            // Update cached status
+            qrz.HasXmlSubscription = true;
+            qrz.SubscriptionCheckedAt = DateTime.UtcNow;
+            await _settingsRepository.UpsertAsync(settings);
+
+            return new QrzSubscriptionStatus(true, true, qrz.Username, "XML subscription active", null);
+        }
+        catch (QrzSubscriptionRequiredException)
+        {
+            qrz.HasXmlSubscription = false;
+            qrz.SubscriptionCheckedAt = DateTime.UtcNow;
+            await _settingsRepository.UpsertAsync(settings);
+
+            return new QrzSubscriptionStatus(true, false, qrz.Username, "XML subscription required for callsign lookups", null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking QRZ subscription");
+            return new QrzSubscriptionStatus(false, false, qrz.Username, $"Error: {ex.Message}", null);
+        }
+    }
+
+    public async Task<QrzUploadResult> UploadQsoAsync(Qso qso)
+    {
+        var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
+        var qrz = settings.Qrz;
+
+        if (string.IsNullOrEmpty(qrz.ApiKey))
+        {
+            return new QrzUploadResult(false, null, "QRZ API key not configured", qso.Id);
+        }
+
+        try
+        {
+            var adif = ConvertQsoToAdif(qso);
+            var result = await UploadAdifToQrzAsync(qrz.ApiKey, adif);
+            return new QrzUploadResult(result.Success, result.LogId, result.Message, qso.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading QSO {QsoId} to QRZ", qso.Id);
+            return new QrzUploadResult(false, null, $"Error: {ex.Message}", qso.Id);
+        }
+    }
+
+    public async Task<QrzBatchUploadResult> UploadQsosAsync(IEnumerable<Qso> qsos)
+    {
+        var qsoList = qsos.ToList();
+        var results = new List<QrzUploadResult>();
+        var successCount = 0;
+        var failedCount = 0;
+
+        foreach (var qso in qsoList)
+        {
+            var result = await UploadQsoAsync(qso);
+            results.Add(result);
+
+            if (result.Success)
+                successCount++;
+            else
+                failedCount++;
+
+            // Small delay to avoid rate limiting
+            await Task.Delay(100);
+        }
+
+        return new QrzBatchUploadResult(qsoList.Count, successCount, failedCount, results);
+    }
+
+    /// <summary>
+    /// Upload QSOs in parallel with configurable concurrency and rate limiting.
+    /// Much faster than sequential uploads while respecting API limits.
+    /// </summary>
+    public async Task<QrzBatchUploadResult> UploadQsosParallelAsync(
+        IEnumerable<Qso> qsos,
+        int maxConcurrency = 5,
+        int delayBetweenBatchesMs = 200,
+        IProgress<QrzUploadProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
+        var apiKey = settings.Qrz.ApiKey;
+
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            return new QrzBatchUploadResult(0, 0, 0, new[]
+            {
+                new QrzUploadResult(false, null, "QRZ API key not configured", null)
+            });
+        }
+
+        var qsoList = qsos.ToList();
+        if (qsoList.Count == 0)
+        {
+            return new QrzBatchUploadResult(0, 0, 0, Enumerable.Empty<QrzUploadResult>());
+        }
+
+        var results = new ConcurrentBag<QrzUploadResult>();
+        var successCount = 0;
+        var failedCount = 0;
+        var completedCount = 0;
+
+        // Use SemaphoreSlim for rate limiting
+        using var semaphore = new SemaphoreSlim(maxConcurrency);
+
+        // Process in batches for progress reporting
+        var batches = qsoList
+            .Select((qso, index) => new { qso, index })
+            .GroupBy(x => x.index / maxConcurrency)
+            .Select(g => g.Select(x => x.qso).ToList())
+            .ToList();
+
+        foreach (var batch in batches)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var tasks = batch.Select(async qso =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    var adif = ConvertQsoToAdif(qso);
+                    var result = await UploadAdifToQrzAsync(apiKey, adif);
+
+                    var uploadResult = new QrzUploadResult(result.Success, result.LogId, result.Message, qso.Id);
+                    results.Add(uploadResult);
+
+                    if (result.Success)
+                        Interlocked.Increment(ref successCount);
+                    else
+                        Interlocked.Increment(ref failedCount);
+
+                    var completed = Interlocked.Increment(ref completedCount);
+                    progress?.Report(new QrzUploadProgress(
+                        qsoList.Count,
+                        completed,
+                        successCount,
+                        failedCount,
+                        qso.Callsign
+                    ));
+
+                    return uploadResult;
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            // Small delay between batches to avoid overwhelming the API
+            if (batch != batches.Last())
+            {
+                await Task.Delay(delayBetweenBatchesMs, cancellationToken);
+            }
+        }
+
+        return new QrzBatchUploadResult(qsoList.Count, successCount, failedCount, results.ToList());
+    }
+
+    /// <summary>
+    /// Generate batch ADIF for multiple QSOs (useful for export or future batch upload support)
+    /// </summary>
+    public string GenerateBatchAdif(IEnumerable<Qso> qsos)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Generated by SDRLoggerPlus");
+        sb.AppendLine($"<ADIF_VER:5>3.1.4");
+        sb.AppendLine($"<PROGRAMID:6>SDRLoggerPlus");
+        sb.AppendLine($"<PROGRAMVERSION:5>1.0.0");
+        sb.AppendLine("<EOH>");
+        sb.AppendLine();
+
+        foreach (var qso in qsos)
+        {
+            sb.AppendLine(ConvertQsoToAdif(qso));
+        }
+
+        return sb.ToString();
+    }
+
+    public async Task<QrzCallsignInfo?> LookupCallsignAsync(string callsign)
+    {
+        var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
+        var qrz = settings.Qrz;
+
+        if (string.IsNullOrEmpty(qrz.Username) || string.IsNullOrEmpty(qrz.Password))
+        {
+            _logger.LogWarning("QRZ credentials not configured for callsign lookup");
+            return null;
+        }
+
+        try
+        {
+            var sessionKey = await GetSessionKeyAsync(qrz.Username, qrz.Password);
+            if (sessionKey == null)
+            {
+                _logger.LogWarning("Failed to get QRZ session for callsign lookup");
+                return null;
+            }
+
+            var url = $"{QrzXmlApiUrl}?s={sessionKey}&callsign={Uri.EscapeDataString(callsign)}";
+            var response = await _httpClient.GetStringAsync(url);
+            var doc = XDocument.Parse(response);
+
+            // Try with namespace first, then without
+            var callsignElement = doc.Descendants(QrzNamespace + "Callsign").FirstOrDefault()
+                ?? doc.Descendants("Callsign").FirstOrDefault();
+            if (callsignElement == null)
+            {
+                _logger.LogWarning("QRZ response has no Callsign element for {Callsign}", callsign);
+                return null;
+            }
+
+            var rawLat = GetElementValueNs(callsignElement, "lat");
+            var rawLon = GetElementValueNs(callsignElement, "lon");
+            var parsedLat = ParseDouble(rawLat);
+            var parsedLon = ParseDouble(rawLon);
+
+            // Log raw values for debugging coordinate issues
+            _logger.LogDebug("QRZ coordinates for {Callsign}: raw lat={RawLat}, lon={RawLon}, parsed lat={ParsedLat}, lon={ParsedLon}",
+                callsign, rawLat, rawLon, parsedLat, parsedLon);
+
+            // Validate and normalize coordinates - detect microdegrees (degrees * 1,000,000)
+            var latitude = NormalizeCoordinate(parsedLat, isLatitude: true);
+            var longitude = NormalizeCoordinate(parsedLon, isLatitude: false);
+
+            if (latitude != parsedLat || longitude != parsedLon)
+            {
+                _logger.LogWarning("QRZ coordinates for {Callsign} were in microdegree format and have been normalized: ({OrigLat}, {OrigLon}) -> ({NormLat}, {NormLon})",
+                    callsign, parsedLat, parsedLon, latitude, longitude);
+            }
+
+            return new QrzCallsignInfo(
+                Callsign: GetElementValueNs(callsignElement, "call") ?? callsign,
+                Name: GetElementValueNs(callsignElement, "name"),
+                FirstName: GetElementValueNs(callsignElement, "fname"),
+                Address: GetElementValueNs(callsignElement, "addr1"),
+                City: GetElementValueNs(callsignElement, "addr2"),
+                State: GetElementValueNs(callsignElement, "state"),
+                Country: GetElementValueNs(callsignElement, "country"),
+                Grid: GetElementValueNs(callsignElement, "grid"),
+                Latitude: latitude,
+                Longitude: longitude,
+                Dxcc: ParseInt(GetElementValueNs(callsignElement, "dxcc")),
+                CqZone: ParseInt(GetElementValueNs(callsignElement, "cqzone")),
+                ItuZone: ParseInt(GetElementValueNs(callsignElement, "ituzone")),
+                Email: GetElementValueNs(callsignElement, "email"),
+                QslManager: GetElementValueNs(callsignElement, "qslmgr"),
+                ImageUrl: GetElementValueNs(callsignElement, "image"),
+                LicenseExpiration: ParseDate(GetElementValueNs(callsignElement, "expdate"))
+            );
+        }
+        catch (QrzSubscriptionRequiredException)
+        {
+            _logger.LogWarning("QRZ XML subscription required for callsign lookup");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error looking up callsign {Callsign} on QRZ", callsign);
+            return null;
+        }
+    }
+
+    public async Task<string?> GetBiographyAsync(string callsign)
+    {
+        var upperCall = callsign.ToUpperInvariant();
+
+        // Check cache
+        if (_bioCache.TryGetValue(upperCall, out var cached) &&
+            DateTime.UtcNow - cached.FetchedAt < BioCacheTtl)
+        {
+            return cached.Text;
+        }
+
+        try
+        {
+            // Fetch the QRZ profile page and extract biography from the Base64-encoded bio content
+            var url = $"https://www.qrz.com/db/{Uri.EscapeDataString(upperCall)}";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("User-Agent", "SDRLoggerPlus/1.0");
+            request.Headers.Add("Accept", "text/html");
+
+            var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogDebug("QRZ page returned {StatusCode} for {Callsign}", response.StatusCode, upperCall);
+                return null;
+            }
+
+            var html = await response.Content.ReadAsStringAsync();
+
+            // QRZ embeds bio content as Base64 in: Base64.decode("...") call
+            var base64Match = Regex.Match(html, @"Base64\.decode\(""([A-Za-z0-9+/=]+)""\)\s*\)");
+            if (!base64Match.Success)
+            {
+                _logger.LogDebug("No Base64 biography content found for {Callsign}", upperCall);
+                return null;
+            }
+
+            var base64 = base64Match.Groups[1].Value;
+            var bioHtml = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+
+            var plainText = StripHtml(bioHtml);
+            if (string.IsNullOrWhiteSpace(plainText)) return null;
+
+            _bioCache[upperCall] = (plainText, DateTime.UtcNow);
+            _logger.LogDebug("Fetched biography for {Callsign} ({Length} chars)", upperCall, plainText.Length);
+            return plainText;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch biography for {Callsign}", upperCall);
+            return null;
+        }
+    }
+
+    private static string StripHtml(string html)
+    {
+        // Replace <br>, <p>, <div>, <li> tags with newlines for structure
+        var text = Regex.Replace(html, @"<(br|p|div|li)[^>]*>", "\n", RegexOptions.IgnoreCase);
+        // Strip all remaining HTML tags
+        text = Regex.Replace(text, @"<[^>]+>", string.Empty);
+        // Decode HTML entities
+        text = WebUtility.HtmlDecode(text);
+        // Collapse multiple whitespace/newlines
+        text = Regex.Replace(text, @"[ \t]+", " ");
+        text = Regex.Replace(text, @"\n\s*\n+", "\n");
+        text = text.Trim();
+
+        // Truncate to keep AI context reasonable
+        const int maxLength = 2000;
+        if (text.Length > maxLength)
+        {
+            text = text[..maxLength] + "...";
+        }
+
+        return text;
+    }
+
+    // QRZ XML namespace
+    private static readonly XNamespace QrzNamespace = "http://xmldata.qrz.com";
+
+    private async Task<string?> GetSessionKeyAsync(string username, string password)
+    {
+        // Return cached session if valid
+        if (_sessionKey != null && _sessionExpiry > DateTime.UtcNow)
+        {
+            _logger.LogDebug("Using cached QRZ session key");
+            return _sessionKey;
+        }
+
+        _logger.LogDebug("Requesting new QRZ session for user: {Username}", username);
+        var url = $"{QrzXmlApiUrl}?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&agent=SDRLoggerPlus";
+
+        try
+        {
+            var response = await _httpClient.GetStringAsync(url);
+            var doc = XDocument.Parse(response);
+
+            // Try with namespace first, then without (for backwards compatibility)
+            var session = doc.Descendants(QrzNamespace + "Session").FirstOrDefault()
+                ?? doc.Descendants("Session").FirstOrDefault();
+            if (session == null)
+            {
+                _logger.LogWarning("QRZ response has no Session element");
+                return null;
+            }
+
+            var error = GetElementValueNs(session, "Error");
+            if (!string.IsNullOrEmpty(error))
+            {
+                if (error.Contains("subscription", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new QrzSubscriptionRequiredException(error);
+                }
+                _logger.LogWarning("QRZ login error: {Error}", error);
+                return null;
+            }
+
+            _sessionKey = GetElementValueNs(session, "Key");
+            if (string.IsNullOrEmpty(_sessionKey))
+            {
+                _logger.LogWarning("QRZ response has no session key");
+                return null;
+            }
+
+            // Sessions typically last 24 hours, but we'll refresh more often
+            _sessionExpiry = DateTime.UtcNow.AddHours(1);
+            _logger.LogInformation("QRZ session obtained successfully");
+
+            return _sessionKey;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error connecting to QRZ API");
+            return null;
+        }
+    }
+
+    private async Task<(bool Success, string? LogId, string? Message)> UploadAdifToQrzAsync(string apiKey, string adif)
+    {
+        var content = new FormUrlEncodedContent(new[]
+        {
+            new KeyValuePair<string, string>("KEY", apiKey),
+            new KeyValuePair<string, string>("ACTION", "INSERT"),
+            new KeyValuePair<string, string>("ADIF", adif)
+        });
+
+        var response = await _httpClient.PostAsync(QrzLogbookApiUrl, content);
+        var responseText = await response.Content.ReadAsStringAsync();
+
+        _logger.LogInformation("QRZ logbook response: {Response}", responseText);
+
+        // Parse response - format is: RESULT=OK&LOGID=12345 or RESULT=FAIL&REASON=message
+        // QRZ can also return RESULT=REPLACE&LOGID=xxx for duplicates
+        var parts = responseText.Split('&')
+            .Select(p => p.Split('='))
+            .Where(p => p.Length == 2)
+            .ToDictionary(p => p[0], p => WebUtility.UrlDecode(p[1]));
+
+        parts.TryGetValue("RESULT", out var result);
+        parts.TryGetValue("LOGID", out var logId);
+        parts.TryGetValue("REASON", out var reason);
+
+        // OK = new record inserted, REPLACE = duplicate updated
+        if (result == "OK" || result == "REPLACE")
+        {
+            var message = result == "REPLACE" ? "QSO already exists (updated)" : "QSO uploaded successfully";
+            return (true, logId, message);
+        }
+
+        // Handle duplicate errors as success (QSO already exists in QRZ)
+        if (reason != null && (
+            reason.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("already exists", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("dupe", StringComparison.OrdinalIgnoreCase)))
+        {
+            _logger.LogDebug("QRZ duplicate detected, treating as success: {Reason}", reason);
+            return (true, logId, "QSO already exists in QRZ");
+        }
+
+        return (false, null, reason ?? "Unknown error");
+    }
+
+    private static string ConvertQsoToAdif(Qso qso)
+    {
+        var sb = new StringBuilder();
+
+        // Required fields
+        AppendAdifField(sb, "CALL", qso.Callsign);
+        AppendAdifField(sb, "QSO_DATE", qso.QsoDate.ToString("yyyyMMdd"));
+        AppendAdifField(sb, "TIME_ON", qso.TimeOn.Replace(":", ""));
+        AppendAdifField(sb, "BAND", qso.Band);
+        AppendAdifField(sb, "MODE", qso.Mode);
+
+        // Optional fields
+        if (qso.Frequency.HasValue)
+            AppendAdifField(sb, "FREQ", (qso.Frequency.Value / 1000.0).ToString("F6", System.Globalization.CultureInfo.InvariantCulture));
+
+        if (!string.IsNullOrEmpty(qso.TimeOff))
+            AppendAdifField(sb, "TIME_OFF", qso.TimeOff.Replace(":", ""));
+
+        if (!string.IsNullOrEmpty(qso.RstSent))
+            AppendAdifField(sb, "RST_SENT", qso.RstSent);
+
+        if (!string.IsNullOrEmpty(qso.RstRcvd))
+            AppendAdifField(sb, "RST_RCVD", qso.RstRcvd);
+
+        if (!string.IsNullOrEmpty(qso.Name) || !string.IsNullOrEmpty(qso.Station?.Name))
+            AppendAdifField(sb, "NAME", qso.Name ?? qso.Station?.Name);
+
+        if (!string.IsNullOrEmpty(qso.Grid) || !string.IsNullOrEmpty(qso.Station?.Grid))
+            AppendAdifField(sb, "GRIDSQUARE", qso.Grid ?? qso.Station?.Grid);
+
+        if (!string.IsNullOrEmpty(qso.Country) || !string.IsNullOrEmpty(qso.Station?.Country))
+            AppendAdifField(sb, "COUNTRY", qso.Country ?? qso.Station?.Country);
+
+        if (qso.Dxcc.HasValue || qso.Station?.Dxcc.HasValue == true)
+            AppendAdifField(sb, "DXCC", (qso.Dxcc ?? qso.Station?.Dxcc)?.ToString());
+
+        if (!string.IsNullOrEmpty(qso.Continent) || !string.IsNullOrEmpty(qso.Station?.Continent))
+            AppendAdifField(sb, "CONT", qso.Continent ?? qso.Station?.Continent);
+
+        if (!string.IsNullOrEmpty(qso.Comment))
+            AppendAdifField(sb, "COMMENT", qso.Comment);
+
+        if (!string.IsNullOrEmpty(qso.Notes))
+            AppendAdifField(sb, "NOTES", qso.Notes);
+
+        if (qso.Station?.CqZone.HasValue == true)
+            AppendAdifField(sb, "CQZ", qso.Station.CqZone.ToString());
+
+        if (qso.Station?.ItuZone.HasValue == true)
+            AppendAdifField(sb, "ITUZ", qso.Station.ItuZone.ToString());
+
+        if (qso.Station?.State != null)
+            AppendAdifField(sb, "STATE", qso.Station.State);
+
+        // Contest fields
+        if (qso.Contest != null)
+        {
+            if (!string.IsNullOrEmpty(qso.Contest.ContestId))
+                AppendAdifField(sb, "CONTEST_ID", qso.Contest.ContestId);
+            if (!string.IsNullOrEmpty(qso.Contest.SerialSent))
+                AppendAdifField(sb, "STX", qso.Contest.SerialSent);
+            if (!string.IsNullOrEmpty(qso.Contest.SerialRcvd))
+                AppendAdifField(sb, "SRX", qso.Contest.SerialRcvd);
+            if (!string.IsNullOrEmpty(qso.Contest.Exchange))
+                AppendAdifField(sb, "SRX_STRING", qso.Contest.Exchange);
+        }
+
+        sb.Append("<EOR>");
+        return sb.ToString();
+    }
+
+    private static void AppendAdifField(StringBuilder sb, string fieldName, string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        sb.Append($"<{fieldName}:{value.Length}>{value}");
+    }
+
+    private static string? GetElementValue(XElement parent, string name)
+    {
+        return parent.Element(name)?.Value;
+    }
+
+    // Helper that tries both with namespace and without
+    private static string? GetElementValueNs(XElement parent, string name)
+    {
+        return parent.Element(QrzNamespace + name)?.Value ?? parent.Element(name)?.Value;
+    }
+
+    private static double? ParseDouble(string? value)
+    {
+        return double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var result) ? result : null;
+    }
+
+    private static int? ParseInt(string? value)
+    {
+        return int.TryParse(value, out var result) ? result : null;
+    }
+
+    private static DateTime? ParseDate(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return null;
+        return DateTime.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var result) ? result : null;
+    }
+
+    /// <summary>
+    /// Normalize coordinates that may be in microdegree format (degrees * 1,000,000).
+    /// Valid latitude range: -90 to 90, longitude range: -180 to 180.
+    /// If values are outside this range but within microdegree range, convert them.
+    /// </summary>
+    private static double? NormalizeCoordinate(double? value, bool isLatitude)
+    {
+        if (!value.HasValue) return null;
+
+        var v = value.Value;
+        var maxValid = isLatitude ? 90.0 : 180.0;
+
+        // Check if value is already in valid range
+        if (Math.Abs(v) <= maxValid)
+        {
+            return v;
+        }
+
+        // Check if value looks like microdegrees (within valid range when divided by 1,000,000)
+        var normalized = v / 1_000_000.0;
+        if (Math.Abs(normalized) <= maxValid)
+        {
+            return normalized;
+        }
+
+        // Value is invalid even after normalization - return null
+        return null;
+    }
+}
+
+public class QrzSubscriptionRequiredException : Exception
+{
+    public QrzSubscriptionRequiredException(string message) : base(message) { }
+}
