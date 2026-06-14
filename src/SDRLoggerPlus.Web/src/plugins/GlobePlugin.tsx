@@ -1079,7 +1079,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const showBottomOverlay = containerHeight >= BOTTOM_OVERLAY_THRESHOLD;
 
   return (
-      <div className="relative w-full h-full min-h-[400px]">
+      <div className="relative w-full h-full">
         {/* WebGL Error Message */}
         {webglError && (
           <div className="absolute inset-0 flex items-center justify-center bg-dark-800/95 backdrop-blur-sm z-50">
