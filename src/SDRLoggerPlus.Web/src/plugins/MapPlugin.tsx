@@ -725,7 +725,7 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
   };
 
   return (
-    <div ref={containerRef} className="relative w-full h-full min-h-[400px]">
+    <div ref={containerRef} className="relative w-full h-full">
         <MapContainer
           center={[stationLat, stationLon]}
           zoom={5}
@@ -733,6 +733,7 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
           style={{ background: '#0a0e14' }}
           ref={(map) => { mapRef.current = map ?? null; }}
           zoomControl={false}
+          whenReady={() => requestAnimationFrame(() => mapRef.current?.invalidateSize())}
         >
           <TileLayer
             url={TILE_LAYERS[tileLayer].url}
