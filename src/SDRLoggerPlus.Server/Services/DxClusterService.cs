@@ -207,7 +207,22 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
             return;
         }
 
-        var callsign = config.Callsign ?? stationCallsign ?? "SDRLOGGERPLUS";
+        // Clusters require a real amateur callsign to log in. Falling back to a
+        // bogus placeholder (the old "SDRLOGGERPLUS" default) makes every cluster
+        // reject the login, and the handler then reconnect-loops forever — the
+        // feed silently dies. Refuse to connect until a valid callsign exists and
+        // tell the user why instead of hammering the cluster.
+        var callsign = (config.Callsign ?? stationCallsign ?? "").Trim();
+        if (!IsLikelyCallsign(callsign))
+        {
+            _logger.LogWarning(
+                "Cluster {Name}: no valid callsign configured (cluster='{ClusterCall}', station='{StationCall}') — not connecting",
+                config.Name, config.Callsign, stationCallsign);
+            UpdateStatus(config.Id, config.Name ?? "Unknown", "error",
+                "Set your station callsign in Settings to connect to DX clusters");
+            return;
+        }
+
         var handler = new ClusterConnectionHandler(
             config.Id,
             config.Name ?? "Unknown",
@@ -226,6 +241,29 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
         _connections[config.Id] = handler;
 
         await handler.ConnectAsync(_cts?.Token ?? CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Cheap sanity check that a string looks like an amateur radio callsign
+    /// before we try to log in to a cluster with it. The cluster itself does the
+    /// authoritative validation; this only rejects empty/placeholder values (e.g.
+    /// the old "SDRLOGGERPLUS" fallback) so they never trigger an endless
+    /// reject/reconnect loop. Real callsigns are alphanumeric (plus an optional
+    /// "/" portable marker) and always contain at least one letter and one digit.
+    /// </summary>
+    internal static bool IsLikelyCallsign(string? callsign)
+    {
+        if (string.IsNullOrWhiteSpace(callsign)) return false;
+        var c = callsign.Trim();
+        if (c.Length < 3 || c.Length > 12) return false;
+        bool hasLetter = false, hasDigit = false;
+        foreach (var ch in c)
+        {
+            if (char.IsLetter(ch)) hasLetter = true;
+            else if (char.IsDigit(ch)) hasDigit = true;
+            else if (ch != '/') return false; // only A-Z / 0-9 and a portable slash
+        }
+        return hasLetter && hasDigit;
     }
 
     public async Task DisconnectClusterAsync(string clusterId)
@@ -427,6 +465,16 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
     public IReadOnlyList<SpotReceivedEvent> GetRecentSpots() => _recentBroadcasts.ToArray();
 }
 
+/// <summary>
+/// A non-retryable cluster failure (the cluster rejected the callsign, or a
+/// password is required but none is configured). The connection handler stops
+/// reconnecting when this is thrown instead of looping every 10s forever.
+/// </summary>
+internal sealed class ClusterFatalException : Exception
+{
+    public ClusterFatalException(string message) : base(message) { }
+}
+
 internal record ParsedSpot(
     string DxCall,
     string Spotter,
@@ -504,6 +552,7 @@ internal class ClusterConnectionHandler
         _disconnectRequested = false;
         _connectionCts = CancellationTokenSource.CreateLinkedTokenSource(externalToken);
         var ct = _connectionCts.Token;
+        string? fatalMessage = null;
 
         while (!ct.IsCancellationRequested && !_disconnectRequested)
         {
@@ -515,6 +564,16 @@ internal class ClusterConnectionHandler
             catch (OperationCanceledException) when (ct.IsCancellationRequested || _disconnectRequested)
             {
                 _logger.LogInformation("Cluster {Name} disconnected", _name);
+                break;
+            }
+            catch (ClusterFatalException ex)
+            {
+                // Permanent failures (rejected callsign, missing password) never
+                // succeed on retry. Stop instead of reconnecting every 10s forever
+                // — the old behaviour yielded zero spots and risked the cluster
+                // banning the IP for hammering it.
+                _logger.LogError("Cluster {Name} fatal error: {Message} — not reconnecting", _name, ex.Message);
+                fatalMessage = ex.Message;
                 break;
             }
             catch (Exception ex)
@@ -547,7 +606,12 @@ internal class ClusterConnectionHandler
             }
         }
 
-        _onStatusChanged(_id, _name, "disconnected", null);
+        // Preserve a fatal error so the UI keeps showing why the cluster stopped;
+        // otherwise report a normal disconnect.
+        if (fatalMessage != null)
+            _onStatusChanged(_id, _name, "error", fatalMessage);
+        else
+            _onStatusChanged(_id, _name, "disconnected", null);
     }
 
     public async Task DisconnectAsync()
@@ -668,7 +732,7 @@ internal class ClusterConnectionHandler
             else
             {
                 _logger.LogWarning("Cluster {Name} requires password but none configured", _name);
-                throw new Exception("Password required but not configured");
+                throw new ClusterFatalException("Password required but not configured");
             }
             passwordSent = true;
             return true;
@@ -678,7 +742,7 @@ internal class ClusterConnectionHandler
         if (text.Contains("not a valid callsign") || text.Contains("invalid call"))
         {
             _logger.LogError("Cluster {Name} rejected callsign '{Callsign}'", _name, _callsign);
-            throw new Exception($"Invalid callsign: {_callsign}");
+            throw new ClusterFatalException($"Invalid callsign: {_callsign}");
         }
 
         // Enable CC cluster mode for extended info after seeing the cluster prompt

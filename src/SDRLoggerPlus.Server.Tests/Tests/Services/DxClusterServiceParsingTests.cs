@@ -222,6 +222,33 @@ public class DxClusterServiceParsingTests
 
     #endregion
 
+    #region Callsign Validation (cluster login guard)
+
+    [Theory]
+    // Real callsigns — must be accepted
+    [InlineData("N9BC", true)]
+    [InlineData("W1AW", true)]
+    [InlineData("K1ABC", true)]
+    [InlineData("VE3ABC", true)]
+    [InlineData("DL1ABC", true)]
+    [InlineData("VP2V/W3XYZ", true)]   // portable
+    // Placeholders / junk — must be rejected so they never reach a cluster login
+    [InlineData("SDRLOGGERPLUS", false)] // the old bogus fallback (no digit)
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    [InlineData(null, false)]
+    [InlineData("AB", false)]            // too short
+    [InlineData("HELLO", false)]         // letters only, no digit
+    [InlineData("12345", false)]         // digits only, no letter
+    [InlineData("N9BC!", false)]         // illegal punctuation
+    [InlineData("N9 BC", false)]         // embedded space
+    public void IsLikelyCallsign_DistinguishesRealCallsigns(string? input, bool expected)
+    {
+        DxClusterService.IsLikelyCallsign(input).Should().Be(expected);
+    }
+
+    #endregion
+
     #region Country Lookup via CtyService
 
     [Theory]
