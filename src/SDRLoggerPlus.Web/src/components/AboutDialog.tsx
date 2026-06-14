@@ -69,6 +69,16 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
         <div className="text-left text-xs text-dark-400 space-y-1.5">
           <p className="text-dark-300 font-medium">Credits</p>
           <p>
+            Lead developer:{' '}
+            <span className="text-dark-300">Rick Langford (N8SDR)</span> — creator of
+            SDRLogger+.
+          </p>
+          <p>
+            Contributor:{' '}
+            <span className="text-dark-300">Brent Crier (N9BC)</span> — this
+            cross-platform edition.
+          </p>
+          <p>
             Built on{' '}
             <button
               onClick={() => openLink('https://github.com/brianbruff/Log4YM')}
@@ -76,11 +86,8 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
             >
               Log4YM
             </button>{' '}
-            by Brian Keating, EI6LF (public domain) — the origin of this codebase.
-          </p>
-          <p>
-            Feature designs ported from <span className="text-dark-300">SDRLogger+</span>:
-            awards tracking, weather alerts, S.A.T. integration, Hot List, and scheduled backups.
+            by Brian Keating, EI6LF (public domain) — the original codebase this edition
+            began from.
           </p>
           <p>
             Licensed under the MIT License. Bundles{' '}

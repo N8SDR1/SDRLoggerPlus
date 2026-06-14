@@ -4,7 +4,10 @@
   "version": "2.0.0",
   "type": "module",
   "license": "MIT",
-  "author": "Brent Crier (N9BC)",
+  "author": "Rick Langford (N8SDR)",
+  "contributors": [
+    "Brent Crier (N9BC)"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

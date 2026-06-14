@@ -1,6 +1,6 @@
 appId: com.n9bc.sdrloggerplus
 productName: SDRLoggerPlus
-copyright: Copyright (c) 2026 Brent Crier (N9BC)
+copyright: Copyright (c) 2026 Rick Langford (N8SDR) and contributors
 
 directories:
   output: dist

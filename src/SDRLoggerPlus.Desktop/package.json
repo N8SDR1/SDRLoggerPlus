@@ -10,9 +10,14 @@
   },
   "main": "main.js",
   "author": {
-    "name": "Brent Crier",
-    "email": "bcrier@gmail.com"
+    "name": "Rick Langford (N8SDR)"
   },
+  "contributors": [
+    {
+      "name": "Brent Crier",
+      "email": "bcrier@gmail.com"
+    }
+  ],
   "license": "MIT",
   "scripts": {
     "start": "electron .",
