@@ -186,8 +186,10 @@ export function RotatorCore({ hideControls, hideCompass, integratedMode }: { hid
     const v = Number(localStorage.getItem(ROTATOR_BEAMWIDTH_KEY));
     return Number.isFinite(v) && v >= 2 ? v : DEFAULT_BEAMWIDTH_DEG;
   });
-  const [indicatorStyle, setIndicatorStyle] = useState<'line' | 'arrow'>(() =>
-    localStorage.getItem(ROTATOR_INDICATOR_KEY) === 'arrow' ? 'arrow' : 'line');
+  const [indicatorStyle, setIndicatorStyle] = useState<'line' | 'arrow' | 'hand'>(() => {
+    const v = localStorage.getItem(ROTATOR_INDICATOR_KEY);
+    return v === 'arrow' || v === 'hand' ? v : 'line';
+  });
   useEffect(() => { localStorage.setItem(ROTATOR_BEAM_KEY, beamEnabled ? '1' : '0'); }, [beamEnabled]);
   useEffect(() => { localStorage.setItem(ROTATOR_BEAMWIDTH_KEY, String(beamWidthDeg)); }, [beamWidthDeg]);
   useEffect(() => { localStorage.setItem(ROTATOR_INDICATOR_KEY, indicatorStyle); }, [indicatorStyle]);
@@ -478,6 +480,13 @@ export function RotatorCore({ hideControls, hideCompass, integratedMode }: { hid
                 >
                   Arrow
                 </button>
+                <button
+                  onClick={() => setIndicatorStyle('hand')}
+                  className={`px-2 py-1 font-ui transition-colors ${indicatorStyle === 'hand' ? 'bg-accent-primary text-dark-900' : 'bg-dark-700 text-dark-300 hover:text-dark-200'}`}
+                  title="Finger pointer"
+                >
+                  👆
+                </button>
               </div>
           </div>
         )}
@@ -609,11 +618,21 @@ export function RotatorCore({ hideControls, hideCompass, integratedMode }: { hid
                     <div
                       className="w-full h-full rounded-full"
                       style={{
-                        background: 'linear-gradient(to top, transparent 0%, #00ddff 30%, #00ff88 100%)',
+                        background: indicatorStyle === 'hand'
+                          ? '#15181d' // black stick for the finger pointer
+                          : 'linear-gradient(to top, transparent 0%, #00ddff 30%, #00ff88 100%)',
                       }}
                     />
-                    {/* Needle tip — round dot (line) or arrowhead (arrow) */}
-                    {indicatorStyle === 'arrow' ? (
+                    {/* Needle tip — round dot (line), arrowhead (arrow), or a pointing finger (hand) */}
+                    {indicatorStyle === 'hand' ? (
+                      <div
+                        className="absolute left-1/2 -translate-x-1/2 select-none leading-none"
+                        style={{ top: '-19px', fontSize: '22px', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))' }}
+                        aria-hidden
+                      >
+                        👆
+                      </div>
+                    ) : indicatorStyle === 'arrow' ? (
                       <div
                         className="absolute left-1/2 -translate-x-1/2"
                         style={{
