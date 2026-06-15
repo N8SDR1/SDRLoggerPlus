@@ -437,57 +437,60 @@ export function RotatorCore({ hideControls, hideCompass, integratedMode }: { hid
                   </button>
                 </>
               )}
+          </div>
+        )}
 
-              {/* Beamwidth wedge + heading indicator style */}
-              <div className="w-px h-5 bg-glass-200" />
-              <label className="flex items-center gap-1 text-xs font-ui text-dark-300 cursor-pointer" title="Show the antenna beamwidth wedge on the compass">
+        {/* Beamwidth + heading-indicator controls (visible above the compass) */}
+        {!integratedMode && !hideCompass && (
+          <div className="flex flex-wrap items-center justify-center gap-2 px-2 pt-1 pb-2 text-xs flex-shrink-0">
+            <label className="flex items-center gap-1 font-ui text-dark-300 cursor-pointer" title="Show the antenna beamwidth wedge on the compass">
+              <input
+                type="checkbox"
+                checked={beamEnabled}
+                onChange={(e) => setBeamEnabled(e.target.checked)}
+                className="accent-[rgb(var(--accent-primary))]"
+              />
+              Beam
+            </label>
+            {beamEnabled && (
+              <div className="flex items-center gap-1" title="Beamwidth in degrees">
                 <input
-                  type="checkbox"
-                  checked={beamEnabled}
-                  onChange={(e) => setBeamEnabled(e.target.checked)}
-                  className="accent-[rgb(var(--accent-primary))]"
+                  type="number"
+                  min={2}
+                  max={180}
+                  value={beamWidthDeg}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isFinite(v)) setBeamWidthDeg(Math.min(180, Math.max(2, v)));
+                  }}
+                  className="glass-input w-14 font-mono text-xs text-center py-1"
                 />
-                Beam
-              </label>
-              {beamEnabled && (
-                <div className="flex items-center gap-1" title="Beamwidth in degrees">
-                  <input
-                    type="number"
-                    min={2}
-                    max={180}
-                    value={beamWidthDeg}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      if (Number.isFinite(v)) setBeamWidthDeg(Math.min(180, Math.max(2, v)));
-                    }}
-                    className="glass-input w-14 font-mono text-xs text-center py-1"
-                  />
-                  <span className="text-dark-300 text-xs">&deg;</span>
-                </div>
-              )}
-              <div className="flex rounded overflow-hidden border border-glass-200 text-xs" title="Heading indicator style">
-                <button
-                  onClick={() => setIndicatorStyle('line')}
-                  className={`px-2 py-1 font-ui font-medium transition-colors ${indicatorStyle === 'line' ? 'bg-accent-primary text-dark-900' : 'bg-dark-700 text-dark-300 hover:text-dark-200'}`}
-                  title="Line indicator"
-                >
-                  Line
-                </button>
-                <button
-                  onClick={() => setIndicatorStyle('arrow')}
-                  className={`px-2 py-1 font-ui font-medium transition-colors ${indicatorStyle === 'arrow' ? 'bg-accent-primary text-dark-900' : 'bg-dark-700 text-dark-300 hover:text-dark-200'}`}
-                  title="Arrow indicator"
-                >
-                  Arrow
-                </button>
-                <button
-                  onClick={() => setIndicatorStyle('hand')}
-                  className={`px-2 py-1 font-ui transition-colors ${indicatorStyle === 'hand' ? 'bg-accent-primary text-dark-900' : 'bg-dark-700 text-dark-300 hover:text-dark-200'}`}
-                  title="Finger pointer"
-                >
-                  👆
-                </button>
+                <span className="text-dark-300">&deg;</span>
               </div>
+            )}
+            <div className="flex rounded overflow-hidden border border-glass-200" title="Heading indicator style">
+              <button
+                onClick={() => setIndicatorStyle('line')}
+                className={`px-2 py-1 font-ui font-medium transition-colors ${indicatorStyle === 'line' ? 'bg-accent-primary text-dark-900' : 'bg-dark-700 text-dark-300 hover:text-dark-200'}`}
+                title="Line indicator"
+              >
+                Line
+              </button>
+              <button
+                onClick={() => setIndicatorStyle('arrow')}
+                className={`px-2 py-1 font-ui font-medium transition-colors ${indicatorStyle === 'arrow' ? 'bg-accent-primary text-dark-900' : 'bg-dark-700 text-dark-300 hover:text-dark-200'}`}
+                title="Arrow indicator"
+              >
+                Arrow
+              </button>
+              <button
+                onClick={() => setIndicatorStyle('hand')}
+                className={`px-2 py-1 font-ui transition-colors ${indicatorStyle === 'hand' ? 'bg-accent-primary text-dark-900' : 'bg-dark-700 text-dark-300 hover:text-dark-200'}`}
+                title="Finger pointer"
+              >
+                👆
+              </button>
+            </div>
           </div>
         )}
 
