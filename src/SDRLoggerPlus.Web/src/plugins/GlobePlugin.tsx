@@ -101,8 +101,9 @@ interface GlobeLabelData {
   lng: number;
   text: string;
   color: string;
-  type: 'dx' | 'spotter';
+  type: 'dx' | 'spotter' | 'pota';
   dxCall?: string;
+  activator?: string;
   frequency?: number;
   mode?: string;
 }
@@ -205,7 +206,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const [webglError, setWebglError] = useState<string | null>(null);
   const [containerHeight, setContainerHeight] = useState(0);
   // Slow auto-rotation of the globe (on by default); pausable via the overlay button.
-  const [isRotating, setIsRotating] = useState(true);
+  const [isRotating, setIsRotating] = useState(false); // paused on startup; resume via the Play button
   const isRotatingRef = useRef(isRotating);
   isRotatingRef.current = isRotating;
   // Flips true once the globe instance is created, so rotation/marker effects can run.
@@ -887,6 +888,25 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       }
     }
 
+    // POTA labels — always-visible like the DX labels (click to add to the log).
+    if (settings.map.showPotaOverlay) {
+      for (const spot of potaSpots) {
+        if (spot.latitude == null || spot.longitude == null ||
+            !isFinite(spot.latitude) || !isFinite(spot.longitude)) continue;
+        const freqKhz = parseFloat(spot.frequency);
+        labelData.push({
+          lat: spot.latitude,
+          lng: spot.longitude,
+          text: `${spot.reference} ${isFinite(freqKhz) ? (freqKhz / 1000).toFixed(3) : ''}`.trim(),
+          color: '#10b981',
+          type: 'pota',
+          activator: spot.activator,
+          frequency: isFinite(freqKhz) ? freqKhz : undefined,
+          mode: spot.mode ?? undefined,
+        });
+      }
+    }
+
     globeRef.current.pointsData(markerData);
     globeRef.current.arcsData(arcData);
     setGlobeLabels(labelData);
@@ -1109,9 +1129,11 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                 onClick={
                   lb.type === 'dx' && lb.dxCall
                     ? () => selectSpotRef.current(lb.dxCall!, lb.frequency ?? 0, lb.mode)
+                    : lb.type === 'pota' && lb.activator
+                    ? () => selectSpotRef.current(lb.activator!, lb.frequency ?? 0, lb.mode)
                     : undefined
                 }
-                title={lb.type === 'dx' ? 'Click to add to log' : undefined}
+                title={lb.type === 'dx' || lb.type === 'pota' ? 'Click to add to log' : undefined}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -1128,8 +1150,8 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                   border: `1px solid ${lb.color}`,
                   color: lb.color,
                   userSelect: 'none',
-                  pointerEvents: lb.type === 'dx' ? 'auto' : 'none',
-                  cursor: lb.type === 'dx' ? 'pointer' : 'default',
+                  pointerEvents: lb.type === 'dx' || lb.type === 'pota' ? 'auto' : 'none',
+                  cursor: lb.type === 'dx' || lb.type === 'pota' ? 'pointer' : 'default',
                 }}
               >
                 {lb.text}
