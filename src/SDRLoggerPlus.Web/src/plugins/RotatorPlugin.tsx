@@ -5,6 +5,24 @@ import { useSignalR } from '../hooks/useSignalR';
 import { GlassPanel } from '../components/GlassPanel';
 import { useSettingsStore, RotatorPreset } from '../store/settingsStore';
 
+// Rotator compass display prefs (per-install, like the meter calibration).
+const ROTATOR_BEAM_KEY = 'sdrloggerplus-rotator-beam';
+const ROTATOR_BEAMWIDTH_KEY = 'sdrloggerplus-rotator-beamwidth-deg';
+const ROTATOR_INDICATOR_KEY = 'sdrloggerplus-rotator-indicator';
+const DEFAULT_BEAMWIDTH_DEG = 30;
+
+/** SVG pie-slice path for the beamwidth wedge on the 224px compass (0deg = North = up). */
+function beamWedgePath(azimuthDeg: number, widthDeg: number): string {
+  const r = 96, cx = 112, cy = 112;
+  const half = Math.min(180, Math.max(2, widthDeg)) / 2;
+  const a0 = (azimuthDeg - half) * Math.PI / 180;
+  const a1 = (azimuthDeg + half) * Math.PI / 180;
+  const x0 = cx + r * Math.sin(a0), y0 = cy - r * Math.cos(a0);
+  const x1 = cx + r * Math.sin(a1), y1 = cy - r * Math.cos(a1);
+  const largeArc = half * 2 > 180 ? 1 : 0;
+  return `M${cx} ${cy} L${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${largeArc} 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z`;
+}
+
 export function RotatorControls() {
   const { rotatorPosition, focusedCallsignInfo } = useAppStore();
   const { commandRotator } = useSignalR();
@@ -161,6 +179,18 @@ export function RotatorCore({ hideControls, hideCompass, integratedMode }: { hid
   const [displayAzimuth, setDisplayAzimuth] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [pathMode, setPathMode] = useState<'short' | 'long'>('short');
+
+  // Compass display prefs (persisted per install).
+  const [beamEnabled, setBeamEnabled] = useState<boolean>(() => localStorage.getItem(ROTATOR_BEAM_KEY) !== '0');
+  const [beamWidthDeg, setBeamWidthDeg] = useState<number>(() => {
+    const v = Number(localStorage.getItem(ROTATOR_BEAMWIDTH_KEY));
+    return Number.isFinite(v) && v >= 2 ? v : DEFAULT_BEAMWIDTH_DEG;
+  });
+  const [indicatorStyle, setIndicatorStyle] = useState<'line' | 'arrow'>(() =>
+    localStorage.getItem(ROTATOR_INDICATOR_KEY) === 'arrow' ? 'arrow' : 'line');
+  useEffect(() => { localStorage.setItem(ROTATOR_BEAM_KEY, beamEnabled ? '1' : '0'); }, [beamEnabled]);
+  useEffect(() => { localStorage.setItem(ROTATOR_BEAMWIDTH_KEY, String(beamWidthDeg)); }, [beamWidthDeg]);
+  useEffect(() => { localStorage.setItem(ROTATOR_INDICATOR_KEY, indicatorStyle); }, [indicatorStyle]);
 
   // Calculate long path from short path (add 180 degrees)
   const shortPathBearing = focusedCallsignInfo?.bearing;
@@ -405,6 +435,50 @@ export function RotatorCore({ hideControls, hideCompass, integratedMode }: { hid
                   </button>
                 </>
               )}
+
+              {/* Beamwidth wedge + heading indicator style */}
+              <div className="w-px h-5 bg-glass-200" />
+              <label className="flex items-center gap-1 text-xs font-ui text-dark-300 cursor-pointer" title="Show the antenna beamwidth wedge on the compass">
+                <input
+                  type="checkbox"
+                  checked={beamEnabled}
+                  onChange={(e) => setBeamEnabled(e.target.checked)}
+                  className="accent-[rgb(var(--accent-primary))]"
+                />
+                Beam
+              </label>
+              {beamEnabled && (
+                <div className="flex items-center gap-1" title="Beamwidth in degrees">
+                  <input
+                    type="number"
+                    min={2}
+                    max={180}
+                    value={beamWidthDeg}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v)) setBeamWidthDeg(Math.min(180, Math.max(2, v)));
+                    }}
+                    className="glass-input w-14 font-mono text-xs text-center py-1"
+                  />
+                  <span className="text-dark-300 text-xs">&deg;</span>
+                </div>
+              )}
+              <div className="flex rounded overflow-hidden border border-glass-200 text-xs" title="Heading indicator style">
+                <button
+                  onClick={() => setIndicatorStyle('line')}
+                  className={`px-2 py-1 font-ui font-medium transition-colors ${indicatorStyle === 'line' ? 'bg-accent-primary text-dark-900' : 'bg-dark-700 text-dark-300 hover:text-dark-200'}`}
+                  title="Line indicator"
+                >
+                  Line
+                </button>
+                <button
+                  onClick={() => setIndicatorStyle('arrow')}
+                  className={`px-2 py-1 font-ui font-medium transition-colors ${indicatorStyle === 'arrow' ? 'bg-accent-primary text-dark-900' : 'bg-dark-700 text-dark-300 hover:text-dark-200'}`}
+                  title="Arrow indicator"
+                >
+                  Arrow
+                </button>
+              </div>
           </div>
         )}
 
@@ -508,6 +582,23 @@ export function RotatorCore({ hideControls, hideCompass, integratedMode }: { hid
                     />
                   )}
 
+                  {/* Beamwidth wedge (antenna coverage around the heading) */}
+                  {beamEnabled && (
+                    <svg
+                      className="absolute left-0 top-0 pointer-events-none"
+                      width="224"
+                      height="224"
+                      viewBox="0 0 224 224"
+                    >
+                      <path
+                        d={beamWedgePath(currentAzimuth, beamWidthDeg)}
+                        fill="rgba(0, 221, 255, 0.12)"
+                        stroke="rgba(0, 221, 255, 0.35)"
+                        strokeWidth="1"
+                      />
+                    </svg>
+                  )}
+
                   {/* Rotator needle (main beam direction) */}
                   <div
                     className="absolute left-1/2 top-1/2 w-1.5 h-24 -ml-[3px] origin-bottom transition-transform duration-700 ease-out"
@@ -521,8 +612,23 @@ export function RotatorCore({ hideControls, hideCompass, integratedMode }: { hid
                         background: 'linear-gradient(to top, transparent 0%, #00ddff 30%, #00ff88 100%)',
                       }}
                     />
-                    {/* Needle tip glow */}
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-accent-primary rounded-full shadow-glow opacity-80" />
+                    {/* Needle tip — round dot (line) or arrowhead (arrow) */}
+                    {indicatorStyle === 'arrow' ? (
+                      <div
+                        className="absolute left-1/2 -translate-x-1/2"
+                        style={{
+                          top: '-8px',
+                          width: 0,
+                          height: 0,
+                          borderLeft: '6px solid transparent',
+                          borderRight: '6px solid transparent',
+                          borderBottom: '11px solid #00ddff',
+                          filter: 'drop-shadow(0 0 4px rgba(0,221,255,0.7))',
+                        }}
+                      />
+                    ) : (
+                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-accent-primary rounded-full shadow-glow opacity-80" />
+                    )}
                   </div>
 
                   {/* Center hub */}
