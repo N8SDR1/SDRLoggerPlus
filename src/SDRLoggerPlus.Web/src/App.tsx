@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Layout, Model, TabNode, TabSetNode, BorderNode, ITabSetRenderValues, Actions, DockLocation } from 'flexlayout-react';
-import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, AudioWaveform, Activity, TrendingUp, Gauge, Map } from 'lucide-react';
+import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, AudioWaveform, Activity, TrendingUp, Gauge } from 'lucide-react';
 import { StatusBar } from './components/StatusBar';
 import { WeatherAlertBanner } from './components/WeatherAlertBanner';
 import { Toasts } from './components/Toasts';
@@ -9,7 +9,7 @@ import { ConnectionOverlay } from './components/ConnectionOverlay';
 import { SetupWizard } from './components/SetupWizard';
 import { PluginErrorBoundary } from './components/PluginErrorBoundary';
 import { useSignalRConnection } from './hooks/useSignalR';
-import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, PropagationPanelPlugin, CwKeyerPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin } from './plugins';
+import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, PropagationPanelPlugin, CwKeyerPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin } from './plugins';
 import { useLayoutStore, defaultLayout } from './store/layoutStore';
 import { useSettingsStore } from './store/settingsStore';
 import { useSetupStore } from './store/setupStore';
@@ -155,13 +155,6 @@ const PLUGINS: Record<string, PluginDef> = {
     component: StatisticsPlugin,
     category: 'Logging',
     tags: ['dxcc', 'awards', 'stats', 'countries', 'bands'],
-  },
-  'map': {
-    name: 'Map',
-    icon: <Map className="w-4 h-4" />,
-    component: MapPlugin,
-    category: 'Maps & Navigation',
-    tags: ['map', '2d', 'leaflet', 'spots'],
   },
 };
 
