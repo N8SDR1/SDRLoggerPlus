@@ -372,6 +372,42 @@ public class RadioSettings
 
     [BsonElement("tci")]
     public TciSettings Tci { get; set; } = new();
+
+    [BsonElement("flrig")]
+    public FlrigSettings Flrig { get; set; } = new();
+}
+
+[BsonIgnoreExtraElements]
+public class FlrigSettings
+{
+    // W1HKJ flrig XML-RPC integration. The v1.x port docs the whole
+    // rationale — flrig is a lightweight rig-control bridge that exposes
+    // rig.get_vfoA / rig.set_vfoA / rig.get_mode / rig.set_mode over XML-RPC.
+    // We poll it every 1.5 s while enabled, following the same cadence
+    // v1.x used.
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; }
+
+    [BsonElement("host")]
+    public string Host { get; set; } = "127.0.0.1";
+
+    [BsonElement("port")]
+    public int Port { get; set; } = 12345;
+
+    // Rig-specific digital passthrough mode override. flrig calls the same
+    // "digital audio in SSB passband" mode different names on different
+    // rigs (USB-D on Icom, DATA-U on Kenwood/Yaesu, PKT-U on some, DIGU
+    // on others). We auto-detect the right name on connect, but this
+    // override lets an operator pin it explicitly when detection picks
+    // the wrong one.
+    [BsonElement("digitalMode")]
+    public string? DigitalMode { get; set; }
+
+    // RTTY mode override — blank = "RTTY" sent as native radio RTTY.
+    // Set to "USB-D" (or similar) for AFSK RTTY via fldigi where the rig
+    // needs to stay in digital-passthrough mode.
+    [BsonElement("rttyMode")]
+    public string? RttyMode { get; set; }
 }
 
 [BsonIgnoreExtraElements]

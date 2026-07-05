@@ -85,6 +85,7 @@ public class LogHub : Hub<ILogHubClient>
     private readonly TunerGeniusService _tunerGeniusService;
     private readonly TciRadioService _tciRadioService;
     private readonly HamlibService _hamlibService;
+    private readonly FlrigService _flrigService;
     private readonly RotatorService _rotatorService;
     private readonly IQrzService _qrzService;
     private readonly IHamQthService _hamQthService;
@@ -101,6 +102,7 @@ public class LogHub : Hub<ILogHubClient>
         TunerGeniusService tunerGeniusService,
         TciRadioService tciRadioService,
         HamlibService hamlibService,
+        FlrigService flrigService,
         RotatorService rotatorService,
         IQrzService qrzService,
         IHamQthService hamQthService,
@@ -118,6 +120,7 @@ public class LogHub : Hub<ILogHubClient>
         _tunerGeniusService = tunerGeniusService;
         _tciRadioService = tciRadioService;
         _hamlibService = hamlibService;
+        _flrigService = flrigService;
         _rotatorService = rotatorService;
         _qrzService = qrzService;
         _hamQthService = hamQthService;
@@ -959,6 +962,53 @@ public class LogHub : Hub<ILogHubClient>
     {
         _logger.LogInformation("Disconnecting from TCI {RadioId}", radioId);
         await _tciRadioService.DisconnectAsync(radioId);
+    }
+
+    // ── flrig (XML-RPC) ─────────────────────────────────────────────────
+    // flrig runs as a separate desktop bridge to the physical rig, so
+    // there's no "discover" step — the operator just enters the host+port
+    // (defaults 127.0.0.1:12345) in Settings and toggles Enabled. The
+    // FlrigService background poller handles connect/reconnect on its own
+    // schedule; these methods only need to save config + push a status
+    // request so the UI reflects the change immediately.
+
+    /// <summary>
+    /// Save flrig connection config to user settings. Enabling turns on
+    /// the background poller; disabling gracefully takes it offline.
+    /// </summary>
+    public async Task SaveFlrigConfig(string host, int port, bool enabled, string? digitalMode = null, string? rttyMode = null)
+    {
+        _logger.LogInformation("Saving flrig config: {Host}:{Port} enabled={Enabled}", host, port, enabled);
+        var settings = await _settingsRepository.GetAsync() ?? new SDRLoggerPlus.Contracts.Models.UserSettings();
+        settings.Radio ??= new();
+        settings.Radio.Flrig ??= new();
+        settings.Radio.Flrig.Host = string.IsNullOrWhiteSpace(host) ? "127.0.0.1" : host.Trim();
+        settings.Radio.Flrig.Port = port > 0 ? port : 12345;
+        settings.Radio.Flrig.Enabled = enabled;
+        settings.Radio.Flrig.DigitalMode = string.IsNullOrWhiteSpace(digitalMode) ? null : digitalMode!.Trim();
+        settings.Radio.Flrig.RttyMode = string.IsNullOrWhiteSpace(rttyMode) ? null : rttyMode!.Trim();
+        await _settingsRepository.UpsertAsync(settings);
+        await RequestRadioStatus();
+    }
+
+    /// <summary>
+    /// Set the rig frequency via flrig XML-RPC.
+    /// </summary>
+    public async Task SetFlrigFrequency(long frequencyHz)
+    {
+        _logger.LogDebug("flrig set freq {Hz} Hz", frequencyHz);
+        await _flrigService.SetFrequencyAsync(frequencyHz);
+    }
+
+    /// <summary>
+    /// Set the rig mode via flrig XML-RPC. Accepts app-normalized modes
+    /// (USB/LSB/CWU/CWL/FT8/DIGU/etc.); FlrigService handles the rig-
+    /// specific translation.
+    /// </summary>
+    public async Task SetFlrigMode(string mode)
+    {
+        _logger.LogDebug("flrig set mode {Mode}", mode);
+        await _flrigService.SetModeAsync(mode);
     }
 
     public async Task SelectRadioInstance(SelectRadioInstanceCommand cmd)

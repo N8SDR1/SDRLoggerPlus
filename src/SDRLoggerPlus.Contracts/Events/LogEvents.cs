@@ -324,7 +324,8 @@ public record SetPgxlStandbyCommand(
 public enum RadioType
 {
     Tci,
-    Hamlib
+    Hamlib,
+    Flrig
 }
 
 /// <summary>

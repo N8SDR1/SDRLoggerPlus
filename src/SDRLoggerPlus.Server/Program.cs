@@ -136,6 +136,10 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<TciRadioService>()
 builder.Services.AddSingleton<HamlibService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HamlibService>());
 
+// Register flrig XML-RPC rig-control service (ported from v1.x)
+builder.Services.AddSingleton<FlrigService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<FlrigService>());
+
 
 // Club Log realtime QSO upload (singleton so the one-strike auth block persists)
 builder.Services.AddSingleton<ClubLogService>(sp =>
