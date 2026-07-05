@@ -69,14 +69,9 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
         <div className="text-left text-xs text-dark-400 space-y-1.5">
           <p className="text-dark-300 font-medium">Credits</p>
           <p>
-            Lead developer:{' '}
-            <span className="text-dark-300">Rick Langford (N8SDR)</span> — creator of
-            SDRLogger+.
-          </p>
-          <p>
-            Contributor:{' '}
-            <span className="text-dark-300">Brent Crier (N9BC)</span> — this
-            cross-platform edition.
+            Authors:{' '}
+            <span className="text-dark-300">Rick Langford (N8SDR)</span> and{' '}
+            <span className="text-dark-300">Brent Crier (N9BC)</span>.
           </p>
           <p>
             Built on{' '}
@@ -86,7 +81,7 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
             >
               Log4YM
             </button>{' '}
-            by Brian Keating, EI6LF (public domain) — the original codebase this edition
+            by Brian Keating, EI6LF (Unlicense) — the original codebase this edition
             began from.
           </p>
           <p>

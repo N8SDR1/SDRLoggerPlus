@@ -2902,23 +2902,31 @@ function AboutSection() {
 
         <div className="space-y-2 text-sm text-dark-300">
           <p>
-            <strong className="text-dark-200">Author:</strong> Brent Crier (N9BC)
+            <strong className="text-dark-200">Authors:</strong> Rick Langford (N8SDR) and Brent Crier (N9BC)
           </p>
           <p>
-            <strong className="text-dark-200">License:</strong> Public Domain (Unlicense)
+            <strong className="text-dark-200">License:</strong> MIT License
           </p>
           <p>
             <strong className="text-dark-200">Website:</strong>{' '}
-            <a href="https://github.com/n9bc/SDRLoggerPlus" className="text-accent-primary hover:underline">
-              github.com/n9bc/SDRLoggerPlus
+            <a href="https://github.com/N8SDR1/SDRLoggerPlus" className="text-accent-primary hover:underline">
+              github.com/N8SDR1/SDRLoggerPlus
             </a>
           </p>
         </div>
 
-        <div className="pt-4 border-t border-glass-100">
+        <div className="pt-4 border-t border-glass-100 space-y-2">
           <p className="text-xs text-dark-300">
             SDRLoggerPlus is a modern ham radio logging application designed for amateur radio operators.
             It features real-time DX cluster integration, rotator control, and QSO logging.
+          </p>
+          <p className="text-xs text-dark-400">
+            Built on{' '}
+            <a href="https://github.com/brianbruff/Log4YM" className="text-accent-primary hover:underline">
+              Log4YM
+            </a>{' '}
+            by Brian Keating (EI6LF) — released under the Unlicense. Bundles Hamlib and libusb (LGPL-2.1)
+            and the AD1C Country Files. See THIRD-PARTY-NOTICES for full open-source license information.
           </p>
         </div>
       </div>
