@@ -63,6 +63,60 @@ function interpolateGreatCircle(
   };
 }
 
+/**
+ * Great-circle Slerp along the LONG path — the reflex-angle arc that goes
+ * the OTHER way around the globe from station to target. Uses the same
+ * math as the short-path helper above but with the central angle set to
+ * (2π - ω) instead of ω. sin() naturally flips sign in the third quadrant,
+ * which is exactly what puts the interpolated points on the opposite
+ * hemisphere from the short path.
+ *
+ * Used by the DE→DX Long-Path visualization on the 3D globe.
+ */
+function interpolateGreatCircleLongPath(
+  lat1: number, lon1: number,
+  lat2: number, lon2: number,
+  t: number
+): { lat: number; lng: number } {
+  const toRad = Math.PI / 180;
+  const toDeg = 180 / Math.PI;
+
+  const lat1Rad = lat1 * toRad;
+  const lon1Rad = lon1 * toRad;
+  const lat2Rad = lat2 * toRad;
+  const lon2Rad = lon2 * toRad;
+
+  const x1 = Math.cos(lat1Rad) * Math.cos(lon1Rad);
+  const y1 = Math.cos(lat1Rad) * Math.sin(lon1Rad);
+  const z1 = Math.sin(lat1Rad);
+
+  const x2 = Math.cos(lat2Rad) * Math.cos(lon2Rad);
+  const y2 = Math.cos(lat2Rad) * Math.sin(lon2Rad);
+  const z2 = Math.sin(lat2Rad);
+
+  const dot = x1 * x2 + y1 * y2 + z1 * z2;
+  const omega = Math.acos(Math.max(-1, Math.min(1, dot)));
+  const omegaLong = 2 * Math.PI - omega;
+
+  const sinLong = Math.sin(omegaLong);
+  if (Math.abs(sinLong) < 1e-10) {
+    // Antipodal endpoints — great-circle plane is undefined.
+    return { lat: lat1, lng: lon1 };
+  }
+
+  const a = Math.sin((1 - t) * omegaLong) / sinLong;
+  const b = Math.sin(t * omegaLong) / sinLong;
+
+  const x = a * x1 + b * x2;
+  const y = a * y1 + b * y2;
+  const z = a * z1 + b * z2;
+
+  return {
+    lat: Math.atan2(z, Math.sqrt(x * x + y * y)) * toDeg,
+    lng: Math.atan2(y, x) * toDeg,
+  };
+}
+
 // Marker data structure for globe points
 interface GlobeMarkerData {
   lat: number;
@@ -391,19 +445,42 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     // Render direct great-circle path from DE station to DX target
     const targetCoords = targetCoordsRef.current;
     if (targetCoords !== null) {
+      const isApprox = targetCoords.approximate;
+
+      // ── Short path (red-orange) ──────────────────────────────────────
+      // Shorter of the two great-circle arcs — the primary bearing line.
       const targetPath: [number, number, number][] = [];
       for (let i = 0; i <= numSegments; i++) {
         const t = i / numSegments;
         const point = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
         targetPath.push([point.lat, point.lng, 0.02]);
       }
-
-      const isApprox = targetCoords.approximate;
       pathsData.push({
         path: targetPath,
         // Approx (cty.dat centroid) → dimmer alpha to reinforce that it's
         // a country-scale hint, not the operator's real QTH.
         color: isApprox ? 'rgba(255, 68, 102, 0.45)' : 'rgba(255, 68, 102, 0.8)',
+        stroke: 2,
+        dashLength: isApprox ? 0.02 : 0,
+        dashGap:    isApprox ? 0.015 : 0,
+      });
+
+      // ── Long path (cyan) ─────────────────────────────────────────────
+      // The reflex-angle arc going the other way around the globe. Same
+      // start/end points, opposite hemisphere in between. ~3x longer than
+      // short path so use more segments (double) to keep the curve smooth.
+      // Cyan is the "beam pointer swung 180°" convention hams use on maps
+      // and reads clearly against the red-orange short path.
+      const LP_SEGMENTS = numSegments * 2;
+      const longPath: [number, number, number][] = [];
+      for (let i = 0; i <= LP_SEGMENTS; i++) {
+        const t = i / LP_SEGMENTS;
+        const point = interpolateGreatCircleLongPath(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
+        longPath.push([point.lat, point.lng, 0.02]);
+      }
+      pathsData.push({
+        path: longPath,
+        color: isApprox ? 'rgba(0, 229, 255, 0.4)' : 'rgba(0, 229, 255, 0.75)',
         stroke: 2,
         dashLength: isApprox ? 0.02 : 0,
         dashGap:    isApprox ? 0.015 : 0,
@@ -1244,8 +1321,20 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                     )}
                     {focusedCallsignInfo.bearing != null && (
                       <p className="text-[10px] font-mono text-accent-info">
+                        <span className="text-accent-danger" title="Short path">SP</span>{' '}
                         {focusedCallsignInfo.bearing.toFixed(0)}°
                         {focusedCallsignInfo.distance != null && ` / ${Math.round(focusedCallsignInfo.distance)}km`}
+                      </p>
+                    )}
+                    {focusedCallsignInfo.bearing != null && (
+                      // Long-path readout — reciprocal bearing (SP + 180°) and
+                      // the LP distance = 40030 - SP distance (great-circle
+                      // circumference at Earth's mean radius). Cyan matches
+                      // the LP line drawn on the globe.
+                      <p className="text-[10px] font-mono" style={{ color: 'rgba(0, 229, 255, 0.9)' }}>
+                        <span title="Long path">LP</span>{' '}
+                        {((focusedCallsignInfo.bearing + 180) % 360).toFixed(0)}°
+                        {focusedCallsignInfo.distance != null && ` / ${Math.round(40030 - focusedCallsignInfo.distance)}km`}
                       </p>
                     )}
                   </div>
