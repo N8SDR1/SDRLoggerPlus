@@ -451,8 +451,44 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     if (targetCoords !== null) {
       const isApprox = targetCoords.approximate;
 
+      // Path colors — chosen to contrast strongly against each other AND
+      // against the dark globe surface. Red-orange for short path (classic
+      // ham-map convention), lime-green for long path (cyan was too close
+      // to the ocean color and blended in).
+      const SP_COLOR = isApprox ? 'rgba(255, 68, 102, 0.45)' : 'rgba(255, 68, 102, 0.85)';
+      const LP_COLOR = isApprox ? 'rgba(163, 230, 53, 0.5)'  : 'rgba(163, 230, 53, 0.9)';
+
+      // Small helper: compute an arrowhead "V" at the endpoint of a great-
+      // circle path. Given the last two points on the polyline, the final
+      // approach bearing is calculated_azimuth(nearEnd → end); the arrow's
+      // two tails are drawn from `end` back along (finalBearing + 180 ±
+      // ARROW_HALF_ANGLE_DEG), each `arrowKm` long. Returned as two 2-point
+      // polylines that get pushed into pathsData with the same color as
+      // the parent arc.
+      const ARROW_HALF_ANGLE_DEG = 25;
+      const makeArrowhead = (nearEnd: { lat: number; lng: number }, end: { lat: number; lng: number }, arrowKm: number, color: string) => {
+        const finalBearing = calculateAzimuth(nearEnd.lat, nearEnd.lng, end.lat, end.lng);
+        // "Back" bearings — reversed heading, splayed left and right.
+        const backLeft  = (finalBearing + 180 - ARROW_HALF_ANGLE_DEG + 360) % 360;
+        const backRight = (finalBearing + 180 + ARROW_HALF_ANGLE_DEG) % 360;
+        const tailL = getDestinationPoint(end.lat, end.lng, backLeft,  arrowKm);
+        const tailR = getDestinationPoint(end.lat, end.lng, backRight, arrowKm);
+        // Two short solid lines forming the arrowhead V. Arrows stay solid
+        // even when the parent arc is dashed — a dashed arrowhead reads as
+        // "broken," not "approximate."
+        pathsData.push({
+          path: [[tailL.lat, tailL.lng, 0.02], [end.lat, end.lng, 0.02]] as [number, number, number][],
+          color, stroke: 2, dashLength: 0, dashGap: 0,
+        });
+        pathsData.push({
+          path: [[tailR.lat, tailR.lng, 0.02], [end.lat, end.lng, 0.02]] as [number, number, number][],
+          color, stroke: 2, dashLength: 0, dashGap: 0,
+        });
+      };
+
       // ── Short path (red-orange) ──────────────────────────────────────
       // Shorter of the two great-circle arcs — the primary bearing line.
+      const spDistance = calculateDistance(stationLat, stationLon, targetCoords.lat, targetCoords.lng);
       const targetPath: [number, number, number][] = [];
       for (let i = 0; i <= numSegments; i++) {
         const t = i / numSegments;
@@ -463,21 +499,27 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         path: targetPath,
         // Approx (cty.dat centroid) → dimmer alpha to reinforce that it's
         // a country-scale hint, not the operator's real QTH.
-        color: isApprox ? 'rgba(255, 68, 102, 0.45)' : 'rgba(255, 68, 102, 0.8)',
+        color: SP_COLOR,
         stroke: 2,
         dashLength: isApprox ? 0.02 : 0,
         dashGap:    isApprox ? 0.015 : 0,
       });
+      // Arrowhead at the DX end of SP — points AT the DX from the
+      // approach direction. Size scales with arc length (6% of distance,
+      // clamped [250, 1200] km) so short-distance arrows aren't dwarfed
+      // by wide V-splay and long-distance ones don't cover a continent.
+      const spArrowKm = Math.min(1200, Math.max(250, spDistance * 0.06));
+      const spNearEnd = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, 0.97);
+      makeArrowhead(spNearEnd, { lat: targetCoords.lat, lng: targetCoords.lng }, spArrowKm, SP_COLOR);
 
-      // ── Long path (cyan) ─────────────────────────────────────────────
+      // ── Long path (lime green) ───────────────────────────────────────
       // The reflex-angle arc going the other way around the globe. Same
       // start/end points, opposite hemisphere in between. ~3x longer than
       // short path so use more segments (double) to keep the curve smooth.
-      // Cyan is the "beam pointer swung 180°" convention hams use on maps
-      // and reads clearly against the red-orange short path.
       // Off by user preference (Settings → Map → Show Long Path) → skip.
       if (showLongPathRef.current) {
         const LP_SEGMENTS = numSegments * 2;
+        const lpDistance = 40030 - spDistance; // great-circle circumference − SP
         const longPath: [number, number, number][] = [];
         for (let i = 0; i <= LP_SEGMENTS; i++) {
           const t = i / LP_SEGMENTS;
@@ -486,11 +528,18 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         }
         pathsData.push({
           path: longPath,
-          color: isApprox ? 'rgba(0, 229, 255, 0.4)' : 'rgba(0, 229, 255, 0.75)',
+          color: LP_COLOR,
           stroke: 2,
           dashLength: isApprox ? 0.02 : 0,
           dashGap:    isApprox ? 0.015 : 0,
         });
+        // Arrowhead at the DX end of LP — LP approaches the DX from the
+        // opposite hemisphere, so the arrowhead visually shows the "beam
+        // came from over there." Slightly larger scaling than SP because
+        // LP arcs are usually 3–10× longer.
+        const lpArrowKm = Math.min(2000, Math.max(400, lpDistance * 0.04));
+        const lpNearEnd = interpolateGreatCircleLongPath(stationLat, stationLon, targetCoords.lat, targetCoords.lng, 0.985);
+        makeArrowhead(lpNearEnd, { lat: targetCoords.lat, lng: targetCoords.lng }, lpArrowKm, LP_COLOR);
       }
     }
 
@@ -1339,7 +1388,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                       // circumference at Earth's mean radius). Cyan matches
                       // the LP line drawn on the globe. Hidden when the
                       // Show Long Path toggle is off (Settings → Map).
-                      <p className="text-[10px] font-mono" style={{ color: 'rgba(0, 229, 255, 0.9)' }}>
+                      <p className="text-[10px] font-mono" style={{ color: 'rgba(163, 230, 53, 0.95)' }}>
                         <span title="Long path">LP</span>{' '}
                         {((focusedCallsignInfo.bearing + 180) % 360).toFixed(0)}°
                         {focusedCallsignInfo.distance != null && ` / ${Math.round(40030 - focusedCallsignInfo.distance)}km`}
