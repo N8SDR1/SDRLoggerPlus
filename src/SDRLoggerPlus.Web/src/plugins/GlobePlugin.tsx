@@ -382,6 +382,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   focusedCallsignInfoRef.current = focusedCallsignInfo;
 
   // Render the beam visualization (rotator beam + DE→DX line)
+  // Long-path visibility — read once per render outside the animation loop.
+  const showLongPathRef = useRef<boolean>(settings.map.showLongPath !== false);
+  showLongPathRef.current = settings.map.showLongPath !== false;
+
   const renderBeam = useCallback((azimuth: number, isConnected: boolean) => {
     if (!globeRef.current) return;
 
@@ -471,20 +475,23 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       // short path so use more segments (double) to keep the curve smooth.
       // Cyan is the "beam pointer swung 180°" convention hams use on maps
       // and reads clearly against the red-orange short path.
-      const LP_SEGMENTS = numSegments * 2;
-      const longPath: [number, number, number][] = [];
-      for (let i = 0; i <= LP_SEGMENTS; i++) {
-        const t = i / LP_SEGMENTS;
-        const point = interpolateGreatCircleLongPath(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
-        longPath.push([point.lat, point.lng, 0.02]);
+      // Off by user preference (Settings → Map → Show Long Path) → skip.
+      if (showLongPathRef.current) {
+        const LP_SEGMENTS = numSegments * 2;
+        const longPath: [number, number, number][] = [];
+        for (let i = 0; i <= LP_SEGMENTS; i++) {
+          const t = i / LP_SEGMENTS;
+          const point = interpolateGreatCircleLongPath(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
+          longPath.push([point.lat, point.lng, 0.02]);
+        }
+        pathsData.push({
+          path: longPath,
+          color: isApprox ? 'rgba(0, 229, 255, 0.4)' : 'rgba(0, 229, 255, 0.75)',
+          stroke: 2,
+          dashLength: isApprox ? 0.02 : 0,
+          dashGap:    isApprox ? 0.015 : 0,
+        });
       }
-      pathsData.push({
-        path: longPath,
-        color: isApprox ? 'rgba(0, 229, 255, 0.4)' : 'rgba(0, 229, 255, 0.75)',
-        stroke: 2,
-        dashLength: isApprox ? 0.02 : 0,
-        dashGap:    isApprox ? 0.015 : 0,
-      });
     }
 
     globeRef.current
@@ -1326,11 +1333,12 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                         {focusedCallsignInfo.distance != null && ` / ${Math.round(focusedCallsignInfo.distance)}km`}
                       </p>
                     )}
-                    {focusedCallsignInfo.bearing != null && (
+                    {focusedCallsignInfo.bearing != null && settings.map.showLongPath !== false && (
                       // Long-path readout — reciprocal bearing (SP + 180°) and
                       // the LP distance = 40030 - SP distance (great-circle
                       // circumference at Earth's mean radius). Cyan matches
-                      // the LP line drawn on the globe.
+                      // the LP line drawn on the globe. Hidden when the
+                      // Show Long Path toggle is off (Settings → Map).
                       <p className="text-[10px] font-mono" style={{ color: 'rgba(0, 229, 255, 0.9)' }}>
                         <span title="Long path">LP</span>{' '}
                         {((focusedCallsignInfo.bearing + 180) % 360).toFixed(0)}°

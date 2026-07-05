@@ -1971,6 +1971,28 @@ function MapSettingsSection() {
           />
         </label>
 
+        {/* Show Long Path Toggle — draws the cyan reflex-angle great-circle
+            arc alongside the red-orange short-path arc when a callsign is
+            focused on the 3D Globe. Info card also gains an "LP" row with
+            the reciprocal bearing and distance. */}
+        <label className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100 cursor-pointer hover:bg-dark-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <Map className="w-5 h-5" style={{ color: 'rgba(0, 229, 255, 0.9)' }} />
+            <div>
+              <div className="font-medium font-ui text-dark-200">Show Long Path</div>
+              <div className="text-sm text-dark-300">
+                Draw the reflex-angle great-circle arc (cyan) alongside the short path (red) on the 3D Globe. Useful for gray-line contacts.
+              </div>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={map.showLongPath !== false}
+            onChange={(e) => updateMapSettings({ showLongPath: e.target.checked })}
+            className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
+          />
+        </label>
+
 
         {/* Satellite Selection */}
         {map.showSatellites && (

@@ -156,6 +156,10 @@ export interface MapSettings {
   showPskOverlay: boolean;
   pskCallsign: string; // callsign to look up on PSK Reporter; empty = use station callsign
   showAuroraOverlay: boolean;
+  // Long-path great-circle overlay on the 3D globe. Short path (red-orange)
+  // is always drawn when a callsign is focused; the cyan long-path arc is
+  // opt-in so operators who only care about SP get a cleaner view.
+  showLongPath: boolean;
 }
 
 export interface HeaderSettings {
@@ -478,6 +482,7 @@ const defaultSettings: Settings = {
     showPskOverlay: false,
     pskCallsign: '',
     showAuroraOverlay: false,
+    showLongPath: true, // default ON — hams commonly want to see both paths
   },
   cluster: {
     connections: [],
