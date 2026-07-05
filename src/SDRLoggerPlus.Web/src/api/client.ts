@@ -470,6 +470,23 @@ class ApiClient {
     });
   }
 
+  async removeHotListCall(callsign: string): Promise<void> {
+    await this.fetch(`/hotlist/calls/${encodeURIComponent(callsign)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async clearHotList(): Promise<void> {
+    await this.fetch('/hotlist/calls', { method: 'DELETE' });
+  }
+
+  async setHotListFlags(flags: { enabled?: boolean; ttsEnabled?: boolean }): Promise<void> {
+    await this.fetch('/hotlist', {
+      method: 'PUT',
+      body: JSON.stringify(flags),
+    });
+  }
+
   // WSJT-X
   async getWsjtxStatus(): Promise<WsjtxStatus> {
     return this.fetch('/wsjtx/status');
