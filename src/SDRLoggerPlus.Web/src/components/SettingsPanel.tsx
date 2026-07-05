@@ -2935,16 +2935,18 @@ function AboutSection() {
 }
 
 // Web Logbooks — groups QRZ, LOTW, Club Log, HRDLog, and WSJT-X under one category with sub-tabs.
-type WebLogbookTab = 'qrz' | 'lotw' | 'clublog' | 'hrdlog' | 'wsjtx';
+type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'wsjtx' | 'countryfiles';
 
 function WebLogbooksSection() {
   const [tab, setTab] = useState<WebLogbookTab>('qrz');
   const tabs: { id: WebLogbookTab; label: string }[] = [
     { id: 'qrz', label: 'QRZ.com' },
+    { id: 'hamqth', label: 'HamQTH' },
     { id: 'lotw', label: 'LOTW' },
     { id: 'clublog', label: 'Club Log' },
     { id: 'hrdlog', label: 'HRDLog' },
     { id: 'wsjtx', label: 'WSJT-X' },
+    { id: 'countryfiles', label: 'Country Files' },
   ];
 
   return (
@@ -2966,10 +2968,183 @@ function WebLogbooksSection() {
       </div>
 
       {tab === 'qrz' && <QrzSettingsSection />}
+      {tab === 'hamqth' && <HamQthSettingsSection />}
       {tab === 'lotw' && <LotwSettingsSection />}
       {tab === 'clublog' && <ClubLogSettingsSection />}
       {tab === 'hrdlog' && <HrdLogSettingsSection />}
       {tab === 'wsjtx' && <WsjtxSettingsSection />}
+      {tab === 'countryfiles' && <CountryFilesSection />}
+    </div>
+  );
+}
+
+// HamQTH Settings Section — fallback callsign lookup source when QRZ isn't
+// configured or comes up empty. Free account at hamqth.com; the server
+// caches the session_id, so we only need creds here.
+function HamQthSettingsSection() {
+  const { settings, updateHamQthSettings } = useSettingsStore();
+  const [showPassword, setShowPassword] = useState(false);
+  const hq = settings.hamQth;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">HamQTH Integration</h3>
+        <p className="text-sm text-dark-300">
+          Optional fallback callsign lookup for when QRZ is unconfigured or returns nothing.
+          Free account at <a href="https://www.hamqth.com/register.php" target="_blank" rel="noreferrer" className="text-accent-primary hover:underline">hamqth.com</a>.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+        <div>
+          <p className="font-medium font-ui text-dark-200">Enable HamQTH Lookups</p>
+          <p className="text-sm text-dark-300">Used as a second-tier fallback — QRZ still wins when it has data.</p>
+        </div>
+        <button
+          onClick={() => updateHamQthSettings({ enabled: !hq.enabled })}
+          className={`relative w-11 h-6 rounded-full transition-colors ${
+            hq.enabled ? 'bg-accent-success' : 'bg-dark-600 border border-dark-400'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+              hq.enabled ? 'translate-x-5' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium font-ui text-dark-200 mb-1 block">HamQTH Username</label>
+          <input
+            type="text"
+            value={hq.username}
+            onChange={(e) => updateHamQthSettings({ username: e.target.value })}
+            placeholder="Your HamQTH username (usually your callsign)"
+            className="glass-input w-full"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium font-ui text-dark-200 mb-1 block">HamQTH Password</label>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={hq.password}
+              onChange={(e) => updateHamQthSettings({ password: e.target.value })}
+              placeholder="Your HamQTH password"
+              className="glass-input w-full pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((s) => !s)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200"
+            >
+              {showPassword ? '🙈' : '👁'}
+            </button>
+          </div>
+          <p className="text-xs text-dark-400 mt-2">
+            Stored in the local user config only. Session is negotiated on the server; no other machine sees it.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Country Files (AD1C cty.dat) Section — status + one-click update.
+// cty.dat is what powers the last-ditch centroid fallback when no callbook
+// lookup returns coordinates. Users can refresh it against country-files.com
+// without waiting for a new app release.
+function CountryFilesSection() {
+  const [status, setStatus] = useState<{
+    prefixCount: number;
+    updatedUtc?: string | null;
+    source: string;
+    version?: string | null;
+    sourceUrl: string;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const loadStatus = async () => {
+    try {
+      const r = await fetch('/api/cty/status');
+      if (r.ok) setStatus(await r.json());
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => { loadStatus(); }, []);
+
+  const handleUpdate = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await fetch('/api/cty/update', { method: 'POST' });
+      if (r.ok) {
+        const s = await r.json();
+        setStatus(s);
+        setMsg({ kind: 'ok', text: `Updated — ${s.prefixCount.toLocaleString()} prefixes${s.version ? `, version ${s.version}` : ''}.` });
+      } else {
+        const err = await r.json().catch(() => ({ error: r.statusText }));
+        setMsg({ kind: 'err', text: err.error || `HTTP ${r.status}` });
+      }
+    } catch (e) {
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">AD1C Country Files (cty.dat)</h3>
+        <p className="text-sm text-dark-300">
+          Provides DXCC prefix data and country centroids used by the callsign lookup fallback.
+          Ships bundled — click <em>Update</em> to fetch the latest release from{' '}
+          <a href={status?.sourceUrl ?? 'https://www.country-files.com/'} target="_blank" rel="noreferrer" className="text-accent-primary hover:underline">
+            country-files.com
+          </a>.
+        </p>
+      </div>
+
+      <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span className="text-dark-300">Prefixes loaded</span>
+          <span className="font-mono text-dark-200">{status ? status.prefixCount.toLocaleString() : '—'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-dark-300">Version</span>
+          <span className="font-mono text-dark-200">{status?.version ?? 'unknown'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-dark-300">Source</span>
+          <span className="font-mono text-dark-200">{status?.source ?? '—'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-dark-300">Last updated</span>
+          <span className="font-mono text-dark-200">
+            {status?.updatedUtc ? new Date(status.updatedUtc).toLocaleString() : 'never (bundled default)'}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleUpdate}
+          disabled={busy}
+          className="px-4 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {busy ? 'Updating…' : 'Update Country Files'}
+        </button>
+        {msg && (
+          <span className={`text-sm ${msg.kind === 'ok' ? 'text-accent-success' : 'text-accent-danger'}`}>
+            {msg.text}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -22,6 +22,15 @@ export interface QrzSettings {
   enabled: boolean;
 }
 
+// HamQTH.com free callbook. Used as a fallback lookup source when QRZ has
+// nothing (no subscription, unknown call, or QRZ down). Session is managed
+// server-side in HamQthService; the client only owns the credentials.
+export interface HamQthSettings {
+  username: string;
+  password: string;
+  enabled: boolean;
+}
+
 export interface LotwSettings {
   enabled: boolean;
   // Absolute path to the local TQSL binary (e.g. C:\Program Files\TrustedQSL\tqsl.exe).
@@ -272,6 +281,7 @@ export interface AiSettings {
 export interface Settings {
   station: StationSettings;
   qrz: QrzSettings;
+  hamQth: HamQthSettings;
   lotw: LotwSettings;
   clubLog: ClubLogSettings;
   hrdLog: HrdLogSettings;
@@ -316,6 +326,7 @@ interface SettingsState {
   // Settings updates
   updateStationSettings: (station: Partial<StationSettings>) => void;
   updateQrzSettings: (qrz: Partial<QrzSettings>) => void;
+  updateHamQthSettings: (hamQth: Partial<HamQthSettings>) => void;
   updateLotwSettings: (lotw: Partial<LotwSettings>) => void;
   updateClubLogSettings: (clubLog: Partial<ClubLogSettings>) => void;
   updateHrdLogSettings: (hrdLog: Partial<HrdLogSettings>) => void;
@@ -362,6 +373,11 @@ const defaultSettings: Settings = {
     username: '',
     password: '',
     apiKey: '',
+    enabled: false,
+  },
+  hamQth: {
+    username: '',
+    password: '',
     enabled: false,
   },
   lotw: {
@@ -587,6 +603,16 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       settings: {
         ...state.settings,
         qrz: { ...state.settings.qrz, ...qrz },
+      },
+      isDirty: true,
+    })),
+
+  // HamQTH settings (v2 — secondary lookup source, sits between QRZ and cty.dat)
+  updateHamQthSettings: (hamQth) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        hamQth: { ...state.settings.hamQth, ...hamQth },
       },
       isDirty: true,
     })),
@@ -902,6 +928,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
         const mergedSettings: Settings = {
           station: { ...defaultSettings.station, ...settings.station },
           qrz: { ...defaultSettings.qrz, ...settings.qrz },
+          hamQth: { ...defaultSettings.hamQth, ...settings.hamQth },
           lotw: { ...defaultSettings.lotw, ...settings.lotw },
           clubLog: { ...defaultSettings.clubLog, ...settings.clubLog },
           hrdLog: { ...defaultSettings.hrdLog, ...settings.hrdLog },

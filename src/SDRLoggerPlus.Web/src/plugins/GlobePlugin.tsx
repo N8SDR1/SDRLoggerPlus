@@ -318,7 +318,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   }, []);
 
   // Track target DX station coordinates for the DE→DX path line
-  const targetCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
+  // approximate=true means lat/lng came from the cty.dat country centroid
+  // fallback rather than a QRZ/HamQTH lookup — the great-circle to it is
+  // drawn dashed + dimmer so the operator can tell at a glance.
+  const targetCoordsRef = useRef<{ lat: number; lng: number; approximate: boolean } | null>(null);
 
   // Track focused callsign info for label callback
   const focusedCallsignInfoRef = useRef<CallsignLookedUpEvent | null>(null);
@@ -328,7 +331,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const renderBeam = useCallback((azimuth: number, isConnected: boolean) => {
     if (!globeRef.current) return;
 
-    const pathsData: { path: [number, number, number][]; color: string; stroke: number }[] = [];
+    // dashLength / dashGap = 0 → solid line (real QRZ/HamQTH coords).
+    // dashLength / dashGap > 0 → dashed line (cty.dat centroid fallback,
+    // "approximately in that country" — visual cue for the operator).
+    const pathsData: { path: [number, number, number][]; color: string; stroke: number; dashLength: number; dashGap: number }[] = [];
     const numSegments = 50;
     const BEAM_WIDTH_DEG = 45;          // total azimuthal spread of the beam triangle
     const DEFAULT_BEAM_KM = 5000;       // length when no DX target is focused
@@ -392,10 +398,15 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         targetPath.push([point.lat, point.lng, 0.02]);
       }
 
+      const isApprox = targetCoords.approximate;
       pathsData.push({
         path: targetPath,
-        color: 'rgba(255, 68, 102, 0.8)', // Danger red (#ff4466) for DE→DX path
-        stroke: 2
+        // Approx (cty.dat centroid) → dimmer alpha to reinforce that it's
+        // a country-scale hint, not the operator's real QTH.
+        color: isApprox ? 'rgba(255, 68, 102, 0.45)' : 'rgba(255, 68, 102, 0.8)',
+        stroke: 2,
+        dashLength: isApprox ? 0.02 : 0,
+        dashGap:    isApprox ? 0.015 : 0,
       });
     }
 
@@ -404,8 +415,8 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       .pathPoints('path')
       .pathColor('color')
       .pathStroke('stroke')
-      .pathDashLength(0)
-      .pathDashGap(0)
+      .pathDashLength((d: unknown) => (d as { dashLength: number }).dashLength)
+      .pathDashGap((d: unknown) => (d as { dashGap: number }).dashGap)
       .pathDashAnimateTime(0)
       .pathTransitionDuration(0)
       .ringsData([]);
@@ -753,7 +764,11 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   // Update target DX coordinates when focused callsign changes
   useEffect(() => {
     if (focusedCallsignInfo?.latitude != null && focusedCallsignInfo?.longitude != null) {
-      targetCoordsRef.current = { lat: focusedCallsignInfo.latitude, lng: focusedCallsignInfo.longitude };
+      targetCoordsRef.current = {
+        lat: focusedCallsignInfo.latitude,
+        lng: focusedCallsignInfo.longitude,
+        approximate: focusedCallsignInfo.latLonIsApproximate === true,
+      };
     } else {
       targetCoordsRef.current = null;
     }
@@ -1213,8 +1228,16 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                 <div className="flex items-center gap-2">
                   <Target className="w-4 h-4 text-accent-danger" />
                   <div>
-                    <p className="font-mono font-bold text-accent-danger">
+                    <p className="font-mono font-bold text-accent-danger flex items-center gap-1.5">
                       {focusedCallsignInfo.callsign}
+                      {focusedCallsignInfo.latLonIsApproximate && (
+                        <span
+                          className="px-1 py-[1px] rounded text-[8px] font-normal tracking-wider bg-dark-600 text-dark-300 border border-glass-100"
+                          title="Approximate location — cty.dat country centroid (QRZ/HamQTH lookup unavailable)"
+                        >
+                          APPROX
+                        </span>
+                      )}
                     </p>
                     {focusedCallsignInfo.grid && (
                       <p className="text-[10px] font-mono text-dark-300">{focusedCallsignInfo.grid}</p>

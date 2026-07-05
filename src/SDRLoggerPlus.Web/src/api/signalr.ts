@@ -26,6 +26,10 @@ export interface CallsignLookedUpEvent {
   imageUrl?: string;
   bearing?: number;
   distance?: number;
+  // True when lat/lon came from the cty.dat country centroid fallback
+  // rather than a real QRZ/HamQTH lookup — the UI renders the bearing
+  // line dimmer/dashed and shows an "APPROX" chip.
+  latLonIsApproximate?: boolean;
 }
 
 export interface QsoLoggedEvent {
