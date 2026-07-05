@@ -28,6 +28,7 @@ public class SettingsService : ISettingsService
         // created before new settings sections were added to the schema)
         settings.Station ??= new();
         settings.Qrz ??= new();
+        settings.HamQth ??= new();
         settings.Appearance ??= new();
         settings.Rotator ??= new();
         settings.Radio ??= new();

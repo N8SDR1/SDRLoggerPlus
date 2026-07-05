@@ -15,6 +15,9 @@ public class UserSettings
     [BsonElement("qrz")]
     public QrzSettings Qrz { get; set; } = new();
 
+    [BsonElement("hamqth")]
+    public HamQthSettings HamQth { get; set; } = new();
+
     [BsonElement("lotw")]
     public LotwSettings Lotw { get; set; } = new();
 
@@ -153,6 +156,22 @@ public class QrzSettings
 
     [BsonElement("subscriptionCheckedAt")]
     public DateTime? SubscriptionCheckedAt { get; set; }
+}
+
+[BsonIgnoreExtraElements]
+public class HamQthSettings
+{
+    // HamQTH.com callbook credentials. Free account, session-based XML API.
+    // Used as a fallback lookup source when QRZ is not configured or returns
+    // nothing. Session ID is cached in-memory only (not persisted).
+    [BsonElement("username")]
+    public string? Username { get; set; } = string.Empty;
+
+    [BsonElement("password")]
+    public string? Password { get; set; } = string.Empty; // Stored obfuscated
+
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; }
 }
 
 [BsonIgnoreExtraElements]

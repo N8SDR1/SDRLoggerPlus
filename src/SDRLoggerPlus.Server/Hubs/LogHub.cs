@@ -87,6 +87,7 @@ public class LogHub : Hub<ILogHubClient>
     private readonly HamlibService _hamlibService;
     private readonly RotatorService _rotatorService;
     private readonly IQrzService _qrzService;
+    private readonly IHamQthService _hamQthService;
     private readonly ISettingsRepository _settingsRepository;
     private readonly CwKeyerService _cwKeyerService;
     private readonly ICallsignImageRepository _imageRepository;
@@ -102,6 +103,7 @@ public class LogHub : Hub<ILogHubClient>
         HamlibService hamlibService,
         RotatorService rotatorService,
         IQrzService qrzService,
+        IHamQthService hamQthService,
         ISettingsRepository settingsRepository,
         CwKeyerService cwKeyerService,
         ICallsignImageRepository imageRepository,
@@ -118,6 +120,7 @@ public class LogHub : Hub<ILogHubClient>
         _hamlibService = hamlibService;
         _rotatorService = rotatorService;
         _qrzService = qrzService;
+        _hamQthService = hamQthService;
         _settingsRepository = settingsRepository;
         _cwKeyerService = cwKeyerService;
         _imageRepository = imageRepository;
@@ -157,10 +160,10 @@ public class LogHub : Hub<ILogHubClient>
         _logger.LogDebug("Callsign focused: {Callsign} from {Source}", evt.Callsign, evt.Source);
         await Clients.Others.OnCallsignFocused(evt);
 
-        // Try QRZ first. Whatever it returns (info + coords, info without
-        // coords, or nothing at all), we fall through to the cty.dat centroid
-        // fallback so the operator always gets *some* lat/lon for the bearing
-        // line — even without QRZ credentials configured.
+        // Lookup chain: QRZ → HamQTH → cty.dat centroid. Each source is tried
+        // in order; whichever supplies coords first wins. The operator always
+        // gets *some* lat/lon for the bearing line — even without QRZ or
+        // HamQTH credentials configured.
         QrzCallsignInfo? info = null;
         try
         {
@@ -169,7 +172,26 @@ public class LogHub : Hub<ILogHubClient>
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "QRZ lookup failed for {Callsign}", evt.Callsign);
-            // fall through — cty.dat fallback still applies
+            // fall through — HamQTH + cty.dat fallbacks still apply
+        }
+
+        // HamQTH fallback for coords/name — only invoked when QRZ didn't
+        // return them. Runs even if QRZ returned some fields (e.g. QRZ
+        // handed back a Name but no lat/lon), backfilling only what's
+        // missing so HamQTH data never overrides a paid QRZ subscription's
+        // response.
+        HamQthCallsignInfo? hqInfo = null;
+        if (info?.Latitude is null || info.Longitude is null)
+        {
+            try
+            {
+                hqInfo = await _hamQthService.LookupCallsignAsync(evt.Callsign);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "HamQTH lookup failed for {Callsign}", evt.Callsign);
+                // fall through — cty.dat fallback still applies
+            }
         }
 
         // Load station coords once — used for bearing/distance regardless of
@@ -192,12 +214,14 @@ public class LogHub : Hub<ILogHubClient>
             }
         }
 
-        // Decide the target coords: QRZ if it had lat/lon, else cty.dat centroid.
-        double? targetLat = info?.Latitude;
-        double? targetLon = info?.Longitude;
+        // Decide the target coords by precedence: QRZ → HamQTH → cty.dat.
+        // Only cty.dat coords are marked approximate; a real HamQTH hit is
+        // the operator's actual QTH just like QRZ.
+        double? targetLat = info?.Latitude ?? hqInfo?.Latitude;
+        double? targetLon = info?.Longitude ?? hqInfo?.Longitude;
         bool isApproximate = false;
-        string? country = info?.Country;
-        int? cqZone = info?.CqZone;
+        string? country = info?.Country ?? hqInfo?.Country;
+        int? cqZone = info?.CqZone ?? hqInfo?.CqZone;
 
         if (!targetLat.HasValue || !targetLon.HasValue)
         {
@@ -207,7 +231,8 @@ public class LogHub : Hub<ILogHubClient>
                 targetLat = centroid.Value.Lat;
                 targetLon = centroid.Value.Lon;
                 isApproximate = true;
-                // Fill in country/continent from cty.dat if QRZ didn't have them.
+                // Fill in country/CQ zone from cty.dat if neither QRZ nor
+                // HamQTH had them (rare — both usually surface these).
                 var (ctyCountry, _, ctyCqZone) = CtyService.GetEntityFromCallsign(evt.Callsign);
                 country ??= ctyCountry;
                 cqZone ??= ctyCqZone;
@@ -224,25 +249,36 @@ public class LogHub : Hub<ILogHubClient>
             distance = CalculateDistance(stationLat.Value, stationLon.Value, targetLat.Value, targetLon.Value);
         }
 
+        // Compose the event with source precedence QRZ → HamQTH for every
+        // non-coord field. QRZ always wins when it has data; HamQTH backfills
+        // whatever QRZ didn't provide. This keeps a paid QRZ subscription
+        // fully authoritative even when HamQTH would have had richer data
+        // for a particular field.
+        string? name = info != null
+            ? BuildFullName(info.FirstName, info.Name)
+            : (hqInfo != null ? BuildFullName(hqInfo.FirstName, hqInfo.Name) : null);
+
         var lookedUpEvent = new CallsignLookedUpEvent(
-            Callsign: info?.Callsign ?? evt.Callsign,
-            Name: info != null ? BuildFullName(info.FirstName, info.Name) : null,
-            Grid: info?.Grid,
+            Callsign: info?.Callsign ?? hqInfo?.Callsign ?? evt.Callsign,
+            Name: name,
+            Grid: info?.Grid ?? hqInfo?.Grid,
             Latitude: targetLat,
             Longitude: targetLon,
             Country: country,
             Dxcc: info?.Dxcc,
             CqZone: cqZone,
-            ItuZone: info?.ItuZone,
-            State: info?.State,
-            ImageUrl: info?.ImageUrl,
+            ItuZone: info?.ItuZone ?? hqInfo?.ItuZone,
+            State: info?.State ?? hqInfo?.State,
+            ImageUrl: info?.ImageUrl ?? hqInfo?.ImageUrl,
             Bearing: bearing,
             Distance: distance,
             LatLonIsApproximate: isApproximate
         );
 
-        _logger.LogDebug("Callsign lookup complete: {Callsign} -> {Name}, {Country}, Bearing: {Bearing}°, Approx: {Approx}",
-            evt.Callsign, info?.Name ?? "-", country ?? "-", bearing?.ToString("F0") ?? "N/A", isApproximate);
+        _logger.LogDebug(
+            "Callsign lookup: {Callsign} -> Name={Name}, Country={Country}, Bearing={Bearing}°, Sources: QRZ={Qrz} HamQTH={Hq} Cty={Cty}",
+            evt.Callsign, name ?? "-", country ?? "-", bearing?.ToString("F0") ?? "N/A",
+            info != null, hqInfo != null, isApproximate);
 
         await Clients.All.OnCallsignLookedUp(lookedUpEvent);
     }

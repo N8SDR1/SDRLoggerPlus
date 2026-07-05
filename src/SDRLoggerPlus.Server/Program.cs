@@ -76,6 +76,9 @@ builder.Services.AddScoped<IQsoService, QsoService>();
 builder.Services.AddScoped<IAwardsService, AwardsService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddScoped<IQrzService, QrzService>();
+// HamQTH is a Singleton so the session_id cache survives across requests
+// (LogHub is Scoped, would re-login every callsign click otherwise).
+builder.Services.AddSingleton<IHamQthService, HamQthService>();
 builder.Services.AddSingleton<ITqslRunner, TqslRunner>();
 builder.Services.AddScoped<ILotwService, LotwService>();
 builder.Services.AddScoped<IAdifService, AdifService>();
