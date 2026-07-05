@@ -1302,20 +1302,29 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
               top: 0,
               left: 0,
               display: 'none',
-              color: '#ff4466',
-              filter: 'drop-shadow(0 0 4px rgba(0, 0, 0, 0.8))',
+              // Amber/gold — reads as "beacon broadcasting" and stands
+              // clear of the red SP and lime LP arc colors that terminate
+              // at the same point. Also ties to the app's ☕ donate button
+              // for a small warm-color throughline across the UI.
+              color: '#fbbf24',
+              filter: 'drop-shadow(0 0 6px rgba(0, 0, 0, 0.85))',
             }}
           >
             <div className="relative flex items-center justify-center">
               {/* Concentric expanding rings behind the tower — the "radio
                   waves broadcasting" effect. Two rings staggered half a
-                  cycle apart so waves are always emitting. */}
+                  cycle apart so waves are always emitting. The rings are
+                  drawn brighter than the tower itself (lighter yellow
+                  #fde047 vs amber #fbbf24, higher alpha, plus a soft glow
+                  via box-shadow) so the eye reads them as light being
+                  emitted BY the tower, not shadows around it. */}
               <span
                 className="absolute rounded-full"
                 style={{
                   width: '38px',
                   height: '38px',
-                  border: '2px solid rgba(255, 68, 102, 0.55)',
+                  border: '2.5px solid rgba(253, 224, 71, 0.95)',
+                  boxShadow: '0 0 8px rgba(253, 224, 71, 0.6)',
                   animation: 'sdrGlobeTowerPulse 2.2s ease-out infinite',
                 }}
               />
@@ -1324,7 +1333,8 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                 style={{
                   width: '38px',
                   height: '38px',
-                  border: '2px solid rgba(255, 68, 102, 0.55)',
+                  border: '2.5px solid rgba(253, 224, 71, 0.95)',
+                  boxShadow: '0 0 8px rgba(253, 224, 71, 0.6)',
                   animation: 'sdrGlobeTowerPulse 2.2s ease-out infinite',
                   animationDelay: '1.1s',
                 }}
