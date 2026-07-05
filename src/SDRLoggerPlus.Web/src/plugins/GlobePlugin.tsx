@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Globe as GlobeIcon, Navigation, Target, Maximize2, Radio, MapPin, Pause, Play } from 'lucide-react';
+import { Globe as GlobeIcon, Navigation, Target, Maximize2, Radio, RadioTower, MapPin, Pause, Play } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSignalR } from '../hooks/useSignalR';
@@ -291,6 +291,13 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const globeLabelsRef = useRef<GlobeLabelData[]>([]);
   globeLabelsRef.current = globeLabels;
   const labelElsRef = useRef<(HTMLDivElement | null)[]>([]);
+  // The pulsing radio-tower icon we drop over the focused-callsign QTH.
+  // Positioned every frame from the same projection tick that drives the
+  // callsign labels (see below). Hidden when no callsign is focused OR
+  // when the point rotates behind the globe.
+  const targetIconRef = useRef<HTMLDivElement | null>(null);
+  const focusedInfoLatestRef = useRef<CallsignLookedUpEvent | null>(null);
+  focusedInfoLatestRef.current = focusedCallsignInfo;
 
   // Get current radio state if connected
   const selectedRadioState = selectedRadioId ? radioStates.get(selectedRadioId) : null;
@@ -447,21 +454,39 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     }
 
     // Render great-circle paths from DE station to DX target as elevated
-    // animated arcs. globe.gl's built-in arcsData API always draws the SHORT
-    // path — we can't use it for LP, and mixing arc/path styles would look
-    // inconsistent. Instead we build both as pathsData polylines with a
-    // per-point altitude bulge (sin(π·t) * peakAlt) so each path arches off
-    // the sphere. Global path-layer settings enable the flowing dash
-    // animation (see renderBeam's globe.pathsData() call below).
+    // arcs with a whole-line alpha pulse ("heartbeat") — the arcs remain
+    // solid solid lines that gently brighten and dim in unison rather than
+    // dashes flowing along them. Reads as "beam is aimed here" without
+    // demanding the operator's attention.
+    //
+    // globe.gl's built-in arcsData always draws the SHORT path so we can't
+    // use it for LP. Instead we build both as pathsData polylines with a
+    // per-point altitude bulge (sin(π·t) · peakAlt) so each arcs off the
+    // sphere. renderBeam runs every animation frame, so recomputing the
+    // pulse alpha per frame is free — we just modulate the color string.
     const targetCoords = targetCoordsRef.current;
     if (targetCoords !== null) {
       const isApprox = targetCoords.approximate;
 
-      // Path colors — contrast strongly against each other AND against the
-      // dark globe surface. Red-orange for short path (classic ham-map
-      // convention), lime-green for long path.
-      const SP_COLOR = isApprox ? 'rgba(255, 68, 102, 0.55)' : 'rgba(255, 68, 102, 0.9)';
-      const LP_COLOR = isApprox ? 'rgba(163, 230, 53, 0.55)' : 'rgba(163, 230, 53, 0.95)';
+      // Pulse factor — 0..1, sinusoidal, ~3.5s per full breath. Slow enough
+      // to feel calm and background-y, fast enough to feel alive. Both
+      // arcs pulse in unison so the visual reads as a single station-scale
+      // heartbeat, not two independent lines.
+      const PULSE_PERIOD_MS = 3500;
+      const pulseFactor = 0.5 + 0.5 * Math.sin(performance.now() * (2 * Math.PI) / PULSE_PERIOD_MS);
+
+      // Base alpha (when the pulse is at its peak) and floor alpha (trough).
+      // Approx (cty.dat centroid) sits dimmer overall so the "these coords
+      // are a guess" hint stays visible under the alpha modulation.
+      const spAlphaPeak = isApprox ? 0.6  : 0.95;
+      const spAlphaFloor = spAlphaPeak * 0.35;
+      const lpAlphaPeak = isApprox ? 0.6  : 0.95;
+      const lpAlphaFloor = lpAlphaPeak * 0.35;
+      const spAlpha = (spAlphaFloor + (spAlphaPeak - spAlphaFloor) * pulseFactor).toFixed(3);
+      const lpAlpha = (lpAlphaFloor + (lpAlphaPeak - lpAlphaFloor) * pulseFactor).toFixed(3);
+
+      const SP_COLOR = `rgba(255, 68, 102, ${spAlpha})`;   // red-orange
+      const LP_COLOR = `rgba(163, 230, 53, ${lpAlpha})`;   // lime green
 
       // Peak altitude of the arc bulge above the surface. LP is much longer
       // and gets a higher bulge — reinforces visually that it's the "long
@@ -475,7 +500,6 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       for (let i = 0; i <= numSegments; i++) {
         const t = i / numSegments;
         const point = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
-        // sin(π·t) → 0 at endpoints, 1 at midpoint — smooth arc profile.
         const alt = Math.sin(Math.PI * t) * SP_PEAK_ALT;
         targetPath.push([point.lat, point.lng, alt]);
       }
@@ -483,12 +507,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         path: targetPath,
         color: SP_COLOR,
         stroke: 2.5,
-        // Animated flow: dashes travel from station to target. Approximate
-        // (cty.dat centroid) paths get shorter faster-flowing dashes so the
-        // "these coords are a guess" hint is even more obvious than the
-        // dimmer alpha alone.
-        dashLength: isApprox ? 0.03 : 0.05,
-        dashGap:    isApprox ? 0.02 : 0.03,
+        // dashLength/dashGap 0 → solid line; the pulse comes from the
+        // alpha modulation above, not from dashes flowing along the path.
+        dashLength: 0,
+        dashGap: 0,
       });
 
       // ── Long path (lime green, higher bulge) ────────────────────────
@@ -509,8 +531,8 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
           path: longPath,
           color: LP_COLOR,
           stroke: 2.5,
-          dashLength: isApprox ? 0.03 : 0.05,
-          dashGap:    isApprox ? 0.02 : 0.03,
+          dashLength: 0,
+          dashGap: 0,
         });
       }
     }
@@ -522,11 +544,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       .pathStroke('stroke')
       .pathDashLength((d: unknown) => (d as { dashLength: number }).dashLength)
       .pathDashGap((d: unknown) => (d as { dashGap: number }).dashGap)
-      // Flowing-dash animation — dashes travel from the first point (station)
-      // to the last (DX target). 1200 ms per cycle matches the DX cluster
-      // arc animation cadence Brent set up for consistency across the app.
-      // The direction of flow doubles as an implicit arrow.
-      .pathDashAnimateTime(1200)
+      // No dash flow — the arcs pulse in unison via the alpha modulation
+      // computed inside renderBeam above. Setting animate-time to 0 keeps
+      // globe.gl's dash-motion machinery idle.
+      .pathDashAnimateTime(0)
       .pathTransitionDuration(0)
       .ringsData([]);
   }, [stationLat, stationLon, getDestinationPoint]);
@@ -1129,6 +1150,33 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
             el.style.display = 'none';
           }
         }
+
+        // ── Focused-callsign DX tower icon ──────────────────────────────
+        // Positioned every frame by the same projection math the labels
+        // use. Hidden when there's no focused callsign or when the target
+        // point rotates past the globe's horizon.
+        const iconEl = targetIconRef.current;
+        const info = focusedInfoLatestRef.current;
+        if (iconEl) {
+          if (info?.latitude != null && info?.longitude != null) {
+            const sc = globe.getScreenCoords(info.latitude, info.longitude, 0.02);
+            const p = globe.getCoords(info.latitude, info.longitude, 0.02);
+            if (sc && p) {
+              const pLen = Math.hypot(p.x, p.y, p.z) || 1;
+              const cosAngle = (p.x * cam.x + p.y * cam.y + p.z * cam.z) / (pLen * camLen);
+              if (cosAngle > pLen / camLen) {
+                iconEl.style.display = '';
+                iconEl.style.transform = `translate(${sc.x}px, ${sc.y}px) translate(-50%, -100%)`;
+              } else {
+                iconEl.style.display = 'none';
+              }
+            } else {
+              iconEl.style.display = 'none';
+            }
+          } else {
+            iconEl.style.display = 'none';
+          }
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -1241,6 +1289,50 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
           className="w-full h-full"
           style={{ cursor: rotatorEnabled ? 'crosshair' : 'default' }}
         />
+
+        {/* Focused-callsign radio-tower icon — sits over the DX QTH with a
+            gentle wave pulse to reinforce "beam pointing here." Positioned
+            every frame by the same projection tick that drives the labels.
+            Hidden CSS-wise; the tick makes it visible + sets its transform. */}
+        {!hideOverlays && (
+          <div
+            ref={targetIconRef}
+            className="absolute pointer-events-none"
+            style={{
+              top: 0,
+              left: 0,
+              display: 'none',
+              color: '#ff4466',
+              filter: 'drop-shadow(0 0 4px rgba(0, 0, 0, 0.8))',
+            }}
+          >
+            <div className="relative flex items-center justify-center">
+              {/* Concentric expanding rings behind the tower — the "radio
+                  waves broadcasting" effect. Two rings staggered half a
+                  cycle apart so waves are always emitting. */}
+              <span
+                className="absolute rounded-full"
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  border: '2px solid rgba(255, 68, 102, 0.55)',
+                  animation: 'sdrGlobeTowerPulse 2.2s ease-out infinite',
+                }}
+              />
+              <span
+                className="absolute rounded-full"
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  border: '2px solid rgba(255, 68, 102, 0.55)',
+                  animation: 'sdrGlobeTowerPulse 2.2s ease-out infinite',
+                  animationDelay: '1.1s',
+                }}
+              />
+              <RadioTower className="w-6 h-6 relative" strokeWidth={2.4} />
+            </div>
+          </div>
+        )}
 
         {/* Callsign label overlay — black boxes positioned over the globe each
             frame by the effect above (independent of globe.gl's label layers). */}

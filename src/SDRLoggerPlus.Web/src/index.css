@@ -911,6 +911,16 @@ html:not(.dark) .header-plugin {
   animation: radio-wave 2s ease-out infinite;
 }
 
+/* Expanding ring for the DX-target radio-tower icon on the 3D globe.
+   Two staggered rings (see GlobePlugin.tsx) share this keyframe with
+   different animation-delays so the tower always looks like it's
+   emitting waves. */
+@keyframes sdrGlobeTowerPulse {
+  0%   { transform: scale(0.35); opacity: 0.9; }
+  70%  { opacity: 0.15; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
 /* CRT scanline effect — only in dark mode */
 .dark .crt-scanlines::after {
   content: '';
