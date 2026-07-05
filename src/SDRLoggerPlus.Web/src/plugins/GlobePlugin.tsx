@@ -446,100 +446,72 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       globeRef.current.polygonsData(polygons);
     }
 
-    // Render direct great-circle path from DE station to DX target
+    // Render great-circle paths from DE station to DX target as elevated
+    // animated arcs. globe.gl's built-in arcsData API always draws the SHORT
+    // path — we can't use it for LP, and mixing arc/path styles would look
+    // inconsistent. Instead we build both as pathsData polylines with a
+    // per-point altitude bulge (sin(π·t) * peakAlt) so each path arches off
+    // the sphere. Global path-layer settings enable the flowing dash
+    // animation (see renderBeam's globe.pathsData() call below).
     const targetCoords = targetCoordsRef.current;
     if (targetCoords !== null) {
       const isApprox = targetCoords.approximate;
 
-      // Path colors — chosen to contrast strongly against each other AND
-      // against the dark globe surface. Red-orange for short path (classic
-      // ham-map convention), lime-green for long path (cyan was too close
-      // to the ocean color and blended in).
-      const SP_COLOR = isApprox ? 'rgba(255, 68, 102, 0.45)' : 'rgba(255, 68, 102, 0.85)';
-      const LP_COLOR = isApprox ? 'rgba(163, 230, 53, 0.5)'  : 'rgba(163, 230, 53, 0.9)';
+      // Path colors — contrast strongly against each other AND against the
+      // dark globe surface. Red-orange for short path (classic ham-map
+      // convention), lime-green for long path.
+      const SP_COLOR = isApprox ? 'rgba(255, 68, 102, 0.55)' : 'rgba(255, 68, 102, 0.9)';
+      const LP_COLOR = isApprox ? 'rgba(163, 230, 53, 0.55)' : 'rgba(163, 230, 53, 0.95)';
 
-      // Small helper: compute an arrowhead "V" at the endpoint of a great-
-      // circle path. Given the last two points on the polyline, the final
-      // approach bearing is calculated_azimuth(nearEnd → end); the arrow's
-      // two tails are drawn from `end` back along (finalBearing + 180 ±
-      // ARROW_HALF_ANGLE_DEG), each `arrowKm` long. Returned as two 2-point
-      // polylines that get pushed into pathsData with the same color as
-      // the parent arc.
-      const ARROW_HALF_ANGLE_DEG = 25;
-      const makeArrowhead = (nearEnd: { lat: number; lng: number }, end: { lat: number; lng: number }, arrowKm: number, color: string) => {
-        const finalBearing = calculateAzimuth(nearEnd.lat, nearEnd.lng, end.lat, end.lng);
-        // "Back" bearings — reversed heading, splayed left and right.
-        const backLeft  = (finalBearing + 180 - ARROW_HALF_ANGLE_DEG + 360) % 360;
-        const backRight = (finalBearing + 180 + ARROW_HALF_ANGLE_DEG) % 360;
-        const tailL = getDestinationPoint(end.lat, end.lng, backLeft,  arrowKm);
-        const tailR = getDestinationPoint(end.lat, end.lng, backRight, arrowKm);
-        // Two short solid lines forming the arrowhead V. Arrows stay solid
-        // even when the parent arc is dashed — a dashed arrowhead reads as
-        // "broken," not "approximate."
-        pathsData.push({
-          path: [[tailL.lat, tailL.lng, 0.02], [end.lat, end.lng, 0.02]] as [number, number, number][],
-          color, stroke: 2, dashLength: 0, dashGap: 0,
-        });
-        pathsData.push({
-          path: [[tailR.lat, tailR.lng, 0.02], [end.lat, end.lng, 0.02]] as [number, number, number][],
-          color, stroke: 2, dashLength: 0, dashGap: 0,
-        });
-      };
+      // Peak altitude of the arc bulge above the surface. LP is much longer
+      // and gets a higher bulge — reinforces visually that it's the "long
+      // way around" while keeping both curves clearly separated in 3D so
+      // they never overlap or merge as the operator rotates the globe.
+      const SP_PEAK_ALT = 0.10;
+      const LP_PEAK_ALT = 0.22;
 
-      // ── Short path (red-orange) ──────────────────────────────────────
-      // Shorter of the two great-circle arcs — the primary bearing line.
-      const spDistance = calculateDistance(stationLat, stationLon, targetCoords.lat, targetCoords.lng);
+      // ── Short path (red-orange, low bulge) ──────────────────────────
       const targetPath: [number, number, number][] = [];
       for (let i = 0; i <= numSegments; i++) {
         const t = i / numSegments;
         const point = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
-        targetPath.push([point.lat, point.lng, 0.02]);
+        // sin(π·t) → 0 at endpoints, 1 at midpoint — smooth arc profile.
+        const alt = Math.sin(Math.PI * t) * SP_PEAK_ALT;
+        targetPath.push([point.lat, point.lng, alt]);
       }
       pathsData.push({
         path: targetPath,
-        // Approx (cty.dat centroid) → dimmer alpha to reinforce that it's
-        // a country-scale hint, not the operator's real QTH.
         color: SP_COLOR,
-        stroke: 2,
-        dashLength: isApprox ? 0.02 : 0,
-        dashGap:    isApprox ? 0.015 : 0,
+        stroke: 2.5,
+        // Animated flow: dashes travel from station to target. Approximate
+        // (cty.dat centroid) paths get shorter faster-flowing dashes so the
+        // "these coords are a guess" hint is even more obvious than the
+        // dimmer alpha alone.
+        dashLength: isApprox ? 0.03 : 0.05,
+        dashGap:    isApprox ? 0.02 : 0.03,
       });
-      // Arrowhead at the DX end of SP — points AT the DX from the
-      // approach direction. Size scales with arc length (6% of distance,
-      // clamped [250, 1200] km) so short-distance arrows aren't dwarfed
-      // by wide V-splay and long-distance ones don't cover a continent.
-      const spArrowKm = Math.min(1200, Math.max(250, spDistance * 0.06));
-      const spNearEnd = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, 0.97);
-      makeArrowhead(spNearEnd, { lat: targetCoords.lat, lng: targetCoords.lng }, spArrowKm, SP_COLOR);
 
-      // ── Long path (lime green) ───────────────────────────────────────
+      // ── Long path (lime green, higher bulge) ────────────────────────
       // The reflex-angle arc going the other way around the globe. Same
-      // start/end points, opposite hemisphere in between. ~3x longer than
-      // short path so use more segments (double) to keep the curve smooth.
+      // start/end points, opposite hemisphere in between. ~3× longer than
+      // SP so uses double the segments to keep the curve smooth.
       // Off by user preference (Settings → Map → Show Long Path) → skip.
       if (showLongPathRef.current) {
         const LP_SEGMENTS = numSegments * 2;
-        const lpDistance = 40030 - spDistance; // great-circle circumference − SP
         const longPath: [number, number, number][] = [];
         for (let i = 0; i <= LP_SEGMENTS; i++) {
           const t = i / LP_SEGMENTS;
           const point = interpolateGreatCircleLongPath(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
-          longPath.push([point.lat, point.lng, 0.02]);
+          const alt = Math.sin(Math.PI * t) * LP_PEAK_ALT;
+          longPath.push([point.lat, point.lng, alt]);
         }
         pathsData.push({
           path: longPath,
           color: LP_COLOR,
-          stroke: 2,
-          dashLength: isApprox ? 0.02 : 0,
-          dashGap:    isApprox ? 0.015 : 0,
+          stroke: 2.5,
+          dashLength: isApprox ? 0.03 : 0.05,
+          dashGap:    isApprox ? 0.02 : 0.03,
         });
-        // Arrowhead at the DX end of LP — LP approaches the DX from the
-        // opposite hemisphere, so the arrowhead visually shows the "beam
-        // came from over there." Slightly larger scaling than SP because
-        // LP arcs are usually 3–10× longer.
-        const lpArrowKm = Math.min(2000, Math.max(400, lpDistance * 0.04));
-        const lpNearEnd = interpolateGreatCircleLongPath(stationLat, stationLon, targetCoords.lat, targetCoords.lng, 0.985);
-        makeArrowhead(lpNearEnd, { lat: targetCoords.lat, lng: targetCoords.lng }, lpArrowKm, LP_COLOR);
       }
     }
 
@@ -550,7 +522,11 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       .pathStroke('stroke')
       .pathDashLength((d: unknown) => (d as { dashLength: number }).dashLength)
       .pathDashGap((d: unknown) => (d as { dashGap: number }).dashGap)
-      .pathDashAnimateTime(0)
+      // Flowing-dash animation — dashes travel from the first point (station)
+      // to the last (DX target). 1200 ms per cycle matches the DX cluster
+      // arc animation cadence Brent set up for consistency across the app.
+      // The direction of flow doubles as an implicit arrow.
+      .pathDashAnimateTime(1200)
       .pathTransitionDuration(0)
       .ringsData([]);
   }, [stationLat, stationLon, getDestinationPoint]);
