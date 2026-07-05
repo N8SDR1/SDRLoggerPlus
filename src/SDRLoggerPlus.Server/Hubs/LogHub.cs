@@ -157,75 +157,94 @@ public class LogHub : Hub<ILogHubClient>
         _logger.LogDebug("Callsign focused: {Callsign} from {Source}", evt.Callsign, evt.Source);
         await Clients.Others.OnCallsignFocused(evt);
 
-        // Perform QRZ lookup
+        // Try QRZ first. Whatever it returns (info + coords, info without
+        // coords, or nothing at all), we fall through to the cty.dat centroid
+        // fallback so the operator always gets *some* lat/lon for the bearing
+        // line — even without QRZ credentials configured.
+        QrzCallsignInfo? info = null;
         try
         {
-            var info = await _qrzService.LookupCallsignAsync(evt.Callsign);
-            if (info != null)
-            {
-                // Calculate bearing from station location
-                double? bearing = null;
-                double? distance = null;
-
-                var settings = await _settingsRepository.GetAsync();
-                if (settings?.Station != null && info.Latitude.HasValue && info.Longitude.HasValue
-                    && settings.Station.Latitude.HasValue && settings.Station.Longitude.HasValue)
-                {
-                    // Normalize station coordinates in case they were stored in microdegree format
-                    var stationLat = NormalizeCoordinate(settings.Station.Latitude.Value, isLatitude: true);
-                    var stationLon = NormalizeCoordinate(settings.Station.Longitude.Value, isLatitude: false);
-
-                    if (stationLat.HasValue && stationLon.HasValue && stationLat != 0 && stationLon != 0)
-                    {
-                        bearing = CalculateBearing(stationLat.Value, stationLon.Value, info.Latitude.Value, info.Longitude.Value);
-                        distance = CalculateDistance(stationLat.Value, stationLon.Value, info.Latitude.Value, info.Longitude.Value);
-
-                        // Log if coordinates were normalized (helps diagnose issues)
-                        if (stationLat != settings.Station.Latitude || stationLon != settings.Station.Longitude)
-                        {
-                            _logger.LogWarning("Station coordinates were in microdegree format: ({OrigLat}, {OrigLon}) -> ({NormLat}, {NormLon})",
-                                settings.Station.Latitude, settings.Station.Longitude, stationLat, stationLon);
-                        }
-                    }
-                }
-
-                var lookedUpEvent = new CallsignLookedUpEvent(
-                    Callsign: info.Callsign,
-                    Name: BuildFullName(info.FirstName, info.Name),
-                    Grid: info.Grid,
-                    Latitude: info.Latitude,
-                    Longitude: info.Longitude,
-                    Country: info.Country,
-                    Dxcc: info.Dxcc,
-                    CqZone: info.CqZone,
-                    ItuZone: info.ItuZone,
-                    State: info.State,
-                    ImageUrl: info.ImageUrl,
-                    Bearing: bearing,
-                    Distance: distance
-                );
-
-                _logger.LogDebug("Callsign looked up: {Callsign} -> {Name}, {Country}, Bearing: {Bearing}°",
-                    info.Callsign, info.Name, info.Country, bearing?.ToString("F0") ?? "N/A");
-
-                await Clients.All.OnCallsignLookedUp(lookedUpEvent);
-            }
-            else
-            {
-                // Send empty lookup result to clear loading state
-                await Clients.Caller.OnCallsignLookedUp(new CallsignLookedUpEvent(
-                    Callsign: evt.Callsign, Name: null, Grid: null, Latitude: null, Longitude: null,
-                    Country: null, Dxcc: null, CqZone: null, ItuZone: null, State: null, ImageUrl: null));
-            }
+            info = await _qrzService.LookupCallsignAsync(evt.Callsign);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to lookup callsign {Callsign}", evt.Callsign);
-            // Send empty result to clear loading state
-            await Clients.Caller.OnCallsignLookedUp(new CallsignLookedUpEvent(
-                Callsign: evt.Callsign, Name: null, Grid: null, Latitude: null, Longitude: null,
-                Country: null, Dxcc: null, CqZone: null, ItuZone: null, State: null, ImageUrl: null));
+            _logger.LogWarning(ex, "QRZ lookup failed for {Callsign}", evt.Callsign);
+            // fall through — cty.dat fallback still applies
         }
+
+        // Load station coords once — used for bearing/distance regardless of
+        // which source supplies the target coords.
+        var settings = await _settingsRepository.GetAsync();
+        double? stationLat = null, stationLon = null;
+        if (settings?.Station != null && settings.Station.Latitude.HasValue && settings.Station.Longitude.HasValue)
+        {
+            stationLat = NormalizeCoordinate(settings.Station.Latitude.Value, isLatitude: true);
+            stationLon = NormalizeCoordinate(settings.Station.Longitude.Value, isLatitude: false);
+            if (stationLat is 0 or null || stationLon is 0 or null)
+            {
+                stationLat = null;
+                stationLon = null;
+            }
+            else if (stationLat != settings.Station.Latitude || stationLon != settings.Station.Longitude)
+            {
+                _logger.LogWarning("Station coordinates were in microdegree format: ({OrigLat}, {OrigLon}) -> ({NormLat}, {NormLon})",
+                    settings.Station.Latitude, settings.Station.Longitude, stationLat, stationLon);
+            }
+        }
+
+        // Decide the target coords: QRZ if it had lat/lon, else cty.dat centroid.
+        double? targetLat = info?.Latitude;
+        double? targetLon = info?.Longitude;
+        bool isApproximate = false;
+        string? country = info?.Country;
+        int? cqZone = info?.CqZone;
+
+        if (!targetLat.HasValue || !targetLon.HasValue)
+        {
+            var centroid = CtyService.GetCentroidFromCallsign(evt.Callsign);
+            if (centroid.HasValue)
+            {
+                targetLat = centroid.Value.Lat;
+                targetLon = centroid.Value.Lon;
+                isApproximate = true;
+                // Fill in country/continent from cty.dat if QRZ didn't have them.
+                var (ctyCountry, _, ctyCqZone) = CtyService.GetEntityFromCallsign(evt.Callsign);
+                country ??= ctyCountry;
+                cqZone ??= ctyCqZone;
+                _logger.LogDebug("cty.dat fallback: {Callsign} -> centroid ({Lat}, {Lon}) [{Country}]",
+                    evt.Callsign, targetLat, targetLon, country ?? "?");
+            }
+        }
+
+        double? bearing = null;
+        double? distance = null;
+        if (targetLat.HasValue && targetLon.HasValue && stationLat.HasValue && stationLon.HasValue)
+        {
+            bearing = CalculateBearing(stationLat.Value, stationLon.Value, targetLat.Value, targetLon.Value);
+            distance = CalculateDistance(stationLat.Value, stationLon.Value, targetLat.Value, targetLon.Value);
+        }
+
+        var lookedUpEvent = new CallsignLookedUpEvent(
+            Callsign: info?.Callsign ?? evt.Callsign,
+            Name: info != null ? BuildFullName(info.FirstName, info.Name) : null,
+            Grid: info?.Grid,
+            Latitude: targetLat,
+            Longitude: targetLon,
+            Country: country,
+            Dxcc: info?.Dxcc,
+            CqZone: cqZone,
+            ItuZone: info?.ItuZone,
+            State: info?.State,
+            ImageUrl: info?.ImageUrl,
+            Bearing: bearing,
+            Distance: distance,
+            LatLonIsApproximate: isApproximate
+        );
+
+        _logger.LogDebug("Callsign lookup complete: {Callsign} -> {Name}, {Country}, Bearing: {Bearing}°, Approx: {Approx}",
+            evt.Callsign, info?.Name ?? "-", country ?? "-", bearing?.ToString("F0") ?? "N/A", isApproximate);
+
+        await Clients.All.OnCallsignLookedUp(lookedUpEvent);
     }
 
     private static double CalculateBearing(double lat1, double lon1, double lat2, double lon2)

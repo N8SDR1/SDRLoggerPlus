@@ -12,7 +12,11 @@ public record CallsignFocusedEvent(
 );
 
 /// <summary>
-/// Emitted after successful QRZ/callbook lookup
+/// Emitted after successful QRZ/callbook lookup. When QRZ (and HamQTH when
+/// enabled) return nothing, the backend falls back to the AD1C country
+/// centroid from cty.dat — in that case Latitude/Longitude are populated
+/// but LatLonIsApproximate is true so the UI can render the bearing line
+/// with an "approximate" visual style.
 /// </summary>
 public record CallsignLookedUpEvent(
     string Callsign,
@@ -27,7 +31,8 @@ public record CallsignLookedUpEvent(
     string? State,
     string? ImageUrl,
     double? Bearing = null,
-    double? Distance = null
+    double? Distance = null,
+    bool LatLonIsApproximate = false
 );
 
 /// <summary>
