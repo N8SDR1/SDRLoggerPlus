@@ -9,7 +9,8 @@ directory distributed alongside this file.
 Origin of the codebase
 -----------------------
 SDRLoggerPlus originates from Log4YM by Brian Keating (EI6LF), released into the
-public domain. Several feature designs were re-implemented based on SDRLogger+
+public domain under the Unlicense (https://unlicense.org). Several feature
+designs were re-implemented based on SDRLogger+
 (awards tracking, weather alerts, S.A.T. integration, Hot List, scheduled
 backups); no SDRLogger+ source code is included.
 

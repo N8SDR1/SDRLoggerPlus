@@ -3,7 +3,8 @@ MIT License
 Copyright (c) 2026 Rick Langford (N8SDR) and SDRLoggerPlus contributors
 
 Portions of this software originate from Log4YM by Brian Keating (EI6LF),
-which was released into the public domain.
+which was released into the public domain under the Unlicense
+(https://unlicense.org).
 
 This application also bundles and links third-party components that are
 licensed separately (including LGPL-2.1 libraries). Those components remain
