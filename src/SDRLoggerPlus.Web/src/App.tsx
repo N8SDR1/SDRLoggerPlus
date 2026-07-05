@@ -293,7 +293,15 @@ export function App() {
     }
   }, [syncToBackendSync]);
 
-  // Save layout changes (debounced)
+  // Save layout changes (debounced).
+  // pendingLayoutRef is left set to the LATEST model even after the debounced
+  // async sync fires — that's what makes shutdown-save reliable. The async
+  // syncToBackend from setLayout is fire-and-forget, so if the user closes
+  // the browser within the fetch window (a few hundred ms typically), the
+  // response never lands. Keeping pendingLayoutRef non-null means the
+  // beforeunload handler can always fall back to a synchronous save via
+  // saveLayoutImmediately → syncToBackendSync (sendBeacon / sync XHR),
+  // which IS guaranteed to reach the backend before the tab dies.
   const handleModelChange = useCallback((newModel: Model) => {
     setModel(newModel);
     pendingLayoutRef.current = newModel;
@@ -304,7 +312,11 @@ export function App() {
     }
     saveTimeoutRef.current = setTimeout(() => {
       setLayout(newModel.toJson());
-      pendingLayoutRef.current = null;
+      // NOTE: intentionally DO NOT clear pendingLayoutRef.current here.
+      // A redundant sync on beforeunload costs one small sendBeacon call
+      // but eliminates the "closed the tab before the async fetch landed"
+      // data-loss window that used to lose panel drags made in the last
+      // ~second before shutdown.
     }, 1000);
   }, [setLayout]);
 

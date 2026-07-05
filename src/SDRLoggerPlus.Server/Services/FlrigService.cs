@@ -241,13 +241,21 @@ public class FlrigService : BackgroundService
         // builds may not implement get_modes / get_xcvr.
         if (_state != RadioConnectionState.Connected)
         {
-            await DetectDigitalModesAsync(cfg, ct);
+            // Get the rig model FIRST — its brand informs the digital-mode
+            // defaults we use as a fallback when rig.get_modes doesn't help.
             try
             {
                 var xcvr = await XmlRpcCallReturningStringAsync(cfg, "rig.get_xcvr", null, ct);
                 _rigModel = xcvr?.Trim() ?? "";
             }
             catch { _rigModel = ""; }
+
+            ApplyRigBrandDigitalDefaults();
+            await DetectDigitalModesAsync(cfg, ct);
+            _logger.LogInformation(
+                "flrig connected — rig='{Rig}', digital USB='{Usb}', digital LSB='{Lsb}'",
+                string.IsNullOrEmpty(_rigModel) ? "unknown" : _rigModel,
+                _detectedDigitalUsb, _detectedDigitalLsb);
 
             await _hubContext.BroadcastRadioDiscovered(new RadioDiscoveredEvent(
                 Id: FlrigRadioId,
@@ -273,11 +281,55 @@ public class FlrigService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Set sensible digital-mode defaults based on the rig brand BEFORE the
+    /// rig.get_modes-driven auto-detect runs. Icom rigs (IC-*, IC-7300, IC-9100)
+    /// use USB-D / LSB-D for their digital passthrough; Kenwood and Yaesu use
+    /// DATA-U / DATA-L. This means even if rig.get_modes doesn't respond, the
+    /// baseline is at least brand-correct instead of falling back to the
+    /// hard-coded DATA-U default that Icoms silently reject.
+    /// </summary>
+    private void ApplyRigBrandDigitalDefaults()
+    {
+        var xcvr = _rigModel.ToUpperInvariant();
+        if (string.IsNullOrEmpty(xcvr)) return;
+        // Icom: IC-7300, IC-9100, IC-705, IC-7610, IC-7100, IC-9700 etc.
+        if (xcvr.Contains("IC-") || xcvr.StartsWith("IC7") || xcvr.StartsWith("IC9"))
+        {
+            _detectedDigitalUsb = "USB-D";
+            _detectedDigitalLsb = "LSB-D";
+        }
+        // Kenwood: TS-590, TS-890, TS-990 — "DATA" (with sideband tied to the
+        // active VFO) rather than DATA-U/DATA-L per say, but flrig exposes
+        // DATA-U/DATA-L consistently.
+        else if (xcvr.StartsWith("TS-") || xcvr.StartsWith("TS "))
+        {
+            _detectedDigitalUsb = "DATA-U";
+            _detectedDigitalLsb = "DATA-L";
+        }
+        // Yaesu: FT-991, FTDX-*, FT-DX*, FT-450 etc. — DATA-U / DATA-L or
+        // sometimes PKT-U / PKT-L on older models.
+        else if (xcvr.StartsWith("FT-") || xcvr.StartsWith("FTDX") || xcvr.StartsWith("FT DX"))
+        {
+            _detectedDigitalUsb = "DATA-U";
+            _detectedDigitalLsb = "DATA-L";
+        }
+        // Elecraft K3/K4 — DATA
+        else if (xcvr.StartsWith("K3") || xcvr.StartsWith("K4"))
+        {
+            _detectedDigitalUsb = "DATA-U";
+            _detectedDigitalLsb = "DATA-L";
+        }
+        // Unknown brand — keep the hard-coded defaults (DATA-U/DATA-L) that
+        // work on the majority of non-Icom rigs.
+    }
+
     private async Task DetectDigitalModesAsync(FlrigSettings cfg, CancellationToken ct)
     {
         try
         {
             var modesRaw = await XmlRpcCallReturningStringAsync(cfg, "rig.get_modes", null, ct) ?? "";
+            _logger.LogDebug("flrig rig.get_modes returned: '{Modes}'", modesRaw);
             if (string.IsNullOrWhiteSpace(modesRaw)) return;
             var avail = new HashSet<string>(
                 modesRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
@@ -290,12 +342,12 @@ public class FlrigService : BackgroundService
             {
                 if (avail.Contains(candidate)) { _detectedDigitalLsb = candidate; break; }
             }
-            _logger.LogInformation("flrig digital modes detected — USB: {Usb}  LSB: {Lsb}",
-                _detectedDigitalUsb, _detectedDigitalLsb);
         }
-        catch
+        catch (Exception ex)
         {
-            // Older flrig builds may not expose get_modes — keep defaults.
+            // Older flrig builds may not expose get_modes — keep whatever
+            // ApplyRigBrandDigitalDefaults picked based on the model string.
+            _logger.LogDebug(ex, "flrig rig.get_modes unavailable; keeping brand defaults");
         }
     }
 
