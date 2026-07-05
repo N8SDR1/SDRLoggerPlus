@@ -507,6 +507,10 @@ export function useSignalR() {
     await signalRService.saveTciConfig(host, port, name);
   }, []);
 
+  const saveFlrigConfig = useCallback(async (host: string, port: number, enabled: boolean, digitalMode?: string, rttyMode?: string) => {
+    await signalRService.saveFlrigConfig(host, port, enabled, digitalMode, rttyMode);
+  }, []);
+
   const deleteTciConfig = useCallback(async (radioId?: string) => {
     await signalRService.deleteTciConfig(radioId);
   }, []);
@@ -577,6 +581,8 @@ export function useSignalR() {
     disconnectTci,
     saveTciConfig,
     deleteTciConfig,
+    // flrig (W1HKJ XML-RPC bridge)
+    saveFlrigConfig,
     // Map image persistence
     persistCallsignMapImage,
     // Spectrum / panadapter

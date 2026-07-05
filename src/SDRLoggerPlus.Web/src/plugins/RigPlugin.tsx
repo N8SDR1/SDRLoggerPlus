@@ -176,18 +176,23 @@ export function RigPlugin() {
     disconnectTci,
     saveTciConfig,
     deleteTciConfig,
+    saveFlrigConfig,
   } = useSignalR();
 
   const [compact, toggleCompact] = usePanelCompact('rig');
 
   // Radio settings from store (persisted to database)
-  const { settings, updateRadioSettings, updateTciSettings, saveSettings } = useSettingsStore();
+  const { settings, updateRadioSettings, updateTciSettings, updateFlrigSettings, saveSettings } = useSettingsStore();
   const tciSettings = settings.radio.tci;
+  const flrigSettings = settings.radio.flrig;
   const { autoReconnect, autoConnectRigId, reconnectLastOnStartup, scrollTuneStepHz } = settings.radio;
 
   // TCI form state
   const [showTciForm, setShowTciForm] = useState(false);
   const [isConnectingTci, setIsConnectingTci] = useState(false);
+
+  // flrig form state (v1.x SDRLogger+ port)
+  const [showFlrigForm, setShowFlrigForm] = useState(false);
 
   // Hamlib form state
   const [showHamlibForm, setShowHamlibForm] = useState(false);
@@ -470,6 +475,22 @@ export function RigPlugin() {
     }
   };
 
+  // Save flrig config — flips FlrigService's poll state on the backend
+  // via SaveFlrigConfig hub method (writes settings.Radio.Flrig).
+  const handleSaveFlrig = async () => {
+    const { host, port, digitalMode, rttyMode } = flrigSettings;
+    if (!host || !port) return;
+    setShowFlrigForm(false);
+    try {
+      // Toggling Enabled here — Save always writes the current form values.
+      // The Enable pill in the form is the source of truth for the toggle.
+      await saveFlrigConfig(host, port, flrigSettings.enabled,
+        digitalMode || undefined, rttyMode || undefined);
+    } catch (error) {
+      console.error('Failed to save flrig config:', error);
+    }
+  };
+
   const updateHamlibConfig = (updates: Partial<HamlibRigConfigDto>) => {
     setHamlibConfig(prev => ({ ...prev, ...updates }));
   };
@@ -717,13 +738,14 @@ export function RigPlugin() {
           <div className="text-xs text-dark-300 uppercase tracking-wider mb-2 font-ui">
             Radio Type
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => {
                 setShowTciForm(!showTciForm);
                 setShowHamlibForm(false);
+                setShowFlrigForm(false);
               }}
-              className={`px-4 py-3 rounded-lg text-sm font-medium font-ui transition-all border ${
+              className={`px-3 py-3 rounded-lg text-sm font-medium font-ui transition-all border ${
                 showTciForm
                   ? "bg-accent-secondary/20 text-accent-secondary border-accent-secondary/30"
                   : "bg-dark-700 text-dark-200 hover:bg-dark-600 border-glass-100"
@@ -738,8 +760,9 @@ export function RigPlugin() {
               onClick={() => {
                 setShowHamlibForm(!showHamlibForm);
                 setShowTciForm(false);
+                setShowFlrigForm(false);
               }}
-              className={`px-4 py-3 rounded-lg text-sm font-medium font-ui transition-all border ${
+              className={`px-3 py-3 rounded-lg text-sm font-medium font-ui transition-all border ${
                 showHamlibForm
                   ? "bg-accent-primary/20 text-accent-primary border-accent-primary/30"
                   : "bg-dark-700 text-dark-200 hover:bg-dark-600 border-glass-100"
@@ -750,8 +773,129 @@ export function RigPlugin() {
                 <span>Hamlib</span>
               </div>
             </button>
+            <button
+              onClick={() => {
+                setShowFlrigForm(!showFlrigForm);
+                setShowTciForm(false);
+                setShowHamlibForm(false);
+              }}
+              className={`px-3 py-3 rounded-lg text-sm font-medium font-ui transition-all border ${
+                showFlrigForm
+                  ? "bg-amber-500/20 text-amber-400 border-amber-400/30"
+                  : "bg-dark-700 text-dark-200 hover:bg-dark-600 border-glass-100"
+              }`}
+              title="W1HKJ flrig XML-RPC bridge"
+            >
+              <div className="flex flex-col items-center gap-1">
+                <Radio className="w-5 h-5" />
+                <span>flrig</span>
+              </div>
+            </button>
           </div>
         </div>
+
+        {/* flrig Configuration Form — v1.x SDRLogger+ port. flrig is a
+            desktop bridge that talks to the physical rig over CAT/USB and
+            exposes the connection as XML-RPC on port 12345 by default.
+            SDRLoggerPlus polls flrig at 1.5 s cadence when Enabled. */}
+        {showFlrigForm && (
+          <div className="bg-dark-700/50 rounded-lg p-4 border border-amber-400/30 space-y-3">
+            <div className="text-xs text-amber-400 uppercase tracking-wider mb-2 font-ui">
+              flrig XML-RPC Connection
+            </div>
+
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={flrigSettings.enabled}
+                onChange={(e) => updateFlrigSettings({ enabled: e.target.checked })}
+                className="w-4 h-4 rounded bg-dark-800 border-glass-100 text-amber-400 focus:ring-amber-400/50"
+              />
+              <span className="text-dark-200 font-ui">Enable flrig polling</span>
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-dark-300 mb-1 font-ui">Host</label>
+                <input
+                  type="text"
+                  value={flrigSettings.host}
+                  onChange={(e) => updateFlrigSettings({ host: e.target.value })}
+                  placeholder="127.0.0.1"
+                  className="w-full px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-mono focus:outline-none focus:border-amber-400/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-dark-300 mb-1 font-ui">Port</label>
+                <input
+                  type="number"
+                  value={flrigSettings.port}
+                  onChange={(e) => updateFlrigSettings({ port: parseInt(e.target.value) || 12345 })}
+                  placeholder="12345"
+                  className="w-full px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-mono focus:outline-none focus:border-amber-400/50"
+                />
+              </div>
+            </div>
+
+            <details className="text-xs">
+              <summary className="cursor-pointer text-dark-300 hover:text-dark-200 font-ui">
+                Rig-specific mode overrides (advanced)
+              </summary>
+              <div className="mt-2 space-y-3">
+                <div>
+                  <label className="block text-[10px] text-dark-300 mb-1 font-ui uppercase tracking-wider">
+                    Digital passthrough mode override
+                  </label>
+                  <input
+                    type="text"
+                    value={flrigSettings.digitalMode}
+                    onChange={(e) => updateFlrigSettings({ digitalMode: e.target.value.trim().toUpperCase() })}
+                    placeholder="Auto-detect (leave blank)"
+                    className="w-full px-3 py-1.5 bg-dark-800 border border-glass-100 rounded text-xs text-dark-200 font-mono focus:outline-none focus:border-amber-400/50"
+                  />
+                  <p className="text-[10px] text-dark-400 mt-1">
+                    Common: USB-D (Icom), DATA-U (Kenwood/Yaesu), PKT-U, DIGU. Auto-detected on connect if blank.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-dark-300 mb-1 font-ui uppercase tracking-wider">
+                    RTTY mode override
+                  </label>
+                  <input
+                    type="text"
+                    value={flrigSettings.rttyMode}
+                    onChange={(e) => updateFlrigSettings({ rttyMode: e.target.value.trim().toUpperCase() })}
+                    placeholder="RTTY (leave blank for native)"
+                    className="w-full px-3 py-1.5 bg-dark-800 border border-glass-100 rounded text-xs text-dark-200 font-mono focus:outline-none focus:border-amber-400/50"
+                  />
+                  <p className="text-[10px] text-dark-400 mt-1">
+                    Blank = native RTTY. Set USB-D / DATA-U for AFSK RTTY via fldigi.
+                  </p>
+                </div>
+              </div>
+            </details>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleSaveFlrig}
+                disabled={!flrigSettings.host}
+                className="flex-1 px-4 py-2 text-sm font-medium font-ui flex items-center justify-center gap-2 bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/30 transition-all disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" />
+                Save
+              </button>
+              <button
+                onClick={() => setShowFlrigForm(false)}
+                className="px-4 py-2 text-sm font-medium font-ui bg-dark-700 text-dark-300 rounded-lg hover:bg-dark-600 transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="text-[10px] text-dark-400">
+              Requires flrig running on the given host/port. flrig connects to the physical rig via CAT; SDRLoggerPlus reads freq/mode from flrig at 1.5 s.
+            </p>
+          </div>
+        )}
 
         {/* Hamlib Configuration Form */}
         {showHamlibForm && (

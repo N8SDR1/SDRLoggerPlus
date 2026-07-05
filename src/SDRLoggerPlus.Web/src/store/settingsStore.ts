@@ -117,7 +117,24 @@ export interface TciSettings {
   autoConnect: boolean;
 }
 
-export type RigType = 'tci' | 'hamlib' | null;
+// W1HKJ flrig XML-RPC integration (ported from v1.x SDRLogger+). flrig
+// runs as a separate desktop bridge to the physical rig; SDRLoggerPlus
+// polls its XML-RPC endpoint (default port 12345) for freq/mode and
+// pushes commands the same way.
+export interface FlrigSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  // Rig-specific digital passthrough mode override — auto-detected on
+  // connect, this override pins it explicitly when detection guesses wrong.
+  // Common values: USB-D (Icom), DATA-U (Kenwood/Yaesu), PKT-U, DIGU.
+  digitalMode: string;
+  // RTTY mode override — blank = "RTTY" (native), set to USB-D/DATA-U for
+  // AFSK RTTY via fldigi where the rig should stay in digital passthrough.
+  rttyMode: string;
+}
+
+export type RigType = 'tci' | 'hamlib' | 'flrig' | null;
 
 export interface RadioSettings {
   followRadio: boolean;
@@ -127,6 +144,7 @@ export interface RadioSettings {
   reconnectLastOnStartup: boolean;
   scrollTuneStepHz: number;
   tci: TciSettings;
+  flrig: FlrigSettings;
 }
 
 export interface RbnSettings {
@@ -340,6 +358,7 @@ interface SettingsState {
   updateRotatorSettings: (rotator: Partial<RotatorSettings>) => void;
   updateRadioSettings: (radio: Partial<RadioSettings>) => void;
   updateTciSettings: (tci: Partial<TciSettings>) => void;
+  updateFlrigSettings: (flrig: Partial<FlrigSettings>) => void;
   updateMapSettings: (map: Partial<MapSettings>) => void;
   updateClusterSettings: (cluster: Partial<ClusterSettings>) => void;
   updateClusterConnection: (connectionId: string, connection: Partial<ClusterConnection>) => void;
@@ -455,6 +474,13 @@ const defaultSettings: Settings = {
       port: 50001,
       name: '',
       autoConnect: false,
+    },
+    flrig: {
+      enabled: false,
+      host: '127.0.0.1',
+      port: 12345,
+      digitalMode: '',
+      rttyMode: '',
     },
   },
   map: {
@@ -711,6 +737,18 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       isDirty: true,
     })),
 
+  updateFlrigSettings: (flrig) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        radio: {
+          ...state.settings.radio,
+          flrig: { ...state.settings.radio.flrig, ...flrig },
+        },
+      },
+      isDirty: true,
+    })),
+
   // Map settings
   updateMapSettings: (map) =>
     set((state) => ({
@@ -957,6 +995,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
             reconnectLastOnStartup: settings.radio?.reconnectLastOnStartup ?? true,
             scrollTuneStepHz: settings.radio?.scrollTuneStepHz ?? 100,
             tci: { ...defaultSettings.radio.tci, ...settings.radio?.tci, host: settings.radio?.tci?.host ?? '', name: settings.radio?.tci?.name ?? '' },
+            flrig: { ...defaultSettings.radio.flrig, ...settings.radio?.flrig },
           },
           map: {
             ...defaultSettings.map,

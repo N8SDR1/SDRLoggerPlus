@@ -1204,6 +1204,23 @@ class SignalRService {
     await this.connection?.invoke('SaveTciConfig', host, port, name ?? null);
   }
 
+  // flrig (W1HKJ XML-RPC bridge). Save writes to settings.Radio.Flrig and
+  // toggles the FlrigService background poller on/off via the enabled flag.
+  // set_freq / set_mode are direct control commands, matching the TCI/Hamlib
+  // pattern already present in this file.
+  async saveFlrigConfig(host: string, port: number, enabled: boolean, digitalMode?: string, rttyMode?: string): Promise<void> {
+    await this.connection?.invoke('SaveFlrigConfig', host, port, enabled,
+      digitalMode ?? null, rttyMode ?? null);
+  }
+
+  async setFlrigFrequency(frequencyHz: number): Promise<void> {
+    await this.connection?.invoke('SetFlrigFrequency', frequencyHz);
+  }
+
+  async setFlrigMode(mode: string): Promise<void> {
+    await this.connection?.invoke('SetFlrigMode', mode);
+  }
+
   async deleteTciConfig(radioId?: string): Promise<void> {
     await this.connection?.invoke('DeleteTciConfig', radioId ?? null);
   }
