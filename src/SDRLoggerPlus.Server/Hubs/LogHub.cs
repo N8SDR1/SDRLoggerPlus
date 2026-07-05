@@ -494,6 +494,84 @@ public class LogHub : Hub<ILogHubClient>
         }
     }
 
+    /// <summary>
+    /// Set the active rig's mode. Tries TCI → Hamlib → flrig in order,
+    /// same precedence as SelectSpot and TuneToFrequency. Used by the
+    /// Log Entry mode dropdown when following the rig — without this
+    /// the follow-radio effect overwrites the dropdown back to the rig's
+    /// state every poll cycle.
+    /// </summary>
+    public async Task SetRadioMode(string mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode)) return;
+        _logger.LogInformation("Set radio mode: {Mode}", mode);
+
+        var tciRadios = _tciRadioService.GetRadioStates().ToList();
+        if (tciRadios.Any())
+        {
+            var radio = tciRadios.First();
+            await _tciRadioService.SetModeAsync(radio.RadioId, mode, radio.FrequencyHz);
+        }
+        else if (_hamlibService.IsConnected)
+        {
+            // hamlib takes an optional freq for CW/SSB offset compensation;
+            // passing 0 tells it "leave freq alone."
+            await _hamlibService.SetModeAsync(mode, 0);
+        }
+        else if (_flrigService.IsConnected)
+        {
+            await _flrigService.SetModeAsync(mode);
+        }
+    }
+
+    /// <summary>
+    /// Tune the active rig to a sensible default frequency for the given
+    /// band. Used by the Log Entry band dropdown — pick a band, land near
+    /// the middle of the SSB portion (or the CW portion when the current
+    /// mode is CW). Reuses TuneToFrequency's TCI → Hamlib → flrig chain.
+    /// </summary>
+    public async Task TuneToBand(string band, string? mode = null)
+    {
+        if (string.IsNullOrWhiteSpace(band)) return;
+        long? freqHz = DefaultFrequencyForBand(band.ToLowerInvariant(), mode);
+        if (freqHz is null)
+        {
+            _logger.LogDebug("TuneToBand: no default freq for band {Band}", band);
+            return;
+        }
+        _logger.LogInformation("Tune to band {Band} → {FreqMHz} MHz", band, freqHz.Value / 1_000_000.0);
+        await TuneToFrequency(freqHz.Value);
+    }
+
+    // Per-band default landing frequency. SSB portion centres for the phone
+    // bands, CW section for the CW-only bands. Matches "where would a ham
+    // typically drop the VFO when they pick this band cold" — the user can
+    // always tweak from there.
+    private static long? DefaultFrequencyForBand(string band, string? mode)
+    {
+        var isCw = string.Equals(mode, "CW", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mode, "CWU", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mode, "CWL", StringComparison.OrdinalIgnoreCase);
+        return band switch
+        {
+            "160m" => isCw ? 1_820_000L  : 1_845_000L,
+            "80m"  => isCw ? 3_540_000L  : 3_780_000L,
+            "60m"  => 5_357_000L,
+            "40m"  => isCw ? 7_020_000L  : 7_180_000L,
+            "30m"  => 10_130_000L,
+            "20m"  => isCw ? 14_040_000L : 14_250_000L,
+            "17m"  => isCw ? 18_075_000L : 18_140_000L,
+            "15m"  => isCw ? 21_040_000L : 21_300_000L,
+            "12m"  => isCw ? 24_895_000L : 24_940_000L,
+            "10m"  => isCw ? 28_040_000L : 28_400_000L,
+            "6m"   => isCw ? 50_090_000L : 50_150_000L,
+            "2m"   => isCw ? 144_050_000L : 144_200_000L,
+            "1.25m" => 223_500_000L,
+            "70cm" => isCw ? 432_050_000L : 432_100_000L,
+            _ => null,
+        };
+    }
+
     public async Task CommandRotator(RotatorCommandEvent evt)
     {
         _logger.LogInformation("Rotator command: {Azimuth}° from {Source}", evt.TargetAzimuth, evt.Source);

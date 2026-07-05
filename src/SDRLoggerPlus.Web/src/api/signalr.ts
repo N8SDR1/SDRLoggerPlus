@@ -1221,6 +1221,17 @@ class SignalRService {
     await this.connection?.invoke('SetFlrigMode', mode);
   }
 
+  // Cross-rig commands — try TCI → Hamlib → flrig in that order. Used by
+  // the Log Entry dropdowns so changing mode/band pushes the change back
+  // to whichever rig is active.
+  async setRadioMode(mode: string): Promise<void> {
+    await this.connection?.invoke('SetRadioMode', mode);
+  }
+
+  async tuneToBand(band: string, mode?: string): Promise<void> {
+    await this.connection?.invoke('TuneToBand', band, mode ?? null);
+  }
+
   async deleteTciConfig(radioId?: string): Promise<void> {
     await this.connection?.invoke('DeleteTciConfig', radioId ?? null);
   }

@@ -96,7 +96,7 @@ function RstCombobox({ value, onChange, options, className }: {
 
 export function LogEntryPlugin() {
   const queryClient = useQueryClient();
-  const { focusCallsign, persistCallsignMapImage } = useSignalR();
+  const { focusCallsign, persistCallsignMapImage, setRadioMode, tuneToBand } = useSignalR();
   const { focusedCallsignInfo, radioStates, selectedRadioId, isLookingUpCallsign, setFocusedCallsign, setFocusedCallsignInfo, setLogHistoryCallsignFilter, clearCallsignFromAllControls, selectedSpot, setSelectedSpot, addCallsignMapImage } = useAppStore();
   const { settings, updateRadioSettings } = useSettingsStore();
   const followRadio = settings.radio.followRadio;
@@ -412,7 +412,18 @@ export function LogEntryPlugin() {
             </label>
             <select
               value={formData.band}
-              onChange={(e) => setFormData(prev => ({ ...prev, band: e.target.value }))}
+              onChange={(e) => {
+                const newBand = e.target.value;
+                setFormData(prev => ({ ...prev, band: newBand }));
+                // When following a rig, also tune it to a sensible default
+                // frequency in the new band. Without this, the follow-radio
+                // effect would snap the dropdown back to the rig's current
+                // band on the next poll and the user would be unable to
+                // change the band from the Log Entry form.
+                if (followRadio && currentRadioState) {
+                  tuneToBand(newBand, formData.mode).catch(() => {});
+                }
+              }}
               className={`glass-input w-full text-sm font-mono ${
                 followRadio && currentRadioState ? 'border-accent-success/30' : ''
               }`}
@@ -431,7 +442,16 @@ export function LogEntryPlugin() {
             </label>
             <select
               value={formData.mode}
-              onChange={(e) => setFormData(prev => ({ ...prev, mode: e.target.value }))}
+              onChange={(e) => {
+                const newMode = e.target.value;
+                setFormData(prev => ({ ...prev, mode: newMode }));
+                // Same rationale as the band handler above — push the mode
+                // change back to whichever rig is active so the follow-radio
+                // effect doesn't fight the user's selection every 1.5 s poll.
+                if (followRadio && currentRadioState) {
+                  setRadioMode(newMode).catch(() => {});
+                }
+              }}
               className={`glass-input w-full text-sm font-mono ${
                 followRadio && currentRadioState ? 'border-accent-success/30' : ''
               }`}

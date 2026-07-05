@@ -511,6 +511,14 @@ export function useSignalR() {
     await signalRService.saveFlrigConfig(host, port, enabled, digitalMode, rttyMode);
   }, []);
 
+  const setRadioMode = useCallback(async (mode: string) => {
+    await signalRService.setRadioMode(mode);
+  }, []);
+
+  const tuneToBand = useCallback(async (band: string, mode?: string) => {
+    await signalRService.tuneToBand(band, mode);
+  }, []);
+
   const deleteTciConfig = useCallback(async (radioId?: string) => {
     await signalRService.deleteTciConfig(radioId);
   }, []);
@@ -583,6 +591,9 @@ export function useSignalR() {
     deleteTciConfig,
     // flrig (W1HKJ XML-RPC bridge)
     saveFlrigConfig,
+    // Cross-rig commands (used by Log Entry to push dropdown changes back to the active rig)
+    setRadioMode,
+    tuneToBand,
     // Map image persistence
     persistCallsignMapImage,
     // Spectrum / panadapter
