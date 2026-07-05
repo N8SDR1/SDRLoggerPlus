@@ -521,7 +521,7 @@ function createMenu() {
         {
           label: 'SDRLoggerPlus on GitHub',
           click: async () => {
-            await shell.openExternal('https://github.com/n9bc/SDRLoggerPlus');
+            await shell.openExternal('https://github.com/N8SDR1/SDRLoggerPlus');
           }
         },
         { type: 'separator' },

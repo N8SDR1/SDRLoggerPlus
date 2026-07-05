@@ -2,13 +2,12 @@ const { app, dialog, shell } = require('electron');
 const log = require('electron-log');
 
 // Update checks query the latest GitHub release of the SDRLoggerPlus repo.
-// NOTE: n9bc/SDRLoggerPlus is currently a PRIVATE repo with no releases yet, so
-// the unauthenticated release check below will 404 until releases are published
-// and the repo is public (or a token is added). Failures are handled gracefully,
-// so enabling this early is harmless. (The fork's origin, brianbruff/Log4YM,
-// must NOT be used here: its releases are a different product.)
+// The canonical home is N8SDR1/SDRLoggerPlus. The unauthenticated release
+// check below will 404 gracefully until a v2 release is published, so enabling
+// this early is harmless. (The fork's origin, brianbruff/Log4YM, must NOT be
+// used here: its releases are a different product.)
 const UPDATES_ENABLED = true;
-const GITHUB_REPO = 'n9bc/SDRLoggerPlus';
+const GITHUB_REPO = 'N8SDR1/SDRLoggerPlus';
 const RELEASES_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 const RELEASES_PAGE = `https://github.com/${GITHUB_REPO}/releases/latest`;
 
