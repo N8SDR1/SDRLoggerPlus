@@ -380,7 +380,7 @@ export interface ActivateChannelTunerGeniusCommand {
 }
 
 // Radio CAT Control types
-export type RadioType = 'Tci' | 'Hamlib';
+export type RadioType = 'Tci' | 'Hamlib' | 'Flrig';
 
 export type RadioConnectionState =
   | 'Disconnected'

@@ -344,6 +344,22 @@ export function RigPlugin() {
     // The useEffect will re-fire when radioConnectionStates updates.
   }, [autoReconnect, autoConnectRigId, radios, selectedRadioId, isConnectingHamlib, isConnectingTci, radioConnectionStates, handleConnect, setSelectedRadio]);
 
+  // Auto-select the flrig radio the moment FlrigService reports it Connected.
+  // flrig doesn't need a user "Connect" click — it just polls whenever
+  // settings.Radio.Flrig.Enabled is true — so if nothing else is selected
+  // and the flrig radio is live, follow it. This gates click-to-tune from
+  // DX spots AND the Log Entry auto-fill on rig freq/mode.
+  useEffect(() => {
+    if (selectedRadioId) return;
+    const flrigRadio = radios.find(r => r.id === "flrig" || r.type === "Flrig");
+    if (!flrigRadio) return;
+    const connState = radioConnectionStates.get(flrigRadio.id);
+    if (connState === "Connected" || connState === "Monitoring") {
+      console.log("Auto-selecting flrig radio:", flrigRadio.id);
+      setSelectedRadio(flrigRadio.id);
+    }
+  }, [radios, selectedRadioId, radioConnectionStates, setSelectedRadio]);
+
   const handleDisconnect = async () => {
     if (selectedRadioId) {
       const radio = discoveredRadios.get(selectedRadioId);

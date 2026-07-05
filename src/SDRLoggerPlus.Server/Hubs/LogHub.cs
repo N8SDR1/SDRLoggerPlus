@@ -437,6 +437,27 @@ public class LogHub : Hub<ILogHubClient>
                 _logger.LogInformation("Tuned Hamlib radio to {FrequencyMHz} MHz", frequencyHz / 1000000.0);
             }
         }
+        else if (_flrigService.IsConnected)
+        {
+            // Set mode first to avoid CW/SSB frequency shift, then tune. flrig's
+            // XML-RPC mode names get translated by FlrigService (USB-D vs DATA-U
+            // etc.), so the app-normalized mode string from the spot goes in
+            // as-is.
+            if (!string.IsNullOrEmpty(evt.Mode))
+            {
+                var modeSet = await _flrigService.SetModeAsync(evt.Mode);
+                if (modeSet)
+                {
+                    _logger.LogInformation("Set flrig radio mode to {Mode}", evt.Mode);
+                }
+            }
+
+            var tuned = await _flrigService.SetFrequencyAsync(frequencyHz);
+            if (tuned)
+            {
+                _logger.LogInformation("Tuned flrig radio to {FrequencyMHz} MHz", frequencyHz / 1000000.0);
+            }
+        }
     }
 
 
@@ -461,6 +482,14 @@ public class LogHub : Hub<ILogHubClient>
             if (tuned)
             {
                 _logger.LogInformation("Tuned Hamlib radio to {FrequencyMHz} MHz", frequencyHz / 1000000.0);
+            }
+        }
+        else if (_flrigService.IsConnected)
+        {
+            var tuned = await _flrigService.SetFrequencyAsync(frequencyHz);
+            if (tuned)
+            {
+                _logger.LogInformation("Tuned flrig radio to {FrequencyMHz} MHz", frequencyHz / 1000000.0);
             }
         }
     }
