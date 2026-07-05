@@ -107,6 +107,27 @@ html:not(.dark) select option {
   color: #2a2825;
 }
 
+/* Dark-mode native <select> popup: <option> and <optgroup> don't inherit the
+   .glass-input dark background — they need explicit rules or the browser
+   falls back to its default (a washed-out light-grey on Chromium Windows).
+   Applies to every dark-theme select, not just the Log Entry mode dropdown,
+   so band/mode/logbook selects all match Brent's overall visual language. */
+.dark select option {
+  background-color: #141417;        /* --surface-900 */
+  color: #E4E4E7;                   /* --surface-200 */
+}
+.dark select option:checked,
+.dark select option:hover {
+  background-color: #27272B;        /* --surface-800 — subtle highlight */
+  color: #E08A3D;                   /* --accent-primary (warm amber) */
+}
+.dark select optgroup {
+  background-color: #0f0f12;        /* one shade deeper than surface-900 */
+  color: #8E8E96;                   /* --surface-400 — muted label */
+  font-style: italic;
+  font-weight: 600;
+}
+
 .dark {
   /* ============================================
      DARKROOM — Deep, focused, professional.
