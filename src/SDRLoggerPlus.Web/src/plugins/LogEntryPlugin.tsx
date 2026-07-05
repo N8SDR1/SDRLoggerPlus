@@ -19,21 +19,49 @@ const formatTimeForInput = (date: Date): string => {
 };
 
 const BANDS = ['160m', '80m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '70cm'];
-const MODES = ['SSB', 'CW', 'FT8', 'FT4', 'RTTY', 'PSK31', 'AM', 'FM'];
+
+// Mode list matches v1.x SDRLogger+ — USB/LSB are separate (so the rig
+// actually gets USB or LSB, not a collapsed "SSB"), and DIGU/DIGL are the
+// digital-passthrough entries that flrig / Hamlib / TCI translate to the
+// rig's specific digital mode name (USB-D on Icom, DATA-U on Kenwood/Yaesu,
+// etc.) via the per-rig ModeOut mapping in each service.
+const MODES = [
+  'USB', 'LSB',
+  'CWU', 'CWL',
+  'AM', 'SAM', 'FM', 'NFM',
+  'DIGU', 'DIGL',
+  'FT8', 'FT4', 'JS8', 'RTTY', 'PSK31', 'WSPR', 'JT65', 'JT9', 'DIGI',
+];
+
+// Grouped mode structure powering the <optgroup> layout on the Log Entry
+// mode dropdown — matches the v1.x /templates/index.html grouping so
+// operators moving between versions see the same organization.
+const MODE_GROUPS: { label: string; modes: string[] }[] = [
+  { label: 'SSB',            modes: ['USB', 'LSB'] },
+  { label: 'CW',             modes: ['CWU', 'CWL'] },
+  { label: 'AM / FM',        modes: ['AM', 'SAM', 'FM', 'NFM'] },
+  { label: 'Digital (TCI)',  modes: ['DIGU', 'DIGL'] },
+  { label: 'Digital (Log)',  modes: ['FT8', 'FT4', 'JS8', 'RTTY', 'PSK31', 'WSPR', 'JT65', 'JT9', 'DIGI'] },
+];
+
+// Treat CWU/CWL as "CW" for RST/RSTr defaulting and dB-enhancement checks
+// that used to hard-code just `mode === 'CW'`.
+const isCwMode = (m: string) => m === 'CW' || m === 'CWU' || m === 'CWL';
 
 // Common RST values for phone modes (SSB, AM, FM)
 const RST_PHONE = ['59', '58', '57', '56', '55', '54', '53', '52', '51'];
 // Common RST values for CW and digital modes
 const RST_CW_DIGITAL = ['599', '589', '579', '569', '559', '549', '539', '529', '519'];
 
-// Get default RST based on mode
+// Get default RST based on mode. CW-family and DIGI/RTTY use 3-digit RST;
+// phone modes use 2-digit.
 const getDefaultRst = (mode: string): string => {
-  return mode === 'CW' ? '599' : '59';
+  return isCwMode(mode) ? '599' : '59';
 };
 
 // CW doesn't use +dB enhancement
 const supportsDbEnhancement = (mode: string): boolean => {
-  return mode !== 'CW';
+  return !isCwMode(mode);
 };
 
 function RstCombobox({ value, onChange, options, className }: {
@@ -220,25 +248,44 @@ export function LogEntryPlugin() {
     return null;
   };
 
-  // Normalize mode names from radio to match our MODES list
+  // Normalize mode names from radio to match our MODES list. Preserves the
+  // USB/LSB distinction (v1.x behavior) so the rig actually gets back USB
+  // vs LSB and not a collapsed "SSB", and maps the various rig-specific
+  // digital passthrough names (DATA-U, PKT-U, USB-D, USBD) → DIGU / DIGL.
   const normalizeMode = (mode: string): string => {
     const upperMode = mode?.toUpperCase() || '';
-    // Map common variations
-    if (upperMode.includes('LSB') || upperMode.includes('USB')) return 'SSB';
-    if (upperMode.includes('CW')) return 'CW';
+    // Exact match to our list first (covers USB, LSB, CWU, CWL, FT8, ...).
+    if (MODES.includes(upperMode)) return upperMode;
+    // Digital passthrough — rig-specific names → DIGU / DIGL.
+    if (['DATA-U', 'PKT-U', 'USB-D', 'USBD'].includes(upperMode)) return 'DIGU';
+    if (['DATA-L', 'PKT-L', 'LSB-D', 'LSBD'].includes(upperMode)) return 'DIGL';
+    // CW-R / CWR from flrig → CWL (lower sideband CW).
+    if (upperMode === 'CW-R' || upperMode === 'CWR') return 'CWL';
+    // Bare "CW" from a rig with no side distinction → CWU as a sane default.
+    if (upperMode === 'CW') return 'CWU';
+    // Bare "SSB" — no side info; leave existing choice or default to USB.
+    if (upperMode === 'SSB') return 'USB';
+    // FSK variants → RTTY.
+    if (upperMode.includes('RTTY') || upperMode.includes('FSK')) return 'RTTY';
+    // Wildcard matches for FT8 / FT4 / JS8 / WSPR / JT65 / JT9 / PSK.
     if (upperMode.includes('FT8')) return 'FT8';
     if (upperMode.includes('FT4')) return 'FT4';
-    if (upperMode.includes('RTTY') || upperMode.includes('FSK')) return 'RTTY';
-    if (upperMode.includes('PSK')) return 'PSK31';
-    if (upperMode.includes('AM')) return 'AM';
-    if (upperMode.includes('FM') || upperMode.includes('NFM')) return 'FM';
-    // Return original if in list, otherwise default
-    return MODES.includes(upperMode) ? upperMode : 'SSB';
+    if (upperMode.includes('JS8')) return 'JS8';
+    if (upperMode.includes('WSPR')) return 'WSPR';
+    if (upperMode.includes('JT65')) return 'JT65';
+    if (upperMode.includes('JT9'))  return 'JT9';
+    if (upperMode.includes('PSK'))  return 'PSK31';
+    // AM/FM/NFM/SAM already handled by exact match; fall through here means
+    // some obscure rig mode we don't have a bucket for — default USB.
+    return 'USB';
   };
 
-  // Get RST options based on mode
+  // Get RST options based on mode. CW-family gets 3-digit; digital modes
+  // that use dB reports (FT8/FT4/JS8/WSPR/JT65/JT9) still fall under
+  // supportsDbEnhancement elsewhere; the phone-vs-CW split here is for the
+  // basic RST-sent/received dropdown defaults.
   const getRstOptions = (mode: string): string[] => {
-    return mode === 'CW' ? RST_CW_DIGITAL : RST_PHONE;
+    return isCwMode(mode) ? RST_CW_DIGITAL : RST_PHONE;
   };
 
   const toggleFollowRadio = () => {
@@ -456,8 +503,12 @@ export function LogEntryPlugin() {
                 followRadio && currentRadioState ? 'border-accent-success/30' : ''
               }`}
             >
-              {MODES.map(mode => (
-                <option key={mode} value={mode}>{mode}</option>
+              {MODE_GROUPS.map(group => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.modes.map(mode => (
+                    <option key={mode} value={mode}>{mode}</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
