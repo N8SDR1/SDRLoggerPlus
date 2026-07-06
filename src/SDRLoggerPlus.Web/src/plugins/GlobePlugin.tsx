@@ -1586,7 +1586,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
             {focusedCallsignInfo && (
               <div className="glass-panel px-3 py-2 border-l-4 border-accent-danger animate-fade-in pointer-events-auto">
                 <div className="flex items-center gap-2">
-                  <Target className="w-4 h-4 text-accent-danger" />
+                  <Target className="w-4 h-4 text-accent-secondary" />
                   <div>
                     <p className="font-mono font-bold text-accent-danger flex items-center gap-1.5">
                       {focusedCallsignInfo.callsign}
