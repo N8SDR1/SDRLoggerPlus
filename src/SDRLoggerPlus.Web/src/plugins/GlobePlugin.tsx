@@ -224,12 +224,9 @@ interface GlobeInstance {
   ringRepeatPeriod(accessor: number | ((d: unknown) => number)): GlobeInstance;
   ringAltitude(accessor: number | ((d: unknown) => number)): GlobeInstance;
   ringResolution(res: number): GlobeInstance;
-  labelsData(data: unknown[]): GlobeInstance;
-  labelText(accessor: string | ((d: unknown) => string)): GlobeInstance;
-  labelDotRadius(accessor: number | ((d: unknown) => number)): GlobeInstance;
-  labelColor(accessor: string | ((d: unknown) => string)): GlobeInstance;
-  labelAltitude(accessor: number | ((d: unknown) => number)): GlobeInstance;
-  labelsTransitionDuration(duration: number): GlobeInstance;
+  customLayerData(data: unknown[]): GlobeInstance;
+  customThreeObject(fn: (d: unknown) => object): GlobeInstance;
+  customThreeObjectUpdate(fn: (obj: object, d: unknown) => void): GlobeInstance;
   arcsData(data: unknown[]): GlobeInstance;
   arcStartLat(accessor: (d: unknown) => number): GlobeInstance;
   arcStartLng(accessor: (d: unknown) => number): GlobeInstance;
@@ -642,8 +639,9 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       }
 
       let Globe;
+      let THREE: typeof import('three');
       try {
-        await import('three');
+        THREE = await import('three');
         const module = await import('globe.gl');
         Globe = module.default;
       } catch (e) {
@@ -808,17 +806,17 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       material.opacity = 0.95;
 
       // Lightning strike rings — the strike layer owns ringsData (see the strike
-      // effect + the removed per-frame clear in renderBeam). Blitzortung-style
-      // age ramp: white-hot flash → electric yellow → amber as the strike ages
-      // (user-chosen over the earlier cyan; local strikes render at full alpha).
+      // effect + the removed per-frame clear in renderBeam). Pure white (keeps
+      // clear of the DX-spot/POTA palette); intensity fades with strike age,
+      // local strikes render brighter than distant ones.
       globe
         .ringColor((d: unknown) => {
           const s = d as { local: boolean; ts: number };
           return (t: number) => {
             const ageMin = (Date.now() - s.ts) / 60_000;
-            const base = ageMin < 1 ? '255, 255, 255' : ageMin < 5 ? '255, 224, 96' : '255, 150, 40';
-            const alpha = Math.max(0, 1 - t) * (s.local ? 1 : 0.55);
-            return `rgba(${base}, ${alpha.toFixed(3)})`;
+            const ageFactor = ageMin < 1 ? 1 : ageMin < 5 ? 0.7 : 0.45;
+            const alpha = Math.max(0, 1 - t) * ageFactor * (s.local ? 1 : 0.6);
+            return `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
           };
         })
         .ringMaxRadius((d: unknown) => ((d as { local: boolean }).local ? 3.5 : 2.5))
@@ -828,17 +826,45 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         .ringResolution(64)
         .ringsData([]);
 
-      // Strike-center dots (labels layer, dot-only): mark each strike's exact
-      // spot for 60 s after detection, then vanish (the strike effect filters).
+      // Strike-center lightning bolts (custom layer): a white bolt sprite marks
+      // each strike's exact spot for 60 s after live arrival, then vanishes
+      // (the strike effect filters). One shared canvas texture; billboard
+      // sprites stay cheap even at a few hundred live strikes.
+      const boltCanvas = document.createElement('canvas');
+      boltCanvas.width = 64;
+      boltCanvas.height = 64;
+      const boltCtx = boltCanvas.getContext('2d');
+      if (boltCtx) {
+        boltCtx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+        boltCtx.shadowBlur = 6;
+        boltCtx.fillStyle = '#ffffff';
+        boltCtx.beginPath();
+        boltCtx.moveTo(38, 2);
+        boltCtx.lineTo(12, 38);
+        boltCtx.lineTo(28, 38);
+        boltCtx.lineTo(24, 62);
+        boltCtx.lineTo(52, 24);
+        boltCtx.lineTo(34, 24);
+        boltCtx.closePath();
+        boltCtx.fill();
+      }
+      const boltTexture = new THREE.CanvasTexture(boltCanvas);
       globe
-        .labelText(() => '')
-        .labelDotRadius(0.28)
-        .labelColor((d: unknown) => (d as { local: boolean }).local
-          ? 'rgba(255, 255, 255, 0.95)'
-          : 'rgba(255, 240, 180, 0.75)')
-        .labelAltitude(0.007)
-        .labelsTransitionDuration(0)
-        .labelsData([]);
+        .customThreeObject(() => {
+          const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: boltTexture,
+            transparent: true,
+            depthWrite: false,
+          }));
+          sprite.scale.set(3, 3, 1);
+          return sprite;
+        })
+        .customThreeObjectUpdate((obj: object, d: unknown) => {
+          const s = d as { lat: number; lng: number };
+          const p = globe!.getCoords(s.lat, s.lng, 0.012);
+          (obj as { position: { set: (x: number, y: number, z: number) => void } }).position.set(p.x, p.y, p.z);
+        })
+        .customLayerData([]);
 
       globeRef.current = globe;
       setGlobeReady(true);
@@ -1242,7 +1268,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     if (!globeReady || !globeRef.current) return;
     if (!settings.map.showLightning) {
       globeRef.current.ringsData([]);
-      globeRef.current.labelsData([]);
+      globeRef.current.customLayerData([]);
       return;
     }
     const store = strikeStoreRef.current;
@@ -1268,7 +1294,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         return r;
       });
       globeRef.current.ringsData(data);
-      globeRef.current.labelsData(dots);
+      globeRef.current.customLayerData(dots);
     };
 
     // Initial backfill.
@@ -1296,7 +1322,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       clearLightningStrikesCallback(cb);
       if (globeRef.current) {
         globeRef.current.ringsData([]);
-        globeRef.current.labelsData([]);
+        globeRef.current.customLayerData([]);
       }
     };
   }, [globeReady, settings.map.showLightning]);
