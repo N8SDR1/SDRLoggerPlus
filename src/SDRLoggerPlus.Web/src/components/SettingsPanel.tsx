@@ -3067,7 +3067,7 @@ function AboutSection() {
       <div className="space-y-4">
         <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100">
           <div className="flex items-center gap-4">
-            <img src="./sdrloggerplus-icon.png" alt="SDRLoggerPlus" className="w-16 h-16 rounded-lg" />
+            <img src="./sdrloggerplus-icon.png" alt="SDRLoggerPlus" className="w-24 h-24 rounded-lg" />
             <div>
               <h4 className="text-xl font-bold font-display text-accent-primary">SDRLOGGERPLUS</h4>
               <p className="text-sm text-dark-300">Ham Radio Logging Software</p>

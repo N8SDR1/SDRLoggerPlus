@@ -51,7 +51,7 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
         <img
           src="./sdrloggerplus-banner.png"
           alt="SDRLoggerPlus"
-          className="w-40 h-40 mx-auto mb-4 rounded-lg"
+          className="w-48 h-48 mx-auto mb-4 rounded-lg"
         />
 
         <h1 className="text-2xl font-bold text-white font-display tracking-wider">
