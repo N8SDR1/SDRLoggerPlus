@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Globe as GlobeIcon, Navigation, Target, Maximize2, Radio, RadioTower, MapPin, Pause, Play } from 'lucide-react';
+import { Globe as GlobeIcon, Navigation, Target, Maximize2, Radio, RadioTower, MapPin, Pause, Play, Zap } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSignalR } from '../hooks/useSignalR';
@@ -9,6 +9,8 @@ import { RotatorControls } from './RotatorPlugin';
 import { api } from '../api/client';
 import { rigModeToSpotModes } from '../utils/rigTracking';
 import type { CallsignLookedUpEvent } from '../api/signalr';
+import { StrikeStore, type Strike } from '../utils/lightningStrikes';
+import { setLightningStrikesCallback, clearLightningStrikesCallback } from '../api/signalr';
 // Globe is dynamically imported to catch WebGL errors at load time
 
 // Default station location (can be overridden by store)
@@ -216,6 +218,12 @@ interface GlobeInstance {
   polygonAltitude(alt: number | ((d: unknown) => number)): GlobeInstance;
   polygonsTransitionDuration(duration: number): GlobeInstance;
   ringsData(data: unknown[]): GlobeInstance;
+  ringColor(accessor: (d: unknown) => (t: number) => string): GlobeInstance;
+  ringMaxRadius(accessor: number | ((d: unknown) => number)): GlobeInstance;
+  ringPropagationSpeed(accessor: number | ((d: unknown) => number)): GlobeInstance;
+  ringRepeatPeriod(accessor: number | ((d: unknown) => number)): GlobeInstance;
+  ringAltitude(accessor: number | ((d: unknown) => number)): GlobeInstance;
+  ringResolution(res: number): GlobeInstance;
   arcsData(data: unknown[]): GlobeInstance;
   arcStartLat(accessor: (d: unknown) => number): GlobeInstance;
   arcStartLng(accessor: (d: unknown) => number): GlobeInstance;
@@ -253,7 +261,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const lastBeamPolyKeyRef = useRef<string | null>(null);
 
   const { stationGrid, rotatorPosition, focusedCallsignInfo, radioStates, selectedRadioId, potaSpots, dxClusterSpots: spots, dxClusterMapEnabled } = useAppStore();
-  const { settings } = useSettingsStore();
+  const { settings, updateMapSettings } = useSettingsStore();
   const { commandRotator, focusCallsign, selectSpot } = useSignalR();
 
   const [currentAzimuth, setCurrentAzimuth] = useState(0);
@@ -270,6 +278,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   focusCallsignRef.current = focusCallsign;
   const selectSpotRef = useRef(selectSpot);
   selectSpotRef.current = selectSpot;
+  const strikeStoreRef = useRef(new StrikeStore());
 
   // When a radio is connected, the globe shows only DX spots on the radio's
   // current band + mode (so the display follows the rig). No radio → show all.
@@ -548,8 +557,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       // computed inside renderBeam above. Setting animate-time to 0 keeps
       // globe.gl's dash-motion machinery idle.
       .pathDashAnimateTime(0)
-      .pathTransitionDuration(0)
-      .ringsData([]);
+      .pathTransitionDuration(0);
   }, [stationLat, stationLon, getDestinationPoint]);
 
   // Animation loop - use ref to avoid dependency on currentAzimuth
@@ -792,6 +800,22 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       // Set material opacity
       const material = globe.globeMaterial();
       material.opacity = 0.95;
+
+      // Lightning strike rings — the strike layer owns ringsData (see the strike
+      // effect + the removed per-frame clear in renderBeam). Cyan/white local,
+      // dimmer for global; deliberately not yellow (that's the DX-tower pulse).
+      globe
+        .ringColor((d: unknown) => {
+          const s = d as { local: boolean };
+          const base = s.local ? '120, 230, 255' : '120, 180, 220'; // cyan-white / dim
+          return (t: number) => `rgba(${base}, ${Math.max(0, 1 - t).toFixed(3)})`;
+        })
+        .ringMaxRadius((d: unknown) => ((d as { local: boolean }).local ? 3.5 : 2.5))
+        .ringPropagationSpeed(2)
+        .ringRepeatPeriod(0)   // single ripple per strike, no repeat
+        .ringAltitude(0.006)
+        .ringResolution(64)
+        .ringsData([]);
 
       globeRef.current = globe;
       setGlobeReady(true);
@@ -1190,6 +1214,44 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     globeRef.current.controls().autoRotate = isRotating;
   }, [isRotating, globeReady]);
 
+  // Lightning strikes → globe.gl ringsData. Backfill via REST, then live via SignalR.
+  useEffect(() => {
+    if (!globeReady || !globeRef.current) return;
+    if (!settings.map.showLightning) {
+      globeRef.current.ringsData([]);
+      return;
+    }
+    const store = strikeStoreRef.current;
+    let cancelled = false;
+
+    const render = () => {
+      if (cancelled || !globeRef.current) return;
+      const active = store.active(Date.now());
+      globeRef.current.ringsData(active.map(s => ({ lat: s.lat, lng: s.lon, local: s.local })));
+    };
+
+    // Initial backfill.
+    api.getLightningStrikes().then(list => {
+      if (cancelled) return;
+      store.merge(list as Strike[]);
+      render();
+    }).catch(() => { /* best-effort */ });
+
+    // Live updates.
+    const cb = (evt: { strikes: Strike[] }) => { store.merge(evt.strikes); render(); };
+    setLightningStrikesCallback(cb);
+
+    // Age-out sweep so rings fade even without new strikes arriving.
+    const interval = setInterval(render, 2000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      clearLightningStrikesCallback(cb);
+      if (globeRef.current) globeRef.current.ringsData([]);
+    };
+  }, [globeReady, settings.map.showLightning]);
+
   // Fly to target when focused callsign changes
   useEffect(() => {
     if (!globeRef.current) return;
@@ -1395,6 +1457,18 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
             aria-label={isRotating ? 'Pause globe rotation' : 'Resume globe rotation'}
           >
             {isRotating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          </button>
+        )}
+
+        {/* Lightning strikes overlay toggle (Top Right, left of rotation button) */}
+        {!hideOverlays && (
+          <button
+            onClick={() => updateMapSettings({ showLightning: !settings.map.showLightning })}
+            className={`glass-button absolute top-4 right-16 p-2 z-10 ${settings.map.showLightning ? 'text-yellow-300' : ''}`}
+            title={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
+            aria-label={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
+          >
+            <Zap className="w-4 h-4" />
           </button>
         )}
 
