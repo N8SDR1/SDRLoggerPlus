@@ -621,7 +621,7 @@ export function LogEntryPlugin() {
         {/* Callsign, Band, Mode on one line */}
         <div className="flex gap-2 items-end">
           <div className="flex-1">
-            <label className="text-xs font-ui text-dark-300 flex items-center gap-1 mb-1">
+            <label className="text-xs font-ui text-dark-200 flex items-center gap-1 mb-1">
               {isLookingUpCallsign ? (
                 <Loader2 className="w-3 h-3 animate-spin text-accent-primary" />
               ) : (
@@ -642,7 +642,7 @@ export function LogEntryPlugin() {
             />
           </div>
           <div className="w-28">
-            <label className="text-xs font-ui text-dark-300 mb-1 flex items-center gap-1">
+            <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
               Band
               {followRadio && currentRadioState && (
                 <span className="w-1.5 h-1.5 rounded-full bg-accent-success" title="From radio" />
@@ -672,7 +672,7 @@ export function LogEntryPlugin() {
             </select>
           </div>
           <div className="w-28">
-            <label className="text-xs font-ui text-dark-300 mb-1 flex items-center gap-1">
+            <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
               Mode
               {followRadio && currentRadioState && (
                 <span className="w-1.5 h-1.5 rounded-full bg-accent-success" title="From radio" />
@@ -767,7 +767,7 @@ export function LogEntryPlugin() {
 
         {/* Name field with lock pattern */}
         <div>
-          <label className="text-xs font-ui text-dark-300 mb-1 flex items-center gap-1">
+          <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
             <User className="w-3 h-3" />
             Name
             {nameLocked && focusedCallsignInfo?.name && (
@@ -803,7 +803,7 @@ export function LogEntryPlugin() {
 
         {/* QTH/Location — v1.x General field, worked-station location */}
         <div>
-          <label className="text-xs font-ui text-dark-300 mb-1 block flex items-center gap-1">
+          <label className="text-xs font-ui text-dark-200 mb-1 block flex items-center gap-1">
             <MapPin className="w-3 h-3" />
             QTH / Location
           </label>
@@ -819,7 +819,7 @@ export function LogEntryPlugin() {
         {/* Frequency, RST Sent, RST Rcvd on one line */}
         <div className="flex gap-3 items-end">
           <div className="w-32">
-            <label className="text-xs font-ui text-dark-300 mb-1 flex items-center gap-1">
+            <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
               Frequency (MHz)
               {followRadio && currentRadioState && (
                 <span className="w-1.5 h-1.5 rounded-full bg-accent-success" title="From radio" />
@@ -850,7 +850,7 @@ export function LogEntryPlugin() {
 
           {/* My RST Sent — v1.x label wording */}
           <div>
-            <label className="text-xs font-ui text-dark-300 mb-1 flex items-center gap-1">
+            <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
               <span className="text-accent-success">My</span> RST Sent
             </label>
             <div className="flex items-center gap-1">
@@ -886,7 +886,7 @@ export function LogEntryPlugin() {
 
           {/* Their RST Rcvd — v1.x label wording */}
           <div>
-            <label className="text-xs font-ui text-dark-300 mb-1 flex items-center gap-1">
+            <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
               <span className="text-accent-secondary">Their</span> RST Rcvd
             </label>
             <div className="flex items-center gap-1">
@@ -921,7 +921,7 @@ export function LogEntryPlugin() {
             in AdifExtra so PotaStatistics picks it up as a hunt. */}
         {logMode === 'pota' && (
           <div>
-            <label className="text-xs font-ui text-dark-300 mb-1 block flex items-center gap-1">
+            <label className="text-xs font-ui text-dark-200 mb-1 block flex items-center gap-1">
               <Trees className="w-3 h-3 text-green-400" />
               P2P Park Ref
               <span className="text-[10px] text-dark-400 font-normal ml-1">(optional — their park if P2P contact)</span>
@@ -940,7 +940,7 @@ export function LogEntryPlugin() {
             contest name / event / park reference. Backend maps into
             Qso.Contest.ContestId. */}
         <div>
-          <label className="text-xs font-ui text-dark-300 mb-1 block">Contest / Event / Park</label>
+          <label className="text-xs font-ui text-dark-200 mb-1 block">Contest / Event / Park</label>
           <input
             type="text"
             value={formData.contest}
@@ -953,7 +953,7 @@ export function LogEntryPlugin() {
         {/* Remarks — v1.x consolidates Comment + Notes into one field.
             Stored server-side in Qso.Comment (the ADIF-exported field). */}
         <div>
-          <label className="text-xs font-ui text-dark-300 mb-1 block">Remarks</label>
+          <label className="text-xs font-ui text-dark-200 mb-1 block">Remarks</label>
           <input
             type="text"
             value={formData.remarks}
