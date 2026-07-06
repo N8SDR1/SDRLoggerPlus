@@ -15,6 +15,7 @@ public interface ILogHubClient
     Task OnSpotReceived(SpotReceivedEvent evt);
     Task OnHotListChanged(HotListChangedEvent evt);
     Task OnLightningStatus(SDRLoggerPlus.Server.Services.Weather.LightningStatus status);
+    Task OnLightningStrikes(LightningStrikesEvent evt);
     Task OnWindStatus(SDRLoggerPlus.Server.Services.Weather.WindStatus status);
     Task OnSatState(SDRLoggerPlus.Server.Services.Sat.SatState state);
     Task OnSpotSelected(SpotSelectedEvent evt);
@@ -1261,5 +1262,10 @@ public static class LogHubExtensions
     public static async Task BroadcastSpectrumData(this IHubContext<LogHub, ILogHubClient> hub, SpectrumDataEvent evt)
     {
         await hub.Clients.All.OnSpectrumData(evt);
+    }
+
+    public static async Task BroadcastLightningStrikes(this IHubContext<LogHub, ILogHubClient> hub, LightningStrikesEvent evt)
+    {
+        await hub.Clients.All.OnLightningStrikes(evt);
     }
 }

@@ -840,3 +840,10 @@ public record TciMetersEvent(
     bool IsTransmitting,
     DateTime TimestampUtc
 );
+
+/// <summary>A single lightning strike for the globe display. Local = in the operator's
+/// fast-refresh region tier (vs. the slower global tier).</summary>
+public record LightningStrike(double Lat, double Lon, DateTime TimestampUtc, bool Local = false);
+
+/// <summary>A batch of newly-observed lightning strikes pushed to clients.</summary>
+public record LightningStrikesEvent(IReadOnlyList<LightningStrike> Strikes);
