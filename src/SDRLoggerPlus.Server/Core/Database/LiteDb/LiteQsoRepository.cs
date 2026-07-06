@@ -169,18 +169,27 @@ public class LiteQsoRepository : IQsoRepository
         var today = DateTime.UtcNow.Date;
         var qsosToday = all.Count(q => q.QsoDate >= today);
 
-        // Qso stores DXCC/Grid on the nested StationInfo (v2 schema) and
-        // ALSO carries legacy top-level Dxcc/Grid columns for older rows.
-        // Prefer the nested value and fall back to the legacy field so the
-        // counts don't come out as zero for a modern logbook — matches the
-        // MapToResponse `qso.Dxcc ?? qso.Station?.Dxcc` fallback.
-        int? DxccOf(Qso q) => q.Station?.Dxcc ?? q.Dxcc;
+        // Qso stores DXCC / Country / Grid on the nested StationInfo (v2
+        // schema) and ALSO carries legacy top-level columns for older rows —
+        // prefer the nested value with a fallback to the legacy field.
+        //
+        // "Countries" is counted by distinct country NAME rather than DXCC
+        // entity id: many ADIF exports (including old SDRLogger+ v1) omit
+        // the DXCC field, but populate COUNTRY (or we back-fill it via
+        // CtyService callsign lookup on import). Counting by name gives the
+        // operator the number they actually think of as "countries worked"
+        // — which is what the label reads — and stays non-zero on imports
+        // that only carry the country name.
+        string? CountryOf(Qso q) => !string.IsNullOrEmpty(q.Station?.Country) ? q.Station!.Country : q.Country;
         string? GridOf(Qso q) => !string.IsNullOrEmpty(q.Station?.Grid) ? q.Station!.Grid : q.Grid;
 
         var stats = new QsoStatistics(
             TotalQsos: all.Count,
             UniqueCallsigns: all.Select(q => q.Callsign).Distinct().Count(),
-            UniqueCountries: all.Select(DxccOf).Where(d => d.HasValue).Distinct().Count(),
+            UniqueCountries: all.Select(CountryOf)
+                .Where(c => !string.IsNullOrEmpty(c))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
             UniqueGrids: all.Select(GridOf).Where(g => !string.IsNullOrEmpty(g)).Distinct().Count(),
             QsosToday: qsosToday,
             QsosByBand: all.GroupBy(q => q.Band ?? "Unknown")
