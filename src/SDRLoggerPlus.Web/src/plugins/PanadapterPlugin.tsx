@@ -509,10 +509,11 @@ export function PanadapterPlugin() {
     }
 
     // --- Waterfall grid ---
-    // Subtle vertical lines over the waterfall region aligned with the
-    // frequency-axis ticks above. Very low alpha — the goal is "I can
-    // eyeball an offset from the VFO without effort", not a full grid
-    // overlay. Toggle off when it pulls the eye on dense bands.
+    // Vertical lines over the waterfall region aligned with the
+    // frequency-axis ticks above. Alpha bumped to 0.22 (from 0.06) —
+    // 6% blended into the waterfall LUT colours turned out invisible;
+    // 22% reads as "there but doesn't fight for attention". Toggle off
+    // when it pulls the eye on dense bands.
     if (wfGridRef.current && waterfallH > 0 && dispRange > 0) {
       const targetTicks = Math.floor(w / 100);
       const rawStep = dispRange / Math.max(targetTicks, 1);
@@ -521,7 +522,7 @@ export function PanadapterPlugin() {
       const stepHz = nice * magnitude;
       const firstTick = Math.ceil(zLow / stepHz) * stepHz;
       ctx.save();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let freq = firstTick; freq <= zHigh; freq += stepHz) {
