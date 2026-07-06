@@ -132,6 +132,14 @@ export function PanadapterPlugin() {
   const pausedRef = useRef(false);
   const hasDataRef = useRef(false);
   const peakRef = useRef(100); // rolling peak for auto-scaling amplitude
+  // Auto-tracked noise floor — the 20th-percentile amp of each frame,
+  // EMA-smoothed. Waterfall pixels use (raw - noiseFloor) / (peak -
+  // noiseFloor) so band noise consistently sits at LUT[0] regardless of
+  // signal strength or intensity. This matches how every mature SDR
+  // waterfall (Lyra's AutoDbScaler, Thetis, ExpertSDR3) handles it —
+  // was the missing piece that made the FLR slider "touchy" even at
+  // full swing.
+  const noiseFloorRef = useRef(0);
   const splitRatioRef = useRef(loadSplitRatio()); // spectrum/waterfall split, dragged via the axis bar
   const draggingSplitRef = useRef(false);
   const didDragRef = useRef(false); // suppress click-to-tune after a divider drag
@@ -154,11 +162,11 @@ export function PanadapterPlugin() {
     if (smoothing <= 0) smoothedRef.current = null;
   }, [smoothing]);
 
-  // Waterfall intensity (gain applied to the value→color mapping).
-  // Range widened to 0.05..2.0 (was 0.2..3.0) because the practical
-  // working zone is well below 1.0 on typical HL2 signal levels — 0.2
-  // felt like the floor when it should be mid-range.
-  const [wfIntensity, setWfIntensity] = useState(() => loadNumber(INTENSITY_STORAGE_KEY, 0.6, 0.05, 2.0));
+  // Waterfall intensity — brightness gain on the mapped LUT position.
+  // With the new auto-tracked noise-floor mapping, 1.0 = neutral (noise
+  // sits at LUT[0], peak at LUT[255]). Below 1.0 darkens the whole
+  // waterfall; above 1.0 boosts weak signals into brighter colours.
+  const [wfIntensity, setWfIntensity] = useState(() => loadNumber(INTENSITY_STORAGE_KEY, 1.0, 0.3, 2.0));
   const wfIntensityRef = useRef(wfIntensity);
   useEffect(() => {
     wfIntensityRef.current = wfIntensity;
@@ -191,22 +199,25 @@ export function PanadapterPlugin() {
   // dB knobs from the operator's POV: raise floor to darken quieter
   // signals (kills speckle in noisy bands); lower ceiling to make weak
   // signals pop (compresses the LUT into the interesting dB window).
-  // Range 0..0.35 with 0.005 step — the useful working zone. Above ~0.3
-  // the entire waterfall clips to black on typical band noise; 0.02 step
-  // was too coarse — one click could over-suppress or leave nothing.
-  const [wfFloor, setWfFloor] = useState(() => loadNumber(WF_FLOOR_STORAGE_KEY, 0.0, 0.0, 0.35));
+  // Floor OFFSET into the auto-window. 0 = "map at auto-tracked noise
+  // floor" (default — the noise sits at LUT[0], so background is the
+  // colour LUT[0]). Positive values push additional above-noise signals
+  // to LUT[0] (kills speckle in noisy bands). Range 0..0.4 with 0.005
+  // step gives fine control across the useful working zone.
+  const [wfFloor, setWfFloor] = useState(() => loadNumber(WF_FLOOR_STORAGE_KEY, 0.0, 0.0, 0.4));
   const wfFloorRef = useRef(wfFloor);
   useEffect(() => {
     wfFloorRef.current = wfFloor;
     localStorage.setItem(WF_FLOOR_STORAGE_KEY, wfFloor.toFixed(2));
   }, [wfFloor]);
 
-  // Range 0.5..1.2 with 0.01 step. Below 0.5 the LUT saturates on
-  // pure noise (a wall of colour); above 1.2 nothing ever hits the
-  // top of the LUT (the loudest colour is unreachable, so headroom is
-  // wasted). 0.02 step was too coarse; 0.01 gives fine control near
-  // the interesting signal ceiling.
-  const [wfCeil, setWfCeil] = useState(() => loadNumber(WF_CEIL_STORAGE_KEY, 1.0, 0.5, 1.2));
+  // Ceiling OFFSET into the auto-window. 1.0 = "map at auto-tracked
+  // peak" (default — loudest signal reaches the LUT top colour).
+  // Lowering it (e.g. 0.7) compresses the LUT into a lower slice of the
+  // dynamic range so mid-strength signals reach the top colour — makes
+  // weak signals really POP. Range 0.5..1.0 with 0.01 step; below 0.5
+  // the entire LUT saturates on noise.
+  const [wfCeil, setWfCeil] = useState(() => loadNumber(WF_CEIL_STORAGE_KEY, 1.0, 0.5, 1.0));
   const wfCeilRef = useRef(wfCeil);
   useEffect(() => {
     wfCeilRef.current = wfCeil;
@@ -351,6 +362,19 @@ export function PanadapterPlugin() {
     }
     const scale = Math.max(peakRef.current * 1.1, 1); // 10% headroom
 
+    // Auto-track noise floor from this frame: take a sparse ~20th
+    // percentile (sort a subsample — full sort is O(n log n) and this
+    // runs every frame). EMA-smooth toward it so a strong signal
+    // doesn't yank the floor around. Result: waterfall gets a stable
+    // reference point for "background = black" independent of signal
+    // strength, matching Lyra's AutoDbScaler behaviour.
+    const sampleStride = Math.max(1, Math.floor(len / 128));
+    const sample: number[] = [];
+    for (let i = 0; i < len; i += sampleStride) sample.push(points[i]);
+    sample.sort((a, b) => a - b);
+    const frameFloor = sample[Math.floor(sample.length * 0.20)] ?? 0;
+    noiseFloorRef.current = noiseFloorRef.current * 0.9 + frameFloor * 0.1;
+
     // --- Zoom window: full span at 1×, narrowing around the VFO as zoom rises ---
     const lowHz = data.lowFrequencyHz;
     const highHz = data.highFrequencyHz;
@@ -428,15 +452,21 @@ export function PanadapterPlugin() {
     wfFrameCounterRef.current = (wfFrameCounterRef.current + 1) % 1000;
     const wfAdvance = wfFrameCounterRef.current % (11 - wfSpeedRef.current) === 0;
     const intensity = wfIntensityRef.current;
-    // Operator floor/ceiling as fractions of the auto-scale. `floor` is
-    // the value below which everything renders as LUT[0] (silent); `ceil`
-    // is the value at which everything saturates to LUT[255] (loudest).
-    // We remap (v - floor) / (ceil - floor) so the operator's window
-    // maps to the full 0..1 LUT range — the "dB stretch" behaviour they
-    // expect from a normal SDR waterfall.
+    // dB-stretch style mapping (matches Lyra's AutoDbScaler). Signal
+    // remapped between auto-tracked noise floor and peak: value at
+    // noiseFloor → LUT[0] (BACKGROUND — black in Classic/Rainbow, dark
+    // purple in Viridis, near-black in Heat), value at peak → LUT[255]
+    // (LOUDEST). The operator's FLR and CEL sliders then shift those
+    // reference points up/down within the auto-window; FLR up = suppress
+    // signals just above the noise (kills speckle), CEL down = compress
+    // the interesting signal window so weak signals pop. INT applies as
+    // a gain to the mapped position, letting the operator brighten/dim
+    // the whole result independently.
+    const autoFloor = noiseFloorRef.current;
+    const autoSpan = Math.max(peakRef.current - autoFloor, 1);
     const floor = wfFloorRef.current;
     const ceil = Math.max(wfCeilRef.current, floor + 0.05); // guarantee non-zero window
-    const span = ceil - floor;
+    const opSpan = ceil - floor;
     const lut = paletteRef.current;
 
     if (!pausedRef.current && waterfallH > 0 && wfAdvance) {
@@ -456,10 +486,13 @@ export function PanadapterPlugin() {
       const imgData = wfCtx.createImageData(w, 1);
       const pixels = imgData.data;
       for (let x = 0; x < w; x++) {
-        const raw = (points[xToIdx(x)] / scale) * intensity;
-        // Operator floor/ceiling remap: values in [floor, ceil] map to
-        // the full LUT range; below floor = LUT[0], above ceil = LUT[255].
-        const v = (raw - floor) / span;
+        // Signal expressed as a fraction of the auto-tracked dynamic
+        // range (noiseFloor..peak). autoT = 0 at noise floor, 1 at peak.
+        const autoT = (points[xToIdx(x)] - autoFloor) / autoSpan;
+        // Operator FLR/CEL then shift/stretch that window: a value at
+        // autoT=FLR becomes v=0 (LUT bottom), autoT=CEL becomes v=1
+        // (LUT top). INT gains the mapped position for brightening.
+        const v = ((autoT - floor) / opSpan) * intensity;
         const val = Math.min(Math.max(Math.floor(v * 255), 0), 255);
         const ci = val * 3;
         const pi = x * 4;
@@ -784,7 +817,7 @@ export function PanadapterPlugin() {
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">INT</span>
             <input
               type="range"
-              min={0.05}
+              min={0.3}
               max={2.0}
               step={0.05}
               value={wfIntensity}
@@ -792,26 +825,28 @@ export function PanadapterPlugin() {
               className="w-16 accent-[rgb(var(--accent-primary))] cursor-pointer"
             />
           </div>
-          {/* Waterfall floor / ceiling (dB-ish stretch — raises the noise
-              cutoff, lowers the saturation top) */}
-          <div className="flex items-center gap-1.5" title={`Waterfall floor (silences quieter signals): ${(wfFloor * 100).toFixed(1)}%`}>
+          {/* Waterfall floor / ceiling — offsets into the auto-tracked
+              signal range. FLR up = suppress noise more; CEL down =
+              compress the LUT into the interesting signal window so
+              weak signals pop. */}
+          <div className="flex items-center gap-1.5" title={`Waterfall floor (push more noise to background): +${(wfFloor * 100).toFixed(1)}% above auto`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">FLR</span>
             <input
               type="range"
               min={0.0}
-              max={0.35}
+              max={0.4}
               step={0.005}
               value={wfFloor}
               onChange={(e) => setWfFloor(parseFloat(e.target.value))}
               className="w-14 accent-[rgb(var(--accent-primary))] cursor-pointer"
             />
           </div>
-          <div className="flex items-center gap-1.5" title={`Waterfall ceiling (compresses to loudest signals): ${(wfCeil * 100).toFixed(0)}%`}>
+          <div className="flex items-center gap-1.5" title={`Waterfall ceiling (LUT saturates at this fraction of peak): ${(wfCeil * 100).toFixed(0)}%`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">CEL</span>
             <input
               type="range"
               min={0.5}
-              max={1.2}
+              max={1.0}
               step={0.01}
               value={wfCeil}
               onChange={(e) => setWfCeil(parseFloat(e.target.value))}
