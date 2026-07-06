@@ -1585,8 +1585,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         {/* Beam heading — under the play button (Top Right). */}
         {!hideOverlays && rotatorEnabled && (
           <div className="absolute top-16 right-4 text-right pointer-events-none">
-            {/* 1.15rem = 15% larger than the 1rem station callsign. */}
-            <div className="text-[1.15rem] font-display font-bold text-accent-primary drop-shadow-glow leading-none">
+            <div className="text-[1.5rem] font-display font-bold text-accent-primary drop-shadow-glow leading-none">
               {currentAzimuth}°
             </div>
             <div className="text-[10px] font-ui font-bold uppercase tracking-[0.2em] text-accent-primary/60 mt-1">
