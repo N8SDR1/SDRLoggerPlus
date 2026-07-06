@@ -425,6 +425,12 @@ export function App() {
         <SetupWizard onComplete={() => fetchStatus()} />
       )}
 
+      {/* Weather alert strip pinned to the very top — v1.x parity. Sits
+          above the header so a real lightning / high-wind alert is the
+          first thing the operator sees, and pushes the rest of the app
+          down (rather than overlapping) so nothing behind it is hidden. */}
+      <WeatherAlertBanner />
+
       <main className="flex-1 relative overflow-hidden">
         <Layout
           ref={layoutRef}
@@ -539,7 +545,6 @@ export function App() {
         )}
       </main>
 
-      <WeatherAlertBanner />
       <StatusBar />
 
       {/* Settings Panel (Modal) */}
