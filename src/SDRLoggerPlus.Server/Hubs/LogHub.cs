@@ -470,6 +470,27 @@ public class LogHub : Hub<ILogHubClient>
         }
     }
 
+    /// <summary>
+    /// Broadcast a spot to every connected DX cluster. Called by the
+    /// LogEntry "Spot" button. Returns the count of clusters that
+    /// accepted the write so the caller can toast "spotted on 2 clusters"
+    /// or "no clusters connected — nothing spotted".
+    /// </summary>
+    public async Task<int> SendDxSpot(string callsign, double frequencyKhz, string? comment)
+    {
+        if (_dxClusterService is null) return 0;
+        if (string.IsNullOrWhiteSpace(callsign) || frequencyKhz <= 0) return 0;
+        try
+        {
+            return await _dxClusterService.SendSpotAsync(callsign, frequencyKhz, comment);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SendDxSpot failed for {Callsign} @ {FreqKhz}", callsign, frequencyKhz);
+            return 0;
+        }
+    }
+
 
     public async Task TuneToFrequency(long frequencyHz)
     {

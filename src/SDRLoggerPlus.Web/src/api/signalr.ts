@@ -1255,6 +1255,14 @@ class SignalRService {
     await this.connection?.invoke('TuneToBand', band, mode ?? null);
   }
 
+  /**
+   * Broadcast a spot to every connected DX cluster. Returns the number of
+   * clusters that accepted the write — 0 = none connected / nothing sent.
+   */
+  async sendDxSpot(callsign: string, frequencyKhz: number, comment?: string): Promise<number> {
+    return await this.connection?.invoke<number>('SendDxSpot', callsign, frequencyKhz, comment ?? null) ?? 0;
+  }
+
   async deleteTciConfig(radioId?: string): Promise<void> {
     await this.connection?.invoke('DeleteTciConfig', radioId ?? null);
   }

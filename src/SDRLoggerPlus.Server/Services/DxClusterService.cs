@@ -17,6 +17,14 @@ public interface IDxClusterService
     IReadOnlyDictionary<string, ClusterConnectionStatus> GetStatuses();
     Task StartAsync(CancellationToken cancellationToken);
     Task StopAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Broadcast a spot to every currently-connected cluster. Returns the
+    /// count of clusters that accepted the write. Clusters relay spots
+    /// upstream so submitting to multiple clusters doesn't duplicate the
+    /// spot on the network — the cluster network handles dedup.
+    /// </summary>
+    Task<int> SendSpotAsync(string callsign, double freqKhz, string? comment, CancellationToken ct = default);
 }
 
 public record ClusterConnectionStatus(
@@ -281,6 +289,19 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
         return _statuses;
     }
 
+    public async Task<int> SendSpotAsync(string callsign, double freqKhz, string? comment, CancellationToken ct = default)
+    {
+        // Fan out to every connected cluster in parallel. Each cluster
+        // handler serialises its own writes via _writeLock, so this is
+        // safe. Disconnected clusters simply return false without error.
+        var tasks = _connections.Values
+            .Select(h => h.SendSpotAsync(callsign, freqKhz, comment, ct))
+            .ToArray();
+        if (tasks.Length == 0) return 0;
+        var results = await Task.WhenAll(tasks);
+        return results.Count(r => r);
+    }
+
     /// <summary>
     /// Ingest a spot from a non-telnet source (e.g. the Spothole.app poller)
     /// through the same deduplication/save/broadcast pipeline as cluster spots.
@@ -505,6 +526,12 @@ internal class ClusterConnectionHandler
     private TcpClient? _tcpClient;
     private CancellationTokenSource? _connectionCts;
     private bool _disconnectRequested;
+    // Live writer + gate — set while a connection is up, cleared on
+    // teardown. Serialised so a mid-QSO SendSpotAsync can't interleave
+    // with the login/CC-mode/filter writes happening on the receive loop.
+    private StreamWriter? _writer;
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    public bool IsConnected => _writer is not null && _tcpClient?.Connected == true;
 
     private const int ReconnectDelayMs = 10000;
     private const int ReadTimeoutMs = 120000;
@@ -638,9 +665,11 @@ internal class ClusterConnectionHandler
 
         using var stream = tcpClient.GetStream();
         using var writer = new StreamWriter(stream, Encoding.ASCII) { AutoFlush = true };
-
-        _logger.LogInformation("Connected to cluster {Name}", _name);
-        _onStatusChanged(_id, _name, "connected", null);
+        _writer = writer;
+        try
+        {
+            _logger.LogInformation("Connected to cluster {Name}", _name);
+            _onStatusChanged(_id, _name, "connected", null);
 
         var loginSent = false;
         var passwordSent = false;
@@ -700,6 +729,45 @@ internal class ClusterConnectionHandler
             {
                 pending.Clear();
             }
+        }
+        }
+        finally
+        {
+            // Clear the live-writer handle so a SendSpotAsync racing an
+            // in-flight teardown doesn't write into a disposed stream.
+            _writer = null;
+        }
+    }
+
+    /// <summary>
+    /// Submit a spot to the DX cluster. Uses the standard DXSpider/CC
+    /// "dx" command format ("dx FREQ_KHZ CALL COMMENT"), which every
+    /// interoperable cluster (VE7CC, AR-Cluster, DXSpider, CC Cluster)
+    /// accepts. The cluster then broadcasts the spot upstream as a
+    /// "DX de MYCALL:..." line — same net effect as v1's raw-telnet
+    /// send. Returns false when not connected or the write fails.
+    /// </summary>
+    public async Task<bool> SendSpotAsync(string callsign, double freqKhz, string? comment, CancellationToken ct)
+    {
+        var w = _writer;
+        if (w is null || _tcpClient?.Connected != true) return false;
+
+        var line = $"dx {freqKhz:F1} {callsign.ToUpperInvariant()} {(comment ?? "").Trim()}".TrimEnd();
+        await _writeLock.WaitAsync(ct);
+        try
+        {
+            await w.WriteLineAsync(line.AsMemory(), ct);
+            _logger.LogInformation("Cluster {Name}: sent spot '{Line}'", _name, line);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cluster {Name}: send-spot failed", _name);
+            return false;
+        }
+        finally
+        {
+            _writeLock.Release();
         }
     }
 

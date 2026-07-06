@@ -519,6 +519,10 @@ export function useSignalR() {
     await signalRService.tuneToBand(band, mode);
   }, []);
 
+  const sendDxSpot = useCallback(async (callsign: string, freqKhz: number, comment?: string) => {
+    return await signalRService.sendDxSpot(callsign, freqKhz, comment);
+  }, []);
+
   const deleteTciConfig = useCallback(async (radioId?: string) => {
     await signalRService.deleteTciConfig(radioId);
   }, []);
@@ -594,6 +598,7 @@ export function useSignalR() {
     // Cross-rig commands (used by Log Entry to push dropdown changes back to the active rig)
     setRadioMode,
     tuneToBand,
+    sendDxSpot,
     // Map image persistence
     persistCallsignMapImage,
     // Spectrum / panadapter

@@ -138,7 +138,7 @@ function RstCombobox({ value, onChange, options, className }: {
 
 export function LogEntryPlugin() {
   const queryClient = useQueryClient();
-  const { focusCallsign, persistCallsignMapImage, setRadioMode, tuneToBand } = useSignalR();
+  const { focusCallsign, persistCallsignMapImage, setRadioMode, tuneToBand, sendDxSpot } = useSignalR();
   const { focusedCallsignInfo, radioStates, selectedRadioId, isLookingUpCallsign, setFocusedCallsign, setFocusedCallsignInfo, setLogHistoryCallsignFilter, clearCallsignFromAllControls, selectedSpot, setSelectedSpot, addCallsignMapImage } = useAppStore();
   const { settings, updateRadioSettings } = useSettingsStore();
   const followRadio = settings.radio.followRadio;
@@ -1214,9 +1214,25 @@ export function LogEntryPlugin() {
           </button>
           <button
             type="button"
-            disabled
-            className="glass-button flex items-center justify-center gap-1.5 py-2 px-3 opacity-40 cursor-not-allowed"
-            title="Send a spot to the DX cluster — coming soon (backend needs a spot-emit hub method)"
+            onClick={async () => {
+              // Broadcast to every connected cluster. Freq is stored as
+              // MHz in the form; the cluster wire format is kHz so we
+              // convert. Callsign and freq are required — Spot is
+              // useless without either.
+              const freqMhz = parseFloat(formData.frequency);
+              if (!formData.callsign || !freqMhz) return;
+              try {
+                const n = await sendDxSpot(formData.callsign, freqMhz * 1000, formData.remarks || undefined);
+                alert(n > 0
+                  ? `Spotted ${formData.callsign} on ${n} cluster${n === 1 ? '' : 's'}`
+                  : 'No clusters connected — nothing spotted');
+              } catch (e) {
+                alert(`Spot failed: ${e instanceof Error ? e.message : String(e)}`);
+              }
+            }}
+            disabled={!formData.callsign || !formData.frequency}
+            className="glass-button flex items-center justify-center gap-1.5 py-2 px-3 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Send this QSO's callsign+frequency as a spot to every connected DX cluster"
           >
             <Send className="w-4 h-4" />
             Spot
