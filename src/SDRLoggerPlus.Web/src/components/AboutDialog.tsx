@@ -9,9 +9,10 @@ interface AboutDialogProps {
 
 type TabId = 'about' | 'help' | 'changelog';
 
-// Support link — points at the SDRLoggerPlus donations page. Adjust as
-// needed if the project moves to a different platform.
-const SUPPORT_URL = 'https://buymeacoffee.com/n8sdr';
+// Support link — the SDRLoggerPlus PayPal donation URL used by v1. Same
+// account, same "Built by a fellow ham, for the community" note so the
+// history of contributors reaches the same place across both versions.
+const SUPPORT_URL = 'https://www.paypal.com/donate/?business=NP2ZQS4LR454L&no_recurring=0&item_name=Built+by+a+fellow+ham%2C+for+the+community.++Free+to+use%2C+free+to+share.+A+small+donation+keeps+the+code+flowing.+73+de+N8SDR&currency_code=USD';
 
 /**
  * Tabbed About/Help/Changelog dialog. Historical AboutDialog content
