@@ -17,9 +17,9 @@ import { setLightningStrikesCallback, clearLightningStrikesCallback } from '../a
 const DEFAULT_LAT = 52.6667; // IO52RN - Limerick
 const DEFAULT_LON = -8.6333;
 
-// Thresholds for showing overlays based on container height
+// Height threshold for the top-left station/DX cards. The beam-heading readout
+// below them is not gated — it stays visible at any panel size.
 const TOP_OVERLAY_THRESHOLD = 450;
-const BOTTOM_OVERLAY_THRESHOLD = 550;
 
 // Spherical linear interpolation (SLERP) along a great circle between two lat/lon points.
 // t=0 returns start, t=1 returns end.
@@ -1456,7 +1456,6 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   };
 
   const showTopOverlay = containerHeight >= TOP_OVERLAY_THRESHOLD;
-  const showBottomOverlay = containerHeight >= BOTTOM_OVERLAY_THRESHOLD;
 
   return (
       <div className="relative w-full h-full">
@@ -1599,8 +1598,12 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         )}
 
         {/* Station and Rig Info Overlay (Top Left) */}
-        {!hideOverlays && showTopOverlay && (
+        {!hideOverlays && (
           <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
+            {/* Station chip + focused-DX card collapse on short panels; the
+                beam-heading block below stays visible at any panel size. */}
+            {showTopOverlay && (
+            <>
             <div className="glass-panel px-3 py-2 border-l-4 border-accent-primary">
               <div className="flex items-center gap-2 mb-1">
                 <div className="p-1 bg-accent-primary/20 rounded">
@@ -1703,10 +1706,11 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                 </div>
               </div>
             )}
+            </>
+            )}
 
-            {/* Azimuth and Coordinates — stacked under the station/DX cards */}
-            {showBottomOverlay && (
-              <div className="flex flex-col items-center gap-1 mt-1">
+            {/* Beam heading + coords — stays visible at any panel size. */}
+            <div className="flex flex-col items-center gap-1 mt-1">
                 {rotatorEnabled && (
                   <div className="text-center">
                     <div className="text-4xl font-display font-bold text-accent-primary drop-shadow-glow leading-none">
@@ -1727,7 +1731,6 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                   <div>{Math.abs(stationLon).toFixed(4)}°{stationLon >= 0 ? 'E' : 'W'}</div>
                 </div>
               </div>
-            )}
           </div>
         )}
 
