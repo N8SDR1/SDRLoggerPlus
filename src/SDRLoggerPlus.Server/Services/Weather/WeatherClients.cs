@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SDRLoggerPlus.Contracts.Events;
 
 namespace SDRLoggerPlus.Server.Services.Weather;
 
@@ -32,6 +33,7 @@ public interface IEcowittClient
 public interface IBlitzortungClient
 {
     Task<List<StrikeInfo>> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default);
+    Task<List<LightningStrike>> GetStrikesRawAsync(IEnumerable<int> regions, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -353,6 +355,42 @@ public class BlitzortungClient : IBlitzortungClient
             catch (Exception ex)
             {
                 _logger.LogDebug("Blitzortung region {Region} error: {Error}", region, ex.Message);
+            }
+        }
+        return strikes;
+    }
+
+    public async Task<List<LightningStrike>> GetStrikesRawAsync(IEnumerable<int> regions, CancellationToken ct = default)
+    {
+        var strikes = new List<LightningStrike>();
+        foreach (var region in regions)
+        {
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                client.Timeout = TimeSpan.FromSeconds(8);
+                client.DefaultRequestHeaders.Add("Referer", "https://map.blitzortung.org/");
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) SDRLoggerPlus");
+                var json = await client.GetStringAsync(
+                    $"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={region:D2}", ct);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    // Flat arrays: [lon, lat, timestamp(ns since epoch), ...]
+                    if (item.ValueKind != JsonValueKind.Array || item.GetArrayLength() < 3) continue;
+                    if (item[0].ValueKind != JsonValueKind.Number || item[1].ValueKind != JsonValueKind.Number
+                        || item[2].ValueKind != JsonValueKind.Number) continue;
+                    var lon = item[0].GetDouble();
+                    var lat = item[1].GetDouble();
+                    var ns = item[2].GetInt64();
+                    var ts = DateTimeOffset.FromUnixTimeMilliseconds(ns / 1_000_000).UtcDateTime;
+                    strikes.Add(new LightningStrike(lat, lon, ts, Local: false));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("Blitzortung raw region {Region} error: {Error}", region, ex.Message);
             }
         }
         return strikes;
