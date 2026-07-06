@@ -203,6 +203,10 @@ builder.Services.AddSingleton<IBlitzortungClient, BlitzortungClient>();
 builder.Services.AddSingleton<WeatherAlertService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<WeatherAlertService>());
 
+// Globe lightning strikes (own poller; only polls while the map toggle is enabled)
+builder.Services.AddSingleton<LightningStrikeService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<LightningStrikeService>());
+
 // Register CSN S.A.T. controller integration
 builder.Services.AddSingleton<SatControllerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SatControllerService>());
