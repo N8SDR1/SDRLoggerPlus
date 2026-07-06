@@ -1041,12 +1041,24 @@ internal class TciRadioConnection
 
                 case "modulation":
                     // Format: modulation:rx,MODE;
+                    // TCI's mode enum has no CW sideband distinction — it's
+                    // just "CW". Lyra (and the TCI spec) collapse CWU/CWL →
+                    // CW outbound and expect the receiver to re-derive the
+                    // sideband from the current dial: CWU above 10 MHz, CWL
+                    // below. Without this the log-entry Mode dropdown gets
+                    // a stale literal "CW" that doesn't match either of
+                    // its CWU/CWL options.
                     if (args.Length >= 2)
                     {
                         var rx = int.TryParse(args[0], out var rxVal) ? rxVal : 0;
                         if (rx == _selectedInstance)
                         {
                             var mode = args[1].ToUpper();
+                            if (mode == "CW")
+                            {
+                                mode = _currentFrequencyHz > 0 && _currentFrequencyHz < 10_000_000
+                                    ? "CWL" : "CWU";
+                            }
                             if (mode != _currentMode)
                             {
                                 _currentMode = mode;

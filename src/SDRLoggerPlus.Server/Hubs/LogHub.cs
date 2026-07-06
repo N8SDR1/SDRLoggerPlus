@@ -396,15 +396,30 @@ public class LogHub : Hub<ILogHubClient>
         // Convert spot frequency from kHz to Hz
         var frequencyHz = (long)(evt.Frequency * 1000);
 
-        // Try to tune connected radio (TCI first, then Hamlib)
-        // Set mode BEFORE frequency so the radio interprets the frequency
-        // in the correct mode context, avoiding ±700 Hz CW/SSB offset issues.
+        // Try to tune connected radio (TCI first, then Hamlib).
+        // ORDER MATTERS and is protocol-specific:
+        //   - Hamlib / flrig: mode BEFORE frequency (their rigs apply a CW
+        //     pitch offset when you change mode, and doing mode-after-freq
+        //     produces a ±700 Hz shift on the dial).
+        //   - TCI (Lyra / Thetis / ExpertSDR3): frequency BEFORE mode. TCI's
+        //     mode enum has no CW sideband distinction — the sender collapses
+        //     CWU/CWL → "CW" and expects the receiver to re-derive CWU/CWL
+        //     from the CURRENT dial (CWU above 10 MHz, CWL below). If we
+        //     send mode first with the OLD dial position, Lyra picks the
+        //     wrong sideband and the user has to click the spot a second
+        //     time. Freq-first-then-mode makes the correct sideband stick
+        //     on the first click. Same principle for USB↔LSB across 10 MHz.
         var tciRadios = _tciRadioService.GetRadioStates().ToList();
         if (tciRadios.Any())
         {
             var radioId = tciRadios.First().RadioId;
 
-            // Set mode first to avoid frequency shift when crossing CW/SSB boundary
+            var tuned = await _tciRadioService.SetFrequencyAsync(radioId, frequencyHz);
+            if (tuned)
+            {
+                _logger.LogInformation("Tuned TCI radio {RadioId} to {FrequencyMHz} MHz", radioId, frequencyHz / 1000000.0);
+            }
+
             if (!string.IsNullOrEmpty(evt.Mode))
             {
                 var modeSet = await _tciRadioService.SetModeAsync(radioId, evt.Mode, frequencyHz);
@@ -412,12 +427,6 @@ public class LogHub : Hub<ILogHubClient>
                 {
                     _logger.LogInformation("Set TCI radio {RadioId} mode to {Mode}", radioId, evt.Mode);
                 }
-            }
-
-            var tuned = await _tciRadioService.SetFrequencyAsync(radioId, frequencyHz);
-            if (tuned)
-            {
-                _logger.LogInformation("Tuned TCI radio {RadioId} to {FrequencyMHz} MHz", radioId, frequencyHz / 1000000.0);
             }
         }
         else if (_hamlibService.IsConnected)
