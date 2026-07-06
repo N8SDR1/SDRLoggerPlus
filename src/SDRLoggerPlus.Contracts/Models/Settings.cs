@@ -452,6 +452,9 @@ public class MapSettings
     [BsonElement("showPotaOverlay")]
     public bool ShowPotaOverlay { get; set; }
 
+    [BsonElement("showLightning")]
+    public bool ShowLightning { get; set; }
+
     [BsonElement("showDayNightOverlay")]
     public bool ShowDayNightOverlay { get; set; }
 
