@@ -155,7 +155,10 @@ export function PanadapterPlugin() {
   }, [smoothing]);
 
   // Waterfall intensity (gain applied to the value→color mapping).
-  const [wfIntensity, setWfIntensity] = useState(() => loadNumber(INTENSITY_STORAGE_KEY, 1.0, 0.2, 3.0));
+  // Range widened to 0.05..2.0 (was 0.2..3.0) because the practical
+  // working zone is well below 1.0 on typical HL2 signal levels — 0.2
+  // felt like the floor when it should be mid-range.
+  const [wfIntensity, setWfIntensity] = useState(() => loadNumber(INTENSITY_STORAGE_KEY, 0.6, 0.05, 2.0));
   const wfIntensityRef = useRef(wfIntensity);
   useEffect(() => {
     wfIntensityRef.current = wfIntensity;
@@ -188,14 +191,22 @@ export function PanadapterPlugin() {
   // dB knobs from the operator's POV: raise floor to darken quieter
   // signals (kills speckle in noisy bands); lower ceiling to make weak
   // signals pop (compresses the LUT into the interesting dB window).
-  const [wfFloor, setWfFloor] = useState(() => loadNumber(WF_FLOOR_STORAGE_KEY, 0.0, 0.0, 0.6));
+  // Range 0..0.35 with 0.005 step — the useful working zone. Above ~0.3
+  // the entire waterfall clips to black on typical band noise; 0.02 step
+  // was too coarse — one click could over-suppress or leave nothing.
+  const [wfFloor, setWfFloor] = useState(() => loadNumber(WF_FLOOR_STORAGE_KEY, 0.0, 0.0, 0.35));
   const wfFloorRef = useRef(wfFloor);
   useEffect(() => {
     wfFloorRef.current = wfFloor;
     localStorage.setItem(WF_FLOOR_STORAGE_KEY, wfFloor.toFixed(2));
   }, [wfFloor]);
 
-  const [wfCeil, setWfCeil] = useState(() => loadNumber(WF_CEIL_STORAGE_KEY, 1.0, 0.3, 1.5));
+  // Range 0.5..1.2 with 0.01 step. Below 0.5 the LUT saturates on
+  // pure noise (a wall of colour); above 1.2 nothing ever hits the
+  // top of the LUT (the loudest colour is unreachable, so headroom is
+  // wasted). 0.02 step was too coarse; 0.01 gives fine control near
+  // the interesting signal ceiling.
+  const [wfCeil, setWfCeil] = useState(() => loadNumber(WF_CEIL_STORAGE_KEY, 1.0, 0.5, 1.2));
   const wfCeilRef = useRef(wfCeil);
   useEffect(() => {
     wfCeilRef.current = wfCeil;
@@ -769,13 +780,13 @@ export function PanadapterPlugin() {
             />
           </div>
           {/* Waterfall intensity */}
-          <div className="flex items-center gap-1.5" title={`Waterfall intensity: ${wfIntensity.toFixed(1)}×`}>
+          <div className="flex items-center gap-1.5" title={`Waterfall intensity: ${wfIntensity.toFixed(2)}×`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">INT</span>
             <input
               type="range"
-              min={0.2}
-              max={3.0}
-              step={0.1}
+              min={0.05}
+              max={2.0}
+              step={0.05}
               value={wfIntensity}
               onChange={(e) => setWfIntensity(parseFloat(e.target.value))}
               className="w-16 accent-[rgb(var(--accent-primary))] cursor-pointer"
@@ -783,13 +794,13 @@ export function PanadapterPlugin() {
           </div>
           {/* Waterfall floor / ceiling (dB-ish stretch — raises the noise
               cutoff, lowers the saturation top) */}
-          <div className="flex items-center gap-1.5" title={`Waterfall floor (silences quieter signals): ${(wfFloor * 100).toFixed(0)}%`}>
+          <div className="flex items-center gap-1.5" title={`Waterfall floor (silences quieter signals): ${(wfFloor * 100).toFixed(1)}%`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">FLR</span>
             <input
               type="range"
               min={0.0}
-              max={0.6}
-              step={0.02}
+              max={0.35}
+              step={0.005}
               value={wfFloor}
               onChange={(e) => setWfFloor(parseFloat(e.target.value))}
               className="w-14 accent-[rgb(var(--accent-primary))] cursor-pointer"
@@ -799,9 +810,9 @@ export function PanadapterPlugin() {
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">CEL</span>
             <input
               type="range"
-              min={0.3}
-              max={1.5}
-              step={0.02}
+              min={0.5}
+              max={1.2}
+              step={0.01}
               value={wfCeil}
               onChange={(e) => setWfCeil(parseFloat(e.target.value))}
               className="w-14 accent-[rgb(var(--accent-primary))] cursor-pointer"
