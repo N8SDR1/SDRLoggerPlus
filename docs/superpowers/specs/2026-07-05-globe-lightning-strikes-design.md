@@ -58,19 +58,25 @@ a multi-source selector (Ambient/Met Office), and a day/night grey-line globe to
 
 ### Data tiers
 
-- **Local tier:** Blitzortung regions **07/12/13** (Americas — what the backend already
-  fetches). Polled on a **fast timer** (default 60 s). Full-detail rings, brighter color,
-  longer retention window.
-- **Global tier:** **all other** Blitzortung regions. Polled on a **slow timer**
-  (default 300 s). Same individual-strike rendering, dimmer color, shorter retention.
-- Both tiers render every strike as a ring; the only differences are cadence, color/alpha,
-  and retention window. No aggregation.
+> **FIELD DISCOVERY (2026-07-05, manual verification — supersedes the region-tier
+> design below):** live probing proved the GEOjson `n` parameter is a worldwide
+> **5-minute time slice** (0 = newest), NOT a geographic region, and the row
+> timestamp is a `"yyyy-MM-dd HH:mm:ss.fffffffff"` UTC **string**, not ns-since-epoch.
+> "Americas regions 07/12/13" (a premise inherited from the alert code) actually
+> meant "worldwide strikes 35–65 minutes old." As built instead:
+> - **One poll cadence:** slices `{0,1}` every 60 s (2 req/min — fewer than the
+>   two-tier design) cover the buffer's full 10-minute retention window, worldwide.
+> - **Local tier = distance:** strikes within **750 km of the station** are tagged
+>   Local (bright rings, kept preferentially under the cap); the rest are the dim
+>   global tier. User-approved; this also delivers the station-relative behavior
+>   the original phase-1 note deferred.
+> - Retention windows, colors, cap, and the rest of this spec are unchanged.
 
-> **Phase-1 simplification (stated limitation):** the "local" tier is the hardcoded
-> Americas region set, matching the existing fetch. This is correct for Americas-based
-> operators (the current users) but not station-relative worldwide. Making the local tier
-> station-relative (map station lat/lon → containing region[s]) is a deliberate future
-> refinement, not part of this phase.
+- **Local tier:** strikes within 750 km of the station (see discovery note; formerly
+  "regions 07/12/13"). Full-detail rings, brighter color.
+- **Global tier:** all other strikes. Dimmer color, longer retention window (10 min
+  vs 5 min local).
+- Both tiers render every strike as a ring. No aggregation.
 
 ### Backend
 

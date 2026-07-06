@@ -6,16 +6,18 @@ using SDRLoggerPlus.Server.Hubs;
 namespace SDRLoggerPlus.Server.Services.Weather;
 
 /// <summary>
-/// Polls Blitzortung on two cadences — local regions (Americas) fast, all regions
-/// slow — only while the globe lightning toggle is enabled. Feeds a StrikeBuffer
-/// and pushes new strikes over SignalR. Ephemeral; nothing is persisted.
+/// Polls Blitzortung's worldwide strike feed — only while the globe lightning
+/// toggle is enabled. The feed's `n` parameter is a 5-minute time slice (0 =
+/// newest), NOT a geographic region; slices {0,1} cover the buffer's full
+/// 10-minute retention window. Strikes within LocalRadiusKm of the station are
+/// tagged Local (bright tier). Feeds a StrikeBuffer and pushes new strikes over
+/// SignalR. Ephemeral; nothing is persisted.
 /// </summary>
 public class LightningStrikeService : BackgroundService
 {
-    private static readonly int[] LocalRegions = { 7, 12, 13 };
-    private static readonly int[] GlobalRegions = Enumerable.Range(1, 14).Except(LocalRegions).ToArray();
-    private static readonly TimeSpan LocalInterval = TimeSpan.FromSeconds(60);
-    private static readonly TimeSpan GlobalInterval = TimeSpan.FromSeconds(300);
+    private static readonly int[] TimeSlices = { 0, 1 };
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
+    private const double LocalRadiusKm = 750;
 
     private readonly IServiceProvider _serviceProvider;
     private readonly IBlitzortungClient _blitzortung;
@@ -43,29 +45,18 @@ public class LightningStrikeService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var lastLocal = DateTime.MinValue;
-        var lastGlobal = DateTime.MinValue;
+        var lastPoll = DateTime.MinValue;
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 var settings = await ReadSettingsAsync();
-                if (settings.Map.ShowLightning)
+                if (settings.Map.ShowLightning && DateTime.UtcNow - lastPoll >= PollInterval)
                 {
-                    var now = DateTime.UtcNow;
+                    lastPoll = DateTime.UtcNow;
                     var (stationLat, stationLon) = ResolveStation(settings);
-
-                    if (now - lastLocal >= LocalInterval)
-                    {
-                        lastLocal = now;
-                        await PollAsync(LocalRegions, local: true, stationLat, stationLon, stoppingToken);
-                    }
-                    if (now - lastGlobal >= GlobalInterval)
-                    {
-                        lastGlobal = now;
-                        await PollAsync(GlobalRegions, local: false, stationLat, stationLon, stoppingToken);
-                    }
+                    await PollAsync(stationLat, stationLon, stoppingToken);
                 }
             }
             catch (OperationCanceledException) { break; }
@@ -76,11 +67,14 @@ public class LightningStrikeService : BackgroundService
         }
     }
 
-    private async Task PollAsync(int[] regions, bool local, double? stationLat, double? stationLon, CancellationToken ct)
+    private async Task PollAsync(double? stationLat, double? stationLon, CancellationToken ct)
     {
-        var raw = await _blitzortung.GetStrikesRawAsync(regions, ct);
-        // Local and global region sets are disjoint, so the whole batch shares this tier's tag.
-        var tagged = raw.Select(s => s with { Local = local }).ToList();
+        var raw = await _blitzortung.GetStrikesRawAsync(TimeSlices, ct);
+        var tagged = raw.Select(s => s with
+        {
+            Local = stationLat.HasValue && stationLon.HasValue &&
+                    PropagationService.HaversineDistanceKm(stationLat.Value, stationLon.Value, s.Lat, s.Lon) <= LocalRadiusKm
+        }).ToList();
         IReadOnlyList<LightningStrike> added;
         lock (_lock) added = _buffer.Add(tagged, DateTime.UtcNow, stationLat, stationLon);
         if (added.Count > 0 && _hubContext != null)

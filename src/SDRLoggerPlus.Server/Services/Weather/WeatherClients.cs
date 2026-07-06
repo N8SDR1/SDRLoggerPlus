@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using SDRLoggerPlus.Contracts.Events;
 
@@ -33,7 +34,7 @@ public interface IEcowittClient
 public interface IBlitzortungClient
 {
     Task<List<StrikeInfo>> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default);
-    Task<List<LightningStrike>> GetStrikesRawAsync(IEnumerable<int> regions, CancellationToken ct = default);
+    Task<List<LightningStrike>> GetStrikesRawAsync(IEnumerable<int> slices, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -310,8 +311,10 @@ public class EcowittClient : IEcowittClient
 }
 
 /// <summary>
-/// Blitzortung.org public strike feed. Regions 07/12/13 cover the Americas
-/// (same set SDRLogger+ fetched); strikes filtered to the configured range.
+/// Blitzortung.org public strike feed. The GEOjson `n` parameter selects a
+/// worldwide 5-minute time slice (0 = newest) — NOT a geographic region, despite
+/// the historical naming here. The alert path still fetches slices 7/12/13 as
+/// SDRLogger+ always did; strikes are filtered to the configured range.
 /// </summary>
 public class BlitzortungClient : IBlitzortungClient
 {
@@ -360,10 +363,10 @@ public class BlitzortungClient : IBlitzortungClient
         return strikes;
     }
 
-    public async Task<List<LightningStrike>> GetStrikesRawAsync(IEnumerable<int> regions, CancellationToken ct = default)
+    public async Task<List<LightningStrike>> GetStrikesRawAsync(IEnumerable<int> slices, CancellationToken ct = default)
     {
         var strikes = new List<LightningStrike>();
-        foreach (var region in regions)
+        foreach (var slice in slices)
         {
             try
             {
@@ -372,27 +375,47 @@ public class BlitzortungClient : IBlitzortungClient
                 client.DefaultRequestHeaders.Add("Referer", "https://map.blitzortung.org/");
                 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) SDRLoggerPlus");
                 var json = await client.GetStringAsync(
-                    $"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={region:D2}", ct);
+                    $"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={slice:D2}", ct);
                 using var doc = JsonDocument.Parse(json);
                 if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
                 foreach (var item in doc.RootElement.EnumerateArray())
                 {
-                    // Flat arrays: [lon, lat, timestamp(ns since epoch), ...]
+                    // Flat arrays: [lon, lat, timestamp, ...]. The live feed sends the
+                    // timestamp as a "yyyy-MM-dd HH:mm:ss.fffffffff" UTC string; the
+                    // ns-since-epoch number form is accepted for compatibility.
                     if (item.ValueKind != JsonValueKind.Array || item.GetArrayLength() < 3) continue;
-                    if (item[0].ValueKind != JsonValueKind.Number || item[1].ValueKind != JsonValueKind.Number
-                        || item[2].ValueKind != JsonValueKind.Number) continue;
+                    if (item[0].ValueKind != JsonValueKind.Number || item[1].ValueKind != JsonValueKind.Number) continue;
+                    var ts = ParseStrikeTimestamp(item[2]);
+                    if (ts is null) continue;
                     var lon = item[0].GetDouble();
                     var lat = item[1].GetDouble();
-                    var ns = item[2].GetInt64();
-                    var ts = DateTimeOffset.FromUnixTimeMilliseconds(ns / 1_000_000).UtcDateTime;
-                    strikes.Add(new LightningStrike(lat, lon, ts, Local: false));
+                    strikes.Add(new LightningStrike(lat, lon, ts.Value, Local: false));
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogDebug("Blitzortung raw region {Region} error: {Error}", region, ex.Message);
+                _logger.LogDebug("Blitzortung raw slice {Slice} error: {Error}", slice, ex.Message);
             }
         }
         return strikes;
+    }
+
+    /// <summary>
+    /// Feed timestamps are UTC "yyyy-MM-dd HH:mm:ss.fffffffff" strings (9-digit ns
+    /// fraction — beyond DateTime's 7-digit tick precision, so the tail is trimmed)
+    /// or, historically, ns-since-epoch numbers. Null for anything unparseable.
+    /// </summary>
+    private static DateTime? ParseStrikeTimestamp(JsonElement el)
+    {
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt64(out var ns))
+            return DateTimeOffset.FromUnixTimeMilliseconds(ns / 1_000_000).UtcDateTime;
+        if (el.ValueKind != JsonValueKind.String) return null;
+        var s = el.GetString();
+        if (string.IsNullOrEmpty(s)) return null;
+        var dot = s.IndexOf('.');
+        if (dot >= 0 && s.Length > dot + 8) s = s[..(dot + 8)];
+        return DateTime.TryParse(s, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var ts)
+            ? ts : null;
     }
 }
