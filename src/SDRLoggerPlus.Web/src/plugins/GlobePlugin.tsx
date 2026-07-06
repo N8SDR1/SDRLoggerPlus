@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Globe as GlobeIcon, Navigation, Target, Maximize2, Radio, RadioTower, MapPin, Pause, Play } from 'lucide-react';
+import { Globe as GlobeIcon, Navigation, Target, Maximize2, RadioTower, Pause, Play, Zap } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSignalR } from '../hooks/useSignalR';
@@ -9,15 +9,13 @@ import { RotatorControls } from './RotatorPlugin';
 import { api } from '../api/client';
 import { rigModeToSpotModes } from '../utils/rigTracking';
 import type { CallsignLookedUpEvent } from '../api/signalr';
+import { StrikeStore, type Strike } from '../utils/lightningStrikes';
+import { setLightningStrikesCallback, clearLightningStrikesCallback } from '../api/signalr';
 // Globe is dynamically imported to catch WebGL errors at load time
 
 // Default station location (can be overridden by store)
 const DEFAULT_LAT = 52.6667; // IO52RN - Limerick
 const DEFAULT_LON = -8.6333;
-
-// Thresholds for showing overlays based on container height
-const TOP_OVERLAY_THRESHOLD = 450;
-const BOTTOM_OVERLAY_THRESHOLD = 550;
 
 // Spherical linear interpolation (SLERP) along a great circle between two lat/lon points.
 // t=0 returns start, t=1 returns end.
@@ -216,6 +214,15 @@ interface GlobeInstance {
   polygonAltitude(alt: number | ((d: unknown) => number)): GlobeInstance;
   polygonsTransitionDuration(duration: number): GlobeInstance;
   ringsData(data: unknown[]): GlobeInstance;
+  ringColor(accessor: (d: unknown) => (t: number) => string): GlobeInstance;
+  ringMaxRadius(accessor: number | ((d: unknown) => number)): GlobeInstance;
+  ringPropagationSpeed(accessor: number | ((d: unknown) => number)): GlobeInstance;
+  ringRepeatPeriod(accessor: number | ((d: unknown) => number)): GlobeInstance;
+  ringAltitude(accessor: number | ((d: unknown) => number)): GlobeInstance;
+  ringResolution(res: number): GlobeInstance;
+  customLayerData(data: unknown[]): GlobeInstance;
+  customThreeObject(fn: (d: unknown) => object): GlobeInstance;
+  customThreeObjectUpdate(fn: (obj: object, d: unknown) => void): GlobeInstance;
   arcsData(data: unknown[]): GlobeInstance;
   arcStartLat(accessor: (d: unknown) => number): GlobeInstance;
   arcStartLng(accessor: (d: unknown) => number): GlobeInstance;
@@ -234,6 +241,11 @@ interface GlobeInstance {
   getScreenCoords(lat: number, lng: number, altitude?: number): { x: number; y: number } | undefined;
   getCoords(lat: number, lng: number, altitude?: number): { x: number; y: number; z: number };
   camera(): { position: { x: number; y: number; z: number } };
+  // Three.js scene graph + renderer — used to raise texture anisotropy on the
+  // globe surface and streamed map tiles so the sphere stays crisp at oblique
+  // viewing angles (default anisotropy of 1 reads as "grainy").
+  scene(): { traverse(cb: (obj: unknown) => void): void };
+  renderer(): { capabilities: { getMaxAnisotropy(): number } };
   onGlobeClick(fn: (coords: { lat: number; lng: number }) => void): GlobeInstance;
   onPointClick(fn: (point: unknown, event: MouseEvent, coords: { lat: number; lng: number; altitude: number }) => void): GlobeInstance;
   onZoom(fn: (pov: { lat: number; lng: number; altitude: number }) => void): GlobeInstance;
@@ -253,7 +265,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const lastBeamPolyKeyRef = useRef<string | null>(null);
 
   const { stationGrid, rotatorPosition, focusedCallsignInfo, radioStates, selectedRadioId, potaSpots, dxClusterSpots: spots, dxClusterMapEnabled } = useAppStore();
-  const { settings } = useSettingsStore();
+  const { settings, updateMapSettings } = useSettingsStore();
   const { commandRotator, focusCallsign, selectSpot } = useSignalR();
 
   const [currentAzimuth, setCurrentAzimuth] = useState(0);
@@ -270,6 +282,9 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   focusCallsignRef.current = focusCallsign;
   const selectSpotRef = useRef(selectSpot);
   selectSpotRef.current = selectSpot;
+  const strikeStoreRef = useRef(new StrikeStore());
+  // Throttle timestamp for the texture-anisotropy sweep (see the label tick).
+  const lastAnisoSweepRef = useRef(0);
 
   // When a radio is connected, the globe shows only DX spots on the radio's
   // current band + mode (so the display follows the rig). No radio → show all.
@@ -298,10 +313,6 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const targetIconRef = useRef<HTMLDivElement | null>(null);
   const focusedInfoLatestRef = useRef<CallsignLookedUpEvent | null>(null);
   focusedInfoLatestRef.current = focusedCallsignInfo;
-
-  // Get current radio state if connected
-  const selectedRadioState = selectedRadioId ? radioStates.get(selectedRadioId) : null;
-  const isRadioConnected = !!selectedRadioState;
 
   // Rotator is enabled in settings
   const rotatorEnabled = settings.rotator.enabled;
@@ -548,8 +559,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       // computed inside renderBeam above. Setting animate-time to 0 keeps
       // globe.gl's dash-motion machinery idle.
       .pathDashAnimateTime(0)
-      .pathTransitionDuration(0)
-      .ringsData([]);
+      .pathTransitionDuration(0);
   }, [stationLat, stationLon, getDestinationPoint]);
 
   // Animation loop - use ref to avoid dependency on currentAzimuth
@@ -628,8 +638,9 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       }
 
       let Globe;
+      let THREE: typeof import('three');
       try {
-        await import('three');
+        THREE = await import('three');
         const module = await import('globe.gl');
         Globe = module.default;
       } catch (e) {
@@ -792,6 +803,72 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       // Set material opacity
       const material = globe.globeMaterial();
       material.opacity = 0.95;
+
+      // Lightning strike rings — the strike layer owns ringsData (see the strike
+      // effect + the removed per-frame clear in renderBeam). Pure white (keeps
+      // clear of the DX-spot/POTA palette); intensity fades with strike age,
+      // local strikes render brighter than distant ones.
+      globe
+        .ringColor((d: unknown) => {
+          const s = d as { local: boolean; ts: number };
+          return (t: number) => {
+            const ageMin = (Date.now() - s.ts) / 60_000;
+            const ageFactor = ageMin < 1 ? 1 : ageMin < 5 ? 0.7 : 0.45;
+            const alpha = Math.max(0, 1 - t) * ageFactor * (s.local ? 1 : 0.6);
+            return `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
+          };
+        })
+        .ringMaxRadius((d: unknown) => ((d as { local: boolean }).local ? 3.5 : 2.5))
+        .ringPropagationSpeed(2)
+        .ringRepeatPeriod(2000)   // re-ripple while the strike is retained (5–10 min)
+        .ringAltitude(0.006)
+        .ringResolution(32)   // halved — ring count is capped, keep per-ring cost low
+        .ringsData([]);
+
+      // Strike-center lightning bolts (custom layer): a red bolt with a white
+      // outline marks each strike's exact spot for 60 s after live arrival, then
+      // vanishes (the strike effect filters). One shared canvas texture;
+      // billboard sprites stay cheap even at a few hundred live strikes.
+      const boltCanvas = document.createElement('canvas');
+      boltCanvas.width = 64;
+      boltCanvas.height = 64;
+      const boltCtx = boltCanvas.getContext('2d');
+      if (boltCtx) {
+        // Bolt inset from the 64px edges so the white outline never clips.
+        boltCtx.beginPath();
+        boltCtx.moveTo(40, 8);
+        boltCtx.lineTo(16, 36);
+        boltCtx.lineTo(30, 36);
+        boltCtx.lineTo(24, 56);
+        boltCtx.lineTo(48, 26);
+        boltCtx.lineTo(34, 26);
+        boltCtx.closePath();
+        // White outline first (drawn wide, so the red fill covers its inner half).
+        boltCtx.lineJoin = 'round';
+        boltCtx.strokeStyle = '#ffffff';
+        boltCtx.lineWidth = 6;
+        boltCtx.stroke();
+        // Red fill on top.
+        boltCtx.fillStyle = '#ff2a2a';
+        boltCtx.fill();
+      }
+      const boltTexture = new THREE.CanvasTexture(boltCanvas);
+      globe
+        .customThreeObject(() => {
+          const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: boltTexture,
+            transparent: true,
+            depthWrite: false,
+          }));
+          sprite.scale.set(3, 3, 1);
+          return sprite;
+        })
+        .customThreeObjectUpdate((obj: object, d: unknown) => {
+          const s = d as { lat: number; lng: number };
+          const p = globe!.getCoords(s.lat, s.lng, 0.012);
+          (obj as { position: { set: (x: number, y: number, z: number) => void } }).position.set(p.x, p.y, p.z);
+        })
+        .customLayerData([]);
 
       globeRef.current = globe;
       setGlobeReady(true);
@@ -1133,6 +1210,34 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       if (globe) {
         const cam = globe.camera().position;
         const camLen = Math.hypot(cam.x, cam.y, cam.z) || 1;
+
+        // Anisotropic filtering sweep. The globe base texture and the Google
+        // map tiles both load with three.js's default anisotropy of 1, which
+        // leaves the sphere looking grainy/smeared toward its curved edges.
+        // Bump every texture to the GPU's max anisotropy for a crisp surface.
+        // Map tiles stream in continuously as the operator zooms/rotates, so we
+        // re-sweep on a throttle and skip textures already at max.
+        const nowMs = performance.now();
+        if (nowMs - lastAnisoSweepRef.current > 750) {
+          lastAnisoSweepRef.current = nowMs;
+          try {
+            const maxAniso = globe.renderer().capabilities.getMaxAnisotropy();
+            if (maxAniso > 1) {
+              globe.scene().traverse((obj) => {
+                const mat = (obj as { material?: unknown }).material;
+                const mats = Array.isArray(mat) ? mat : mat ? [mat] : [];
+                for (const m of mats) {
+                  const tex = (m as { map?: { anisotropy: number; needsUpdate: boolean } }).map;
+                  if (tex && tex.anisotropy !== maxAniso) {
+                    tex.anisotropy = maxAniso;
+                    tex.needsUpdate = true;
+                  }
+                }
+              });
+            }
+          } catch { /* best-effort — never break the render loop */ }
+        }
+
         for (let i = 0; i < labels.length; i++) {
           const el = els[i];
           if (!el) continue;
@@ -1189,6 +1294,77 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     if (!globeReady || !globeRef.current) return;
     globeRef.current.controls().autoRotate = isRotating;
   }, [isRotating, globeReady]);
+
+  // Lightning strikes → globe.gl ringsData. Backfill via REST, then live via SignalR.
+  useEffect(() => {
+    if (!globeReady || !globeRef.current) return;
+    if (!settings.map.showLightning) {
+      globeRef.current.ringsData([]);
+      globeRef.current.customLayerData([]);
+      return;
+    }
+    const store = strikeStoreRef.current;
+    let cancelled = false;
+
+    // Stable ring datum per strike — globe.gl diffs ringsData by object
+    // identity, so fresh literals each sweep would rebuild every ring mesh.
+    // Arrival time (for the 60 s strike-bolt window) lives in the persistent
+    // StrikeStore keyed by strike-key — NOT here — so it survives dedupe and
+    // this effect being torn down/recreated on toggle. Bolts key on arrival,
+    // not strike time, because the feed publishes ~1–2 min behind real time.
+    type RingDatum = { lat: number; lng: number; local: boolean; ts: number };
+    const ringCache = new WeakMap<Strike, RingDatum>();
+    // Render caps — the store retains thousands of strikes across the global
+    // 10-min window, but every rendered ring is a continuously-rippling mesh
+    // and every bolt an unbatched sprite draw call. Thousands of them stall the
+    // GPU (freeze/crash on weaker hardware), so bound what actually draws: keep
+    // all local strikes, then the newest, up to these limits.
+    const MAX_RINGS = 400;
+    const MAX_BOLTS = 120;
+    const render = () => {
+      if (cancelled || !globeRef.current) return;
+      const now = Date.now();
+      const prioritized = store.active(now)
+        .map(s => {
+          let r = ringCache.get(s);
+          if (!r) { r = { lat: s.lat, lng: s.lon, local: s.local, ts: Date.parse(s.timestampUtc) }; ringCache.set(s, r); }
+          const arrived = store.arrivedAt(s);
+          return { r, live: arrived !== undefined && now - arrived <= 60_000 };
+        })
+        .sort((a, b) => (Number(b.r.local) - Number(a.r.local)) || (b.r.ts - a.r.ts)); // local first, then newest
+      const rings = prioritized.slice(0, MAX_RINGS).map(x => x.r);
+      const dots = prioritized.filter(x => x.live).slice(0, MAX_BOLTS).map(x => x.r);
+      globeRef.current.ringsData(rings);
+      globeRef.current.customLayerData(dots);
+    };
+
+    // Initial backfill (no arrival time → history draws rings only, no bolt).
+    api.getLightningStrikes().then(list => {
+      if (cancelled) return;
+      store.merge(list as Strike[]);
+      render();
+    }).catch(() => { /* best-effort */ });
+
+    // Live updates — record arrival so these strikes get a 60 s bolt.
+    const cb = (evt: { strikes: Strike[] }) => {
+      store.merge(evt.strikes, Date.now());
+      render();
+    };
+    setLightningStrikesCallback(cb);
+
+    // Age-out sweep so rings fade even without new strikes arriving.
+    const interval = setInterval(render, 2000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      clearLightningStrikesCallback(cb);
+      if (globeRef.current) {
+        globeRef.current.ringsData([]);
+        globeRef.current.customLayerData([]);
+      }
+    };
+  }, [globeReady, settings.map.showLightning]);
 
   // Fly to target when focused callsign changes
   useEffect(() => {
@@ -1261,14 +1437,6 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       }
     };
   }, [focusedCallsignInfo?.latitude, focusedCallsignInfo?.longitude, stationLat, stationLon]);
-
-  const formatFrequency = (hz: number): string => {
-    const mhz = hz / 1_000_000;
-    return mhz.toFixed(3);
-  };
-
-  const showTopOverlay = containerHeight >= TOP_OVERLAY_THRESHOLD;
-  const showBottomOverlay = containerHeight >= BOTTOM_OVERLAY_THRESHOLD;
 
   return (
       <div className="relative w-full h-full">
@@ -1398,46 +1566,38 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
           </button>
         )}
 
-        {/* Station and Rig Info Overlay (Top Left) */}
-        {!hideOverlays && showTopOverlay && (
-          <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
-            <div className="glass-panel px-3 py-2 border-l-4 border-accent-primary">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="p-1 bg-accent-primary/20 rounded">
-                  <GlobeIcon className="w-3.5 h-3.5 text-accent-primary" />
-                </div>
-                <span className="font-display font-bold text-dark-100 tracking-wider">
-                  {settings.station.callsign || 'STATION'}
-                </span>
-                <span className="text-[10px] font-mono text-dark-300 bg-dark-700 px-1.5 py-0.5 rounded">
-                  {settings.station.gridSquare || stationGrid || '----'}
-                </span>
-              </div>
-              
-              {isRadioConnected && selectedRadioState && (
-                <div className="flex flex-col gap-0.5 mt-1 pt-1 border-t border-glass-100">
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <Radio className="w-3 h-3 text-accent-success" />
-                    <span className="font-mono font-bold text-accent-success">
-                      {formatFrequency(selectedRadioState.frequencyHz)}
-                    </span>
-                    <span className="text-[10px] text-dark-300 font-ui">MHz</span>
-                    <span className="text-[10px] font-bold text-accent-secondary ml-auto bg-accent-secondary/10 px-1 rounded">
-                      {selectedRadioState.mode}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-dark-400 font-ui truncate max-w-[150px]">
-                    {selectedRadioId?.startsWith('tci-') ? 'TCI' : 'Rig'}: {selectedRadioState.band}
-                  </div>
-                </div>
-              )}
-            </div>
+        {/* Lightning strikes overlay toggle (Top Right, left of rotation button) */}
+        {!hideOverlays && (
+          <button
+            onClick={() => updateMapSettings({ showLightning: !settings.map.showLightning })}
+            className={`glass-button absolute top-4 right-16 p-2 z-10 ${settings.map.showLightning ? 'text-cyan-300' : ''}`}
+            title={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
+            aria-label={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
+          >
+            <Zap className="w-4 h-4" />
+          </button>
+        )}
 
-            {/* Target DX Info (if active) */}
+        {/* Beam heading — under the play button (Top Right). */}
+        {!hideOverlays && rotatorEnabled && (
+          <div className="absolute top-16 right-4 text-right pointer-events-none">
+            <div className="text-[1.5rem] font-display font-bold text-accent-primary drop-shadow-glow leading-none">
+              {currentAzimuth}°
+            </div>
+            <div className="text-[10px] font-ui font-bold uppercase tracking-[0.2em] text-accent-primary/60 mt-1">
+              Beam Heading
+            </div>
+          </div>
+        )}
+
+        {/* Station and Rig Info Overlay (Top Left) */}
+        {!hideOverlays && (
+          <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
+            {/* Focused DX ("their callsign") card — stays visible at any panel size. */}
             {focusedCallsignInfo && (
               <div className="glass-panel px-3 py-2 border-l-4 border-accent-danger animate-fade-in pointer-events-auto">
                 <div className="flex items-center gap-2">
-                  <Target className="w-4 h-4 text-accent-danger" />
+                  <Target className="w-4 h-4 text-accent-secondary" />
                   <div>
                     <p className="font-mono font-bold text-accent-danger flex items-center gap-1.5">
                       {focusedCallsignInfo.callsign}
@@ -1483,7 +1643,17 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                         setCurrentAzimuth(bearing);
                         commandRotator(bearing, 'globe');
                       }}
-                      className="glass-button-success px-2 py-1 flex items-center gap-1 text-[10px] ml-2"
+                      className="rounded-lg px-2 py-1 flex items-center gap-1 text-[10px] ml-2 font-bold transition-all duration-200 hover:brightness-125 active:scale-95"
+                      style={{
+                        // High-contrast HUD pill: bright green on a near-opaque
+                        // dark backdrop so the bearing stays legible over the
+                        // globe. The old glass-button-success was green text on
+                        // a translucent green fill, which blended into the map.
+                        background: 'rgba(8, 11, 18, 0.9)',
+                        border: '1px solid rgba(74, 222, 128, 0.85)',
+                        color: '#6ee7a0',
+                        boxShadow: '0 0 8px rgba(74, 222, 128, 0.35)',
+                      }}
                       title={`Rotate to ${focusedCallsignInfo.callsign}`}
                     >
                       <Navigation className="w-2.5 h-2.5" />
@@ -1493,31 +1663,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                 </div>
               </div>
             )}
-          </div>
-        )}
 
-        {/* Azimuth and Coordinates Overlay (Bottom Center) */}
-        {!hideOverlays && showBottomOverlay && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none">
-            {rotatorEnabled && (
-              <div className="text-center">
-                <div className="text-5xl font-display font-bold text-accent-primary drop-shadow-glow leading-none">
-                  {currentAzimuth}°
-                </div>
-                <div className="text-[10px] font-ui font-bold uppercase tracking-[0.2em] text-accent-primary/60 mt-1">
-                  Beam Heading
-                </div>
-              </div>
-            )}
-            
-            <div className="mt-2 flex items-center gap-3 px-3 py-1 bg-dark-900/40 backdrop-blur-sm rounded-full border border-glass-100 text-[10px] font-mono text-dark-300">
-              <div className="flex items-center gap-1">
-                <MapPin className="w-2.5 h-2.5" />
-                <span>{stationLat.toFixed(4)}°N</span>
-              </div>
-              <div className="w-px h-2 bg-glass-200" />
-              <div>{Math.abs(stationLon).toFixed(4)}°{stationLon >= 0 ? 'E' : 'W'}</div>
-            </div>
           </div>
         )}
 

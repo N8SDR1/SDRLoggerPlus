@@ -163,6 +163,7 @@ export interface MapSettings {
   selectedSatellites: string[];
   rbn: RbnSettings;
   showPotaOverlay: boolean;
+  showLightning: boolean;
   showDayNightOverlay: boolean;
   showGrayLine: boolean;
   showSunMarker: boolean;
@@ -497,6 +498,7 @@ const defaultSettings: Settings = {
       modes: ['CW', 'RTTY'],
     },
     showPotaOverlay: false,
+    showLightning: false,
     showDayNightOverlay: false,
     showGrayLine: false,
     showSunMarker: true,
