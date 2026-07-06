@@ -162,6 +162,9 @@ builder.Services.AddSingleton<EqslService>(sp =>
         sp.GetRequiredService<IHttpClientFactory>().CreateClient("Eqsl"),
         sp.GetRequiredService<ILogger<EqslService>>()));
 
+// Generic ADIF-over-UDP auto-import (VarAC / N1MM / Logger32 / …)
+builder.Services.AddHostedService<AdifUdpListenerService>();
+
 // Register Rotator service (hamlib rotctld)
 builder.Services.AddSingleton<RotatorService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RotatorService>());

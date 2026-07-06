@@ -57,6 +57,9 @@ public class UserSettings
     [BsonElement("adifMonitor")]
     public AdifMonitorSettings AdifMonitor { get; set; } = new();
 
+    [BsonElement("adifUdp")]
+    public AdifUdpSettings AdifUdp { get; set; } = new();
+
     [BsonElement("rbnAlerts")]
     public RbnAlertSettings RbnAlerts { get; set; } = new();
 
@@ -254,6 +257,24 @@ public class AdifMonitorSettings
 
     [BsonElement("file2")]
     public string? File2 { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Generic ADIF-over-UDP listener — ports v1 SDRLogger+'s port-52001
+/// auto-import that catches broadcasts from VarAC, DXKeeper, N1MM,
+/// Logger32, and any other logger that emits an ADIF record over UDP
+/// when a QSO is logged. Uses the same ImportAdifAsync pipeline as
+/// file-based ADIF Monitor + explicit import, so dedup / DXCC lookup
+/// / broadcast-to-clients all apply automatically.
+/// </summary>
+public class AdifUdpSettings
+{
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; }
+
+    // 52001 = v1 default; matches VarAC/N1MM/etc. common port choice.
+    [BsonElement("port")]
+    public int Port { get; set; } = 52001;
 }
 
 public class ClubLogSettings

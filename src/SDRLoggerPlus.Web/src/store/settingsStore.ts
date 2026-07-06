@@ -54,6 +54,11 @@ export interface RbnAlertSettings {
   voice: boolean;
 }
 
+export interface AdifUdpSettings {
+  enabled: boolean;
+  port: number; // default 52001, v1 SDRLogger+ convention
+}
+
 export interface AdifMonitorSettings {
   enabled: boolean;
   file1: string; // watched external ADIF files (VarAC, MSHV, ...)
@@ -317,6 +322,7 @@ export interface Settings {
   hrdLog: HrdLogSettings;
   eqsl: EqslSettings;
   adifMonitor: AdifMonitorSettings;
+  adifUdp: AdifUdpSettings;
   rbnAlerts: RbnAlertSettings;
   appearance: AppearanceSettings;
   rotator: RotatorSettings;
@@ -363,6 +369,7 @@ interface SettingsState {
   updateHrdLogSettings: (hrdLog: Partial<HrdLogSettings>) => void;
   updateEqslSettings: (eqsl: Partial<EqslSettings>) => void;
   updateAdifMonitorSettings: (adifMonitor: Partial<AdifMonitorSettings>) => void;
+  updateAdifUdpSettings: (adifUdp: Partial<AdifUdpSettings>) => void;
   updateRbnAlertSettings: (rbnAlerts: Partial<RbnAlertSettings>) => void;
   updateAppearanceSettings: (appearance: Partial<AppearanceSettings>) => void;
   updateRotatorSettings: (rotator: Partial<RotatorSettings>) => void;
@@ -440,6 +447,10 @@ const defaultSettings: Settings = {
     enabled: false,
     file1: '',
     file2: '',
+  },
+  adifUdp: {
+    enabled: false,
+    port: 52001,
   },
   rbnAlerts: {
     enabled: false,
@@ -707,6 +718,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       settings: {
         ...state.settings,
         adifMonitor: { ...state.settings.adifMonitor, ...adifMonitor },
+      },
+      isDirty: true,
+    })),
+
+  updateAdifUdpSettings: (adifUdp) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        adifUdp: { ...state.settings.adifUdp, ...adifUdp },
       },
       isDirty: true,
     })),
@@ -1003,6 +1023,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           hrdLog: { ...defaultSettings.hrdLog, ...settings.hrdLog },
           eqsl: { ...defaultSettings.eqsl, ...settings.eqsl },
           adifMonitor: { ...defaultSettings.adifMonitor, ...settings.adifMonitor },
+          adifUdp: { ...defaultSettings.adifUdp, ...settings.adifUdp },
           rbnAlerts: { ...defaultSettings.rbnAlerts, ...settings.rbnAlerts },
           appearance: {
             ...defaultSettings.appearance,

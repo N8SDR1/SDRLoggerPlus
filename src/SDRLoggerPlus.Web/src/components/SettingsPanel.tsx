@@ -1497,8 +1497,9 @@ function RbnAlertsSettingsSection() {
 
 // ADIF File Monitor Settings Section
 function AdifMonitorSettingsSection() {
-  const { settings, updateAdifMonitorSettings } = useSettingsStore();
+  const { settings, updateAdifMonitorSettings, updateAdifUdpSettings } = useSettingsStore();
   const monitor = settings.adifMonitor;
+  const udp = settings.adifUdp;
 
   return (
     <div className="space-y-6">
@@ -1549,6 +1550,53 @@ function AdifMonitorSettingsSection() {
           Full paths to .adi files. QSOs already in the file when monitoring starts are not imported —
           only what other programs append afterwards.
         </p>
+      </div>
+
+      {/* ADIF-over-UDP listener (v1 SDRLogger+ port-52001 auto-import).
+          Sits alongside the file monitor because it does the same thing
+          via a different transport — no reason to separate them into
+          their own tab. */}
+      <div className="pt-6 border-t border-glass-100">
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">ADIF over UDP</h3>
+        <p className="text-sm text-dark-300">
+          Listen for ADIF QSO records broadcast over UDP by loggers like VarAC, DXKeeper, N1MM, or Logger32.
+          Each datagram is parsed as a single QSO and imported through the same pipeline as file-based import,
+          so dedup and DXCC back-fill apply automatically.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between p-3 bg-dark-700 rounded-lg">
+        <div>
+          <label className="text-sm font-medium text-dark-200">Enable UDP Listener</label>
+          <p className="text-xs text-dark-400 mt-0.5">Bind the socket and accept ADIF datagrams</p>
+        </div>
+        <button
+          onClick={() => updateAdifUdpSettings({ enabled: !udp.enabled })}
+          className={`relative w-11 h-6 rounded-full transition-colors ${udp.enabled ? 'bg-accent-primary' : 'bg-dark-500'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${udp.enabled ? 'translate-x-5' : ''}`} />
+        </button>
+      </div>
+
+      <div className={`space-y-4 ${!udp.enabled ? 'opacity-50' : ''}`}>
+        <div className="space-y-2 max-w-xs">
+          <label className="text-sm font-medium font-ui text-dark-200">UDP Port</label>
+          <input
+            type="number"
+            min={1024}
+            max={65535}
+            value={udp.port}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              if (!Number.isNaN(v)) updateAdifUdpSettings({ port: v });
+            }}
+            className="glass-input w-full font-mono"
+          />
+          <p className="text-xs text-dark-300">
+            v1 default was 52001. Point your other logger's ADIF-broadcast setting at this port; multiple
+            loggers can share it.
+          </p>
+        </div>
       </div>
     </div>
   );
