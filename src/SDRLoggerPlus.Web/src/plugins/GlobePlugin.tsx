@@ -1713,7 +1713,8 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
             <div className="flex flex-col items-center gap-1 mt-1">
                 {rotatorEnabled && (
                   <div className="text-center">
-                    <div className="text-4xl font-display font-bold text-accent-primary drop-shadow-glow leading-none">
+                    {/* 1.15rem = 15% larger than the 1rem station callsign. */}
+                    <div className="text-[1.15rem] font-display font-bold text-accent-primary drop-shadow-glow leading-none">
                       {currentAzimuth}°
                     </div>
                     <div className="text-[10px] font-ui font-bold uppercase tracking-[0.2em] text-accent-primary/60 mt-1">
