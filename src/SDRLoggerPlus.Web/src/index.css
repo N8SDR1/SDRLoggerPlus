@@ -840,6 +840,40 @@ html:not(.dark) .header-plugin {
   line-height: 1;
 }
 
+/* SDRLoggerPlus brand mark on the header bar — matches the v1.x layout
+   where the icon + cyan "SDRLOGGER+" wordmark sat to the left of the
+   operator's callsign. Sizes derive from --ts so the group scales with
+   the header the same way callsign / version / time do. */
+.header-plugin__brand {
+  gap: calc(var(--ts) * 0.15 * 1px);
+}
+.header-plugin__logo {
+  width: calc(var(--ts) * 0.9 * 1px);
+  height: calc(var(--ts) * 0.9 * 1px);
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.header-plugin__wordmark {
+  font-family: 'Orbitron', system-ui, sans-serif;
+  font-weight: 900;
+  font-size: calc(var(--ts) * 0.55 * 1px);
+  letter-spacing: 2px;
+  color: rgb(var(--accent-secondary));
+  text-shadow: var(--text-glow-secondary, 0 0 8px rgba(91, 165, 250, 0.35));
+  line-height: 1;
+}
+
+/* Brand + callsign kept as a single flex block so the header's
+   space-between distribution doesn't spread them across the bar.
+   Reasonable gap between the wordmark and the callsign but they still
+   feel like one left-hand cluster. */
+.header-plugin__brand-block {
+  display: inline-flex;
+  align-items: baseline;
+  gap: calc(var(--ts) * 0.4 * 1px);
+  flex-shrink: 0;
+}
+
 .header-plugin__version {
   font-family: 'JetBrains Mono', monospace;
   font-size: calc(var(--ts) * 0.2 * 1px);
@@ -848,8 +882,8 @@ html:not(.dark) .header-plugin {
 
 .header-plugin__label {
   font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-size: calc(var(--ts) * 0.25 * 1px);
-  font-weight: 600;
+  font-size: calc(var(--ts) * 0.32 * 1px);
+  font-weight: 700;
   letter-spacing: 1.5px;
   text-transform: uppercase;
   color: rgb(var(--accent-secondary));
@@ -874,22 +908,22 @@ html:not(.dark) .header-plugin {
 }
 
 .header-plugin__weather-icon {
-  font-size: calc(var(--ts) * 0.35 * 1px);
+  font-size: calc(var(--ts) * 0.52 * 1px);
   line-height: 1;
 }
 
 .header-plugin__weather-temp {
   font-family: 'JetBrains Mono', monospace;
-  font-size: calc(var(--ts) * 0.3 * 1px);
-  font-weight: 600;
+  font-size: calc(var(--ts) * 0.42 * 1px);
+  font-weight: 700;
   color: rgb(var(--accent-secondary));
 }
 
-.header-plugin__indices { gap: 6px; }
+.header-plugin__indices { gap: 10px; }
 
 .header-plugin__value {
   font-family: 'Orbitron', system-ui, sans-serif;
-  font-size: calc(var(--ts) * 0.3 * 1px);
+  font-size: calc(var(--ts) * 0.45 * 1px);
   font-weight: 700;
   color: rgb(var(--accent-primary));
   min-width: 3ch;

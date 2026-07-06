@@ -49,6 +49,7 @@ import { useSettingsStore, SettingsSection, StationSettings } from '../store/set
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
 import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
 import { useLayoutStore } from '../store/layoutStore';
+import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
 import { Model } from 'flexlayout-react';
 import { gridToLatLon } from '../utils/maidenhead';
 import { APP_VERSION } from '../version';
@@ -2981,6 +2982,109 @@ function WeatherSettingsSection() {
           One set of credentials per vendor drives both lightning and wind. Ecowitt readings are
           cached for 30 s so both pollers share a single API call.
         </p>
+      </div>
+
+      <WeatherPreviewSubsection />
+    </div>
+  );
+}
+
+// Preview subsection — inject fake lightning / wind statuses into the
+// WeatherAlertBanner for 20 seconds so the operator can see what a real
+// alert will look like without waiting for actual weather. Client-side
+// only, no backend touched. Preview overrides the enable-check on the
+// banner so it fires even when weather alerts are otherwise disabled.
+function WeatherPreviewSubsection() {
+  const { startPreview } = useWeatherPreviewStore();
+  const kph = useSettingsStore(state => state.settings.weather.wind.displayUnit === 'kph');
+
+  const fakeLightning = () => startPreview({
+    lightning: {
+      active: true,
+      closestKm: 12,
+      closestMi: 7,
+      direction: 'SW',
+      strikesLastHour: 23,
+      sources: ['preview'],
+      nwsWarning: null,
+      lastUpdateUtc: new Date().toISOString(),
+    },
+  });
+
+  const fakeWind = () => startPreview({
+    wind: {
+      active: true,
+      severity: 'high',
+      sustainedMph: 34,
+      gustMph: 51,
+      sustainedKph: Math.round(34 * 1.60934),
+      gustKph: Math.round(51 * 1.60934),
+      direction: 'WSW',
+      sources: ['preview'],
+      nwsAlert: null,
+      lastUpdateUtc: new Date().toISOString(),
+      unit: kph ? 'kph' : 'mph',
+      threshSustMph: 30,
+      threshGustMph: 45,
+    },
+  });
+
+  const fakeBothExtreme = () => startPreview({
+    lightning: {
+      active: true,
+      closestKm: 3,
+      closestMi: 2,
+      direction: 'W',
+      strikesLastHour: 87,
+      sources: ['preview'],
+      nwsWarning: 'SEVERE THUNDERSTORM WARNING',
+      lastUpdateUtc: new Date().toISOString(),
+    },
+    wind: {
+      active: true,
+      severity: 'extreme',
+      sustainedMph: 62,
+      gustMph: 88,
+      sustainedKph: Math.round(62 * 1.60934),
+      gustKph: Math.round(88 * 1.60934),
+      direction: 'NW',
+      sources: ['preview'],
+      nwsAlert: 'HIGH WIND WARNING',
+      lastUpdateUtc: new Date().toISOString(),
+      unit: kph ? 'kph' : 'mph',
+      threshSustMph: 30,
+      threshGustMph: 45,
+    },
+  });
+
+  return (
+    <div>
+      <h4 className="text-sm font-semibold font-ui text-dark-200 mb-1">Preview Alerts</h4>
+      <p className="text-xs text-dark-300 mb-3">
+        Show a fake alert banner for 20 seconds so you can see what real alerts will look like (and where they'll appear). Preview also fires when weather alerts are turned off — no real weather data or backend calls involved.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={fakeLightning}
+          className="px-3 py-1.5 rounded text-xs font-ui border border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/10 transition-colors"
+          title="Show a fake lightning-only alert (elevated severity)"
+        >
+          ⚡ Lightning Only
+        </button>
+        <button
+          onClick={fakeWind}
+          className="px-3 py-1.5 rounded text-xs font-ui border border-orange-500/40 text-orange-300 hover:bg-orange-500/10 transition-colors"
+          title="Show a fake high-wind alert"
+        >
+          💨 High Wind
+        </button>
+        <button
+          onClick={fakeBothExtreme}
+          className="px-3 py-1.5 rounded text-xs font-ui border border-red-500/40 text-red-300 hover:bg-red-500/10 transition-colors"
+          title="Show both alerts at extreme severity — worst-case appearance"
+        >
+          ⚡💨 Both — Extreme
+        </button>
       </div>
     </div>
   );

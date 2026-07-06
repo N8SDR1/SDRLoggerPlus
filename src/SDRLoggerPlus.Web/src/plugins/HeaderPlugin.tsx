@@ -174,10 +174,24 @@ export function HeaderPlugin() {
 
   return (
     <div ref={containerRef} className="header-plugin bg-dark-900">
-      {/* Callsign + Version */}
-      <div className="header-plugin__group">
-        <span className="header-plugin__callsign font-display text-accent-primary">{callsign || 'N0CALL'}</span>
-        <span className="header-plugin__version font-mono text-dark-300">v{APP_VERSION}</span>
+      {/* Brand mark + operator callsign kept as one visual unit so the
+          top-bar space-between distribution doesn't push the callsign
+          halfway across the header. Matches the v1.x layout where
+          icon → SDRLOGGER+ → callsign all hugged the left edge. */}
+      <div className="header-plugin__brand-block">
+        <div className="header-plugin__group header-plugin__brand">
+          <img
+            src="./sdrloggerplus-icon.png"
+            alt="SDRLoggerPlus"
+            className="header-plugin__logo rounded"
+          />
+          <span className="header-plugin__wordmark font-display">SDRLOGGER<span className="text-accent-primary">+</span></span>
+        </div>
+
+        <div className="header-plugin__group">
+          <span className="header-plugin__callsign font-display text-accent-primary">{callsign || 'N0CALL'}</span>
+          <span className="header-plugin__version font-mono text-dark-300">v{APP_VERSION}</span>
+        </div>
       </div>
 
       {/* Separator */}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Zap, Wind, X } from 'lucide-react';
 import { api, LightningStatus, WindStatus } from '../api/client';
 import { useSettingsStore } from '../store/settingsStore';
+import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
 
 const SEVERITY_STYLES: Record<string, string> = {
   elevated: 'bg-yellow-900/60 border-yellow-600/60 text-yellow-200',
@@ -19,6 +20,10 @@ export function WeatherAlertBanner() {
   const [lightning, setLightning] = useState<LightningStatus | null>(null);
   const [wind, setWind] = useState<WindStatus | null>(null);
   const [dismissedKey, setDismissedKey] = useState('');
+  // Preview override — Settings → Weather can inject a fake status for
+  // the operator to see what the banner looks like without waiting for
+  // real weather. When active, it takes precedence over the polled state.
+  const preview = useWeatherPreviewStore();
 
   useEffect(() => {
     if (!weatherEnabled) return;
@@ -36,42 +41,57 @@ export function WeatherAlertBanner() {
     return () => { cancelled = true; clearInterval(timer); };
   }, [weatherEnabled]);
 
-  if (!weatherEnabled) return null;
+  const previewActive = preview.expiresAt > Date.now();
+  // Preview overrides the enable check too — operator wants to see the
+  // banner even if weather alerts are disabled overall.
+  if (!weatherEnabled && !previewActive) return null;
 
-  const lightningActive = lightning?.active === true;
-  const windActive = wind?.active === true && !!wind.severity;
+  const effectiveLightning = previewActive ? preview.lightning : lightning;
+  const effectiveWind = previewActive ? preview.wind : wind;
+
+  const lightningActive = effectiveLightning?.active === true;
+  const windActive = effectiveWind?.active === true && !!effectiveWind.severity;
   if (!lightningActive && !windActive) return null;
 
   // Key changes whenever the alert content changes, un-hiding a dismissed banner
-  const key = `${lightningActive ? `L${lightning?.strikesLastHour}${lightning?.closestKm}` : ''}|${windActive ? `W${wind?.severity}${wind?.gustMph}` : ''}`;
+  const key = `${lightningActive ? `L${effectiveLightning?.strikesLastHour}${effectiveLightning?.closestKm}` : ''}|${windActive ? `W${effectiveWind?.severity}${effectiveWind?.gustMph}` : ''}`;
   if (key === dismissedKey) return null;
 
-  const useKph = wind?.unit === 'kph';
+  const useKph = effectiveWind?.unit === 'kph';
+  // Local aliases the JSX still references — kept as `lightning` and
+  // `wind` so the rendering block below doesn't need touching.
+  const l = effectiveLightning;
+  const w = effectiveWind;
   const windText = windActive
     ? (useKph
-        ? `G${Math.round(wind!.gustKph ?? 0)}kph ${Math.round(wind!.sustainedKph ?? 0)}kph ${wind!.direction}`
-        : `G${Math.round(wind!.gustMph ?? 0)} ${Math.round(wind!.sustainedMph ?? 0)}mph ${wind!.direction}`)
+        ? `G${Math.round(w!.gustKph ?? 0)}kph ${Math.round(w!.sustainedKph ?? 0)}kph ${w!.direction}`
+        : `G${Math.round(w!.gustMph ?? 0)} ${Math.round(w!.sustainedMph ?? 0)}mph ${w!.direction}`)
     : '';
 
-  const severityStyle = SEVERITY_STYLES[wind?.severity ?? ''] ?? SEVERITY_STYLES.high;
+  const severityStyle = SEVERITY_STYLES[w?.severity ?? ''] ?? SEVERITY_STYLES.high;
   const style = lightningActive ? SEVERITY_STYLES.extreme : severityStyle;
 
   return (
-    <div className={`flex items-center gap-3 px-3 py-1 border-b text-xs font-medium ${style}`}>
+    <div className={`flex items-center gap-3 px-3 py-1 border-b text-xs font-medium ${style}${previewActive ? ' animate-pulse' : ''}`}>
+      {previewActive && (
+        <span className="text-[10px] font-bold uppercase tracking-widest opacity-80" title="Preview only — not a real alert">
+          Preview
+        </span>
+      )}
       {lightningActive && (
-        <span className="flex items-center gap-1.5" title={lightning?.nwsWarning ?? 'Lightning detected'}>
+        <span className="flex items-center gap-1.5" title={l?.nwsWarning ?? 'Lightning detected'}>
           <Zap className="w-3.5 h-3.5" />
-          Lightning{lightning?.closestMi != null && ` ${lightning.closestMi} mi ${lightning.direction}`}
-          {lightning != null && lightning.strikesLastHour > 0 && ` · ${lightning.strikesLastHour}/hr`}
-          {lightning?.nwsWarning && ` · ${lightning.nwsWarning}`}
+          Lightning{l?.closestMi != null && ` ${l.closestMi} mi ${l.direction}`}
+          {l != null && l.strikesLastHour > 0 && ` · ${l.strikesLastHour}/hr`}
+          {l?.nwsWarning && ` · ${l.nwsWarning}`}
         </span>
       )}
       {windActive && (
-        <span className="flex items-center gap-1.5" title={wind?.nwsAlert ?? 'High wind'}>
+        <span className="flex items-center gap-1.5" title={w?.nwsAlert ?? 'High wind'}>
           <Wind className="w-3.5 h-3.5" />
-          {wind?.severity === 'extreme' ? 'EXTREME WIND' : wind?.severity === 'high' ? 'High wind' : 'Wind'}
+          {w?.severity === 'extreme' ? 'EXTREME WIND' : w?.severity === 'high' ? 'High wind' : 'Wind'}
           {' '}{windText}
-          {wind?.nwsAlert && ` · ${wind.nwsAlert}`}
+          {w?.nwsAlert && ` · ${w.nwsAlert}`}
         </span>
       )}
       <button
