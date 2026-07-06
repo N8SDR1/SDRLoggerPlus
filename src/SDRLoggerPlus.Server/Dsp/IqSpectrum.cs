@@ -28,12 +28,34 @@ public static class IqSpectrum
         if (iqInterleaved.Length < fftSize * 2)
             throw new ArgumentException("Not enough IQ samples for the requested FFT size", nameof(iqInterleaved));
 
+        // HL2 baseband → RF-oriented spectrum: complex conjugation.
+        //
+        // The Hermes Lite 2 (and the openHPSDR family in general) delivers
+        // IQ baseband whose spectrum is MIRRORED around DC relative to the
+        // RF spectrum — a USB audio tone at +1 kHz above the carrier appears
+        // as energy at -1 kHz in the baseband, LSB at -1 kHz shows as +1
+        // kHz, and so on. This is a fixed property of the HL2's
+        // downconversion path, not an artifact.
+        //
+        // The TCI protocol's iq_stream carries the RAW baseband so consumer
+        // apps can apply their own DSP (this matches Thetis's original
+        // behaviour, which Lyra follows). Thetis's and Lyra's OWN
+        // panadapters look RF-correct because their WDSP demodulation chain
+        // performs the un-mirror as part of sideband selection. A TCI
+        // client that wants to show "RF spectrum around the VFO" (which is
+        // what operators expect from a panadapter) has to apply the
+        // un-mirror at the point of display.
+        //
+        // Conjugating the input (real part unchanged, imaginary part
+        // negated) is mathematically identical to mirroring the spectrum
+        // around DC, and that's exactly the correction the HL2 baseband
+        // requires.
         var re = new double[fftSize];
         var im = new double[fftSize];
         for (int i = 0; i < fftSize; i++)
         {
             re[i] = iqInterleaved[i * 2] * window[i];
-            im[i] = iqInterleaved[i * 2 + 1] * window[i];
+            im[i] = -iqInterleaved[i * 2 + 1] * window[i];
         }
 
         Fft.Transform(re, im);
