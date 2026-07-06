@@ -93,9 +93,9 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
   },
   {
     id: 'backup',
-    name: 'Backup',
+    name: 'Backup & Restore',
     icon: <Archive className="w-5 h-5" />,
-    description: 'Scheduled logbook backups',
+    description: 'Logbook backups + settings export / import',
   },
   {
     id: 'sat',
@@ -1930,129 +1930,6 @@ function AppearanceSettingsSection() {
       </div>
 
       <LayoutPresetsSubsection />
-      <SettingsBackupSubsection />
-    </div>
-  );
-}
-
-// Settings Backup subsection — export/import the full UserSettings blob.
-// Uses the dedicated /api/settings/import endpoint on restore so the
-// SavedLayouts + LayoutJson from the backup actually take effect (the
-// general POST /settings preserves those from the DB and would ignore
-// the imported values otherwise).
-//
-// WARNING SURFACED IN UI: exports contain credentials (QRZ + HamQTH +
-// ClubLog + HRDLog passwords, LOTW paths, API keys). Both the download
-// and the import flows require an explicit confirm.
-function SettingsBackupSubsection() {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const flash = (kind: 'ok' | 'err', text: string, holdMs = 4000) => {
-    setMessage({ kind, text });
-    setTimeout(() => setMessage(null), holdMs);
-  };
-
-  const handleExport = async () => {
-    if (!window.confirm(
-      'Export your settings to a JSON file?\n\n' +
-      'The file will include your callsign, station info, callbook credentials (QRZ / HamQTH / Club Log / HRDLog passwords), radio configs, and saved layouts.\n\n' +
-      'Treat the file like a password backup — anyone with it can log in as you.',
-    )) return;
-    setBusy(true);
-    try {
-      const payload = await api.exportSettings();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const stamp = new Date().toISOString().slice(0, 10);
-      a.href = url;
-      a.download = `sdrloggerplus-settings-${stamp}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      flash('ok', 'Settings exported.');
-    } catch (e) {
-      flash('err', e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handlePickFile = () => fileInputRef.current?.click();
-
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // reset so re-selecting the same file re-fires
-    if (!file) return;
-    if (!window.confirm(
-      `Import "${file.name}"?\n\n` +
-      'This will REPLACE all current settings (station, callbook credentials, radio configs, saved layouts, the current arrangement) with the file\'s contents.\n\n' +
-      'The current settings will be lost — export first if you want a safety copy.',
-    )) return;
-    setBusy(true);
-    try {
-      const text = await file.text();
-      const payload = JSON.parse(text);
-      await api.importSettings(payload);
-      flash('ok', 'Settings imported. Reloading…', 8000);
-      // Full page reload so every store and long-lived subscription
-      // re-hydrates from the imported record. Half-a-second delay so
-      // the success flash lands on-screen before the reload starts.
-      setTimeout(() => window.location.reload(), 500);
-    } catch (err) {
-      flash('err', `Import failed: ${err instanceof Error ? err.message : String(err)}`);
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="pt-4 mt-4 border-t border-glass-100">
-      <div className="flex items-center justify-between gap-3 mb-2">
-        <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-semibold font-ui text-dark-200">Backup &amp; Restore Settings</h4>
-          <p className="text-xs text-dark-300 mt-0.5">
-            Export the full user settings blob to a JSON file (station info, callbook credentials, radio configs, saved layouts) — great for moving to a new machine, or as a safety net before a big change. Import replaces the current settings entirely.
-          </p>
-          <p className="text-[10px] text-accent-warning mt-1">
-            ⚠ Exported files contain your QRZ / HamQTH / Club Log / HRDLog passwords — store them like you'd store any other credentials file.
-          </p>
-        </div>
-        <div className="flex flex-col gap-1.5 whitespace-nowrap">
-          <button
-            onClick={handleExport}
-            disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-ui border border-accent-primary/40 text-accent-primary hover:bg-accent-primary/10 transition-colors disabled:opacity-50"
-            title="Download settings as JSON"
-          >
-            <Download className="w-3.5 h-3.5" /> Export
-          </button>
-          <button
-            onClick={handlePickFile}
-            disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-ui border border-accent-secondary/40 text-accent-secondary hover:bg-accent-secondary/10 transition-colors disabled:opacity-50"
-            title="Restore settings from a JSON file"
-          >
-            <CloudUpload className="w-3.5 h-3.5" /> Import
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json,.json"
-            onChange={handleFileSelected}
-            className="hidden"
-          />
-        </div>
-      </div>
-      {message && (
-        <p className={`mt-2 text-xs font-ui ${
-          message.kind === 'ok' ? 'text-accent-success' : 'text-accent-danger'
-        }`}>
-          {message.text}
-        </p>
-      )}
     </div>
   );
 }
@@ -2542,7 +2419,11 @@ function BackupSettingsSection() {
       if (typeof parsed !== 'object' || parsed === null || !knownKeys.some((k) => k in parsed)) {
         throw new Error('not a SDRLoggerPlus settings file');
       }
-      const response = await fetch('/api/settings', {
+      // Use the dedicated /api/settings/import endpoint (full replace)
+      // rather than POST /api/settings (which preserves SavedLayouts +
+      // LayoutJson from the DB — perfect for the "theme knob changed
+      // shouldn't wipe presets" case, wrong for restoring a backup).
+      const response = await fetch('/api/settings/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parsed),
