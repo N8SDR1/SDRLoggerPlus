@@ -196,7 +196,7 @@ function HelpTab() {
         <li>
           <strong className="text-white">Connect a radio (optional but recommended).</strong>{' '}
           Any of three paths works and multiple can run at once:
-          <ul className="mt-1 ml-6 list-disc space-y-0.5 text-dark-300 text-xs">
+          <ul className="mt-1 ml-6 list-disc space-y-1 text-dark-100 text-xs">
             <li>
               <span className="text-dark-100">TCI</span> — works with{' '}
               <button
