@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Globe as GlobeIcon, Navigation, Target, Maximize2, Radio, RadioTower, MapPin, Pause, Play, Zap } from 'lucide-react';
+import { Globe as GlobeIcon, Navigation, Target, Maximize2, RadioTower, MapPin, Pause, Play, Zap } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSignalR } from '../hooks/useSignalR';
@@ -16,10 +16,6 @@ import { setLightningStrikesCallback, clearLightningStrikesCallback } from '../a
 // Default station location (can be overridden by store)
 const DEFAULT_LAT = 52.6667; // IO52RN - Limerick
 const DEFAULT_LON = -8.6333;
-
-// Height threshold for the top-left station/DX cards. The beam-heading readout
-// below them is not gated — it stays visible at any panel size.
-const TOP_OVERLAY_THRESHOLD = 450;
 
 // Spherical linear interpolation (SLERP) along a great circle between two lat/lon points.
 // t=0 returns start, t=1 returns end.
@@ -317,10 +313,6 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const targetIconRef = useRef<HTMLDivElement | null>(null);
   const focusedInfoLatestRef = useRef<CallsignLookedUpEvent | null>(null);
   focusedInfoLatestRef.current = focusedCallsignInfo;
-
-  // Get current radio state if connected
-  const selectedRadioState = selectedRadioId ? radioStates.get(selectedRadioId) : null;
-  const isRadioConnected = !!selectedRadioState;
 
   // Rotator is enabled in settings
   const rotatorEnabled = settings.rotator.enabled;
@@ -1450,13 +1442,6 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     };
   }, [focusedCallsignInfo?.latitude, focusedCallsignInfo?.longitude, stationLat, stationLon]);
 
-  const formatFrequency = (hz: number): string => {
-    const mhz = hz / 1_000_000;
-    return mhz.toFixed(3);
-  };
-
-  const showTopOverlay = containerHeight >= TOP_OVERLAY_THRESHOLD;
-
   return (
       <div className="relative w-full h-full">
         {/* WebGL Error Message */}
@@ -1600,43 +1585,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         {/* Station and Rig Info Overlay (Top Left) */}
         {!hideOverlays && (
           <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
-            {/* Station chip + focused-DX card collapse on short panels; the
-                beam-heading block below stays visible at any panel size. */}
-            {showTopOverlay && (
-            <>
-            <div className="glass-panel px-3 py-2 border-l-4 border-accent-primary">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="p-1 bg-accent-primary/20 rounded">
-                  <GlobeIcon className="w-3.5 h-3.5 text-accent-primary" />
-                </div>
-                <span className="font-display font-bold text-dark-100 tracking-wider">
-                  {settings.station.callsign || 'STATION'}
-                </span>
-                <span className="text-[10px] font-mono text-dark-300 bg-dark-700 px-1.5 py-0.5 rounded">
-                  {settings.station.gridSquare || stationGrid || '----'}
-                </span>
-              </div>
-              
-              {isRadioConnected && selectedRadioState && (
-                <div className="flex flex-col gap-0.5 mt-1 pt-1 border-t border-glass-100">
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <Radio className="w-3 h-3 text-accent-success" />
-                    <span className="font-mono font-bold text-accent-success">
-                      {formatFrequency(selectedRadioState.frequencyHz)}
-                    </span>
-                    <span className="text-[10px] text-dark-300 font-ui">MHz</span>
-                    <span className="text-[10px] font-bold text-accent-secondary ml-auto bg-accent-secondary/10 px-1 rounded">
-                      {selectedRadioState.mode}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-dark-400 font-ui truncate max-w-[150px]">
-                    {selectedRadioId?.startsWith('tci-') ? 'TCI' : 'Rig'}: {selectedRadioState.band}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Target DX Info (if active) */}
+            {/* Focused DX ("their callsign") card — stays visible at any panel size. */}
             {focusedCallsignInfo && (
               <div className="glass-panel px-3 py-2 border-l-4 border-accent-danger animate-fade-in pointer-events-auto">
                 <div className="flex items-center gap-2">
@@ -1705,8 +1654,6 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                   )}
                 </div>
               </div>
-            )}
-            </>
             )}
 
             {/* Beam heading + coords — stays visible at any panel size. */}
