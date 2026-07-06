@@ -3266,6 +3266,35 @@ function HamQthSettingsSection() {
   const [showPassword, setShowPassword] = useState(false);
   const hq = settings.hamQth;
 
+  // "Test Credentials" state — mirrors the QRZ section's pattern above.
+  // On success we also flip enabled=true so the operator doesn't have to
+  // separately remember to toggle the switch after a green tick.
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState('');
+  const handleTest = async () => {
+    setTestStatus('testing');
+    setTestMessage('');
+    try {
+      const resp = await fetch('/api/hamqth/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: hq.username, password: hq.password }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setTestStatus('success');
+        setTestMessage(data.message || 'Connected successfully');
+        if (!hq.enabled) updateHamQthSettings({ enabled: true });
+      } else {
+        setTestStatus('error');
+        setTestMessage(data.message || 'Connection failed');
+      }
+    } catch {
+      setTestStatus('error');
+      setTestMessage('Failed to reach server');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -3327,6 +3356,26 @@ function HamQthSettingsSection() {
           <p className="text-xs text-dark-400 mt-2">
             Stored in the local user config only. Session is negotiated on the server; no other machine sees it.
           </p>
+        </div>
+
+        {/* Test Credentials — parity with QRZ. A round-trip login to
+            HamQTH's XML API proves the username/password work right now;
+            success also flips enabled=true so a green tick can't be
+            defeated by a forgotten master toggle. */}
+        <div className="pt-2">
+          <button
+            onClick={handleTest}
+            disabled={testStatus === 'testing' || !hq.username || !hq.password}
+            className="glass-button-primary px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {testStatus === 'testing' ? 'Testing…' : 'Test Credentials'}
+          </button>
+          {testStatus === 'success' && (
+            <span className="ml-3 text-sm text-accent-success">✓ {testMessage}</span>
+          )}
+          {testStatus === 'error' && (
+            <span className="ml-3 text-sm text-red-400">✗ {testMessage}</span>
+          )}
         </div>
       </div>
     </div>

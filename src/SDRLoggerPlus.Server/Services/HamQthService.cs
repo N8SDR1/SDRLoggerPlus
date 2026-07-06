@@ -43,6 +43,61 @@ public class HamQthService : IHamQthService
         _logger = logger;
     }
 
+    public async Task<HamQthTestResult> TestCredentialsAsync(string username, string password, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            return new HamQthTestResult(false, "Username and password are required");
+
+        try
+        {
+            var http = _httpClientFactory.CreateClient();
+            http.Timeout = TimeSpan.FromSeconds(15);
+
+            var loginUrl = $"{BaseUrl}?u={Uri.EscapeDataString(username)}&p={Uri.EscapeDataString(password)}";
+            using var resp = await http.GetAsync(loginUrl, cancellationToken);
+            if (!resp.IsSuccessStatusCode)
+                return new HamQthTestResult(false, $"HamQTH returned HTTP {(int)resp.StatusCode}");
+
+            var xml = await resp.Content.ReadAsStringAsync(cancellationToken);
+            var doc = XDocument.Parse(xml);
+            XNamespace ns = XmlNs;
+
+            var session = doc.Root?.Element(ns + "session");
+            if (session is null)
+                return new HamQthTestResult(false, "Malformed HamQTH response (no <session> element)");
+
+            var error = session.Element(ns + "error")?.Value;
+            if (!string.IsNullOrEmpty(error))
+                return new HamQthTestResult(false, error);
+
+            var id = session.Element(ns + "session_id")?.Value;
+            if (string.IsNullOrEmpty(id))
+                return new HamQthTestResult(false, "HamQTH returned no session_id");
+
+            // Success — prime our cache so the first real lookup after a
+            // successful test doesn't pay for a second login round trip.
+            await _sessionLock.WaitAsync(cancellationToken);
+            try
+            {
+                _sessionId = id;
+                _sessionForUsername = username;
+                _sessionAcquiredUtc = DateTime.UtcNow;
+            }
+            finally { _sessionLock.Release(); }
+
+            return new HamQthTestResult(true, $"Connected as {username}");
+        }
+        catch (TaskCanceledException)
+        {
+            return new HamQthTestResult(false, "Connection timed out");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "HamQTH credentials test failed");
+            return new HamQthTestResult(false, ex.Message);
+        }
+    }
+
     public async Task<HamQthCallsignInfo?> LookupCallsignAsync(string callsign, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(callsign)) return null;

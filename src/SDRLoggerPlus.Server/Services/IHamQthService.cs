@@ -16,7 +16,20 @@ public interface IHamQthService
     /// or unconfigured, the callsign isn't in HamQTH, or the request fails.
     /// </summary>
     Task<HamQthCallsignInfo?> LookupCallsignAsync(string callsign, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Test credentials by attempting a fresh XML-API login. Bypasses the
+    /// cached session so the test truly proves the supplied username/
+    /// password work right now (not "worked an hour ago"). Powers the
+    /// "Test Credentials" button in Settings → HamQTH.
+    /// </summary>
+    Task<HamQthTestResult> TestCredentialsAsync(string username, string password, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Outcome of a HamQTH credentials-test round trip.
+/// </summary>
+public record HamQthTestResult(bool Success, string Message);
 
 /// <summary>
 /// Subset of the HamQTH XML response used by the callsign lookup chain.
