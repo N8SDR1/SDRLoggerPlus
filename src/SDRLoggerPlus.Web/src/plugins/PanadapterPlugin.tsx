@@ -522,7 +522,7 @@ export function PanadapterPlugin() {
       const stepHz = nice * magnitude;
       const firstTick = Math.ceil(zLow / stepHz) * stepHz;
       ctx.save();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let freq = firstTick; freq <= zHigh; freq += stepHz) {
