@@ -199,9 +199,16 @@ export function SatPlugin() {
               </div>
             )}
 
-            {state.passQsos.length > 0 && (
-              <div>
-                <p className="text-xs text-dark-100 mb-1 font-ui">Pass QSOs ({state.passQsos.length})</p>
+            {/* Pass Log — v1.x always renders the header + an empty-state
+                line so the operator knows the section exists BEFORE the
+                first QSO of the pass is auto-logged. */}
+            <div className="pt-1 border-t border-glass-100">
+              <p className="text-[10px] font-ui text-dark-100 tracking-wider uppercase mb-1">
+                Pass Log{state.passQsos.length > 0 && ` (${state.passQsos.length})`}
+              </p>
+              {state.passQsos.length === 0 ? (
+                <p className="text-xs text-dark-200 italic">No QSOs this pass</p>
+              ) : (
                 <div className="space-y-0.5">
                   {state.passQsos.map((q, i) => (
                     <p key={i} className="text-xs font-mono text-gray-100">
@@ -209,8 +216,8 @@ export function SatPlugin() {
                     </p>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             {state.events.length > 0 && (
               <div>
