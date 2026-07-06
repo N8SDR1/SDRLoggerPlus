@@ -10,12 +10,12 @@ import { signalRService } from '../api/signalr';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 
-// Three colormap palettes. Operator picks in the panel header; the choice
-// persists across sessions via localStorage. Design goal: one bright/
-// full-spectrum classic for "I want to see everything", one thermal
-// for high-contrast signal hunting, one cool monochrome for long
-// listening sessions where the classic palette gets tiring.
-type PaletteId = 'classic' | 'heat' | 'cool';
+// Four colormap palettes. Operator picks in the panel header; the choice
+// persists across sessions via localStorage. Classic + Heat are our own;
+// Viridis + Rainbow are ported byte-for-byte from Lyra (see
+// SDRProject/lyra-cpp/src/palettes.cpp) so the two apps render matching
+// waterfalls when the operator flips between them.
+type PaletteId = 'classic' | 'heat' | 'viridis' | 'rainbow';
 type ColorStop = { pos: number; r: number; g: number; b: number };
 
 const PALETTES: Record<PaletteId, { label: string; stops: ColorStop[] }> = {
@@ -42,15 +42,31 @@ const PALETTES: Record<PaletteId, { label: string; stops: ColorStop[] }> = {
       { pos: 255, r: 255, g: 255, b: 220 },
     ],
   },
-  cool: {
-    label: 'Cool',
+  // Matches Lyra palettes.cpp Viridis (0.00, 0.25, 0.50, 0.75, 1.00
+  // fractional stops → 0..255 int positions). Perceptually-uniform,
+  // popular in scientific-instrument waterfalls.
+  viridis: {
+    label: 'Viridis',
+    stops: [
+      { pos: 0, r: 68, g: 1, b: 84 },
+      { pos: 64, r: 59, g: 82, b: 139 },
+      { pos: 128, r: 33, g: 145, b: 140 },
+      { pos: 191, r: 94, g: 201, b: 98 },
+      { pos: 255, r: 253, g: 231, b: 37 },
+    ],
+  },
+  // Matches Lyra palettes.cpp Rainbow (0.00, 0.15, 0.30, 0.45, 0.60,
+  // 0.80, 1.00 fractional stops → 0..255 int positions).
+  rainbow: {
+    label: 'Rainbow',
     stops: [
       { pos: 0, r: 0, g: 0, b: 0 },
-      { pos: 60, r: 0, g: 20, b: 60 },
-      { pos: 120, r: 0, g: 80, b: 160 },
-      { pos: 180, r: 0, g: 180, b: 220 },
-      { pos: 220, r: 140, g: 230, b: 240 },
-      { pos: 255, r: 240, g: 255, b: 255 },
+      { pos: 38, r: 0, g: 0, b: 128 },
+      { pos: 77, r: 0, g: 128, b: 255 },
+      { pos: 115, r: 0, g: 255, b: 128 },
+      { pos: 153, r: 255, g: 255, b: 0 },
+      { pos: 204, r: 255, g: 128, b: 0 },
+      { pos: 255, r: 255, g: 0, b: 0 },
     ],
   },
 };
@@ -75,7 +91,8 @@ function buildColormap(stops: ColorStop[]): Uint8Array {
 const PALETTE_LUTS: Record<PaletteId, Uint8Array> = {
   classic: buildColormap(PALETTES.classic.stops),
   heat: buildColormap(PALETTES.heat.stops),
-  cool: buildColormap(PALETTES.cool.stops),
+  viridis: buildColormap(PALETTES.viridis.stops),
+  rainbow: buildColormap(PALETTES.rainbow.stops),
 };
 
 const DEFAULT_SPECTRUM_RATIO = 0.3; // top 30% for spectrum line (user-adjustable by dragging the axis bar)
@@ -150,7 +167,12 @@ export function PanadapterPlugin() {
   // without a re-render cascade or buffer rebuild.
   const [palette, setPalette] = useState<PaletteId>(() => {
     const stored = localStorage.getItem(PALETTE_STORAGE_KEY);
-    return stored === 'heat' || stored === 'cool' || stored === 'classic' ? stored : 'classic';
+    // 'cool' was the pre-4-palette default we ditched; migrate it (and
+    // any other stale value) to 'classic' silently.
+    if (stored === 'heat' || stored === 'viridis' || stored === 'rainbow' || stored === 'classic') {
+      return stored;
+    }
+    return 'classic';
   });
   const paletteRef = useRef<Uint8Array>(PALETTE_LUTS[palette]);
   useEffect(() => {
