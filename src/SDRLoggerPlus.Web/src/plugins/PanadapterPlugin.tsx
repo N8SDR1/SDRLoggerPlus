@@ -256,6 +256,34 @@ export function PanadapterPlugin() {
   // Compact label for the header dropdown ("1 Hz", "1 kHz", "5 kHz").
   const formatStep = (hz: number) => (hz >= 1000 ? `${hz / 1000} kHz` : `${hz} Hz`);
 
+  /**
+   * Reusable wheel-handler for the header <input type="range"> sliders.
+   * A range input doesn't respond to mouse-wheel by default; this lets
+   * the operator hover a slider and scroll to increment/decrement by
+   * one step (wheel up = increase, wheel down = decrease). Shift+wheel
+   * gives 5× steps for coarse adjustment. Prevents the page/panadapter
+   * from scrolling while the pointer is over the slider.
+   */
+  const sliderWheel = (
+    value: number,
+    setter: (v: number) => void,
+    min: number,
+    max: number,
+    step: number,
+  ) => (e: React.WheelEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dir = e.deltaY < 0 ? 1 : -1;
+    const mult = e.shiftKey ? 5 : 1;
+    const raw = value + dir * step * mult;
+    // Snap to the step grid so floating-point creep doesn't accumulate.
+    const snapped = Math.round(raw / step) * step;
+    const clamped = Math.min(max, Math.max(min, snapped));
+    // Precision cleanup — 0.1 * 3 = 0.30000000000000004 otherwise.
+    const decimals = step < 1 ? (step.toString().split('.')[1]?.length ?? 0) : 0;
+    setter(parseFloat(clamped.toFixed(decimals)));
+  };
+
   // Keep pausedRef in sync
   useEffect(() => {
     pausedRef.current = paused;
@@ -806,7 +834,7 @@ export function PanadapterPlugin() {
             </span>
           )}
           {/* Spectrum smoothing */}
-          <div className="flex items-center gap-1.5" title={`Spectrum smoothing: ${Math.round(smoothing * 100)}%`}>
+          <div className="flex items-center gap-1.5" title={`Spectrum smoothing: ${Math.round(smoothing * 100)}% — mouse wheel to adjust, Shift+wheel 5×`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">SM</span>
             <input
               type="range"
@@ -815,11 +843,12 @@ export function PanadapterPlugin() {
               step={0.05}
               value={smoothing}
               onChange={(e) => setSmoothing(parseFloat(e.target.value))}
+              onWheel={sliderWheel(smoothing, setSmoothing, 0, MAX_SMOOTH, 0.05)}
               className="w-16 accent-[rgb(var(--accent-primary))] cursor-pointer"
             />
           </div>
           {/* Waterfall intensity */}
-          <div className="flex items-center gap-1.5" title={`Waterfall intensity: ${wfIntensity.toFixed(2)}×`}>
+          <div className="flex items-center gap-1.5" title={`Waterfall intensity: ${wfIntensity.toFixed(2)}× — mouse wheel to adjust, Shift+wheel 5×`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">INT</span>
             <input
               type="range"
@@ -828,6 +857,7 @@ export function PanadapterPlugin() {
               step={0.05}
               value={wfIntensity}
               onChange={(e) => setWfIntensity(parseFloat(e.target.value))}
+              onWheel={sliderWheel(wfIntensity, setWfIntensity, 0.3, 2.0, 0.05)}
               className="w-16 accent-[rgb(var(--accent-primary))] cursor-pointer"
             />
           </div>
@@ -835,7 +865,7 @@ export function PanadapterPlugin() {
               signal range. FLR up = suppress noise more; CEL down =
               compress the LUT into the interesting signal window so
               weak signals pop. */}
-          <div className="flex items-center gap-1.5" title={`Waterfall floor (push more noise to background): +${(wfFloor * 100).toFixed(1)}% above auto`}>
+          <div className="flex items-center gap-1.5" title={`Waterfall floor (push more noise to background): +${(wfFloor * 100).toFixed(1)}% above auto — mouse wheel to adjust, Shift+wheel 5×`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">FLR</span>
             <input
               type="range"
@@ -844,10 +874,11 @@ export function PanadapterPlugin() {
               step={0.005}
               value={wfFloor}
               onChange={(e) => setWfFloor(parseFloat(e.target.value))}
+              onWheel={sliderWheel(wfFloor, setWfFloor, 0.0, 0.4, 0.005)}
               className="w-14 accent-[rgb(var(--accent-primary))] cursor-pointer"
             />
           </div>
-          <div className="flex items-center gap-1.5" title={`Waterfall ceiling (LUT saturates at this fraction of peak): ${(wfCeil * 100).toFixed(0)}%`}>
+          <div className="flex items-center gap-1.5" title={`Waterfall ceiling (LUT saturates at this fraction of peak): ${(wfCeil * 100).toFixed(0)}% — mouse wheel to adjust, Shift+wheel 5×`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">CEL</span>
             <input
               type="range"
@@ -856,6 +887,7 @@ export function PanadapterPlugin() {
               step={0.01}
               value={wfCeil}
               onChange={(e) => setWfCeil(parseFloat(e.target.value))}
+              onWheel={sliderWheel(wfCeil, setWfCeil, 0.5, 1.0, 0.01)}
               className="w-14 accent-[rgb(var(--accent-primary))] cursor-pointer"
             />
           </div>
@@ -900,7 +932,7 @@ export function PanadapterPlugin() {
             Grid
           </button>
           {/* Waterfall speed */}
-          <div className="flex items-center gap-1.5" title={`Waterfall speed: ${wfSpeed}/10`}>
+          <div className="flex items-center gap-1.5" title={`Waterfall speed: ${wfSpeed}/10 — mouse wheel to adjust`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">WF</span>
             <input
               type="range"
@@ -908,6 +940,7 @@ export function PanadapterPlugin() {
               max={10}
               value={wfSpeed}
               onChange={(e) => setWfSpeed(parseInt(e.target.value))}
+              onWheel={sliderWheel(wfSpeed, setWfSpeed, 1, 10, 1)}
               className="w-16 accent-[rgb(var(--accent-primary))] cursor-pointer"
             />
           </div>
