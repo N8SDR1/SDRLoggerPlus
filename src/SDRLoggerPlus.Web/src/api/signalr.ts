@@ -425,6 +425,14 @@ export interface RadioStateChangedEvent {
   isTransmitting: boolean;
   band: string;
   sliceOrInstance?: string;
+  /** RX filter low edge relative to carrier (Hz). Signed. 0 = not reported. */
+  filterLowHz?: number;
+  /** RX filter high edge relative to carrier (Hz). Signed. 0 = not reported. */
+  filterHighHz?: number;
+  /** Panadapter center frequency. Differs from frequencyHz only in CTUN mode. 0 = not reported. */
+  centerHz?: number;
+  /** CW pitch tone (Hz). Positions the narrow CW passband. */
+  cwPitchHz?: number;
 }
 
 // CW Keyer types

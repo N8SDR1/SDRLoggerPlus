@@ -378,7 +378,21 @@ public record RadioStateChangedEvent(
     string Mode,
     bool IsTransmitting,
     string Band,
-    string? SliceOrInstance
+    string? SliceOrInstance,
+    // RX filter passband, signed edges relative to the carrier (Hz).
+    // From TCI's rx_filter_band. USB is positive (100..2700), LSB
+    // negative, CW narrow around ±cwPitch. 0/0 = radio hasn't reported
+    // yet — the panadapter falls back to no shading.
+    int FilterLowHz = 0,
+    int FilterHighHz = 0,
+    // Panadapter center frequency. Equals FrequencyHz normally; differs
+    // when the radio is in CTUN (VFO moves inside a fixed panadapter
+    // window). 0 = not reported → treat as == FrequencyHz.
+    long CenterHz = 0,
+    // CW pitch in Hz. Used to position the narrow CW passband on the
+    // correct side of the carrier marker. Default 700 = common rig
+    // default.
+    int CwPitchHz = 700
 );
 
 /// <summary>

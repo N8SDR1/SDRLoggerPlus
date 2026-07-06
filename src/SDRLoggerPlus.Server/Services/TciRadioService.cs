@@ -663,6 +663,21 @@ internal class TciRadioConnection
     private long _currentFrequencyHz;
     private string _currentMode = "USB";
     private bool _isTransmitting;
+    // Filter passband edges relative to the carrier, in Hz, from TCI's
+    // rx_filter_band message. USB reports positive numbers, LSB reports
+    // negative — we surface them exactly as the radio reports so the
+    // panadapter can draw the passband on the correct side of the VFO
+    // without per-mode guessing.
+    private int _filterLowHz;
+    private int _filterHighHz;
+    // CTUN offset: TCI's `dds` message reports the panadapter center; VFO
+    // may sit inside that window when the operator is in CTUN mode. When
+    // dds == vfo (normal / no-CTUN), the two match.
+    private long _ddsCenterHz;
+    // CW pitch in Hz — used to position CW's narrow passband correctly
+    // relative to the carrier marker (CWU passband sits at +pitch, CWL at
+    // -pitch). Default 700 matches Lyra + most rigs.
+    private int _cwPitchHz = 700;
     private readonly Tci.TciMeterAggregator _meters = new();
 
     // IQ panadapter: accumulate the TCI IQ stream, FFT it in the backend, and
@@ -750,7 +765,11 @@ internal class TciRadioConnection
             _currentMode,
             _isTransmitting,
             BandHelper.GetBand(_currentFrequencyHz),
-            _selectedInstance.ToString()
+            _selectedInstance.ToString(),
+            _filterLowHz,
+            _filterHighHz,
+            _ddsCenterHz,
+            _cwPitchHz
         );
     }
 
@@ -1064,6 +1083,71 @@ internal class TciRadioConnection
                                 _currentMode = mode;
                                 stateChanged = true;
                             }
+                        }
+                    }
+                    break;
+
+                case "rx_filter_band":
+                    // Format: rx_filter_band:rx,lowHz,highHz;
+                    // Signed edges relative to the carrier. USB reports
+                    // positive numbers (e.g. 100..2700), LSB negative
+                    // (-2700..-100), CW narrow around ±pitch. We forward
+                    // as-is; the panadapter draws the passband from
+                    // vfo+low to vfo+high without per-mode assumptions.
+                    if (args.Length >= 3)
+                    {
+                        var rx = int.TryParse(args[0], out var rxVal) ? rxVal : 0;
+                        if (rx == _selectedInstance
+                            && int.TryParse(args[1], out var lo)
+                            && int.TryParse(args[2], out var hi))
+                        {
+                            if (lo != _filterLowHz || hi != _filterHighHz)
+                            {
+                                _filterLowHz = lo;
+                                _filterHighHz = hi;
+                                stateChanged = true;
+                            }
+                        }
+                    }
+                    break;
+
+                case "dds":
+                    // Format: dds:rx,frequencyHz;
+                    // The panadapter's center frequency. Usually tracks
+                    // the VFO 1:1, but Lyra's CTUN lock decouples them:
+                    // dds stays put on the band segment while the VFO
+                    // moves inside it. We surface it so the panadapter
+                    // can render the correct span.
+                    if (args.Length >= 2)
+                    {
+                        var rx = int.TryParse(args[0], out var rxVal) ? rxVal : 0;
+                        if (rx == _selectedInstance
+                            && long.TryParse(args[1], out var ddsHz)
+                            && ddsHz != _ddsCenterHz)
+                        {
+                            _ddsCenterHz = ddsHz;
+                            stateChanged = true;
+                        }
+                    }
+                    break;
+
+                case "cw_pitch":
+                    // Format: cw_pitch:rx,pitchHz;
+                    // Offset of the CW audio tone from the carrier. The
+                    // panadapter uses it to position the narrow CW filter
+                    // rectangle correctly (CWU sits at +pitch, CWL at
+                    // -pitch, both centered on the pitch tone).
+                    if (args.Length >= 2)
+                    {
+                        // Some rigs send just `cw_pitch:hz;` without an rx
+                        // index; accept both shapes.
+                        var raw = args.Length >= 2 && int.TryParse(args[0], out _) && int.TryParse(args[1], out var p)
+                            ? p
+                            : (int.TryParse(args[0], out var p1) ? p1 : _cwPitchHz);
+                        if (raw > 0 && raw != _cwPitchHz)
+                        {
+                            _cwPitchHz = raw;
+                            stateChanged = true;
                         }
                     }
                     break;

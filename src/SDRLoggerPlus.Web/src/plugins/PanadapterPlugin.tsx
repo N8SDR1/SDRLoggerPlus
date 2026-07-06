@@ -129,6 +129,46 @@ export function PanadapterPlugin() {
     return null;
   };
 
+  /**
+   * Current radio state, or null. Bundles VFO + mode + filter passband edges
+   * + CW pitch so the render loop can draw the passband rectangle exactly
+   * where the radio actually is (per TCI's rx_filter_band + cw_pitch),
+   * with no per-mode default guessing.
+   */
+  const currentRadioState = () => {
+    const radioStates = useAppStore.getState().radioStates;
+    for (const [, state] of radioStates) {
+      if (state.frequencyHz) return state;
+    }
+    return null;
+  };
+
+  /**
+   * Compute the panadapter passband window in absolute Hz for the current
+   * radio state. USB reports positive edges (100..2700), LSB negative,
+   * CW narrow around ±cwPitch. Returns null when the radio hasn't
+   * reported filter edges yet (Lyra sends rx_filter_band on connect +
+   * every mode/width change, so this is only null during the first
+   * fraction of a second).
+   */
+  const passbandAbsHz = (state: ReturnType<typeof currentRadioState>): { lo: number; hi: number } | null => {
+    if (!state) return null;
+    const vfo = state.frequencyHz;
+    const lo = state.filterLowHz ?? 0;
+    const hi = state.filterHighHz ?? 0;
+    if (lo === 0 && hi === 0) return null;
+    // TCI reports CW filter edges around 0 Hz (e.g. -250..+250 for a
+    // 500 Hz filter). The audible tone is at +cwPitch for CWU, -cwPitch
+    // for CWL. Offset the passband so it centers on the pitch tone —
+    // matching how Thetis and Lyra render CW passbands.
+    const mode = state.mode?.toUpperCase() ?? '';
+    const pitch = state.cwPitchHz ?? 700;
+    let offset = 0;
+    if (mode === 'CWU' || mode === 'CW') offset = pitch;
+    else if (mode === 'CWL') offset = -pitch;
+    return { lo: vfo + lo + offset, hi: vfo + hi + offset };
+  };
+
   // Render loop
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -295,6 +335,38 @@ export function PanadapterPlugin() {
       ctx.drawImage(wfBuf, 0, waterfallY);
     } else if (waterfallBufRef.current && waterfallH > 0) {
       ctx.drawImage(waterfallBufRef.current, 0, waterfallY);
+    }
+
+    // --- Filter passband rectangle ---
+    // Drawn BEFORE the VFO marker so the marker line sits on top and
+    // stays visible when the passband overlaps the carrier position.
+    // Uses the exact edges the radio reports via TCI's rx_filter_band —
+    // no per-mode default guessing.
+    const state = currentRadioState();
+    const pass = passbandAbsHz(state);
+    if (pass && pass.hi > zLow && pass.lo < zHigh) {
+      const loClamped = Math.max(pass.lo, zLow);
+      const hiClamped = Math.min(pass.hi, zHigh);
+      const x0 = ((loClamped - zLow) / dispRange) * w;
+      const x1 = ((hiClamped - zLow) / dispRange) * w;
+      ctx.save();
+      // Translucent green fill over the spectrum + waterfall — same colour
+      // Thetis/Lyra use for the RX passband. Waterfall gets a lighter
+      // tint so the scrolling signal is still readable underneath.
+      ctx.fillStyle = 'rgba(0, 200, 100, 0.15)';
+      ctx.fillRect(x0, 0, Math.max(1, x1 - x0), spectrumH);
+      ctx.fillStyle = 'rgba(0, 200, 100, 0.08)';
+      ctx.fillRect(x0, spectrumH + AXIS_HEIGHT, Math.max(1, x1 - x0), waterfallH);
+      // Thin edge lines mark the filter cutoffs precisely.
+      ctx.strokeStyle = 'rgba(0, 230, 120, 0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x0, 0);
+      ctx.lineTo(x0, spectrumH);
+      ctx.moveTo(x1, 0);
+      ctx.lineTo(x1, spectrumH);
+      ctx.stroke();
+      ctx.restore();
     }
 
     // --- VFO indicator ---
@@ -490,12 +562,47 @@ export function PanadapterPlugin() {
 
   const zoomLabel = zoom < 2 ? '1×' : `${Math.round(zoom)}×`;
 
+  // Mode + filter width readout for the panel header. Subscribes to
+  // radioStates so the chip re-renders when the radio reports a new
+  // mode / filter width via TCI. Falls back to null (chip hidden) when
+  // the radio hasn't reported filter edges yet.
+  const modeChip = useAppStore((s) => {
+    for (const [, state] of s.radioStates) {
+      if (!state.frequencyHz) continue;
+      const lo = state.filterLowHz ?? 0;
+      const hi = state.filterHighHz ?? 0;
+      if (lo === 0 && hi === 0) {
+        return state.mode ? { mode: state.mode, width: null as string | null } : null;
+      }
+      const width = Math.round(hi - lo);
+      // Show CW as ±width around pitch (matches how operators think of
+      // narrow filters); SSB/AM/FM as low..high in Hz.
+      const mode = (state.mode ?? '').toUpperCase();
+      const w = mode.startsWith('CW')
+        ? `${width} Hz`
+        : `${lo >= 0 ? lo : lo} to ${hi >= 0 ? '+' + hi : hi} Hz`;
+      return { mode: state.mode, width: w };
+    }
+    return null;
+  });
+
   return (
     <GlassPanel
       title="Panadapter"
       icon={<Activity className="w-4 h-4" />}
       actions={
         <div className="flex items-center gap-3">
+          {modeChip && (
+            <span
+              className="text-[10px] font-ui text-accent-secondary/90 border border-accent-secondary/30 rounded px-1.5 py-0.5 flex items-center gap-1"
+              title="RX mode + filter passband width (from TCI)"
+            >
+              <span className="font-bold tracking-wider">{modeChip.mode}</span>
+              {modeChip.width && (
+                <span className="text-dark-100 font-mono">{modeChip.width}</span>
+              )}
+            </span>
+          )}
           {/* Spectrum smoothing */}
           <div className="flex items-center gap-1.5" title={`Spectrum smoothing: ${Math.round(smoothing * 100)}%`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">SM</span>
