@@ -487,6 +487,27 @@ class ApiClient {
     });
   }
 
+  // Named layout presets — up to 3 slots persisted server-side. Load flow
+  // is client-driven: fetch the list, pick one, apply its layoutJson via
+  // the layoutStore's setLayout so it flows through the normal auto-save
+  // path.
+  async getSavedLayouts(): Promise<SavedLayoutSlot[]> {
+    return this.fetch<SavedLayoutSlot[]>('/settings/layouts');
+  }
+
+  async saveNamedLayout(name: string, layoutJson: string): Promise<SavedLayoutSlot[]> {
+    return this.fetch<SavedLayoutSlot[]>('/settings/layouts', {
+      method: 'POST',
+      body: JSON.stringify({ name, layoutJson }),
+    });
+  }
+
+  async deleteNamedLayout(name: string): Promise<SavedLayoutSlot[]> {
+    return this.fetch<SavedLayoutSlot[]>(`/settings/layouts/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+  }
+
   // WSJT-X
   async getWsjtxStatus(): Promise<WsjtxStatus> {
     return this.fetch('/wsjtx/status');
@@ -844,6 +865,13 @@ export interface LotwTestTqslResponse {
   ok: boolean;
   version: string | null;
   error: string | null;
+}
+
+// Named layout preset (v2 — operator can save/name up to 3 arrangements)
+export interface SavedLayoutSlot {
+  name: string;
+  layoutJson: string;
+  savedAt: string;
 }
 
 // Contest Types

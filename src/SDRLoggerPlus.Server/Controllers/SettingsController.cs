@@ -185,6 +185,105 @@ public class SettingsController : ControllerBase
         return Ok(saved);
     }
 
+    // ── Named layout presets ─────────────────────────────────────────────
+    // Up to 3 named preset slots stored on UserSettings.SavedLayouts.
+    // Distinct from LayoutJson (the auto-saved live arrangement). Load =
+    // client fetches by name and applies via setLayout, which flows back
+    // through the normal auto-save path so the newly-applied preset
+    // becomes the live layout too.
+
+    private const int MaxSavedLayouts = 3;
+
+    public record SaveLayoutRequest(string Name, string LayoutJson);
+
+    /// <summary>
+    /// List saved layout slots. Includes the full LayoutJson so a follow-up
+    /// GET-then-apply flow can be done in one round trip — 3 slots × ~2 KB
+    /// each is a tiny payload.
+    /// </summary>
+    [HttpGet("layouts")]
+    [ProducesResponseType(typeof(List<SavedLayoutSlot>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<SavedLayoutSlot>>> GetSavedLayouts()
+    {
+        var settings = await _settingsService.GetSettingsAsync();
+        return Ok(settings.SavedLayouts ?? new List<SavedLayoutSlot>());
+    }
+
+    /// <summary>
+    /// Save (or overwrite) a named layout preset. If a slot with that name
+    /// already exists it's replaced (updating SavedAt). If not, a new slot
+    /// is appended — provided we're not already at MaxSavedLayouts, in which
+    /// case a 409 is returned instructing the client to delete something
+    /// first.
+    /// </summary>
+    [HttpPost("layouts")]
+    [ProducesResponseType(typeof(List<SavedLayoutSlot>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<List<SavedLayoutSlot>>> SaveNamedLayout([FromBody] SaveLayoutRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return BadRequest(new { error = "Name is required" });
+        if (string.IsNullOrWhiteSpace(request.LayoutJson))
+            return BadRequest(new { error = "LayoutJson is required" });
+
+        var settings = await _settingsService.GetSettingsAsync();
+        settings.SavedLayouts ??= new List<SavedLayoutSlot>();
+        var trimmedName = request.Name.Trim();
+
+        var existing = settings.SavedLayouts.FirstOrDefault(l =>
+            string.Equals(l.Name, trimmedName, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            existing.LayoutJson = request.LayoutJson;
+            existing.SavedAt = DateTime.UtcNow;
+            _logger.LogInformation("Overwrote saved layout preset '{Name}'", trimmedName);
+        }
+        else
+        {
+            if (settings.SavedLayouts.Count >= MaxSavedLayouts)
+            {
+                return Conflict(new
+                {
+                    error = $"Already at the {MaxSavedLayouts}-slot limit — delete one first",
+                    slots = settings.SavedLayouts.Select(l => l.Name).ToArray(),
+                });
+            }
+            settings.SavedLayouts.Add(new SavedLayoutSlot
+            {
+                Name = trimmedName,
+                LayoutJson = request.LayoutJson,
+                SavedAt = DateTime.UtcNow,
+            });
+            _logger.LogInformation("Saved new layout preset '{Name}' ({Count}/{Max})",
+                trimmedName, settings.SavedLayouts.Count, MaxSavedLayouts);
+        }
+
+        var saved = await _settingsService.SaveSettingsAsync(settings);
+        return Ok(saved.SavedLayouts ?? new List<SavedLayoutSlot>());
+    }
+
+    /// <summary>
+    /// Delete a named layout preset by name. Case-insensitive match on the
+    /// stored Name. Idempotent — deleting something that doesn't exist
+    /// still returns 200 with the current list.
+    /// </summary>
+    [HttpDelete("layouts/{name}")]
+    [ProducesResponseType(typeof(List<SavedLayoutSlot>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<SavedLayoutSlot>>> DeleteNamedLayout(string name)
+    {
+        var settings = await _settingsService.GetSettingsAsync();
+        settings.SavedLayouts ??= new List<SavedLayoutSlot>();
+        var removed = settings.SavedLayouts.RemoveAll(l =>
+            string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (removed > 0)
+        {
+            _logger.LogInformation("Deleted saved layout preset '{Name}'", name);
+            await _settingsService.SaveSettingsAsync(settings);
+        }
+        return Ok(settings.SavedLayouts);
+    }
+
     /// <summary>
     /// Update desktop window geometry only
     /// </summary>

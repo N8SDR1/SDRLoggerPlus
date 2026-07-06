@@ -75,6 +75,14 @@ public class UserSettings
     [BsonElement("layoutJson")]
     public string? LayoutJson { get; set; }
 
+    // Named layout presets — operator can save up to 3 arrangements
+    // (POTA setup, DXpedition setup, contest setup, etc.) and click to
+    // switch between them. Separate from LayoutJson, which is the
+    // auto-saved "current live arrangement" that persists across restarts.
+    // Enforced max 3 on the write path (SettingsController).
+    [BsonElement("savedLayouts")]
+    public List<SavedLayoutSlot> SavedLayouts { get; set; } = new();
+
     [BsonElement("gridStates")]
     public Dictionary<string, string>? GridStates { get; set; }
 
@@ -815,4 +823,24 @@ public class Layout
 
     [BsonElement("updatedAt")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// A single named layout preset the operator has saved (e.g. "POTA",
+/// "Contest", "DXpedition"). Persisted inside UserSettings.SavedLayouts.
+/// </summary>
+[BsonIgnoreExtraElements]
+public class SavedLayoutSlot
+{
+    [BsonElement("name")]
+    public string Name { get; set; } = "";
+
+    // FlexLayout IJsonModel serialized as a JSON string — same format the
+    // live LayoutJson field uses. Kept as a string so the settings blob
+    // stays small and BSON doesn't try to deserialize the layout tree.
+    [BsonElement("layoutJson")]
+    public string LayoutJson { get; set; } = "";
+
+    [BsonElement("savedAt")]
+    public DateTime SavedAt { get; set; } = DateTime.UtcNow;
 }
