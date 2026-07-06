@@ -377,6 +377,19 @@ export function LogHistoryPlugin() {
       resizable: true,
     },
     {
+      // Remarks column — v1.x parity. Log-entry writes the "Remarks" field
+      // into Qso.Comment (the ADIF-exported field), so we surface it here.
+      // Fills the previously-blank gap between Country and the action icons.
+      headerName: 'Remarks',
+      field: 'comment',
+      valueGetter: (params) => params.data?.comment || '',
+      cellClass: 'text-dark-200 truncate',
+      tooltipValueGetter: (params) => params.data?.comment ?? '',
+      width: 220,
+      resizable: true,
+      flex: 1,
+    },
+    {
       headerName: '',
       field: 'id',
       cellRenderer: ActionCellRenderer,

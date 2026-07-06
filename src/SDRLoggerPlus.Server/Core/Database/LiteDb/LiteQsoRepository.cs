@@ -169,11 +169,19 @@ public class LiteQsoRepository : IQsoRepository
         var today = DateTime.UtcNow.Date;
         var qsosToday = all.Count(q => q.QsoDate >= today);
 
+        // Qso stores DXCC/Grid on the nested StationInfo (v2 schema) and
+        // ALSO carries legacy top-level Dxcc/Grid columns for older rows.
+        // Prefer the nested value and fall back to the legacy field so the
+        // counts don't come out as zero for a modern logbook — matches the
+        // MapToResponse `qso.Dxcc ?? qso.Station?.Dxcc` fallback.
+        int? DxccOf(Qso q) => q.Station?.Dxcc ?? q.Dxcc;
+        string? GridOf(Qso q) => !string.IsNullOrEmpty(q.Station?.Grid) ? q.Station!.Grid : q.Grid;
+
         var stats = new QsoStatistics(
             TotalQsos: all.Count,
             UniqueCallsigns: all.Select(q => q.Callsign).Distinct().Count(),
-            UniqueCountries: all.Where(q => q.Dxcc.HasValue).Select(q => q.Dxcc).Distinct().Count(),
-            UniqueGrids: all.Where(q => !string.IsNullOrEmpty(q.Grid)).Select(q => q.Grid).Distinct().Count(),
+            UniqueCountries: all.Select(DxccOf).Where(d => d.HasValue).Distinct().Count(),
+            UniqueGrids: all.Select(GridOf).Where(g => !string.IsNullOrEmpty(g)).Distinct().Count(),
             QsosToday: qsosToday,
             QsosByBand: all.GroupBy(q => q.Band ?? "Unknown")
                 .ToDictionary(g => g.Key, g => g.Count()),
