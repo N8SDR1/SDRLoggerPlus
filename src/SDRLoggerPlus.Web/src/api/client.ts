@@ -530,6 +530,10 @@ class ApiClient {
     return this.fetch('/weather/lightning');
   }
 
+  async getLightningStrikes(): Promise<{ lat: number; lon: number; timestampUtc: string; local: boolean }[]> {
+    return this.fetch('/weather/lightning/strikes');
+  }
+
   async getWindStatus(): Promise<WindStatus> {
     return this.fetch('/weather/wind');
   }

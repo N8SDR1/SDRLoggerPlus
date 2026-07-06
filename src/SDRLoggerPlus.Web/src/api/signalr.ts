@@ -619,6 +619,17 @@ export function clearTciMetersCallback(cb: (evt: TciMetersEvent) => void): void 
   if (tciMetersCallback === cb) tciMetersCallback = null;
 }
 
+export interface LightningStrikeMsg { lat: number; lon: number; timestampUtc: string; local: boolean }
+export interface LightningStrikesEvent { strikes: LightningStrikeMsg[] }
+
+let lightningStrikesCallback: ((evt: LightningStrikesEvent) => void) | null = null;
+export function setLightningStrikesCallback(cb: ((evt: LightningStrikesEvent) => void) | null): void {
+  lightningStrikesCallback = cb;
+}
+export function clearLightningStrikesCallback(cb: (evt: LightningStrikesEvent) => void): void {
+  if (lightningStrikesCallback === cb) lightningStrikesCallback = null;
+}
+
 // Connection state for tracking
 export type SignalRConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'rehydrating';
 
@@ -1038,6 +1049,10 @@ class SignalRService {
     // TCI meter events (direct callback, bypasses React state)
     this.connection.on('OnTciMeters', (evt: TciMetersEvent) => {
       tciMetersCallback?.(evt);
+    });
+
+    this.connection.on('OnLightningStrikes', (evt: LightningStrikesEvent) => {
+      lightningStrikesCallback?.(evt);
     });
   }
 
