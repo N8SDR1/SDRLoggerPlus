@@ -1464,7 +1464,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         {!hideOverlays && (
           <button
             onClick={() => updateMapSettings({ showLightning: !settings.map.showLightning })}
-            className={`glass-button absolute top-4 right-16 p-2 z-10 ${settings.map.showLightning ? 'text-yellow-300' : ''}`}
+            className={`glass-button absolute top-4 right-16 p-2 z-10 ${settings.map.showLightning ? 'text-cyan-300' : ''}`}
             title={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
             aria-label={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
           >
