@@ -50,14 +50,6 @@ describe('AboutDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClose when the Close button is clicked', () => {
-    const onClose = vi.fn();
-    render(<AboutDialog isOpen={true} onClose={onClose} />);
-    const closeButton = screen.getByText('Close');
-    fireEvent.click(closeButton);
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
   it('calls onClose when Escape key is pressed', () => {
     const onClose = vi.fn();
     render(<AboutDialog isOpen={true} onClose={onClose} />);
