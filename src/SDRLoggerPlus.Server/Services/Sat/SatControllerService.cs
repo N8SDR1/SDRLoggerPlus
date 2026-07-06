@@ -33,7 +33,17 @@ public record SatState(
     List<SatPassQso> PassQsos,
     List<SatEvent> Events,
     SatMapInfo? Map,
-    string? Error);
+    string? Error,
+    // v1.x SAT-panel parity fields — the CSN /track poll already returns
+    // these; we now stash them on the state so the frontend can render
+    // Az/El, Range, Max El, and Time-to-AOS/LOS the way the old SDRLogger+
+    // Satellite Status panel did.
+    double? AzDeg,
+    double? ElDeg,
+    double? RangeKm,
+    double? MaxElDeg,
+    double? TimeToAosSec,
+    double? TimeToLosSec);
 
 public record SatMapInfo(double Lat, double Lon, double AltKm, double FootprintRadiusKm);
 
@@ -66,6 +76,11 @@ public class SatControllerService : BackgroundService
     private readonly List<SatPassQso> _passQsos = new();
     private readonly Queue<SatEvent> _events = new();
     private SatMapInfo? _map;
+    // Live look-angle + pass-timing fields sourced from the CSN /track poll.
+    // Max-elevation is remembered across the pass (the controller only
+    // reports current El) so the operator can see how high the bird will
+    // ultimately go — matches v1.x SDRLogger+ Satellite Status panel.
+    private double? _azDeg, _elDeg, _rangeKm, _maxElDeg, _ttAosSec, _ttLosSec;
 
     public SatControllerService(
         IServiceProvider serviceProvider,
@@ -87,7 +102,14 @@ public class SatControllerService : BackgroundService
         if (!active)
         {
             CloseSockets();
-            lock (_stateLock) { _status = "idle"; _aosTime = null; }
+            lock (_stateLock)
+            {
+                _status = "idle";
+                _aosTime = null;
+                // Clear pass-scoped live-tracking data so a stale look-angle
+                // doesn't linger in the UI after the operator deactivates.
+                _azDeg = _elDeg = _rangeKm = _maxElDeg = _ttAosSec = _ttLosSec = null;
+            }
         }
         await BroadcastStateAsync();
     }
@@ -98,7 +120,8 @@ public class SatControllerService : BackgroundService
         {
             return new SatState(_active, _status, _serial, _firmware, _satellite, _catno,
                 _transponder, _upFreq, _upMode, _downFreq, _downMode, _aosAz, _losAz,
-                _aosTime, _lastHeard, _passQsos.ToList(), _events.ToList(), _map, _error);
+                _aosTime, _lastHeard, _passQsos.ToList(), _events.ToList(), _map, _error,
+                _azDeg, _elDeg, _rangeKm, _maxElDeg, _ttAosSec, _ttLosSec);
         }
     }
 
@@ -417,6 +440,13 @@ public class SatControllerService : BackgroundService
                 // Pass status from time-to-AOS / time-to-LOS
                 var ttaos = root.TryGetProperty("ttaos", out var ta) && ta.ValueKind == JsonValueKind.Number ? ta.GetDouble() : -1;
                 var ttlos = root.TryGetProperty("ttlos", out var tl) && tl.ValueKind == JsonValueKind.Number ? tl.GetDouble() : -1;
+                _ttAosSec = ttaos >= 0 ? ttaos : null;
+                _ttLosSec = ttlos >= 0 ? ttlos : null;
+                // Max-El also comes from /track (the CSN box computes it
+                // per-pass); we fall back to remembering the highest _elDeg
+                // we've seen if the controller doesn't report it directly.
+                if (root.TryGetProperty("maxEL", out var mxEl) && mxEl.ValueKind == JsonValueKind.Number)
+                    _maxElDeg = mxEl.GetDouble();
                 if (!string.IsNullOrEmpty(satname) && ttaos == 0 && ttlos > 0)
                 {
                     _status = "aos";
@@ -432,10 +462,20 @@ public class SatControllerService : BackgroundService
                     _status = "idle";
                 }
 
-                // Sub-point + footprint from station look-angle and slant range
+                // Sub-point + footprint from station look-angle and slant range.
+                // Also stash the raw look-angle numbers on the state so the
+                // Satellite Status panel can show them (v1.x parity).
                 var az = Num(root, "az");
                 var el = Num(root, "el");
                 var rangeKm = Num(root, "range");
+                _azDeg = az;
+                _elDeg = el;
+                _rangeKm = rangeKm;
+                // If the controller doesn't push maxEL, track the highest El
+                // we've observed this pass ourselves. Reset happens in
+                // SetActiveAsync(false) below.
+                if (el is > 0 && (_maxElDeg == null || el.Value > _maxElDeg))
+                    _maxElDeg = el.Value;
                 var station = settings.Station;
                 var loc = station.Latitude != null && station.Longitude != null
                     ? (station.Latitude.Value, station.Longitude.Value)

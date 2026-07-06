@@ -106,6 +106,14 @@ export interface SatState {
   events: SatEvent[];
   map?: SatMapInfo | null;
   error?: string | null;
+  // Live look-angle + pass timing (from the CSN /track poll). All nullable
+  // — a controller that isn't tracking a pass yet won't have these.
+  azDeg?: number | null;
+  elDeg?: number | null;
+  rangeKm?: number | null;
+  maxElDeg?: number | null;
+  timeToAosSec?: number | null;
+  timeToLosSec?: number | null;
 }
 
 export interface HotListChangedEvent {
