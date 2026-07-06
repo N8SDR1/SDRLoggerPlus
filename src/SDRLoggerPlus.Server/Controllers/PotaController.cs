@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
+using SDRLoggerPlus.Server.Services;
 
 namespace SDRLoggerPlus.Server.Controllers;
 
@@ -12,13 +15,81 @@ public class PotaController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<PotaController> _logger;
     private readonly IMemoryCache _cache;
+    private readonly ISettingsService _settingsService;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public PotaController(IHttpClientFactory httpClientFactory, ILogger<PotaController> logger, IMemoryCache cache)
+    public PotaController(IHttpClientFactory httpClientFactory, ILogger<PotaController> logger, IMemoryCache cache, ISettingsService settingsService)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _cache = cache;
+        _settingsService = settingsService;
+    }
+
+    public record SelfSpotRequest(string Callsign, string Reference, double FrequencyKhz, string Mode, string? Comment = null);
+
+    /// <summary>
+    /// Submit a self-spot to POTA.app so the operator's activation shows
+    /// up on the POTA spot page. Ports v1 SDRLogger+'s /api/pota_spot
+    /// route (main.py:3708). Requires POTA username + password to be set
+    /// in Settings — POTA's /spot endpoint uses HTTP basic auth and
+    /// rejects unauthenticated writes.
+    /// </summary>
+    [HttpPost("spot")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    public async Task<ActionResult> SelfSpot([FromBody] SelfSpotRequest request, CancellationToken ct)
+    {
+        var settings = await _settingsService.GetSettingsAsync();
+        var pota = settings.Pota;
+        if (string.IsNullOrWhiteSpace(pota.Username) || string.IsNullOrWhiteSpace(pota.Password))
+            return Ok(new { success = false, message = "Set your POTA username + password in Settings → POTA first" });
+
+        if (string.IsNullOrWhiteSpace(request.Callsign))
+            return Ok(new { success = false, message = "Activator callsign is required" });
+        if (string.IsNullOrWhiteSpace(request.Reference))
+            return Ok(new { success = false, message = "Park reference is required (e.g. K-1234)" });
+        if (request.FrequencyKhz <= 0)
+            return Ok(new { success = false, message = "Frequency is required" });
+
+        try
+        {
+            var http = _httpClientFactory.CreateClient();
+            http.Timeout = TimeSpan.FromSeconds(10);
+            var authBytes = Encoding.UTF8.GetBytes($"{pota.Username}:{pota.Password}");
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+            // POTA's self-spot payload matches v1's exactly. `spotter == activator`
+            // is what marks it as a self-spot (POTA otherwise treats spots as
+            // third-party observations).
+            var payload = new
+            {
+                activator = request.Callsign.Trim().ToUpperInvariant(),
+                spotter = request.Callsign.Trim().ToUpperInvariant(),
+                frequency = request.FrequencyKhz.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                mode = string.IsNullOrWhiteSpace(request.Mode) ? "SSB" : request.Mode.Trim().ToUpperInvariant(),
+                reference = request.Reference.Trim().ToUpperInvariant(),
+                source = "SDRLoggerPlus",
+                comments = request.Comment ?? string.Empty,
+            };
+            var body = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            var resp = await http.PostAsync("https://api.pota.app/spot", body, ct);
+
+            if (resp.StatusCode == System.Net.HttpStatusCode.OK || resp.StatusCode == System.Net.HttpStatusCode.Created)
+            {
+                _logger.LogInformation("POTA self-spot ok: {Call} @ {Ref} on {Freq} kHz", payload.activator, payload.reference, payload.frequency);
+                return Ok(new { success = true, message = $"Spotted {payload.activator} at {payload.reference} on {payload.frequency} kHz" });
+            }
+            if (resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return Ok(new { success = false, message = "POTA rejected the credentials — check username/password in Settings" });
+
+            var errBody = await resp.Content.ReadAsStringAsync(ct);
+            return Ok(new { success = false, message = $"POTA API HTTP {(int)resp.StatusCode}: {(errBody.Length > 200 ? errBody[..200] : errBody)}" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "POTA self-spot failed");
+            return Ok(new { success = false, message = $"POTA self-spot failed: {ex.Message}" });
+        }
     }
 
     /// <summary>

@@ -1891,6 +1891,65 @@ function EqslSettingsSection() {
   );
 }
 
+// POTA (Parks on the Air) Settings Section — credentials for self-spotting
+// the operator's activation. POTA's /spot endpoint uses HTTP basic auth;
+// the "Spot Myself" button in the LogEntry POTA banner is disabled until
+// both fields are populated.
+function PotaSettingsSection() {
+  const { settings, updatePotaSettings } = useSettingsStore();
+  const pota = settings.pota;
+  const [showPassword, setShowPassword] = useState(false);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">POTA.app</h3>
+        <p className="text-sm text-dark-300">
+          Credentials for self-spotting an activation on <a href="https://pota.app" target="_blank" rel="noreferrer" className="text-accent-primary hover:underline">pota.app</a>.
+          The "Spot Myself" button in the Log Entry POTA banner uses these to POST to <code className="text-xs font-mono">api.pota.app/spot</code>.
+          The rest of the POTA panel (activator feed, park lookups) works without credentials — only self-spotting needs them.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium font-ui text-dark-200">POTA Username</label>
+            <input
+              type="text"
+              value={pota.username}
+              onChange={(e) => updatePotaSettings({ username: e.target.value })}
+              placeholder="Your pota.app username"
+              className="glass-input w-full font-mono"
+            />
+            <p className="text-xs text-dark-300">Your pota.app account username (often your callsign).</p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium font-ui text-dark-200">POTA Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={pota.password}
+                onChange={(e) => updatePotaSettings({ password: e.target.value })}
+                placeholder="Your pota.app password"
+                className="glass-input w-full font-mono pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200"
+              >
+                {showPassword ? '🙈' : '👁'}
+              </button>
+            </div>
+            <p className="text-xs text-dark-300">Stored in the local user config only.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Appearance Settings Section
 function AppearanceSettingsSection() {
   const { settings, updateAppearanceSettings } = useSettingsStore();
@@ -3375,7 +3434,7 @@ function AboutSection() {
 }
 
 // Web Logbooks — groups QRZ, LOTW, Club Log, HRDLog, and WSJT-X under one category with sub-tabs.
-type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'eqsl' | 'wsjtx' | 'countryfiles';
+type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'eqsl' | 'pota' | 'wsjtx' | 'countryfiles';
 
 function WebLogbooksSection() {
   const [tab, setTab] = useState<WebLogbookTab>('qrz');
@@ -3386,6 +3445,7 @@ function WebLogbooksSection() {
     { id: 'clublog', label: 'Club Log' },
     { id: 'hrdlog', label: 'HRDLog' },
     { id: 'eqsl', label: 'eQSL' },
+    { id: 'pota', label: 'POTA' },
     { id: 'wsjtx', label: 'WSJT-X' },
     { id: 'countryfiles', label: 'Country Files' },
   ];
@@ -3414,6 +3474,7 @@ function WebLogbooksSection() {
       {tab === 'clublog' && <ClubLogSettingsSection />}
       {tab === 'hrdlog' && <HrdLogSettingsSection />}
       {tab === 'eqsl' && <EqslSettingsSection />}
+      {tab === 'pota' && <PotaSettingsSection />}
       {tab === 'wsjtx' && <WsjtxSettingsSection />}
       {tab === 'countryfiles' && <CountryFilesSection />}
     </div>

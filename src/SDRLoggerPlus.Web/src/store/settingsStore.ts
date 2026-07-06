@@ -86,6 +86,11 @@ export interface EqslSettings {
   qthNickname: string; // optional: pick a QTH when your eQSL account has multiple
 }
 
+export interface PotaSettings {
+  username: string;  // POTA.app account username
+  password: string;  // POTA.app account password (basic-auth on /spot)
+}
+
 export interface AppearanceSettings {
   theme: ThemeId;
   compactMode: boolean;
@@ -327,6 +332,7 @@ export interface Settings {
   clubLog: ClubLogSettings;
   hrdLog: HrdLogSettings;
   eqsl: EqslSettings;
+  pota: PotaSettings;
   adifMonitor: AdifMonitorSettings;
   adifUdp: AdifUdpSettings;
   rbnAlerts: RbnAlertSettings;
@@ -374,6 +380,7 @@ interface SettingsState {
   updateClubLogSettings: (clubLog: Partial<ClubLogSettings>) => void;
   updateHrdLogSettings: (hrdLog: Partial<HrdLogSettings>) => void;
   updateEqslSettings: (eqsl: Partial<EqslSettings>) => void;
+  updatePotaSettings: (pota: Partial<PotaSettings>) => void;
   updateAdifMonitorSettings: (adifMonitor: Partial<AdifMonitorSettings>) => void;
   updateAdifUdpSettings: (adifUdp: Partial<AdifUdpSettings>) => void;
   updateRbnAlertSettings: (rbnAlerts: Partial<RbnAlertSettings>) => void;
@@ -448,6 +455,10 @@ const defaultSettings: Settings = {
     username: '',
     password: '',
     qthNickname: '',
+  },
+  pota: {
+    username: '',
+    password: '',
   },
   adifMonitor: {
     enabled: false,
@@ -709,6 +720,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       settings: {
         ...state.settings,
         eqsl: { ...state.settings.eqsl, ...eqsl },
+      },
+      isDirty: true,
+    })),
+
+  updatePotaSettings: (pota) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        pota: { ...state.settings.pota, ...pota },
       },
       isDirty: true,
     })),
@@ -1031,6 +1051,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           clubLog: { ...defaultSettings.clubLog, ...settings.clubLog },
           hrdLog: { ...defaultSettings.hrdLog, ...settings.hrdLog },
           eqsl: { ...defaultSettings.eqsl, ...settings.eqsl },
+          pota: { ...defaultSettings.pota, ...settings.pota },
           adifMonitor: { ...defaultSettings.adifMonitor, ...settings.adifMonitor },
           adifUdp: { ...defaultSettings.adifUdp, ...settings.adifUdp },
           rbnAlerts: { ...defaultSettings.rbnAlerts, ...settings.rbnAlerts },

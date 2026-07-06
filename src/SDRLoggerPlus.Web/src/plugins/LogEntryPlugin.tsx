@@ -677,9 +677,39 @@ export function LogEntryPlugin() {
                 </button>
                 <button
                   type="button"
-                  disabled
-                  className="ml-auto px-2 py-1 rounded bg-green-500/15 border border-green-500/30 text-green-300/60 text-xs font-ui opacity-60 cursor-not-allowed flex items-center gap-1"
-                  title="Self-spot to the POTA network — coming soon (needs a POTA account token in Settings)"
+                  onClick={async () => {
+                    // Self-spot the current activation on POTA. Freq comes
+                    // from the form (MHz → kHz). Empty freq / mode means
+                    // the operator hasn't tuned yet; disabled catches
+                    // that case so we never send garbage to POTA.
+                    const call = settings.station.callsign?.trim().toUpperCase() || '';
+                    const freqMhz = parseFloat(formData.frequency);
+                    if (!call || !activatingPark || !freqMhz) return;
+                    try {
+                      const resp = await fetch('/api/pota/spot', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          callsign: call,
+                          reference: activatingPark,
+                          frequencyKhz: freqMhz * 1000,
+                          mode: formData.mode,
+                          comment: formData.remarks || undefined,
+                        }),
+                      });
+                      const data = await resp.json();
+                      alert(data.message ?? (data.success ? 'Spotted on POTA' : 'POTA self-spot failed'));
+                    } catch (e) {
+                      alert(`POTA self-spot failed: ${e instanceof Error ? e.message : String(e)}`);
+                    }
+                  }}
+                  disabled={!formData.frequency || !activatingPark}
+                  className="ml-auto px-2 py-1 rounded bg-green-500/20 border border-green-500/40 text-green-300 text-xs font-ui hover:bg-green-500/30 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                  title={
+                    !activatingPark ? 'Set your activating park first'
+                    : !formData.frequency ? 'Set the frequency you are operating on'
+                    : `Self-spot ${activatingPark} on POTA.app (uses POTA username/password from Settings)`
+                  }
                 >
                   <Megaphone className="w-3 h-3" />
                   Spot Myself

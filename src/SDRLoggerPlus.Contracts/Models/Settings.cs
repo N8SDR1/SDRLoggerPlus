@@ -54,6 +54,9 @@ public class UserSettings
     [BsonElement("eqsl")]
     public EqslSettings Eqsl { get; set; } = new();
 
+    [BsonElement("pota")]
+    public PotaSettings Pota { get; set; } = new();
+
     [BsonElement("adifMonitor")]
     public AdifMonitorSettings AdifMonitor { get; set; } = new();
 
@@ -310,6 +313,20 @@ public class HrdLogSettings
     // Per-account upload code from the hrdlog.net account page (My Account → Online Log).
     [BsonElement("uploadCode")]
     public string? UploadCode { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// POTA.app credentials for self-spotting the operator's own activation.
+/// v1 SDRLogger+ used basic-auth on POST api.pota.app/spot; empty
+/// credentials disable the "Spot Myself" button in the POTA banner.
+/// </summary>
+public class PotaSettings
+{
+    [BsonElement("username")]
+    public string? Username { get; set; } = string.Empty;
+
+    [BsonElement("password")]
+    public string? Password { get; set; } = string.Empty;
 }
 
 /// <summary>
