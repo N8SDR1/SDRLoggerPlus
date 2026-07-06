@@ -52,4 +52,22 @@ public class StrikeBufferTests
         current.Should().Contain(mid);        // nearer of the two globals
         current.Should().NotContain(far);     // farthest trimmed
     }
+
+    [Fact]
+    public void Cap_is_enforced_even_when_locals_alone_exceed_it()
+    {
+        // Regression: a dense local storm must not grow the buffer past the cap.
+        // With cap 2 and three locals, keep the two nearest, trim the farthest local.
+        var buf = new StrikeBuffer(TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(10), cap: 2);
+        var near = new LightningStrike(44.9, -91.6, T0, Local: true);   // ~11 km
+        var mid = new LightningStrike(45.8, -91.6, T0, Local: true);    // ~111 km
+        var farLocal = new LightningStrike(48.0, -91.6, T0, Local: true); // ~356 km
+        buf.Add(new[] { near, mid, farLocal }, T0, 44.8, -91.6);
+
+        var current = buf.Current(T0);
+        current.Should().HaveCount(2);              // cap holds despite all being local
+        current.Should().Contain(near);
+        current.Should().Contain(mid);
+        current.Should().NotContain(farLocal);      // farthest local trimmed
+    }
 }

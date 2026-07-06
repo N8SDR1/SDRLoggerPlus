@@ -59,28 +59,21 @@ public sealed class StrikeBuffer
 
         if (_byKey.Count <= _cap) return;
 
-        // Over cap: keep all local; among globals keep the nearest to the station.
-        var locals = _byKey.Values.Where(s => s.Local).ToList();
-        var globals = _byKey.Values.Where(s => !s.Local).ToList();
-        if (stationLat.HasValue && stationLon.HasValue)
-            globals = globals.OrderBy(s => Haversine(stationLat.Value, stationLon.Value, s.Lat, s.Lon)).ToList();
-        else
-            globals = globals.OrderByDescending(s => s.TimestampUtc).ToList();
-
-        var keepGlobals = Math.Max(0, _cap - locals.Count);
-        var kept = locals.Concat(globals.Take(keepGlobals));
+        // Over cap: prioritise local strikes, then nearest-to-station (newest as
+        // the tiebreak / no-station fallback), and hard-trim to _cap. Locals are
+        // kept ahead of globals but are themselves trimmed if they alone exceed
+        // the cap — otherwise a dense local storm could grow the buffer without
+        // bound, defeating the cap during exactly the high-load case it guards.
+        var hasStation = stationLat.HasValue && stationLon.HasValue;
+        var kept = _byKey.Values
+            .OrderByDescending(s => s.Local)
+            .ThenBy(s => hasStation
+                ? PropagationService.HaversineDistanceKm(stationLat!.Value, stationLon!.Value, s.Lat, s.Lon)
+                : 0)
+            .ThenByDescending(s => s.TimestampUtc)
+            .Take(_cap)
+            .ToList();
         _byKey.Clear();
         foreach (var s in kept) _byKey[Key(s)] = s;
-    }
-
-    private static double Haversine(double lat1, double lon1, double lat2, double lon2)
-    {
-        const double R = 6371;
-        double ToRad(double d) => d * Math.PI / 180;
-        var dLat = ToRad(lat2 - lat1);
-        var dLon = ToRad(lon2 - lon1);
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
-              + Math.Cos(ToRad(lat1)) * Math.Cos(ToRad(lat2)) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 }

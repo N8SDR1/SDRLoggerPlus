@@ -72,16 +72,17 @@ a multi-source selector (Ambient/Met Office), and a day/night grey-line globe to
 >   the original phase-1 note deferred.
 > - Retention windows, cap, and the rest of this spec are unchanged.
 
-> **POST-VERIFICATION RESTYLE (2026-07-06, user-directed):** after seeing it live,
-> the user rejected the cyan rings — they didn't read as lightning. Rings now use
-> the blitzortung-convention **age ramp: white-hot → electric yellow → amber**
-> (fresh → 1 min → 5+ min), local strikes at full alpha, global dimmer. This
-> consciously overrides this spec's "not yellow" rule (the DX-tower-pulse clash
-> was judged acceptable; the flash core is white). Each strike also gets a
-> **center dot** (labels layer, dot-only) for **60 s from live arrival** — keyed
-> on SignalR arrival rather than strike time because the feed publishes ~1–2 min
-> behind real time, so strike-time dots would never show. Backfilled history
-> draws rings only, never dots.
+> **POST-VERIFICATION RESTYLE (2026-07-06, user-directed — supersedes the ring
+> color in the rest of this spec, including the "cyan/white … Not yellow" lines
+> below):** after seeing it live, the user rejected cyan (didn't read as
+> lightning), then a white→yellow→amber age ramp (too close to the DX-spot
+> palette). **Final: rings are pure white**; strike age only fades the ring's
+> intensity/alpha (fresh 1.0 → 1 min 0.7 → 5+ min 0.45), local strikes brighter
+> than global. Each strike also gets a **center lightning-bolt sprite** (custom
+> layer — red fill, white outline) for **60 s from live arrival** — keyed on
+> SignalR arrival rather than strike time because the feed publishes ~1–2 min
+> behind real time, so strike-time bolts would never show. Backfilled history
+> draws rings only, never bolts.
 
 - **Local tier:** strikes within 750 km of the station (see discovery note; formerly
   "regions 07/12/13"). Full-detail rings, brighter color.

@@ -1308,13 +1308,12 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
 
     // Stable ring datum per strike — globe.gl diffs ringsData by object
     // identity, so fresh literals each sweep would rebuild every ring mesh.
-    // `arrived` = local receipt time, set only for strikes seen via a live
-    // SignalR push; it drives the 60 s strike-bolt window. Keyed on arrival,
-    // not strike time, because the feed publishes ~1–2 min behind real time —
-    // strike-time bolts would never show. Backfill history has no bolt.
-    type RingDatum = { lat: number; lng: number; local: boolean; ts: number; arrived?: number };
+    // Arrival time (for the 60 s strike-bolt window) lives in the persistent
+    // StrikeStore keyed by strike-key — NOT here — so it survives dedupe and
+    // this effect being torn down/recreated on toggle. Bolts key on arrival,
+    // not strike time, because the feed publishes ~1–2 min behind real time.
+    type RingDatum = { lat: number; lng: number; local: boolean; ts: number };
     const ringCache = new WeakMap<Strike, RingDatum>();
-    const liveSince = new WeakMap<Strike, number>();
     // Render caps — the store retains thousands of strikes across the global
     // 10-min window, but every rendered ring is a continuously-rippling mesh
     // and every bolt an unbatched sprite draw call. Thousands of them stall the
@@ -1328,30 +1327,27 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       const prioritized = store.active(now)
         .map(s => {
           let r = ringCache.get(s);
-          if (!r) { r = { lat: s.lat, lng: s.lon, local: s.local, ts: Date.parse(s.timestampUtc), arrived: liveSince.get(s) }; ringCache.set(s, r); }
-          return r;
+          if (!r) { r = { lat: s.lat, lng: s.lon, local: s.local, ts: Date.parse(s.timestampUtc) }; ringCache.set(s, r); }
+          const arrived = store.arrivedAt(s);
+          return { r, live: arrived !== undefined && now - arrived <= 60_000 };
         })
-        .sort((a, b) => (Number(b.local) - Number(a.local)) || (b.ts - a.ts)); // local first, then newest
-      const rings = prioritized.slice(0, MAX_RINGS);
-      const dots = prioritized
-        .filter(r => r.arrived !== undefined && now - r.arrived <= 60_000)
-        .slice(0, MAX_BOLTS);
+        .sort((a, b) => (Number(b.r.local) - Number(a.r.local)) || (b.r.ts - a.r.ts)); // local first, then newest
+      const rings = prioritized.slice(0, MAX_RINGS).map(x => x.r);
+      const dots = prioritized.filter(x => x.live).slice(0, MAX_BOLTS).map(x => x.r);
       globeRef.current.ringsData(rings);
       globeRef.current.customLayerData(dots);
     };
 
-    // Initial backfill.
+    // Initial backfill (no arrival time → history draws rings only, no bolt).
     api.getLightningStrikes().then(list => {
       if (cancelled) return;
       store.merge(list as Strike[]);
       render();
     }).catch(() => { /* best-effort */ });
 
-    // Live updates.
+    // Live updates — record arrival so these strikes get a 60 s bolt.
     const cb = (evt: { strikes: Strike[] }) => {
-      const now = Date.now();
-      for (const s of evt.strikes) liveSince.set(s, now);
-      store.merge(evt.strikes);
+      store.merge(evt.strikes, Date.now());
       render();
     };
     setLightningStrikesCallback(cb);
