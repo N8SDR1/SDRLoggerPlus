@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using MongoDB.Bson;
 using SDRLoggerPlus.Contracts.Api;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Contracts.Events;
@@ -76,6 +77,20 @@ public class QsoService : IQsoService
                 Country = request.Country
             }
         };
+
+        // POTA tagging — write the standard ADIF POTA fields into
+        // AdifExtra so PotaStatistics picks them up and QSOs round-
+        // trip through ADIF export cleanly.
+        //   my_pota_ref = park the operator is activating
+        //   pota_ref    = worked-station's park for P2P contacts
+        if (!string.IsNullOrWhiteSpace(request.MyPotaRef) || !string.IsNullOrWhiteSpace(request.PotaRef))
+        {
+            qso.AdifExtra ??= new BsonDocument();
+            if (!string.IsNullOrWhiteSpace(request.MyPotaRef))
+                qso.AdifExtra["my_pota_ref"] = request.MyPotaRef.Trim().ToUpperInvariant();
+            if (!string.IsNullOrWhiteSpace(request.PotaRef))
+                qso.AdifExtra["pota_ref"] = request.PotaRef.Trim().ToUpperInvariant();
+        }
 
         var created = await _repository.CreateAsync(qso);
 

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Radio as RadioIcon } from 'lucide-react';
+import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Radio as RadioIcon, Pencil, Megaphone } from 'lucide-react';
 import { api, CreateQsoRequest } from '../api/client';
 import { useSignalR } from '../hooks/useSignalR';
 import { useAppStore } from '../store/appStore';
@@ -135,9 +135,30 @@ export function LogEntryPlugin() {
   const { settings, updateRadioSettings } = useSettingsStore();
   const followRadio = settings.radio.followRadio;
 
-  // Log-mode switcher — persists per session; General is fully wired,
-  // POTA and SAT are visual-only placeholders until the follow-up commits.
-  const [logMode, setLogMode] = useState<LogMode>('general');
+  // Log-mode switcher — persists per session; General + POTA fully
+  // wired here, SAT still placeholder until commit #3.
+  const [logMode, setLogMode] = useState<LogMode>(() => {
+    try {
+      const saved = localStorage.getItem('sdrl_log_mode');
+      if (saved === 'general' || saved === 'pota' || saved === 'sat') return saved;
+    } catch { /* localStorage disabled — default fine */ }
+    return 'general';
+  });
+  useEffect(() => {
+    try { localStorage.setItem('sdrl_log_mode', logMode); } catch { /* no-op */ }
+  }, [logMode]);
+
+  // POTA "activating" park — the park YOU'RE at (my_pota_ref on the QSO).
+  // Persisted across sessions so a multi-hour activation doesn't need
+  // re-entry every reload.
+  const [activatingPark, setActivatingPark] = useState<string>(() => {
+    try { return localStorage.getItem('sdrl_activating_park') || ''; } catch { return ''; }
+  });
+  const [editingPark, setEditingPark] = useState(false);
+  const [parkDraft, setParkDraft] = useState('');
+  useEffect(() => {
+    try { localStorage.setItem('sdrl_activating_park', activatingPark); } catch { /* no-op */ }
+  }, [activatingPark]);
 
   const [formData, setFormData] = useState({
     callsign: '',
@@ -153,6 +174,8 @@ export function LogEntryPlugin() {
     grid: '',
     contest: '',
     remarks: '',
+    // POTA park-to-park — the WORKED station's park (pota_ref on the QSO).
+    p2pPark: '',
   });
 
   // Timestamp state - locked means it follows system time
@@ -329,7 +352,9 @@ export function LogEntryPlugin() {
       }
       // Clear callsign from all controls (QRZ profile, rotator, log history filter, etc.)
       clearCallsignFromAllControls();
-      // Clear form
+      // Clear form. Note we intentionally KEEP activatingPark (it's a
+      // session-level setting, not per-QSO) but clear p2pPark since
+      // that's specific to the QSO we just logged.
       setFormData({
         ...formData,
         callsign: '',
@@ -341,6 +366,7 @@ export function LogEntryPlugin() {
         frequency: '',
         rstSentPlus: '',
         rstRcvdPlus: '',
+        p2pPark: '',
       });
     },
   });
@@ -376,6 +402,7 @@ export function LogEntryPlugin() {
       grid: '',
       contest: '',
       remarks: '',
+      p2pPark: '',
     });
     setTimeLocked(true);
     setNameLocked(true);
@@ -417,6 +444,11 @@ export function LogEntryPlugin() {
       // ADIF-exported field). Notes stays available for the POTA/SAT
       // commits or a future secondary-notes field if we want one.
       comment: formData.remarks || undefined,
+      // POTA — only send the park fields when actually in POTA mode
+      // so a General QSO doesn't accidentally get tagged with a
+      // leftover activatingPark value from a prior session.
+      myPotaRef: logMode === 'pota' && activatingPark ? activatingPark : undefined,
+      potaRef: logMode === 'pota' && formData.p2pPark ? formData.p2pPark : undefined,
     });
   };
 
@@ -500,11 +532,92 @@ export function LogEntryPlugin() {
           Log&nbsp;Mode
         </span>
         <ModeTab id="general" label="General" icon={<RadioIcon className="w-3.5 h-3.5" />} />
-        <ModeTab id="pota"    label="POTA"    icon={<Trees className="w-3.5 h-3.5" />}    disabledTitle="POTA-specific fields + separate database — coming soon" />
+        <ModeTab id="pota"    label="POTA"    icon={<Trees className="w-3.5 h-3.5" />} />
         <ModeTab id="sat"     label="SAT"     icon={<Satellite className="w-3.5 h-3.5" />} disabledTitle="Satellite fields + S.A.T. controller sync — coming soon" />
       </div>
 
       <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); handleClear(); } }} className="p-3 space-y-3">
+        {/* POTA — ACTIVATING chip. Shows the park the operator is
+            currently activating; persists across reloads. Empty state
+            surfaces an "Add park ref" prompt so the intent is obvious
+            for someone new to POTA mode. Spot Myself is a placeholder
+            for the POTA-spot API integration (needs a POTA account
+            token — deferred). */}
+        {logMode === 'pota' && (
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-green-500/10 border border-green-500/30">
+            <Trees className="w-4 h-4 text-green-400 flex-shrink-0" />
+            {editingPark ? (
+              <>
+                <input
+                  type="text"
+                  autoFocus
+                  value={parkDraft}
+                  onChange={(e) => setParkDraft(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); setActivatingPark(parkDraft.trim()); setEditingPark(false); }
+                    if (e.key === 'Escape') { e.preventDefault(); setEditingPark(false); }
+                  }}
+                  placeholder="K-1234"
+                  className="glass-input flex-1 font-mono text-sm py-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => { setActivatingPark(parkDraft.trim()); setEditingPark(false); }}
+                  className="px-2 py-1 rounded bg-green-500/20 border border-green-500/40 text-green-300 text-xs font-ui hover:bg-green-500/30"
+                  tabIndex={-1}
+                >
+                  Set
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingPark(false)}
+                  className="px-2 py-1 rounded bg-dark-600 border border-dark-500 text-dark-300 text-xs font-ui hover:bg-dark-500"
+                  tabIndex={-1}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : activatingPark ? (
+              <>
+                <span className="text-[10px] font-ui text-green-400 tracking-wider uppercase">Activating</span>
+                <span className="font-mono font-bold text-green-300 text-sm">{activatingPark}</span>
+                <button
+                  type="button"
+                  onClick={() => { setParkDraft(activatingPark); setEditingPark(true); }}
+                  className="ml-1 p-1 rounded text-green-300/70 hover:text-green-300 hover:bg-green-500/10"
+                  title="Edit park reference"
+                  tabIndex={-1}
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  className="ml-auto px-2 py-1 rounded bg-green-500/15 border border-green-500/30 text-green-300/60 text-xs font-ui opacity-60 cursor-not-allowed flex items-center gap-1"
+                  title="Self-spot to the POTA network — coming soon (needs a POTA account token in Settings)"
+                >
+                  <Megaphone className="w-3 h-3" />
+                  Spot Myself
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="text-[10px] font-ui text-green-400 tracking-wider uppercase">POTA activation</span>
+                <span className="text-xs text-green-300/70">No park set —</span>
+                <button
+                  type="button"
+                  onClick={() => { setParkDraft(''); setEditingPark(true); }}
+                  className="px-2 py-0.5 rounded bg-green-500/20 border border-green-500/40 text-green-300 text-xs font-ui hover:bg-green-500/30 flex items-center gap-1"
+                  tabIndex={-1}
+                >
+                  <Pencil className="w-3 h-3" />
+                  Add park ref
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Callsign, Band, Mode on one line */}
         <div className="flex gap-2 items-end">
           <div className="flex-1">
@@ -803,6 +916,26 @@ export function LogEntryPlugin() {
           </div>
         </div>
 
+        {/* POTA — P2P Park Ref (worked station's park for park-to-park
+            contacts). Optional; when set, backend stores as `pota_ref`
+            in AdifExtra so PotaStatistics picks it up as a hunt. */}
+        {logMode === 'pota' && (
+          <div>
+            <label className="text-xs font-ui text-dark-300 mb-1 block flex items-center gap-1">
+              <Trees className="w-3 h-3 text-green-400" />
+              P2P Park Ref
+              <span className="text-[10px] text-dark-400 font-normal ml-1">(optional — their park if P2P contact)</span>
+            </label>
+            <input
+              type="text"
+              value={formData.p2pPark}
+              onChange={(e) => setFormData(prev => ({ ...prev, p2pPark: e.target.value.toUpperCase() }))}
+              placeholder="K-5678"
+              className="glass-input w-full font-mono text-sm"
+            />
+          </div>
+        )}
+
         {/* Contest / Event / Park — v1.x General field, free-text
             contest name / event / park reference. Backend maps into
             Qso.Contest.ContestId. */}
@@ -908,6 +1041,19 @@ export function LogEntryPlugin() {
             Spot
           </button>
         </div>
+
+        {/* v1.x-style "mode active" indicator at the bottom of the form —
+            tells the operator at a glance which database bucket their
+            QSOs are landing in. v2 uses one collection with POTA tagging
+            via AdifExtra rather than a separate .db file, but the
+            behavioral outcome (queried out via PotaStatistics) matches. */}
+        {logMode === 'pota' && (
+          <div className="flex items-center justify-center gap-2 px-3 py-1.5 rounded bg-green-500/10 border border-green-500/30 text-[11px] font-ui text-green-300">
+            <Trees className="w-3 h-3" />
+            POTA mode active — QSOs tagged as POTA
+            {activatingPark && <span className="font-mono font-bold">({activatingPark})</span>}
+          </div>
+        )}
       </form>
     </GlassPanel>
   );

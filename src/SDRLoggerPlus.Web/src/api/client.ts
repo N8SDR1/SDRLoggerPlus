@@ -52,6 +52,12 @@ export interface CreateQsoRequest {
   // identifier that lands on Qso.Contest.ContestId server-side.
   qth?: string;
   contest?: string;
+  // v1.x POTA-mode fields — myPotaRef is the park YOU'RE activating,
+  // potaRef is the WORKED station's park for park-to-park contacts.
+  // Both stored on the QSO via AdifExtra so PotaStatistics picks them
+  // up automatically and ADIF export round-trips cleanly.
+  myPotaRef?: string;
+  potaRef?: string;
 }
 
 export interface UpdateQsoRequest {

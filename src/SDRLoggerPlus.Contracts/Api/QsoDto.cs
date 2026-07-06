@@ -17,7 +17,14 @@ public record CreateQsoRequest(
     // notes distinct from remarks, and worked-station QTH string).
     string? Contest = null,
     string? Notes = null,
-    string? Qth = null
+    string? Qth = null,
+    // v1.x POTA-mode fields — MyPotaRef is the park the operator is
+    // activating (e.g. "K-1234"), PotaRef is the worked station's park
+    // when it's a park-to-park contact. Both stored on the QSO via
+    // AdifExtra so the existing PotaStatistics service picks them up
+    // and QSOs round-trip cleanly through ADIF export.
+    string? MyPotaRef = null,
+    string? PotaRef = null
 );
 
 public record UpdateQsoRequest(
