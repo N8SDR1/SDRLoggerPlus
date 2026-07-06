@@ -826,26 +826,31 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         .ringResolution(64)
         .ringsData([]);
 
-      // Strike-center lightning bolts (custom layer): a white bolt sprite marks
-      // each strike's exact spot for 60 s after live arrival, then vanishes
-      // (the strike effect filters). One shared canvas texture; billboard
-      // sprites stay cheap even at a few hundred live strikes.
+      // Strike-center lightning bolts (custom layer): a red bolt with a white
+      // outline marks each strike's exact spot for 60 s after live arrival, then
+      // vanishes (the strike effect filters). One shared canvas texture;
+      // billboard sprites stay cheap even at a few hundred live strikes.
       const boltCanvas = document.createElement('canvas');
       boltCanvas.width = 64;
       boltCanvas.height = 64;
       const boltCtx = boltCanvas.getContext('2d');
       if (boltCtx) {
-        boltCtx.shadowColor = 'rgba(255, 255, 255, 0.9)';
-        boltCtx.shadowBlur = 6;
-        boltCtx.fillStyle = '#ffffff';
+        // Bolt inset from the 64px edges so the white outline never clips.
         boltCtx.beginPath();
-        boltCtx.moveTo(38, 2);
-        boltCtx.lineTo(12, 38);
-        boltCtx.lineTo(28, 38);
-        boltCtx.lineTo(24, 62);
-        boltCtx.lineTo(52, 24);
-        boltCtx.lineTo(34, 24);
+        boltCtx.moveTo(40, 8);
+        boltCtx.lineTo(16, 36);
+        boltCtx.lineTo(30, 36);
+        boltCtx.lineTo(24, 56);
+        boltCtx.lineTo(48, 26);
+        boltCtx.lineTo(34, 26);
         boltCtx.closePath();
+        // White outline first (drawn wide, so the red fill covers its inner half).
+        boltCtx.lineJoin = 'round';
+        boltCtx.strokeStyle = '#ffffff';
+        boltCtx.lineWidth = 6;
+        boltCtx.stroke();
+        // Red fill on top.
+        boltCtx.fillStyle = '#ff2a2a';
         boltCtx.fill();
       }
       const boltTexture = new THREE.CanvasTexture(boltCanvas);
