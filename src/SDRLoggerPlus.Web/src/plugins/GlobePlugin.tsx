@@ -224,6 +224,12 @@ interface GlobeInstance {
   ringRepeatPeriod(accessor: number | ((d: unknown) => number)): GlobeInstance;
   ringAltitude(accessor: number | ((d: unknown) => number)): GlobeInstance;
   ringResolution(res: number): GlobeInstance;
+  labelsData(data: unknown[]): GlobeInstance;
+  labelText(accessor: string | ((d: unknown) => string)): GlobeInstance;
+  labelDotRadius(accessor: number | ((d: unknown) => number)): GlobeInstance;
+  labelColor(accessor: string | ((d: unknown) => string)): GlobeInstance;
+  labelAltitude(accessor: number | ((d: unknown) => number)): GlobeInstance;
+  labelsTransitionDuration(duration: number): GlobeInstance;
   arcsData(data: unknown[]): GlobeInstance;
   arcStartLat(accessor: (d: unknown) => number): GlobeInstance;
   arcStartLng(accessor: (d: unknown) => number): GlobeInstance;
@@ -802,13 +808,18 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       material.opacity = 0.95;
 
       // Lightning strike rings — the strike layer owns ringsData (see the strike
-      // effect + the removed per-frame clear in renderBeam). Cyan/white local,
-      // dimmer for global; deliberately not yellow (that's the DX-tower pulse).
+      // effect + the removed per-frame clear in renderBeam). Blitzortung-style
+      // age ramp: white-hot flash → electric yellow → amber as the strike ages
+      // (user-chosen over the earlier cyan; local strikes render at full alpha).
       globe
         .ringColor((d: unknown) => {
-          const s = d as { local: boolean };
-          const base = s.local ? '120, 230, 255' : '120, 180, 220'; // cyan-white / dim
-          return (t: number) => `rgba(${base}, ${Math.max(0, 1 - t).toFixed(3)})`;
+          const s = d as { local: boolean; ts: number };
+          return (t: number) => {
+            const ageMin = (Date.now() - s.ts) / 60_000;
+            const base = ageMin < 1 ? '255, 255, 255' : ageMin < 5 ? '255, 224, 96' : '255, 150, 40';
+            const alpha = Math.max(0, 1 - t) * (s.local ? 1 : 0.55);
+            return `rgba(${base}, ${alpha.toFixed(3)})`;
+          };
         })
         .ringMaxRadius((d: unknown) => ((d as { local: boolean }).local ? 3.5 : 2.5))
         .ringPropagationSpeed(2)
@@ -816,6 +827,18 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         .ringAltitude(0.006)
         .ringResolution(64)
         .ringsData([]);
+
+      // Strike-center dots (labels layer, dot-only): mark each strike's exact
+      // spot for 60 s after detection, then vanish (the strike effect filters).
+      globe
+        .labelText(() => '')
+        .labelDotRadius(0.28)
+        .labelColor((d: unknown) => (d as { local: boolean }).local
+          ? 'rgba(255, 255, 255, 0.95)'
+          : 'rgba(255, 240, 180, 0.75)')
+        .labelAltitude(0.007)
+        .labelsTransitionDuration(0)
+        .labelsData([]);
 
       globeRef.current = globe;
       setGlobeReady(true);
@@ -1219,6 +1242,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     if (!globeReady || !globeRef.current) return;
     if (!settings.map.showLightning) {
       globeRef.current.ringsData([]);
+      globeRef.current.labelsData([]);
       return;
     }
     const store = strikeStoreRef.current;
@@ -1226,15 +1250,25 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
 
     // Stable ring datum per strike — globe.gl diffs ringsData by object
     // identity, so fresh literals each sweep would rebuild every ring mesh.
-    const ringCache = new WeakMap<Strike, { lat: number; lng: number; local: boolean }>();
+    const ringCache = new WeakMap<Strike, { lat: number; lng: number; local: boolean; ts: number }>();
+    // Strikes first seen via a live SignalR push get a center dot for 60 s from
+    // arrival. Keyed on arrival, not strike time: the feed itself publishes
+    // ~1–2 min behind real time, so strike-time dots would never be visible.
+    // Backfilled history never dots (only rings).
+    const liveSince = new WeakMap<Strike, number>();
     const render = () => {
       if (cancelled || !globeRef.current) return;
-      const active = store.active(Date.now());
-      globeRef.current.ringsData(active.map(s => {
+      const now = Date.now();
+      const dots: unknown[] = [];
+      const data = store.active(now).map(s => {
         let r = ringCache.get(s);
-        if (!r) { r = { lat: s.lat, lng: s.lon, local: s.local }; ringCache.set(s, r); }
+        if (!r) { r = { lat: s.lat, lng: s.lon, local: s.local, ts: Date.parse(s.timestampUtc) }; ringCache.set(s, r); }
+        const arrived = liveSince.get(s);
+        if (arrived !== undefined && now - arrived <= 60_000) dots.push(r);
         return r;
-      }));
+      });
+      globeRef.current.ringsData(data);
+      globeRef.current.labelsData(dots);
     };
 
     // Initial backfill.
@@ -1245,7 +1279,12 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     }).catch(() => { /* best-effort */ });
 
     // Live updates.
-    const cb = (evt: { strikes: Strike[] }) => { store.merge(evt.strikes); render(); };
+    const cb = (evt: { strikes: Strike[] }) => {
+      const now = Date.now();
+      for (const s of evt.strikes) liveSince.set(s, now);
+      store.merge(evt.strikes);
+      render();
+    };
     setLightningStrikesCallback(cb);
 
     // Age-out sweep so rings fade even without new strikes arriving.
@@ -1255,7 +1294,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       cancelled = true;
       clearInterval(interval);
       clearLightningStrikesCallback(cb);
-      if (globeRef.current) globeRef.current.ringsData([]);
+      if (globeRef.current) {
+        globeRef.current.ringsData([]);
+        globeRef.current.labelsData([]);
+      }
     };
   }, [globeReady, settings.map.showLightning]);
 
@@ -1577,9 +1619,9 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
           </div>
         )}
 
-        {/* Azimuth and Coordinates Overlay (Bottom Center) */}
+        {/* Azimuth and Coordinates Overlay (Top Center) */}
         {!hideOverlays && showBottomOverlay && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none">
             {rotatorEnabled && (
               <div className="text-center">
                 <div className="text-5xl font-display font-bold text-accent-primary drop-shadow-glow leading-none">

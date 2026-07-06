@@ -70,7 +70,18 @@ a multi-source selector (Ambient/Met Office), and a day/night grey-line globe to
 >   Local (bright rings, kept preferentially under the cap); the rest are the dim
 >   global tier. User-approved; this also delivers the station-relative behavior
 >   the original phase-1 note deferred.
-> - Retention windows, colors, cap, and the rest of this spec are unchanged.
+> - Retention windows, cap, and the rest of this spec are unchanged.
+
+> **POST-VERIFICATION RESTYLE (2026-07-06, user-directed):** after seeing it live,
+> the user rejected the cyan rings — they didn't read as lightning. Rings now use
+> the blitzortung-convention **age ramp: white-hot → electric yellow → amber**
+> (fresh → 1 min → 5+ min), local strikes at full alpha, global dimmer. This
+> consciously overrides this spec's "not yellow" rule (the DX-tower-pulse clash
+> was judged acceptable; the flash core is white). Each strike also gets a
+> **center dot** (labels layer, dot-only) for **60 s from live arrival** — keyed
+> on SignalR arrival rather than strike time because the feed publishes ~1–2 min
+> behind real time, so strike-time dots would never show. Backfilled history
+> draws rings only, never dots.
 
 - **Local tier:** strikes within 750 km of the station (see discovery note; formerly
   "regions 07/12/13"). Full-detail rings, brighter color.
