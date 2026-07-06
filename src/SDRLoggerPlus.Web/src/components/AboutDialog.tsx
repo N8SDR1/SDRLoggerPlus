@@ -170,6 +170,13 @@ function AboutTab({ openLink }: { openLink: (url: string) => void }) {
 }
 
 function HelpTab() {
+  const openLink = (url: string) => {
+    if (window.electronAPI && 'openExternal' in window.electronAPI) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
   return (
     <div className="text-sm text-dark-200 space-y-5 leading-relaxed">
       <div>
@@ -191,16 +198,29 @@ function HelpTab() {
           Any of three paths works and multiple can run at once:
           <ul className="mt-1 ml-6 list-disc space-y-0.5 text-dark-300 text-xs">
             <li>
-              <span className="text-dark-100">TCI</span> — Thetis, Lyra,
-              ExpertSDR3. Enable at Settings → Radio → TCI.
+              <span className="text-dark-100">TCI</span> — recommended for anyone
+              running a Hermes Lite 2 / 2+. Works with{' '}
+              <button
+                onClick={() => openLink('https://github.com/N8SDR1/Lyra-SDR-cpp/releases')}
+                className="font-bold text-accent-primary hover:underline"
+                title="Lyra SDR — open the GitHub releases page"
+              >
+                Lyra
+              </button>{' '}
+              (built by the same team as SDRLoggerPlus), Thetis, and ExpertSDR3.
+              The panadapter panel is <span className="text-dark-100">TCI-only</span> —
+              it draws its spectrum from the TCI IQ stream, so a TCI radio is
+              required for the waterfall to light up. Enable at Settings → Radio → TCI.
             </li>
             <li>
               <span className="text-dark-100">Hamlib</span> — universal (Icom /
-              Yaesu / Kenwood / etc.) via rigctld.
+              Yaesu / Kenwood / etc.) via rigctld. Tunes the radio but doesn't
+              feed the panadapter.
             </li>
             <li>
               <span className="text-dark-100">flrig</span> — XML-RPC bridge to
-              flrig's rig database.
+              flrig's rig database. Tunes the radio but doesn't feed the
+              panadapter.
             </li>
           </ul>
         </li>
