@@ -812,7 +812,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         })
         .ringMaxRadius((d: unknown) => ((d as { local: boolean }).local ? 3.5 : 2.5))
         .ringPropagationSpeed(2)
-        .ringRepeatPeriod(0)   // single ripple per strike, no repeat
+        .ringRepeatPeriod(2000)   // re-ripple while the strike is retained (5–10 min)
         .ringAltitude(0.006)
         .ringResolution(64)
         .ringsData([]);
@@ -1224,10 +1224,17 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     const store = strikeStoreRef.current;
     let cancelled = false;
 
+    // Stable ring datum per strike — globe.gl diffs ringsData by object
+    // identity, so fresh literals each sweep would rebuild every ring mesh.
+    const ringCache = new WeakMap<Strike, { lat: number; lng: number; local: boolean }>();
     const render = () => {
       if (cancelled || !globeRef.current) return;
       const active = store.active(Date.now());
-      globeRef.current.ringsData(active.map(s => ({ lat: s.lat, lng: s.lon, local: s.local })));
+      globeRef.current.ringsData(active.map(s => {
+        let r = ringCache.get(s);
+        if (!r) { r = { lat: s.lat, lng: s.lon, local: s.local }; ringCache.set(s, r); }
+        return r;
+      }));
     };
 
     // Initial backfill.
