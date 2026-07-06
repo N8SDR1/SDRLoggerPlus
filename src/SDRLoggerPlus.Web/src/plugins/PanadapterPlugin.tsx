@@ -10,20 +10,53 @@ import { signalRService } from '../api/signalr';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 
-// Pre-compute a 256-entry colormap: black -> blue -> cyan -> green -> yellow -> red -> white
-const COLORMAP = buildColormap();
+// Three colormap palettes. Operator picks in the panel header; the choice
+// persists across sessions via localStorage. Design goal: one bright/
+// full-spectrum classic for "I want to see everything", one thermal
+// for high-contrast signal hunting, one cool monochrome for long
+// listening sessions where the classic palette gets tiring.
+type PaletteId = 'classic' | 'heat' | 'cool';
+type ColorStop = { pos: number; r: number; g: number; b: number };
 
-function buildColormap(): Uint8Array {
+const PALETTES: Record<PaletteId, { label: string; stops: ColorStop[] }> = {
+  classic: {
+    label: 'Classic',
+    stops: [
+      { pos: 0, r: 0, g: 0, b: 0 },
+      { pos: 36, r: 0, g: 0, b: 180 },
+      { pos: 72, r: 0, g: 180, b: 220 },
+      { pos: 120, r: 0, g: 200, b: 0 },
+      { pos: 170, r: 240, g: 240, b: 0 },
+      { pos: 210, r: 255, g: 60, b: 0 },
+      { pos: 255, r: 255, g: 255, b: 255 },
+    ],
+  },
+  heat: {
+    label: 'Heat',
+    stops: [
+      { pos: 0, r: 0, g: 0, b: 0 },
+      { pos: 60, r: 80, g: 0, b: 0 },
+      { pos: 120, r: 200, g: 30, b: 0 },
+      { pos: 180, r: 255, g: 130, b: 0 },
+      { pos: 220, r: 255, g: 220, b: 40 },
+      { pos: 255, r: 255, g: 255, b: 220 },
+    ],
+  },
+  cool: {
+    label: 'Cool',
+    stops: [
+      { pos: 0, r: 0, g: 0, b: 0 },
+      { pos: 60, r: 0, g: 20, b: 60 },
+      { pos: 120, r: 0, g: 80, b: 160 },
+      { pos: 180, r: 0, g: 180, b: 220 },
+      { pos: 220, r: 140, g: 230, b: 240 },
+      { pos: 255, r: 240, g: 255, b: 255 },
+    ],
+  },
+};
+
+function buildColormap(stops: ColorStop[]): Uint8Array {
   const lut = new Uint8Array(256 * 3);
-  const stops = [
-    { pos: 0, r: 0, g: 0, b: 0 },       // black
-    { pos: 36, r: 0, g: 0, b: 180 },     // blue
-    { pos: 72, r: 0, g: 180, b: 220 },   // cyan
-    { pos: 120, r: 0, g: 200, b: 0 },    // green
-    { pos: 170, r: 240, g: 240, b: 0 },  // yellow
-    { pos: 210, r: 255, g: 60, b: 0 },   // red
-    { pos: 255, r: 255, g: 255, b: 255 },// white
-  ];
   for (let s = 0; s < stops.length - 1; s++) {
     const a = stops[s];
     const b = stops[s + 1];
@@ -37,6 +70,14 @@ function buildColormap(): Uint8Array {
   return lut;
 }
 
+// Prebuilt LUTs — one per palette. Selection is a live ref so a swap
+// takes effect on the next waterfall row without a re-render cascade.
+const PALETTE_LUTS: Record<PaletteId, Uint8Array> = {
+  classic: buildColormap(PALETTES.classic.stops),
+  heat: buildColormap(PALETTES.heat.stops),
+  cool: buildColormap(PALETTES.cool.stops),
+};
+
 const DEFAULT_SPECTRUM_RATIO = 0.3; // top 30% for spectrum line (user-adjustable by dragging the axis bar)
 const MIN_SPECTRUM_RATIO = 0.1;
 const MAX_SPECTRUM_RATIO = 0.85;
@@ -44,6 +85,10 @@ const SPLIT_STORAGE_KEY = 'sdrloggerplus-panadapter-split';
 const SMOOTH_STORAGE_KEY = 'sdrloggerplus-panadapter-smoothing';      // 0..0.95 EMA factor
 const INTENSITY_STORAGE_KEY = 'sdrloggerplus-panadapter-wf-intensity'; // 0.2..3.0 waterfall gain
 const ZOOM_STORAGE_KEY = 'sdrloggerplus-panadapter-zoom';             // 1..MAX_ZOOM
+const PALETTE_STORAGE_KEY = 'sdrloggerplus-panadapter-palette';       // PaletteId
+const WF_FLOOR_STORAGE_KEY = 'sdrloggerplus-panadapter-wf-floor';     // 0.0..0.6, values below scale*floor render black
+const WF_CEIL_STORAGE_KEY = 'sdrloggerplus-panadapter-wf-ceil';       // 0.3..1.5, values above scale*ceil saturate to LUT top
+const WF_GRID_STORAGE_KEY = 'sdrloggerplus-panadapter-wf-grid';       // 'on' | 'off'
 const AXIS_HEIGHT = 20;     // pixels for frequency axis between spectrum and waterfall
 const MAX_SMOOTH = 0.95;    // cap so the trace never fully freezes
 const MIN_ZOOM = 1;
@@ -99,6 +144,53 @@ export function PanadapterPlugin() {
     wfIntensityRef.current = wfIntensity;
     localStorage.setItem(INTENSITY_STORAGE_KEY, wfIntensity.toFixed(2));
   }, [wfIntensity]);
+
+  // Colormap palette — Classic / Heat / Cool. The render loop reads the
+  // ref every frame so a swap takes effect on the next waterfall row
+  // without a re-render cascade or buffer rebuild.
+  const [palette, setPalette] = useState<PaletteId>(() => {
+    const stored = localStorage.getItem(PALETTE_STORAGE_KEY);
+    return stored === 'heat' || stored === 'cool' || stored === 'classic' ? stored : 'classic';
+  });
+  const paletteRef = useRef<Uint8Array>(PALETTE_LUTS[palette]);
+  useEffect(() => {
+    paletteRef.current = PALETTE_LUTS[palette];
+    localStorage.setItem(PALETTE_STORAGE_KEY, palette);
+  }, [palette]);
+
+  // Waterfall dB "floor" and "ceiling" — knee-points relative to the
+  // rolling auto-peak that determines what maps to LUT index 0 (silent /
+  // background) and LUT index 255 (loudest colour). Not literal dB
+  // numbers since the incoming spectrum is already offset-and-scaled to
+  // a non-negative int in the backend (IqSpectrum), but they DO act as
+  // dB knobs from the operator's POV: raise floor to darken quieter
+  // signals (kills speckle in noisy bands); lower ceiling to make weak
+  // signals pop (compresses the LUT into the interesting dB window).
+  const [wfFloor, setWfFloor] = useState(() => loadNumber(WF_FLOOR_STORAGE_KEY, 0.0, 0.0, 0.6));
+  const wfFloorRef = useRef(wfFloor);
+  useEffect(() => {
+    wfFloorRef.current = wfFloor;
+    localStorage.setItem(WF_FLOOR_STORAGE_KEY, wfFloor.toFixed(2));
+  }, [wfFloor]);
+
+  const [wfCeil, setWfCeil] = useState(() => loadNumber(WF_CEIL_STORAGE_KEY, 1.0, 0.3, 1.5));
+  const wfCeilRef = useRef(wfCeil);
+  useEffect(() => {
+    wfCeilRef.current = wfCeil;
+    localStorage.setItem(WF_CEIL_STORAGE_KEY, wfCeil.toFixed(2));
+  }, [wfCeil]);
+
+  // Subtle waterfall grid — vertical lines that scroll with the freq
+  // axis so the operator can eyeball offsets from the VFO / passband.
+  // Very low alpha by default (operator preference: subtle). Toggleable
+  // off entirely because on very dense bands even the subtle lines can
+  // pull the eye.
+  const [wfGrid, setWfGrid] = useState<boolean>(() => localStorage.getItem(WF_GRID_STORAGE_KEY) !== 'off');
+  const wfGridRef = useRef(wfGrid);
+  useEffect(() => {
+    wfGridRef.current = wfGrid;
+    localStorage.setItem(WF_GRID_STORAGE_KEY, wfGrid ? 'on' : 'off');
+  }, [wfGrid]);
 
   // Zoom: 1× = full IQ span; higher zooms into the RX (window centered on the VFO).
   const [zoom, setZoom] = useState(() => loadNumber(ZOOM_STORAGE_KEY, 1, MIN_ZOOM, MAX_ZOOM));
@@ -303,6 +395,16 @@ export function PanadapterPlugin() {
     wfFrameCounterRef.current = (wfFrameCounterRef.current + 1) % 1000;
     const wfAdvance = wfFrameCounterRef.current % (11 - wfSpeedRef.current) === 0;
     const intensity = wfIntensityRef.current;
+    // Operator floor/ceiling as fractions of the auto-scale. `floor` is
+    // the value below which everything renders as LUT[0] (silent); `ceil`
+    // is the value at which everything saturates to LUT[255] (loudest).
+    // We remap (v - floor) / (ceil - floor) so the operator's window
+    // maps to the full 0..1 LUT range — the "dB stretch" behaviour they
+    // expect from a normal SDR waterfall.
+    const floor = wfFloorRef.current;
+    const ceil = Math.max(wfCeilRef.current, floor + 0.05); // guarantee non-zero window
+    const span = ceil - floor;
+    const lut = paletteRef.current;
 
     if (!pausedRef.current && waterfallH > 0 && wfAdvance) {
       let wfBuf = waterfallBufRef.current;
@@ -321,13 +423,16 @@ export function PanadapterPlugin() {
       const imgData = wfCtx.createImageData(w, 1);
       const pixels = imgData.data;
       for (let x = 0; x < w; x++) {
-        const v = (points[xToIdx(x)] / scale) * intensity;
+        const raw = (points[xToIdx(x)] / scale) * intensity;
+        // Operator floor/ceiling remap: values in [floor, ceil] map to
+        // the full LUT range; below floor = LUT[0], above ceil = LUT[255].
+        const v = (raw - floor) / span;
         const val = Math.min(Math.max(Math.floor(v * 255), 0), 255);
         const ci = val * 3;
         const pi = x * 4;
-        pixels[pi] = COLORMAP[ci];
-        pixels[pi + 1] = COLORMAP[ci + 1];
-        pixels[pi + 2] = COLORMAP[ci + 2];
+        pixels[pi] = lut[ci];
+        pixels[pi + 1] = lut[ci + 1];
+        pixels[pi + 2] = lut[ci + 2];
         pixels[pi + 3] = 255;
       }
       wfCtx.putImageData(imgData, 0, 0);
@@ -335,6 +440,31 @@ export function PanadapterPlugin() {
       ctx.drawImage(wfBuf, 0, waterfallY);
     } else if (waterfallBufRef.current && waterfallH > 0) {
       ctx.drawImage(waterfallBufRef.current, 0, waterfallY);
+    }
+
+    // --- Waterfall grid ---
+    // Subtle vertical lines over the waterfall region aligned with the
+    // frequency-axis ticks above. Very low alpha — the goal is "I can
+    // eyeball an offset from the VFO without effort", not a full grid
+    // overlay. Toggle off when it pulls the eye on dense bands.
+    if (wfGridRef.current && waterfallH > 0 && dispRange > 0) {
+      const targetTicks = Math.floor(w / 100);
+      const rawStep = dispRange / Math.max(targetTicks, 1);
+      const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+      const nice = [1, 2, 5, 10].find(m => m * magnitude >= rawStep) ?? 10;
+      const stepHz = nice * magnitude;
+      const firstTick = Math.ceil(zLow / stepHz) * stepHz;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let freq = firstTick; freq <= zHigh; freq += stepHz) {
+        const x = ((freq - zLow) / dispRange) * w;
+        ctx.moveTo(x, waterfallY);
+        ctx.lineTo(x, waterfallY + waterfallH);
+      }
+      ctx.stroke();
+      ctx.restore();
     }
 
     // --- Filter passband rectangle ---
@@ -629,6 +759,57 @@ export function PanadapterPlugin() {
               className="w-16 accent-[rgb(var(--accent-primary))] cursor-pointer"
             />
           </div>
+          {/* Waterfall floor / ceiling (dB-ish stretch — raises the noise
+              cutoff, lowers the saturation top) */}
+          <div className="flex items-center gap-1.5" title={`Waterfall floor (silences quieter signals): ${(wfFloor * 100).toFixed(0)}%`}>
+            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">FLR</span>
+            <input
+              type="range"
+              min={0.0}
+              max={0.6}
+              step={0.02}
+              value={wfFloor}
+              onChange={(e) => setWfFloor(parseFloat(e.target.value))}
+              className="w-14 accent-[rgb(var(--accent-primary))] cursor-pointer"
+            />
+          </div>
+          <div className="flex items-center gap-1.5" title={`Waterfall ceiling (compresses to loudest signals): ${(wfCeil * 100).toFixed(0)}%`}>
+            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">CEL</span>
+            <input
+              type="range"
+              min={0.3}
+              max={1.5}
+              step={0.02}
+              value={wfCeil}
+              onChange={(e) => setWfCeil(parseFloat(e.target.value))}
+              className="w-14 accent-[rgb(var(--accent-primary))] cursor-pointer"
+            />
+          </div>
+          {/* Palette picker */}
+          <div className="flex items-center gap-1.5" title="Waterfall colour palette">
+            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">PAL</span>
+            <select
+              value={palette}
+              onChange={(e) => setPalette(e.target.value as PaletteId)}
+              className="glass-input text-[10px] font-mono px-1 py-0.5"
+            >
+              {(Object.keys(PALETTES) as PaletteId[]).map((id) => (
+                <option key={id} value={id}>{PALETTES[id].label}</option>
+              ))}
+            </select>
+          </div>
+          {/* Grid toggle */}
+          <button
+            onClick={() => setWfGrid((g) => !g)}
+            title={wfGrid ? 'Hide waterfall grid' : 'Show waterfall grid'}
+            className={`text-[10px] font-ui uppercase tracking-wide px-1.5 py-0.5 rounded border transition-colors ${
+              wfGrid
+                ? 'border-accent-secondary/40 text-accent-secondary/90'
+                : 'border-dark-500 text-dark-400 hover:text-dark-200'
+            }`}
+          >
+            Grid
+          </button>
           {/* Waterfall speed */}
           <div className="flex items-center gap-1.5" title={`Waterfall speed: ${wfSpeed}/10`}>
             <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">WF</span>
