@@ -220,6 +220,10 @@ export interface ClusterSettings {
   trackRig: boolean;
   /** Which of the configured telnet clusters receives outbound spots. Empty = auto (only when a single cluster is connected). */
   primarySpotClusterId: string;
+  /** Max spots kept in memory (backing store + backend replay buffer). 50–300. */
+  maxSpots: number;
+  /** Age filter — spots older than this minute count drop off the visible list. */
+  spotAgeMinutes: number;
 }
 
 export interface SpotStatusColors {
@@ -546,6 +550,8 @@ const defaultSettings: Settings = {
     spotholeSpotterCountry: '', // empty = worldwide (fuller band-activity heat map)
     trackRig: false,
     primarySpotClusterId: '', // empty = auto-pick when a single cluster is connected
+    maxSpots: 200,
+    spotAgeMinutes: 10,
   },
   spotStatus: {
     enabled: true,

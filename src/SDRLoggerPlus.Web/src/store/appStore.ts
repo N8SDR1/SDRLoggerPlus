@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useSettingsStore } from './settingsStore';
 import type {
   CallsignLookedUpEvent,
   RotatorPositionEvent,
@@ -135,6 +136,7 @@ interface AppState {
   dxClusterSpots: Spot[];
   addDxClusterSpot: (spot: Spot) => void;
   clearDxClusterSpots: () => void;
+  pruneStaleDxClusterSpots: () => void;
 
   // Callsign map images (persisted in MongoDB)
   callsignMapImages: CallsignMapImage[];
@@ -469,15 +471,35 @@ export const useAppStore = create<AppState>((set) => ({
     if (state.dxClusterSpots.some((s) => s.id === spot.id)) {
       return state;
     }
-    const maxAgeMs = 30 * 60 * 1000; // 30 minutes
+    // Both limits are operator-tunable now (v1 SDRLogger+ parity). Read
+    // straight from the settings store so the change takes effect on
+    // the next spot without needing a reload. Clamp defensively so a
+    // corrupt settings value can't yield a runaway array.
+    const cluster = useSettingsStore.getState().settings.cluster;
+    const maxSpots = Math.max(50, Math.min(300, cluster.maxSpots || 200));
+    const maxAgeMs = Math.max(1, cluster.spotAgeMinutes || 10) * 60 * 1000;
     const cutoff = Date.now() - maxAgeMs;
-    // Prune stale spots, then prepend the new one (max 200)
     const fresh = state.dxClusterSpots.filter(
       (s) => new Date(s.timestamp).getTime() > cutoff
     );
-    return { dxClusterSpots: [spot, ...fresh].slice(0, 200) };
+    return { dxClusterSpots: [spot, ...fresh].slice(0, maxSpots) };
   }),
   clearDxClusterSpots: () => set({ dxClusterSpots: [] }),
+  // Timer-driven eviction of expired spots so a stale entry can't linger
+  // just because no new spot arrived to trigger addDxClusterSpot's filter.
+  // v1 SDRLogger+ ran the equivalent every 30 s (pruneSpots()); v2's
+  // ClusterPlugin owns the interval.
+  pruneStaleDxClusterSpots: () => set((state) => {
+    const cluster = useSettingsStore.getState().settings.cluster;
+    const maxAgeMs = Math.max(1, cluster.spotAgeMinutes || 10) * 60 * 1000;
+    const cutoff = Date.now() - maxAgeMs;
+    const fresh = state.dxClusterSpots.filter(
+      (s) => new Date(s.timestamp).getTime() > cutoff
+    );
+    return fresh.length === state.dxClusterSpots.length
+      ? state
+      : { dxClusterSpots: fresh };
+  }),
 
   // Callsign map images
   callsignMapImages: [],

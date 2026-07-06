@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { RadioTower, Map, Settings, Plus, Trash2, X, Search, Crosshair, Eraser } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, ICellRendererParams, RowClickedEvent, CellMouseOverEvent, CellMouseOutEvent, RowStyle } from 'ag-grid-community';
@@ -522,6 +522,14 @@ export function ClusterPlugin() {
   // Get spots from app store (ephemeral, in-memory only)
   const spots = useAppStore((state) => state.dxClusterSpots);
   const clearDxClusterSpots = useAppStore((state) => state.clearDxClusterSpots);
+  const pruneStaleDxClusterSpots = useAppStore((state) => state.pruneStaleDxClusterSpots);
+
+  // Age-filter enforcement: v1 SDRLogger+ ran pruneSpots() every 30 s so
+  // expired spots dropped off even when no new spot arrived. Same here.
+  useEffect(() => {
+    const id = setInterval(pruneStaleDxClusterSpots, 30_000);
+    return () => clearInterval(id);
+  }, [pruneStaleDxClusterSpots]);
 
   // Rig state for "follow rig" tracking
   const selectedRadioId = useAppStore((state) => state.selectedRadioId);
@@ -799,6 +807,24 @@ export function ClusterPlugin() {
               {connectedCount}/{clusterConnections.length} connected
             </span>
           )}
+          {/* Age filter — v1 SDRLogger+ parity. Compact dropdown; the
+              actual filter/prune lives on the app store so it also
+              affects the map overlay + any other spot consumer. */}
+          <select
+            value={settings.cluster.spotAgeMinutes}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              if (!Number.isNaN(v)) updateClusterSettings({ spotAgeMinutes: v });
+            }}
+            className="glass-input text-xs font-mono px-1 py-0.5"
+            title="Show spots from the last N minutes"
+          >
+            <option value={5}>5 min</option>
+            <option value={10}>10 min</option>
+            <option value={15}>15 min</option>
+            <option value={30}>30 min</option>
+            <option value={60}>60 min</option>
+          </select>
           <span className="text-sm font-mono text-dark-300">
             {filteredSpots?.length || 0} spots
           </span>
@@ -913,6 +939,32 @@ export function ClusterPlugin() {
                 same spot to multiple clusters gets your call flagged as a
                 duplicate source. Pick ONE cluster to spot on. */}
             <div>
+              <h5 className="text-sm font-medium font-ui text-dark-200 mb-3">Max Spots</h5>
+              <div className="space-y-2 p-3 bg-dark-700/50 rounded-lg border border-glass-100 mb-4">
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-ui text-dark-300 shrink-0">Keep the last</label>
+                  <input
+                    type="number"
+                    min={50}
+                    max={300}
+                    step={10}
+                    value={settings.cluster.maxSpots}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!Number.isNaN(v)) {
+                        updateClusterSettings({ maxSpots: Math.max(50, Math.min(300, v)) });
+                      }
+                    }}
+                    className="glass-input w-24 text-sm font-mono"
+                  />
+                  <span className="text-xs font-ui text-dark-300">spots in memory (50–300)</span>
+                </div>
+                <p className="text-xs text-dark-400">
+                  Both the in-memory spot list and the backend replay buffer honour this limit. Also
+                  drives the age filter dropdown in the panel header — spots older than that fall off.
+                </p>
+              </div>
+
               <h5 className="text-sm font-medium font-ui text-dark-200 mb-3">Outbound Spots</h5>
               <div className="space-y-2 p-3 bg-dark-700/50 rounded-lg border border-glass-100">
                 <label className="text-xs font-ui text-dark-300 block">Send self-spots to</label>

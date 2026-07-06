@@ -626,6 +626,20 @@ public class ClusterSettings
     // cluster" fallback so brand-new setups still work.
     [BsonElement("primarySpotClusterId")]
     public string? PrimarySpotClusterId { get; set; } = "";
+
+    // Max spots kept in memory (both the backend replay buffer handed to
+    // new clients and the frontend backing store). v1 SDRLogger+ hard-
+    // capped at 200; v2 lets the operator dial it up to 300 for
+    // contest-day busy periods.
+    [BsonElement("maxSpots")]
+    public int MaxSpots { get; set; } = 200;
+
+    // Age filter — spots older than this drop off the visible list and
+    // are pruned from the backing store. v1 offered 5/10/15/30 min; v2
+    // adds 60 min. The store enforces the filter so a stale spot can't
+    // linger just because no new spot arrived to trigger a render.
+    [BsonElement("spotAgeMinutes")]
+    public int SpotAgeMinutes { get; set; } = 10;
 }
 
 [BsonIgnoreExtraElements]

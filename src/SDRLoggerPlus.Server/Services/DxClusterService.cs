@@ -91,6 +91,11 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
                 _deduplicationWindowSeconds = settings.Cluster.DeduplicationWindowSeconds;
                 _logger.LogInformation("Loaded deduplication window: {Seconds} seconds", _deduplicationWindowSeconds);
             }
+            if (settings?.Cluster != null)
+            {
+                UpdateSpotLimitsFromSettings(settings.Cluster.MaxSpots);
+                _logger.LogInformation("Loaded spot replay cap: {Cap} (from settings.Cluster.MaxSpots)", _recentBroadcastCap);
+            }
         }
         catch (Exception ex)
         {
@@ -531,14 +536,26 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
         // which arrives seconds after boot — before the UI loads) would
         // otherwise be lost. LogHub replays this to each new connection.
         _recentBroadcasts.Enqueue(evt);
-        while (_recentBroadcasts.Count > RecentBroadcastCap)
+        // Cap comes from ClusterSettings.MaxSpots (50–300); we clamp
+        // defensively so a bad settings value can't blow up memory.
+        var cap = Math.Clamp(_recentBroadcastCap, 50, 300);
+        while (_recentBroadcasts.Count > cap)
             _recentBroadcasts.TryDequeue(out _);
 
         await _hubContext.Clients.All.OnSpotReceived(evt);
     }
 
     private readonly ConcurrentQueue<SpotReceivedEvent> _recentBroadcasts = new();
-    private const int RecentBroadcastCap = 200;
+    // Snapshot of ClusterSettings.MaxSpots, refreshed on settings reload
+    // (see UpdateSpotLimitsFromSettings). Volatile-safe read since only
+    // the broadcast loop consumes it and it's an atomic int32 write.
+    private int _recentBroadcastCap = 200;
+
+    /// <summary>Called from settings-load / settings-save so the replay cap tracks live config.</summary>
+    public void UpdateSpotLimitsFromSettings(int maxSpots)
+    {
+        _recentBroadcastCap = Math.Clamp(maxSpots, 50, 300);
+    }
 
     /// <summary>Recently broadcast spots (oldest first), for replay to newly connected clients.</summary>
     public IReadOnlyList<SpotReceivedEvent> GetRecentSpots() => _recentBroadcasts.ToArray();
