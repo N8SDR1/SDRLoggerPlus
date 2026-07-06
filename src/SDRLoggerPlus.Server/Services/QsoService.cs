@@ -92,6 +92,30 @@ public class QsoService : IQsoService
                 qso.AdifExtra["pota_ref"] = request.PotaRef.Trim().ToUpperInvariant();
         }
 
+        // SAT tagging — primary Frequency/Mode carry the uplink leg (what the
+        // operator TX'd), the downlink leg + satellite name land in AdifExtra
+        // as the ADIF-standard fields so LoTW satellite credit survives an
+        // ADIF round-trip: sat_name, prop_mode=SAT, freq_rx (downlink MHz),
+        // down_mode. When the caller supplied an uplink frequency/mode we
+        // promote them to the top-level Frequency/Mode too.
+        if (!string.IsNullOrWhiteSpace(request.Satellite) ||
+            request.UplinkFreq.HasValue || request.DownlinkFreq.HasValue ||
+            !string.IsNullOrWhiteSpace(request.UpMode) || !string.IsNullOrWhiteSpace(request.DownMode))
+        {
+            qso.AdifExtra ??= new BsonDocument();
+            qso.AdifExtra["prop_mode"] = "SAT";
+            if (!string.IsNullOrWhiteSpace(request.Satellite))
+                qso.AdifExtra["sat_name"] = request.Satellite.Trim().ToUpperInvariant();
+            if (request.UplinkFreq.HasValue)
+                qso.Frequency = request.UplinkFreq;
+            if (!string.IsNullOrWhiteSpace(request.UpMode))
+                qso.Mode = request.UpMode;
+            if (request.DownlinkFreq.HasValue)
+                qso.AdifExtra["freq_rx"] = request.DownlinkFreq.Value;
+            if (!string.IsNullOrWhiteSpace(request.DownMode))
+                qso.AdifExtra["down_mode"] = request.DownMode;
+        }
+
         var created = await _repository.CreateAsync(qso);
 
         // Fire-and-forget Club Log realtime upload — logging must never block

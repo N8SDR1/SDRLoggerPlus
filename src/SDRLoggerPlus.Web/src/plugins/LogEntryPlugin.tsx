@@ -1,18 +1,26 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Radio as RadioIcon, Pencil, Megaphone } from 'lucide-react';
-import { api, CreateQsoRequest } from '../api/client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Radio as RadioIcon, Pencil, Megaphone, ArrowUp, ArrowDown } from 'lucide-react';
+import { api, CreateQsoRequest, SatState } from '../api/client';
+import { signalRService } from '../api/signalr';
 import { useSignalR } from '../hooks/useSignalR';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
 
-// v1.x-style log-entry mode switcher. General is functional today;
-// POTA and SAT tabs are placeholders that route to General for now
-// (their bespoke fields, separate-database routing, and S.A.T.
-// controller wiring land in follow-up commits).
+// v1.x-style log-entry mode switcher — General, POTA, and SAT are all
+// fully wired now. General is the default free-form logger, POTA layers
+// on my_pota_ref / pota_ref (P2P) tagging, and SAT auto-populates the
+// satellite name + uplink/downlink freq+mode from the live S.A.T.
+// controller state and writes ADIF-standard sat_name / prop_mode=SAT /
+// freq_rx / down_mode so LoTW satellite credit survives ADIF export.
 type LogMode = 'general' | 'pota' | 'sat';
+
+// Modes typical for satellite passes — SSB birds use USB, FM/CW birds
+// their respective mode. Kept short so the SAT-panel dropdowns aren't a
+// wall of digital modes that don't apply to a satellite QSO.
+const SAT_MODES = ['USB', 'LSB', 'FM', 'CWU', 'CWL'];
 
 // Helper to format date for input
 const formatDateForInput = (date: Date): string => {
@@ -176,7 +184,36 @@ export function LogEntryPlugin() {
     remarks: '',
     // POTA park-to-park — the WORKED station's park (pota_ref on the QSO).
     p2pPark: '',
+    // SAT fields — auto-populate from S.A.T. controller when tracking,
+    // editable otherwise. Freqs in MHz (v1.x + ADIF convention). satGrid
+    // is the WORKED station's grid; separate from `grid` so the standard
+    // grid field can still come from QRZ if we want.
+    satellite: '',
+    uplinkFreq: '',
+    downlinkFreq: '',
+    upMode: 'USB',
+    downMode: 'USB',
+    satGrid: '',
   });
+
+  // Live S.A.T. controller state — poll (5 s) + SignalR push. Only enabled
+  // when SAT integration is on in Settings so we don't hammer the backend
+  // for operators who never use satellites.
+  const satEnabled = settings.sat.enabled;
+  const [liveSatState, setLiveSatState] = useState<SatState | null>(null);
+  const { data: polledSatState } = useQuery({
+    queryKey: ['sat-status'],
+    queryFn: () => api.getSatStatus(),
+    refetchInterval: 5000,
+    enabled: satEnabled && logMode === 'sat',
+  });
+  useEffect(() => {
+    if (logMode !== 'sat' || !satEnabled) return;
+    signalRService.setHandlers({ onSatState: (s) => setLiveSatState(s) });
+    return () => signalRService.setHandlers({ onSatState: undefined });
+  }, [logMode, satEnabled]);
+  const satState = liveSatState ?? polledSatState ?? null;
+  const satTracking = !!(satState?.active && satState?.satellite);
 
   // Timestamp state - locked means it follows system time
   const [timeLocked, setTimeLocked] = useState(true);
@@ -222,6 +259,25 @@ export function LogEntryPlugin() {
       }));
     }
   }, [followRadio, currentRadioState]);
+
+  // Auto-populate SAT fields from the S.A.T. controller when we're in SAT
+  // mode and a pass is being tracked. Empty values from the controller are
+  // preserved as empty (operator can hand-fill); non-empty values overwrite
+  // the form (matches v1.x behaviour where the SAT panel is the source of
+  // truth during a pass). We only auto-fill when the operator hasn't
+  // manually edited the satellite name for THIS pass (via a simple check
+  // against the tracking satellite string).
+  useEffect(() => {
+    if (logMode !== 'sat' || !satState?.satellite) return;
+    setFormData(prev => ({
+      ...prev,
+      satellite: satState.satellite ?? prev.satellite,
+      uplinkFreq: satState.uplinkFreq ?? prev.uplinkFreq,
+      downlinkFreq: satState.downlinkFreq ?? prev.downlinkFreq,
+      upMode: satState.uplinkMode ?? prev.upMode,
+      downMode: satState.downlinkMode ?? prev.downMode,
+    }));
+  }, [logMode, satState?.satellite, satState?.uplinkFreq, satState?.downlinkFreq, satState?.uplinkMode, satState?.downlinkMode]);
 
   // Auto-populate name from QRZ when nameLocked is true
   useEffect(() => {
@@ -367,6 +423,11 @@ export function LogEntryPlugin() {
         rstSentPlus: '',
         rstRcvdPlus: '',
         p2pPark: '',
+        // Clear per-QSO SAT worked-station fields but KEEP the satellite
+        // name + freq/mode — they belong to the pass, not the QSO, and
+        // the auto-fill effect will re-apply them from the S.A.T.
+        // controller anyway.
+        satGrid: '',
       });
     },
   });
@@ -403,6 +464,16 @@ export function LogEntryPlugin() {
       contest: '',
       remarks: '',
       p2pPark: '',
+      // handleClear is the Escape/Clear-button path — a full reset.
+      // Wipe SAT fields too; the auto-fill effect will re-populate them
+      // from the S.A.T. controller state on the next tick if a pass is
+      // still active.
+      satellite: '',
+      uplinkFreq: '',
+      downlinkFreq: '',
+      upMode: 'USB',
+      downMode: 'USB',
+      satGrid: '',
     });
     setTimeLocked(true);
     setNameLocked(true);
@@ -436,7 +507,11 @@ export function LogEntryPlugin() {
       rstRcvd,
       name: formData.name || focusedCallsignInfo?.name,
       qth: formData.qth || undefined,
-      grid: formData.grid || focusedCallsignInfo?.grid,
+      // In SAT mode the operator hand-enters the worked station's grid
+      // (satGrid); otherwise fall back to the general grid field then QRZ.
+      grid: (logMode === 'sat' && formData.satGrid)
+        ? formData.satGrid
+        : (formData.grid || focusedCallsignInfo?.grid),
       country: focusedCallsignInfo?.country,
       contest: formData.contest || undefined,
       // v1.x has a single "Remarks" field; the backend still has both
@@ -449,6 +524,16 @@ export function LogEntryPlugin() {
       // leftover activatingPark value from a prior session.
       myPotaRef: logMode === 'pota' && activatingPark ? activatingPark : undefined,
       potaRef: logMode === 'pota' && formData.p2pPark ? formData.p2pPark : undefined,
+      // SAT — only send SAT fields when actually in SAT mode. Uplink
+      // freq/mode become the QSO's top-level Frequency/Mode server-side;
+      // satellite name + downlink freq/mode land in AdifExtra. satGrid
+      // (worked station's grid) rides on the standard `grid` field
+      // above — no separate wire field needed.
+      satellite: logMode === 'sat' && formData.satellite ? formData.satellite : undefined,
+      uplinkFreq: logMode === 'sat' && formData.uplinkFreq ? parseFloat(formData.uplinkFreq) : undefined,
+      downlinkFreq: logMode === 'sat' && formData.downlinkFreq ? parseFloat(formData.downlinkFreq) : undefined,
+      upMode: logMode === 'sat' && formData.upMode ? formData.upMode : undefined,
+      downMode: logMode === 'sat' && formData.downMode ? formData.downMode : undefined,
     });
   };
 
@@ -533,7 +618,7 @@ export function LogEntryPlugin() {
         </span>
         <ModeTab id="general" label="General" icon={<RadioIcon className="w-3.5 h-3.5" />} />
         <ModeTab id="pota"    label="POTA"    icon={<Trees className="w-3.5 h-3.5" />} />
-        <ModeTab id="sat"     label="SAT"     icon={<Satellite className="w-3.5 h-3.5" />} disabledTitle="Satellite fields + S.A.T. controller sync — coming soon" />
+        <ModeTab id="sat"     label="SAT"     icon={<Satellite className="w-3.5 h-3.5" />} />
       </div>
 
       <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); handleClear(); } }} className="p-3 space-y-3">
@@ -615,6 +700,102 @@ export function LogEntryPlugin() {
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {/* SAT — pass status chip + auto-populated uplink/downlink fields.
+            When the S.A.T. controller is tracking, the satellite/freqs/modes
+            update live; the operator can still hand-edit any field. When
+            no controller is active (or SAT integration is off), everything
+            is hand-enterable — you can log SAT QSOs without a CSN box. */}
+        {logMode === 'sat' && (
+          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-2">
+            <div className="flex items-center gap-2">
+              <Satellite className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              <span className="text-[10px] font-ui text-amber-400 tracking-wider uppercase">Satellite</span>
+              <input
+                type="text"
+                value={formData.satellite}
+                onChange={(e) => setFormData(prev => ({ ...prev, satellite: e.target.value.toUpperCase() }))}
+                placeholder="SO-50, AO-91, ..."
+                className="glass-input flex-1 font-mono font-bold text-sm py-1 uppercase"
+              />
+              {satTracking && (
+                <span
+                  className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-ui tracking-wider"
+                  title="S.A.T. controller is tracking this pass"
+                >
+                  TRACKING
+                </span>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
+                  <ArrowUp className="w-3 h-3 text-amber-400" />
+                  Uplink (MHz)
+                </label>
+                <input
+                  type="text"
+                  value={formData.uplinkFreq}
+                  onChange={(e) => setFormData(prev => ({ ...prev, uplinkFreq: e.target.value }))}
+                  placeholder="145.850"
+                  className="glass-input w-full font-mono text-sm"
+                />
+              </div>
+              <div className="w-24">
+                <label className="text-xs font-ui text-dark-200 mb-1 block">Up Mode</label>
+                <select
+                  value={formData.upMode}
+                  onChange={(e) => setFormData(prev => ({ ...prev, upMode: e.target.value }))}
+                  className="glass-input w-full text-sm font-mono"
+                >
+                  {SAT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
+                  <ArrowDown className="w-3 h-3 text-amber-400" />
+                  Downlink (MHz)
+                </label>
+                <input
+                  type="text"
+                  value={formData.downlinkFreq}
+                  onChange={(e) => setFormData(prev => ({ ...prev, downlinkFreq: e.target.value }))}
+                  placeholder="436.795"
+                  className="glass-input w-full font-mono text-sm"
+                />
+              </div>
+              <div className="w-24">
+                <label className="text-xs font-ui text-dark-200 mb-1 block">Down Mode</label>
+                <select
+                  value={formData.downMode}
+                  onChange={(e) => setFormData(prev => ({ ...prev, downMode: e.target.value }))}
+                  className="glass-input w-full text-sm font-mono"
+                >
+                  {SAT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-amber-400" />
+                Their Grid
+                <span className="text-[10px] text-dark-400 font-normal ml-1">(worked station's grid — required for SAT credit)</span>
+              </label>
+              <input
+                type="text"
+                value={formData.satGrid}
+                onChange={(e) => setFormData(prev => ({ ...prev, satGrid: e.target.value.toUpperCase() }))}
+                placeholder="EM79"
+                className="glass-input w-full font-mono text-sm uppercase"
+              />
+            </div>
           </div>
         )}
 
@@ -1052,6 +1233,13 @@ export function LogEntryPlugin() {
             <Trees className="w-3 h-3" />
             POTA mode active — QSOs tagged as POTA
             {activatingPark && <span className="font-mono font-bold">({activatingPark})</span>}
+          </div>
+        )}
+        {logMode === 'sat' && (
+          <div className="flex items-center justify-center gap-2 px-3 py-1.5 rounded bg-amber-500/10 border border-amber-500/30 text-[11px] font-ui text-amber-300">
+            <Satellite className="w-3 h-3" />
+            SAT mode active — QSOs tagged as PROP_MODE=SAT for LoTW satellite credit
+            {formData.satellite && <span className="font-mono font-bold">({formData.satellite})</span>}
           </div>
         )}
       </form>

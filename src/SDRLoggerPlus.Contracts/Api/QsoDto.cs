@@ -24,7 +24,17 @@ public record CreateQsoRequest(
     // AdifExtra so the existing PotaStatistics service picks them up
     // and QSOs round-trip cleanly through ADIF export.
     string? MyPotaRef = null,
-    string? PotaRef = null
+    string? PotaRef = null,
+    // v1.x SAT-mode fields — Satellite is the bird name (e.g. "SO-50"),
+    // UplinkFreq/DownlinkFreq are MHz, UpMode/DownMode are per-leg modes
+    // (SSB/FM/CW/etc). Stored via AdifExtra so ADIF export preserves
+    // LoTW satellite-credit fields: sat_name / prop_mode=SAT / freq_rx
+    // (downlink) / down_mode. Primary Frequency/Mode = uplink leg.
+    string? Satellite = null,
+    double? UplinkFreq = null,
+    double? DownlinkFreq = null,
+    string? UpMode = null,
+    string? DownMode = null
 );
 
 public record UpdateQsoRequest(

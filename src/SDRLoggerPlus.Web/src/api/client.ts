@@ -58,6 +58,15 @@ export interface CreateQsoRequest {
   // up automatically and ADIF export round-trips cleanly.
   myPotaRef?: string;
   potaRef?: string;
+  // v1.x SAT-mode fields — satellite name + per-leg freq/mode. Backend
+  // promotes uplinkFreq→Frequency and upMode→Mode, and writes sat_name /
+  // prop_mode=SAT / freq_rx / down_mode into AdifExtra so LoTW satellite
+  // credit survives ADIF export.
+  satellite?: string;
+  uplinkFreq?: number;
+  downlinkFreq?: number;
+  upMode?: string;
+  downMode?: string;
 }
 
 export interface UpdateQsoRequest {
