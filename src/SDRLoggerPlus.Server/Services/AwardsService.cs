@@ -74,9 +74,11 @@ public partial class AwardsService : IAwardsService
                     continue;
             }
 
-            // Build band status for this entity
+            // Build band status for this entity. Normalise the band to
+            // lowercase so mixed-case imports ("40m" from QRZ vs "40M"
+            // from v1 SDRLogger+ ADIF) collapse into a single entry.
             var bandStatus = groupQsos
-                .GroupBy(q => q.Band)
+                .GroupBy(q => (q.Band ?? "").Trim().ToLowerInvariant())
                 .ToDictionary(
                     bg => bg.Key,
                     bg =>

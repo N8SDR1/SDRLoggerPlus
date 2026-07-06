@@ -192,9 +192,17 @@ public class LiteQsoRepository : IQsoRepository
                 .Count(),
             UniqueGrids: all.Select(GridOf).Where(g => !string.IsNullOrEmpty(g)).Distinct().Count(),
             QsosToday: qsosToday,
-            QsosByBand: all.GroupBy(q => q.Band ?? "Unknown")
+            // Group by case-normalised band / mode. ADIF exports differ in
+            // case (v1 SDRLogger+ wrote "40M", QRZ writes "40m") and a
+            // case-sensitive GroupBy splits the same band across two
+            // buckets. Bands are normalised to lowercase because the app-
+            // wide convention ("40m", "70cm") is lowercase; modes to
+            // uppercase because that matches the app's mode-picker
+            // ("USB", "FT8"), so the returned dictionary keys line up
+            // with the UI without extra plumbing.
+            QsosByBand: all.GroupBy(q => (q.Band ?? "Unknown").Trim().ToLowerInvariant())
                 .ToDictionary(g => g.Key, g => g.Count()),
-            QsosByMode: all.GroupBy(q => q.Mode ?? "Unknown")
+            QsosByMode: all.GroupBy(q => (q.Mode ?? "Unknown").Trim().ToUpperInvariant())
                 .ToDictionary(g => g.Key, g => g.Count())
         );
 
