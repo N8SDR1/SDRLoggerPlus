@@ -186,6 +186,44 @@ public class SettingsController : ControllerBase
     }
 
     /// <summary>
+    /// Full-replace settings import — used by the operator-facing
+    /// "Import Settings" button in Appearance. Distinct from the general
+    /// POST /api/settings, which is called on every small settings change
+    /// and preserves SavedLayouts/LayoutJson from the DB. Import replaces
+    /// the whole document as-is so restoring a backup actually restores
+    /// what the user exported.
+    ///
+    /// Contains credentials (QRZ/HamQTH/ClubLog/HRDLog passwords, API
+    /// keys). The client warns before download and again before import.
+    /// </summary>
+    [HttpPost("import")]
+    [ProducesResponseType(typeof(UserSettings), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<UserSettings>> ImportSettings([FromBody] UserSettings settings)
+    {
+        if (settings == null) return BadRequest("Settings cannot be null");
+        // Pin the id so a backup exported from a different-id document
+        // still lands on the caller's "default" settings row.
+        settings.Id = string.IsNullOrEmpty(settings.Id) ? "default" : settings.Id;
+        _logger.LogInformation("Importing settings for station: {Callsign} (full replace)",
+            settings.Station?.Callsign);
+        try
+        {
+            var saved = await _settingsService.SaveSettingsAsync(settings);
+            await _hotListService.ReloadAsync();
+            return Ok(saved);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to import settings");
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                error = "Failed to import settings: " + ex.Message
+            });
+        }
+    }
+
+    /// <summary>
     /// Update layout JSON only
     /// </summary>
     [HttpPut("layout")]

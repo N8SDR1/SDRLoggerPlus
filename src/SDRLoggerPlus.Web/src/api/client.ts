@@ -508,6 +508,24 @@ class ApiClient {
     });
   }
 
+  // Settings export/import — full-blob backup/restore. Export just calls
+  // the general getSettings and hands the caller a raw object; the caller
+  // wraps it in a downloadable blob. Import posts to the dedicated
+  // /settings/import endpoint which does a full-replace on the DB row
+  // (unlike the general POST /settings, which preserves SavedLayouts +
+  // LayoutJson from the DB and would otherwise ignore the imported
+  // versions of those fields).
+  async exportSettings(): Promise<unknown> {
+    return this.fetch<unknown>('/settings');
+  }
+
+  async importSettings(payload: unknown): Promise<unknown> {
+    return this.fetch<unknown>('/settings/import', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // WSJT-X
   async getWsjtxStatus(): Promise<WsjtxStatus> {
     return this.fetch('/wsjtx/status');
