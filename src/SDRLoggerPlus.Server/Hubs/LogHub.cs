@@ -183,13 +183,21 @@ public class LogHub : Hub<ILogHubClient>
         // return them. Runs even if QRZ returned some fields (e.g. QRZ
         // handed back a Name but no lat/lon), backfilling only what's
         // missing so HamQTH data never overrides a paid QRZ subscription's
-        // response.
+        // response. The call is on the UI hot path, so we impose a hard
+        // 6 s ceiling around the whole HamQTH round trip — enough for a
+        // healthy server + retry, small enough that a broken HamQTH can't
+        // hang the callsign panel with a spinning wheel.
         HamQthCallsignInfo? hqInfo = null;
         if (info?.Latitude is null || info.Longitude is null)
         {
             try
             {
-                hqInfo = await _hamQthService.LookupCallsignAsync(evt.Callsign);
+                using var hqCts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+                hqInfo = await _hamQthService.LookupCallsignAsync(evt.Callsign, hqCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("HamQTH lookup timed out for {Callsign} — using cty.dat fallback", evt.Callsign);
             }
             catch (Exception ex)
             {

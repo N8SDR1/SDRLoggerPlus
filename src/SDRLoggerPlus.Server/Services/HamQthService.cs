@@ -33,6 +33,22 @@ public class HamQthService : IHamQthService
     // proactively at 45 min to avoid the invalidation-retry round trip.
     private static readonly TimeSpan SessionMaxAge = TimeSpan.FromMinutes(45);
 
+    // Lookup calls are on the UI hot path (a click on a spot has to
+    // populate the callsign panel). 15 s was fine for a background/batch
+    // context but too long for interactive use — a slow HamQTH server
+    // showed up as a spinning wheel for the full 15 s. 5 s is generous:
+    // typical HamQTH round trip is well under 1 s.
+    private static readonly TimeSpan LookupTimeout = TimeSpan.FromSeconds(5);
+
+    // Negative-result cache — HamQTH not-found responses used to hit the
+    // network on every re-focus of the same callsign. This is a tiny
+    // in-memory dict keyed by callsign that suppresses lookups we
+    // already know will come back empty. Bounded and time-boxed so a
+    // real ham getting added to HamQTH later doesn't stay invisible.
+    private static readonly TimeSpan NegativeCacheTtl = TimeSpan.FromMinutes(10);
+    private const int NegativeCacheMax = 512;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _notFoundCache = new(StringComparer.OrdinalIgnoreCase);
+
     public HamQthService(
         IHttpClientFactory httpClientFactory,
         ISettingsRepository settingsRepository,
@@ -51,7 +67,7 @@ public class HamQthService : IHamQthService
         try
         {
             var http = _httpClientFactory.CreateClient();
-            http.Timeout = TimeSpan.FromSeconds(15);
+            http.Timeout = LookupTimeout;
 
             var loginUrl = $"{BaseUrl}?u={Uri.EscapeDataString(username)}&p={Uri.EscapeDataString(password)}";
             using var resp = await http.GetAsync(loginUrl, cancellationToken);
@@ -111,6 +127,15 @@ public class HamQthService : IHamQthService
             return null;
         }
 
+        // Skip the round trip if we recently learned HamQTH doesn't know
+        // this callsign. TTL bounded so a real ham added to HamQTH later
+        // doesn't stay invisible for the whole process lifetime.
+        var key = callsign.Trim().ToUpperInvariant();
+        if (_notFoundCache.TryGetValue(key, out var expiry) && expiry > DateTime.UtcNow)
+        {
+            return null;
+        }
+
         try
         {
             // First attempt with whatever session we have cached.
@@ -126,6 +151,11 @@ public class HamQthService : IHamQthService
                 if (sessionId is null) return null;
                 result = await DoLookupAsync(sessionId, callsign, cancellationToken);
             }
+
+            if (result.Info is null)
+            {
+                RememberNotFound(key);
+            }
             return result.Info;
         }
         catch (Exception ex)
@@ -133,6 +163,23 @@ public class HamQthService : IHamQthService
             _logger.LogWarning(ex, "HamQTH lookup failed for {Callsign}", callsign);
             return null;
         }
+    }
+
+    private void RememberNotFound(string key)
+    {
+        // Bound the cache — a heavy DX-cluster session can walk through
+        // thousands of distinct calls; evict the oldest entry when we hit
+        // the ceiling so we don't leak memory.
+        if (_notFoundCache.Count >= NegativeCacheMax)
+        {
+            var oldest = _notFoundCache
+                .OrderBy(kv => kv.Value)
+                .Take(_notFoundCache.Count - NegativeCacheMax + 1)
+                .Select(kv => kv.Key)
+                .ToList();
+            foreach (var k in oldest) _notFoundCache.TryRemove(k, out _);
+        }
+        _notFoundCache[key] = DateTime.UtcNow + NegativeCacheTtl;
     }
 
     private async Task<string?> GetOrCreateSessionAsync(string username, string password, CancellationToken cancellationToken)
@@ -157,7 +204,7 @@ public class HamQthService : IHamQthService
             }
 
             var http = _httpClientFactory.CreateClient();
-            http.Timeout = TimeSpan.FromSeconds(15);
+            http.Timeout = LookupTimeout;
 
             var loginUrl = $"{BaseUrl}?u={Uri.EscapeDataString(username)}&p={Uri.EscapeDataString(password)}";
             using var resp = await http.GetAsync(loginUrl, cancellationToken);
