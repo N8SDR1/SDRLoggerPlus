@@ -97,6 +97,12 @@ interface LayoutState {
   // Layout data
   layout: IJsonModel;
   isLoaded: boolean;
+  // True once loadFromBackend has finished (whether it found a saved
+  // layout or not). We refuse to persist any user-driven layout changes
+  // before this flips — otherwise a stray FlexLayout initial onModelChange
+  // emit (or an early user drag) can overwrite the just-loaded layout with
+  // the pre-load default via the App.tsx 1 s debounce.
+  hasEverLoaded: boolean;
 
   // Actions
   setLayout: (layout: IJsonModel) => void;
@@ -112,8 +118,17 @@ interface LayoutState {
 export const useLayoutStore = create<LayoutState>()((set, get) => ({
   layout: defaultLayout,
   isLoaded: false,
+  hasEverLoaded: false,
 
   setLayout: (layout) => {
+    // Guard: if a save fires before the initial load has completed, the
+    // pre-load state would overwrite whatever's saved on the backend.
+    // Skip the save but still update the local state so the UI reacts.
+    if (!get().hasEverLoaded) {
+      console.warn('[layoutStore] setLayout before initial load — updating locally only, not persisting');
+      set({ layout, isLoaded: true });
+      return;
+    }
     set({ layout, isLoaded: true });
     // Sync to backend in background
     get().syncToBackend(layout);
@@ -187,7 +202,10 @@ export const useLayoutStore = create<LayoutState>()((set, get) => ({
     }
   },
 
-  // Load layout from backend on app startup
+  // Load layout from backend on app startup. Always flips hasEverLoaded
+  // to true on completion (success or failure) so setLayout is unblocked
+  // for the rest of the session. Without this flip, setLayout stays in
+  // "local-only" guard mode forever and no drag ever gets persisted.
   loadFromBackend: async () => {
     try {
       console.log('[layoutStore] Loading layout from backend');
@@ -197,18 +215,18 @@ export const useLayoutStore = create<LayoutState>()((set, get) => ({
         if (settings.layoutJson) {
           const layout = JSON.parse(settings.layoutJson);
           console.log('[layoutStore] Layout loaded successfully');
-          set({ layout, isLoaded: true });
+          set({ layout, isLoaded: true, hasEverLoaded: true });
         } else {
           console.log('[layoutStore] No saved layout found, using default');
-          set({ isLoaded: true });
+          set({ isLoaded: true, hasEverLoaded: true });
         }
       } else {
         console.error('[layoutStore] Failed to load layout, status:', response.status);
-        set({ isLoaded: true });
+        set({ isLoaded: true, hasEverLoaded: true });
       }
     } catch (e) {
       console.error('[layoutStore] Failed to load layout from backend:', e);
-      set({ isLoaded: true });
+      set({ isLoaded: true, hasEverLoaded: true });
     }
   },
 
