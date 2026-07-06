@@ -245,6 +245,11 @@ interface GlobeInstance {
   getScreenCoords(lat: number, lng: number, altitude?: number): { x: number; y: number } | undefined;
   getCoords(lat: number, lng: number, altitude?: number): { x: number; y: number; z: number };
   camera(): { position: { x: number; y: number; z: number } };
+  // Three.js scene graph + renderer — used to raise texture anisotropy on the
+  // globe surface and streamed map tiles so the sphere stays crisp at oblique
+  // viewing angles (default anisotropy of 1 reads as "grainy").
+  scene(): { traverse(cb: (obj: unknown) => void): void };
+  renderer(): { capabilities: { getMaxAnisotropy(): number } };
   onGlobeClick(fn: (coords: { lat: number; lng: number }) => void): GlobeInstance;
   onPointClick(fn: (point: unknown, event: MouseEvent, coords: { lat: number; lng: number; altitude: number }) => void): GlobeInstance;
   onZoom(fn: (pov: { lat: number; lng: number; altitude: number }) => void): GlobeInstance;
@@ -282,6 +287,8 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const selectSpotRef = useRef(selectSpot);
   selectSpotRef.current = selectSpot;
   const strikeStoreRef = useRef(new StrikeStore());
+  // Throttle timestamp for the texture-anisotropy sweep (see the label tick).
+  const lastAnisoSweepRef = useRef(0);
 
   // When a radio is connected, the globe shows only DX spots on the radio's
   // current band + mode (so the display follows the rig). No radio → show all.
@@ -823,7 +830,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         .ringPropagationSpeed(2)
         .ringRepeatPeriod(2000)   // re-ripple while the strike is retained (5–10 min)
         .ringAltitude(0.006)
-        .ringResolution(64)
+        .ringResolution(32)   // halved — ring count is capped, keep per-ring cost low
         .ringsData([]);
 
       // Strike-center lightning bolts (custom layer): a red bolt with a white
@@ -1211,6 +1218,34 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       if (globe) {
         const cam = globe.camera().position;
         const camLen = Math.hypot(cam.x, cam.y, cam.z) || 1;
+
+        // Anisotropic filtering sweep. The globe base texture and the Google
+        // map tiles both load with three.js's default anisotropy of 1, which
+        // leaves the sphere looking grainy/smeared toward its curved edges.
+        // Bump every texture to the GPU's max anisotropy for a crisp surface.
+        // Map tiles stream in continuously as the operator zooms/rotates, so we
+        // re-sweep on a throttle and skip textures already at max.
+        const nowMs = performance.now();
+        if (nowMs - lastAnisoSweepRef.current > 750) {
+          lastAnisoSweepRef.current = nowMs;
+          try {
+            const maxAniso = globe.renderer().capabilities.getMaxAnisotropy();
+            if (maxAniso > 1) {
+              globe.scene().traverse((obj) => {
+                const mat = (obj as { material?: unknown }).material;
+                const mats = Array.isArray(mat) ? mat : mat ? [mat] : [];
+                for (const m of mats) {
+                  const tex = (m as { map?: { anisotropy: number; needsUpdate: boolean } }).map;
+                  if (tex && tex.anisotropy !== maxAniso) {
+                    tex.anisotropy = maxAniso;
+                    tex.needsUpdate = true;
+                  }
+                }
+              });
+            }
+          } catch { /* best-effort — never break the render loop */ }
+        }
+
         for (let i = 0; i < labels.length; i++) {
           const el = els[i];
           if (!el) continue;
@@ -1281,24 +1316,35 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
 
     // Stable ring datum per strike — globe.gl diffs ringsData by object
     // identity, so fresh literals each sweep would rebuild every ring mesh.
-    const ringCache = new WeakMap<Strike, { lat: number; lng: number; local: boolean; ts: number }>();
-    // Strikes first seen via a live SignalR push get a center dot for 60 s from
-    // arrival. Keyed on arrival, not strike time: the feed itself publishes
-    // ~1–2 min behind real time, so strike-time dots would never be visible.
-    // Backfilled history never dots (only rings).
+    // `arrived` = local receipt time, set only for strikes seen via a live
+    // SignalR push; it drives the 60 s strike-bolt window. Keyed on arrival,
+    // not strike time, because the feed publishes ~1–2 min behind real time —
+    // strike-time bolts would never show. Backfill history has no bolt.
+    type RingDatum = { lat: number; lng: number; local: boolean; ts: number; arrived?: number };
+    const ringCache = new WeakMap<Strike, RingDatum>();
     const liveSince = new WeakMap<Strike, number>();
+    // Render caps — the store retains thousands of strikes across the global
+    // 10-min window, but every rendered ring is a continuously-rippling mesh
+    // and every bolt an unbatched sprite draw call. Thousands of them stall the
+    // GPU (freeze/crash on weaker hardware), so bound what actually draws: keep
+    // all local strikes, then the newest, up to these limits.
+    const MAX_RINGS = 400;
+    const MAX_BOLTS = 120;
     const render = () => {
       if (cancelled || !globeRef.current) return;
       const now = Date.now();
-      const dots: unknown[] = [];
-      const data = store.active(now).map(s => {
-        let r = ringCache.get(s);
-        if (!r) { r = { lat: s.lat, lng: s.lon, local: s.local, ts: Date.parse(s.timestampUtc) }; ringCache.set(s, r); }
-        const arrived = liveSince.get(s);
-        if (arrived !== undefined && now - arrived <= 60_000) dots.push(r);
-        return r;
-      });
-      globeRef.current.ringsData(data);
+      const prioritized = store.active(now)
+        .map(s => {
+          let r = ringCache.get(s);
+          if (!r) { r = { lat: s.lat, lng: s.lon, local: s.local, ts: Date.parse(s.timestampUtc), arrived: liveSince.get(s) }; ringCache.set(s, r); }
+          return r;
+        })
+        .sort((a, b) => (Number(b.local) - Number(a.local)) || (b.ts - a.ts)); // local first, then newest
+      const rings = prioritized.slice(0, MAX_RINGS);
+      const dots = prioritized
+        .filter(r => r.arrived !== undefined && now - r.arrived <= 60_000)
+        .slice(0, MAX_BOLTS);
+      globeRef.current.ringsData(rings);
       globeRef.current.customLayerData(dots);
     };
 
@@ -1637,7 +1683,17 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                         setCurrentAzimuth(bearing);
                         commandRotator(bearing, 'globe');
                       }}
-                      className="glass-button-success px-2 py-1 flex items-center gap-1 text-[10px] ml-2"
+                      className="rounded-lg px-2 py-1 flex items-center gap-1 text-[10px] ml-2 font-bold transition-all duration-200 hover:brightness-125 active:scale-95"
+                      style={{
+                        // High-contrast HUD pill: bright green on a near-opaque
+                        // dark backdrop so the bearing stays legible over the
+                        // globe. The old glass-button-success was green text on
+                        // a translucent green fill, which blended into the map.
+                        background: 'rgba(8, 11, 18, 0.9)',
+                        border: '1px solid rgba(74, 222, 128, 0.85)',
+                        color: '#6ee7a0',
+                        boxShadow: '0 0 8px rgba(74, 222, 128, 0.35)',
+                      }}
                       title={`Rotate to ${focusedCallsignInfo.callsign}`}
                     >
                       <Navigation className="w-2.5 h-2.5" />
