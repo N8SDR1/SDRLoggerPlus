@@ -110,10 +110,12 @@ html:not(.dark) select option {
 /* Dark-mode native <select> popup: <option> and <optgroup> don't inherit the
    .glass-input dark background — they need explicit rules or the browser
    falls back to its default (a washed-out light-grey on Chromium Windows).
-   Applies to every dark-theme select, not just the Log Entry mode dropdown,
-   so band/mode/logbook selects all match Brent's overall visual language. */
+   Colors match the effective appearance of .glass-input fields (bg-dark-700
+   at 50% opacity over the panel body), so the popup reads as an extension
+   of the closed select rather than a different-colored layer. Applies to
+   every dark-theme select — band/mode/logbook all match. */
 .dark select option {
-  background-color: #141417;        /* --surface-900 */
+  background-color: #1B1B1F;        /* --surface-850 — matches panel body / callsign field */
   color: #E4E4E7;                   /* --surface-200 */
 }
 .dark select option:checked,
@@ -122,7 +124,7 @@ html:not(.dark) select option {
   color: #E08A3D;                   /* --accent-primary (warm amber) */
 }
 .dark select optgroup {
-  background-color: #0f0f12;        /* one shade deeper than surface-900 */
+  background-color: #141417;        /* --surface-900 — one step darker for group header */
   color: #8E8E96;                   /* --surface-400 — muted label */
   font-style: italic;
   font-weight: 600;
