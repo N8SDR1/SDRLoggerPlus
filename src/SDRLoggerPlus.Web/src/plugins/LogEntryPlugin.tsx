@@ -1222,10 +1222,10 @@ export function LogEntryPlugin() {
               const freqMhz = parseFloat(formData.frequency);
               if (!formData.callsign || !freqMhz) return;
               try {
-                const n = await sendDxSpot(formData.callsign, freqMhz * 1000, formData.remarks || undefined);
-                alert(n > 0
-                  ? `Spotted ${formData.callsign} on ${n} cluster${n === 1 ? '' : 's'}`
-                  : 'No clusters connected — nothing spotted');
+                const r = await sendDxSpot(formData.callsign, freqMhz * 1000, formData.remarks || undefined);
+                alert(r.sent
+                  ? `Spotted ${formData.callsign} on ${r.detail}`
+                  : r.detail);
               } catch (e) {
                 alert(`Spot failed: ${e instanceof Error ? e.message : String(e)}`);
               }

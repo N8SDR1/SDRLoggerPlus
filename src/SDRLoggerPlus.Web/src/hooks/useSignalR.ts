@@ -519,7 +519,8 @@ export function useSignalR() {
     await signalRService.tuneToBand(band, mode);
   }, []);
 
-  const sendDxSpot = useCallback(async (callsign: string, freqKhz: number, comment?: string) => {
+  const sendDxSpot = useCallback(async (callsign: string, freqKhz: number, comment?: string):
+    Promise<{ sent: boolean; clusterCount: number; detail: string }> => {
     return await signalRService.sendDxSpot(callsign, freqKhz, comment);
   }, []);
 

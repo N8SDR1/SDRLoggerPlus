@@ -617,6 +617,15 @@ public class ClusterSettings
     // global activity). Set a cty.dat country name to scope spots to its spotters.
     [BsonElement("spotholeSpotterCountry")]
     public string? SpotholeSpotterCountry { get; set; } = "";
+
+    // Which connection to POST outbound self-spots to. The DX cluster
+    // network is federated (VE7CC, DXSpider, AR-Cluster, CC Cluster all
+    // peer and relay upstream), so posting the same spot to every
+    // connected cluster is redundant at best and gets your call flagged
+    // as a repeat-source spammer at worst. Empty = "first connected
+    // cluster" fallback so brand-new setups still work.
+    [BsonElement("primarySpotClusterId")]
+    public string? PrimarySpotClusterId { get; set; } = "";
 }
 
 [BsonIgnoreExtraElements]

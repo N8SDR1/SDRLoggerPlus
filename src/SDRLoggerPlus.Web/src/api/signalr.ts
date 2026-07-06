@@ -1256,11 +1256,14 @@ class SignalRService {
   }
 
   /**
-   * Broadcast a spot to every connected DX cluster. Returns the number of
-   * clusters that accepted the write — 0 = none connected / nothing sent.
+   * Send a spot to the primary DX cluster (or the sole connected cluster
+   * if only one is up). Returns { sent, detail } — `detail` is the target
+   * cluster name on success or a human-readable reason on refusal.
    */
-  async sendDxSpot(callsign: string, frequencyKhz: number, comment?: string): Promise<number> {
-    return await this.connection?.invoke<number>('SendDxSpot', callsign, frequencyKhz, comment ?? null) ?? 0;
+  async sendDxSpot(callsign: string, frequencyKhz: number, comment?: string): Promise<{ sent: boolean; clusterCount: number; detail: string }> {
+    const result = await this.connection?.invoke<{ sent: boolean; clusterCount: number; detail: string }>(
+      'SendDxSpot', callsign, frequencyKhz, comment ?? null);
+    return result ?? { sent: false, clusterCount: 0, detail: 'Not connected to the server' };
   }
 
   async deleteTciConfig(radioId?: string): Promise<void> {

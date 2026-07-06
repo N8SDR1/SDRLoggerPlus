@@ -908,6 +908,34 @@ export function ClusterPlugin() {
 
             <div className="border-t border-glass-100" />
 
+            {/* Outbound-spot cluster picker. The DX cluster network peers
+                clusters together and relays spots upstream, so posting the
+                same spot to multiple clusters gets your call flagged as a
+                duplicate source. Pick ONE cluster to spot on. */}
+            <div>
+              <h5 className="text-sm font-medium font-ui text-dark-200 mb-3">Outbound Spots</h5>
+              <div className="space-y-2 p-3 bg-dark-700/50 rounded-lg border border-glass-100">
+                <label className="text-xs font-ui text-dark-300 block">Send self-spots to</label>
+                <select
+                  value={settings.cluster.primarySpotClusterId}
+                  onChange={(e) => updateClusterSettings({ primarySpotClusterId: e.target.value })}
+                  className="glass-input w-full text-sm"
+                >
+                  <option value="">Auto (only works when a single cluster is connected)</option>
+                  {clusterConnections.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name || `${c.host}:${c.port}`}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-dark-400">
+                  The cluster network peers all clusters and relays spots upstream, so posting to more than
+                  one is redundant and can get your call flagged. Pick one. SpotHole isn't in the list —
+                  it's a read-only aggregator that doesn't accept submitted spots.
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-glass-100" />
+
             {/* Cluster Connections Section */}
             <div>
               <h5 className="text-sm font-medium font-ui text-dark-200 mb-3">Cluster Connections</h5>

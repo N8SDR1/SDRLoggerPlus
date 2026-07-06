@@ -218,6 +218,8 @@ export interface ClusterSettings {
   spotholeSpotterCountry: string;
   /** When true, the spot list follows the connected rig's live band + mode. */
   trackRig: boolean;
+  /** Which of the configured telnet clusters receives outbound spots. Empty = auto (only when a single cluster is connected). */
+  primarySpotClusterId: string;
 }
 
 export interface SpotStatusColors {
@@ -543,6 +545,7 @@ const defaultSettings: Settings = {
     spotholeEnabled: true,
     spotholeSpotterCountry: '', // empty = worldwide (fuller band-activity heat map)
     trackRig: false,
+    primarySpotClusterId: '', // empty = auto-pick when a single cluster is connected
   },
   spotStatus: {
     enabled: true,

@@ -471,15 +471,17 @@ public class LogHub : Hub<ILogHubClient>
     }
 
     /// <summary>
-    /// Broadcast a spot to every connected DX cluster. Called by the
-    /// LogEntry "Spot" button. Returns the count of clusters that
-    /// accepted the write so the caller can toast "spotted on 2 clusters"
-    /// or "no clusters connected — nothing spotted".
+    /// Send a spot to the operator-picked primary DX cluster. Returns a
+    /// tuple the client can toast — Sent=true with the target cluster
+    /// name on success, Sent=false with a human-readable reason (e.g.
+    /// "multiple clusters connected, pick a primary") on refusal.
     /// </summary>
-    public async Task<int> SendDxSpot(string callsign, double frequencyKhz, string? comment)
+    public async Task<SendSpotResult> SendDxSpot(string callsign, double frequencyKhz, string? comment)
     {
-        if (_dxClusterService is null) return 0;
-        if (string.IsNullOrWhiteSpace(callsign) || frequencyKhz <= 0) return 0;
+        if (_dxClusterService is null)
+            return new SendSpotResult(false, 0, "DX cluster service not available");
+        if (string.IsNullOrWhiteSpace(callsign) || frequencyKhz <= 0)
+            return new SendSpotResult(false, 0, "Callsign and frequency are required");
         try
         {
             return await _dxClusterService.SendSpotAsync(callsign, frequencyKhz, comment);
@@ -487,7 +489,7 @@ public class LogHub : Hub<ILogHubClient>
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "SendDxSpot failed for {Callsign} @ {FreqKhz}", callsign, frequencyKhz);
-            return 0;
+            return new SendSpotResult(false, 0, $"Spot failed: {ex.Message}");
         }
     }
 

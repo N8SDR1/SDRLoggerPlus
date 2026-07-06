@@ -19,13 +19,22 @@ public interface IDxClusterService
     Task StopAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Broadcast a spot to every currently-connected cluster. Returns the
-    /// count of clusters that accepted the write. Clusters relay spots
-    /// upstream so submitting to multiple clusters doesn't duplicate the
-    /// spot on the network — the cluster network handles dedup.
+    /// Send a spot to the operator-picked primary cluster (or the sole
+    /// connected cluster if only one is up). Refuses to guess when
+    /// multiple clusters are connected without a primary configured —
+    /// the DX cluster network peers clusters together so posting the
+    /// same spot to multiple clusters gets the operator flagged as a
+    /// duplicate source.
     /// </summary>
-    Task<int> SendSpotAsync(string callsign, double freqKhz, string? comment, CancellationToken ct = default);
+    Task<SendSpotResult> SendSpotAsync(string callsign, double freqKhz, string? comment, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Outcome of a spot submission. Sent = true iff the write hit exactly
+/// one cluster's socket. Detail carries the target cluster name on
+/// success, or a human-readable "why we couldn't" reason on failure.
+/// </summary>
+public record SendSpotResult(bool Sent, int ClusterCount, string Detail);
 
 public record ClusterConnectionStatus(
     string ClusterId,
@@ -289,17 +298,66 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
         return _statuses;
     }
 
-    public async Task<int> SendSpotAsync(string callsign, double freqKhz, string? comment, CancellationToken ct = default)
+    public async Task<SendSpotResult> SendSpotAsync(string callsign, double freqKhz, string? comment, CancellationToken ct = default)
     {
-        // Fan out to every connected cluster in parallel. Each cluster
-        // handler serialises its own writes via _writeLock, so this is
-        // safe. Disconnected clusters simply return false without error.
-        var tasks = _connections.Values
-            .Select(h => h.SendSpotAsync(callsign, freqKhz, comment, ct))
-            .ToArray();
-        if (tasks.Length == 0) return 0;
-        var results = await Task.WhenAll(tasks);
-        return results.Count(r => r);
+        // Pick the SINGLE cluster to spot on. The DX cluster network peers
+        // clusters together and relays spots upstream, so posting to
+        // multiple clusters just gets your call flagged as a duplicate
+        // source. NOTE: _connections only holds TELNET cluster handlers —
+        // Spothole is a separate REST poller (SpotholeService) that
+        // isn't spottable, so it never appears here.
+        //
+        // Selection rules:
+        //   1. If a primary cluster is picked in Settings → Cluster and
+        //      it's connected, use it.
+        //   2. Else if exactly ONE telnet cluster is connected, use it
+        //      (unambiguous — no need to bother the operator).
+        //   3. Else refuse and ask the operator to pick a primary. Never
+        //      silently guess when multiple are connected: guessing can
+        //      double-post to peered clusters.
+        using var scope = _serviceProvider.CreateScope();
+        var settingsService = scope.ServiceProvider.GetRequiredService<ISettingsService>();
+        var settings = await settingsService.GetSettingsAsync();
+        var primaryId = settings.Cluster.PrimarySpotClusterId;
+
+        // Rule 1: honour the explicit primary if it's live.
+        ClusterConnectionHandler? target = null;
+        if (!string.IsNullOrWhiteSpace(primaryId)
+            && _connections.TryGetValue(primaryId!, out var chosen)
+            && chosen.IsConnected)
+        {
+            target = chosen;
+        }
+
+        if (target is null)
+        {
+            var connected = _connections.Values.Where(h => h.IsConnected).ToList();
+            if (connected.Count == 1)
+            {
+                // Rule 2: exactly one connected — no ambiguity.
+                target = connected[0];
+            }
+            else if (connected.Count > 1)
+            {
+                // Rule 3: refuse rather than guess.
+                _logger.LogWarning("Spot: {N} clusters connected but no primary picked in Settings → Cluster — refusing to guess", connected.Count);
+                return new SendSpotResult(false, 0, "Multiple clusters connected — pick a primary spot cluster in Settings → Cluster");
+            }
+            else if (!string.IsNullOrWhiteSpace(primaryId))
+            {
+                _logger.LogInformation("Spot: primary cluster {PrimaryId} isn't connected", primaryId);
+                return new SendSpotResult(false, 0, "The primary spot cluster isn't currently connected");
+            }
+        }
+
+        if (target is null)
+        {
+            _logger.LogInformation("Spot: no connected cluster to send to");
+            return new SendSpotResult(false, 0, "No DX cluster is connected");
+        }
+
+        var ok = await target.SendSpotAsync(callsign, freqKhz, comment, ct);
+        return new SendSpotResult(ok, ok ? 1 : 0, ok ? target.Name : "Cluster write failed");
     }
 
     /// <summary>
@@ -513,6 +571,7 @@ internal class ClusterConnectionHandler
 {
     private readonly string _id;
     private readonly string _name;
+    public string Name => _name;
     private readonly string _host;
     private readonly int _port;
     private readonly string _callsign;
