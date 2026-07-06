@@ -2474,46 +2474,6 @@ function BackupSettingsSection() {
         </p>
       </div>
 
-      {/* Settings export / import */}
-      <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
-        <div>
-          <label className="text-sm font-medium text-dark-200">Settings Export / Import</label>
-          <p className="text-xs text-dark-400 mt-0.5">
-            Save all application settings to a file, or restore them from one. The export includes
-            credentials (QRZ, cluster passwords, API keys) — keep the file private.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={handleExportSettings} className="glass-button px-4 py-2 flex items-center gap-2 text-sm">
-            <Download className="w-4 h-4" />
-            Export Settings
-          </button>
-          <button
-            onClick={() => importFileRef.current?.click()}
-            className="glass-button px-4 py-2 flex items-center gap-2 text-sm"
-          >
-            <CloudUpload className="w-4 h-4" />
-            Import Settings
-          </button>
-          <input
-            ref={importFileRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleImportSettings(file);
-              e.target.value = '';
-            }}
-          />
-        </div>
-        {ioMessage && (
-          <p className={`text-xs ${ioMessage.ok ? 'text-accent-success' : 'text-accent-danger'}`}>
-            {ioMessage.text}
-          </p>
-        )}
-      </div>
-
       {/* Enable toggle */}
       <div className="flex items-center justify-between p-3 bg-dark-700 rounded-lg">
         <div>
@@ -2593,6 +2553,49 @@ function BackupSettingsSection() {
             </p>
           )}
         </div>
+      </div>
+
+      {/* Settings export / import — moved to the bottom so the panel reads
+          top-down as "here is the scheduled logbook backup config", and
+          this credential-heavy manual escape hatch sits at the end where
+          it's less likely to distract during routine schedule tweaks. */}
+      <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
+        <div>
+          <label className="text-sm font-medium text-dark-200">Settings Export / Import</label>
+          <p className="text-xs text-dark-400 mt-0.5">
+            Save all application settings to a file, or restore them from one. The export includes
+            credentials (QRZ, cluster passwords, API keys) — keep the file private.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={handleExportSettings} className="glass-button px-4 py-2 flex items-center gap-2 text-sm">
+            <Download className="w-4 h-4" />
+            Export Settings
+          </button>
+          <button
+            onClick={() => importFileRef.current?.click()}
+            className="glass-button px-4 py-2 flex items-center gap-2 text-sm"
+          >
+            <CloudUpload className="w-4 h-4" />
+            Import Settings
+          </button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImportSettings(file);
+              e.target.value = '';
+            }}
+          />
+        </div>
+        {ioMessage && (
+          <p className={`text-xs ${ioMessage.ok ? 'text-accent-success' : 'text-accent-danger'}`}>
+            {ioMessage.text}
+          </p>
+        )}
       </div>
     </div>
   );
