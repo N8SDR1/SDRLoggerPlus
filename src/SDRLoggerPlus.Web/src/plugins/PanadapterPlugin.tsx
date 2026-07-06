@@ -246,10 +246,15 @@ export function PanadapterPlugin() {
     waterfallBufRef.current = null;
   }, [zoom]);
 
-  // Scroll-tune step (shared with the Rig panel).
+  // Scroll-tune step (shared with the Rig panel — a change here also
+  // affects the Rig VFO's wheel step and vice versa).
   const scrollTuneStepHz = useSettingsStore((s) => s.settings.radio.scrollTuneStepHz);
+  const updateRadioSettings = useSettingsStore((s) => s.updateRadioSettings);
   const scrollStepRef = useRef(scrollTuneStepHz);
   useEffect(() => { scrollStepRef.current = scrollTuneStepHz; }, [scrollTuneStepHz]);
+
+  // Compact label for the header dropdown ("1 Hz", "1 kHz", "5 kHz").
+  const formatStep = (hz: number) => (hz >= 1000 ? `${hz / 1000} kHz` : `${hz} Hz`);
 
   // Keep pausedRef in sync
   useEffect(() => {
@@ -853,6 +858,21 @@ export function PanadapterPlugin() {
               onChange={(e) => setWfCeil(parseFloat(e.target.value))}
               className="w-14 accent-[rgb(var(--accent-primary))] cursor-pointer"
             />
+          </div>
+          {/* Scroll-tune step picker — mouse-wheel tunes the VFO by this
+              amount per notch. Shared with the Rig panel: a change here
+              also affects the Rig VFO's wheel step. */}
+          <div className="flex items-center gap-1.5" title="Mouse-wheel tuning step (shared with Rig panel)">
+            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">STEP</span>
+            <select
+              value={scrollTuneStepHz}
+              onChange={(e) => updateRadioSettings({ scrollTuneStepHz: parseInt(e.target.value, 10) })}
+              className="glass-input text-[10px] font-mono px-1 py-0.5"
+            >
+              {[1, 10, 100, 500, 1000, 2500, 5000, 10000].map((hz) => (
+                <option key={hz} value={hz}>{formatStep(hz)}</option>
+              ))}
+            </select>
           </div>
           {/* Palette picker */}
           <div className="flex items-center gap-1.5" title="Waterfall colour palette">
