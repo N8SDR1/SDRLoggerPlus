@@ -1582,6 +1582,32 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
           </button>
         )}
 
+        {/* Beam heading + coords — under the play button (Top Right). */}
+        {!hideOverlays && (
+          <div className="absolute top-16 right-4 flex flex-col items-end gap-1 pointer-events-none">
+            {rotatorEnabled && (
+              <div className="text-right">
+                {/* 1.15rem = 15% larger than the 1rem station callsign. */}
+                <div className="text-[1.15rem] font-display font-bold text-accent-primary drop-shadow-glow leading-none">
+                  {currentAzimuth}°
+                </div>
+                <div className="text-[10px] font-ui font-bold uppercase tracking-[0.2em] text-accent-primary/60 mt-1">
+                  Beam Heading
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 px-3 py-1 bg-dark-900/40 backdrop-blur-sm rounded-full border border-glass-100 text-[10px] font-mono text-dark-300">
+              <div className="flex items-center gap-1">
+                <MapPin className="w-2.5 h-2.5" />
+                <span>{stationLat.toFixed(4)}°N</span>
+              </div>
+              <div className="w-px h-2 bg-glass-200" />
+              <div>{Math.abs(stationLon).toFixed(4)}°{stationLon >= 0 ? 'E' : 'W'}</div>
+            </div>
+          </div>
+        )}
+
         {/* Station and Rig Info Overlay (Top Left) */}
         {!hideOverlays && (
           <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
@@ -1656,29 +1682,6 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
               </div>
             )}
 
-            {/* Beam heading + coords — stays visible at any panel size. */}
-            <div className="flex flex-col items-center gap-1 mt-1">
-                {rotatorEnabled && (
-                  <div className="text-center">
-                    {/* 1.15rem = 15% larger than the 1rem station callsign. */}
-                    <div className="text-[1.15rem] font-display font-bold text-accent-primary drop-shadow-glow leading-none">
-                      {currentAzimuth}°
-                    </div>
-                    <div className="text-[10px] font-ui font-bold uppercase tracking-[0.2em] text-accent-primary/60 mt-1">
-                      Beam Heading
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-1 flex items-center gap-3 px-3 py-1 bg-dark-900/40 backdrop-blur-sm rounded-full border border-glass-100 text-[10px] font-mono text-dark-300">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-2.5 h-2.5" />
-                    <span>{stationLat.toFixed(4)}°N</span>
-                  </div>
-                  <div className="w-px h-2 bg-glass-200" />
-                  <div>{Math.abs(stationLon).toFixed(4)}°{stationLon >= 0 ? 'E' : 'W'}</div>
-                </div>
-              </div>
           </div>
         )}
 
