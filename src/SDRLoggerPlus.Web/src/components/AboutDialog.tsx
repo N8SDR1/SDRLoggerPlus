@@ -255,6 +255,32 @@ function HelpTab() {
   );
 }
 
+// How many "## " session headings to show inline in the dialog before
+// truncating and linking off to GitHub for the rest. Three keeps the
+// dialog scannable while still covering recent development.
+const CHANGELOG_INLINE_SECTIONS = 3;
+const CHANGELOG_GITHUB_URL = 'https://github.com/N8SDR1/SDRLoggerPlus/blob/v2-alpha/CHANGELOG.md';
+
+/**
+ * Trim the bundled CHANGELOG.md to the last N `## ` sessions. Everything
+ * before the first `## ` (top-level intro paragraphs) is kept as-is, then
+ * the first N `## ` blocks, then we stop. Returns { text, truncated }
+ * so the caller can render a "see full history on GitHub" footer.
+ */
+function trimChangelog(full: string, keepSections: number): { text: string; truncated: boolean } {
+  const lines = full.split('\n');
+  let seen = 0;
+  const kept: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith('## ')) {
+      seen++;
+      if (seen > keepSections) return { text: kept.join('\n'), truncated: true };
+    }
+    kept.push(line);
+  }
+  return { text: kept.join('\n'), truncated: false };
+}
+
 function ChangelogTab({ text, error }: { text: string | null; error: string | null }) {
   if (error) {
     return (
@@ -269,11 +295,21 @@ function ChangelogTab({ text, error }: { text: string | null; error: string | nu
   if (text === null) {
     return <p className="text-sm text-dark-300">Loading changelog…</p>;
   }
+  const { text: shown, truncated } = trimChangelog(text, CHANGELOG_INLINE_SECTIONS);
+
+  const openLink = (url: string) => {
+    if (window.electronAPI && 'openExternal' in window.electronAPI) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   // Very light Markdown rendering — no full parser needed. Headings pop,
   // lists render as lists, everything else is preformatted for readability.
   return (
     <div className="text-sm text-dark-200 space-y-1 leading-relaxed">
-      {text.split('\n').map((line, i) => {
+      {shown.split('\n').map((line, i) => {
         if (line.startsWith('## ')) {
           return <h2 key={i} className="text-base font-semibold font-ui text-accent-primary mt-4 mb-1 first:mt-0">{line.replace(/^## /, '')}</h2>;
         }
@@ -295,6 +331,20 @@ function ChangelogTab({ text, error }: { text: string | null; error: string | nu
         // Body paragraph.
         return <p key={i} className="text-xs text-dark-200 leading-relaxed">{line.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`(.+?)`/g, '$1')}</p>;
       })}
+      {truncated && (
+        <div className="mt-6 pt-4 border-t border-glass-100 text-center">
+          <p className="text-xs text-dark-300 mb-2">
+            Only the {CHANGELOG_INLINE_SECTIONS} most recent sessions are shown here to keep the dialog focused.
+          </p>
+          <button
+            onClick={() => openLink(CHANGELOG_GITHUB_URL)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-dark-700 border border-glass-200 text-accent-primary hover:bg-dark-600 text-xs font-ui transition-colors"
+          >
+            <ScrollText className="w-3 h-3" />
+            Full changelog on GitHub
+          </button>
+        </div>
+      )}
     </div>
   );
 }
