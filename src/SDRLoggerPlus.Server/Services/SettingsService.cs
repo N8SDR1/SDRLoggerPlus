@@ -36,6 +36,7 @@ public class SettingsService : ISettingsService
         settings.Cluster ??= new();
         settings.SpotStatus ??= new();
         settings.Ai ??= new();
+        settings.SavedLayouts ??= new();
 
         return settings;
     }

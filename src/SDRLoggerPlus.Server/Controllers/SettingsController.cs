@@ -68,6 +68,20 @@ public class SettingsController : ControllerBase
 
         try
         {
+            // Preserve fields managed by dedicated endpoints. The general
+            // POST /api/settings bulk save from the frontend doesn't know
+            // about these fields, so its outgoing JSON has null/empty
+            // values that would otherwise wipe them out on Upsert.
+            //   - SavedLayouts → managed by /api/settings/layouts subresource
+            //   - LayoutJson   → managed by PUT /api/settings/layout
+            // Load the existing record and reinject those values.
+            var existing = await _settingsService.GetSettingsAsync(settings.Id);
+            settings.SavedLayouts = existing.SavedLayouts ?? new();
+            if (string.IsNullOrEmpty(settings.LayoutJson))
+            {
+                settings.LayoutJson = existing.LayoutJson;
+            }
+
             var saved = await _settingsService.SaveSettingsAsync(settings);
             // Hot list matching runs off an in-memory set — refresh it so
             // edits made through the settings panel take effect immediately
