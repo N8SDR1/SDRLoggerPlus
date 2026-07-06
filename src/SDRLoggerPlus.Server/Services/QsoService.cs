@@ -15,16 +15,18 @@ public class QsoService : IQsoService
     private readonly ISpotStatusService? _spotStatusService;
     private readonly ClubLogService? _clubLog;
     private readonly HrdLogService? _hrdLog;
+    private readonly EqslService? _eqsl;
 
     public QsoService(IQsoRepository repository, IHubContext<LogHub, ILogHubClient> hub,
         ISpotStatusService? spotStatusService = null, ClubLogService? clubLog = null,
-        HrdLogService? hrdLog = null)
+        HrdLogService? hrdLog = null, EqslService? eqsl = null)
     {
         _repository = repository;
         _hub = hub;
         _spotStatusService = spotStatusService;
         _clubLog = clubLog;
         _hrdLog = hrdLog;
+        _eqsl = eqsl;
     }
 
     public async Task<QsoResponse?> GetByIdAsync(string id)
@@ -131,6 +133,13 @@ public class QsoService : IQsoService
         if (_hrdLog != null)
         {
             _ = Task.Run(() => _hrdLog.UploadQsoAsync(created));
+        }
+
+        // Fire-and-forget eQSL.cc realtime upload — no-ops when disabled,
+        // logs a warning on auth failure but never throws into the caller.
+        if (_eqsl != null)
+        {
+            _ = Task.Run(() => _eqsl.UploadQsoAsync(created));
         }
 
         // Update spot status cache incrementally

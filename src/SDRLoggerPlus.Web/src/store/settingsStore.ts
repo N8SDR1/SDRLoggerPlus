@@ -74,6 +74,13 @@ export interface HrdLogSettings {
   uploadCode: string; // per-account upload code from hrdlog.net
 }
 
+export interface EqslSettings {
+  enabled: boolean;
+  username: string;    // typically your callsign
+  password: string;
+  qthNickname: string; // optional: pick a QTH when your eQSL account has multiple
+}
+
 export interface AppearanceSettings {
   theme: ThemeId;
   compactMode: boolean;
@@ -308,6 +315,7 @@ export interface Settings {
   lotw: LotwSettings;
   clubLog: ClubLogSettings;
   hrdLog: HrdLogSettings;
+  eqsl: EqslSettings;
   adifMonitor: AdifMonitorSettings;
   rbnAlerts: RbnAlertSettings;
   appearance: AppearanceSettings;
@@ -353,6 +361,7 @@ interface SettingsState {
   updateLotwSettings: (lotw: Partial<LotwSettings>) => void;
   updateClubLogSettings: (clubLog: Partial<ClubLogSettings>) => void;
   updateHrdLogSettings: (hrdLog: Partial<HrdLogSettings>) => void;
+  updateEqslSettings: (eqsl: Partial<EqslSettings>) => void;
   updateAdifMonitorSettings: (adifMonitor: Partial<AdifMonitorSettings>) => void;
   updateRbnAlertSettings: (rbnAlerts: Partial<RbnAlertSettings>) => void;
   updateAppearanceSettings: (appearance: Partial<AppearanceSettings>) => void;
@@ -420,6 +429,12 @@ const defaultSettings: Settings = {
     enabled: false,
     callsign: '',
     uploadCode: '',
+  },
+  eqsl: {
+    enabled: false,
+    username: '',
+    password: '',
+    qthNickname: '',
   },
   adifMonitor: {
     enabled: false,
@@ -665,6 +680,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       settings: {
         ...state.settings,
         hrdLog: { ...state.settings.hrdLog, ...hrdLog },
+      },
+      isDirty: true,
+    })),
+
+  updateEqslSettings: (eqsl) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        eqsl: { ...state.settings.eqsl, ...eqsl },
       },
       isDirty: true,
     })),
@@ -977,6 +1001,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           lotw: { ...defaultSettings.lotw, ...settings.lotw },
           clubLog: { ...defaultSettings.clubLog, ...settings.clubLog },
           hrdLog: { ...defaultSettings.hrdLog, ...settings.hrdLog },
+          eqsl: { ...defaultSettings.eqsl, ...settings.eqsl },
           adifMonitor: { ...defaultSettings.adifMonitor, ...settings.adifMonitor },
           rbnAlerts: { ...defaultSettings.rbnAlerts, ...settings.rbnAlerts },
           appearance: {

@@ -155,6 +155,13 @@ builder.Services.AddSingleton<HrdLogService>(sp =>
         sp.GetRequiredService<IHttpClientFactory>().CreateClient("HrdLog"),
         sp.GetRequiredService<ILogger<HrdLogService>>()));
 
+// eQSL.cc realtime QSO upload
+builder.Services.AddSingleton<EqslService>(sp =>
+    new EqslService(
+        sp.GetRequiredService<ISettingsService>(),
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("Eqsl"),
+        sp.GetRequiredService<ILogger<EqslService>>()));
+
 // Register Rotator service (hamlib rotctld)
 builder.Services.AddSingleton<RotatorService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RotatorService>());

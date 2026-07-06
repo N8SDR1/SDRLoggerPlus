@@ -1731,6 +1731,118 @@ function HrdLogSettingsSection() {
   );
 }
 
+// eQSL.cc Settings Section — mirrors the ClubLog / HRDLog pattern.
+// Real-time per-QSO ADIF upload via ImportADIF.cfm; the "Test
+// Credentials" button posts an empty ADIF so eQSL's auth check runs
+// without submitting a QSO.
+function EqslSettingsSection() {
+  const { settings, updateEqslSettings } = useSettingsStore();
+  const eqsl = settings.eqsl;
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState('');
+
+  const handleTest = async () => {
+    setTestStatus('testing');
+    setTestMessage('');
+    try {
+      const resp = await fetch('/api/eqsl/test', { method: 'POST' });
+      const data = await resp.json();
+      if (data.success) {
+        setTestStatus('success');
+        setTestMessage(data.message || 'Connected');
+        if (!eqsl.enabled) updateEqslSettings({ enabled: true });
+      } else {
+        setTestStatus('error');
+        setTestMessage(data.message || 'Test failed');
+      }
+    } catch {
+      setTestStatus('error');
+      setTestMessage('Failed to reach server');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">eQSL.cc</h3>
+        <p className="text-sm text-dark-300">
+          Upload each QSO to eQSL.cc in real time as you log it. Enter your eQSL username
+          (typically your callsign) and password. Save your settings before running Test.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between p-3 bg-dark-700 rounded-lg">
+        <div>
+          <label className="text-sm font-medium text-dark-200">Enable eQSL Upload</label>
+          <p className="text-xs text-dark-400 mt-0.5">Send every new QSO to eQSL.cc automatically</p>
+        </div>
+        <button
+          onClick={() => updateEqslSettings({ enabled: !eqsl.enabled })}
+          className={`relative w-11 h-6 rounded-full transition-colors ${eqsl.enabled ? 'bg-accent-primary' : 'bg-dark-500'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${eqsl.enabled ? 'translate-x-5' : ''}`} />
+        </button>
+      </div>
+
+      <div className={`space-y-4 ${!eqsl.enabled ? 'opacity-50' : ''}`}>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium font-ui text-dark-200">eQSL Username</label>
+            <input
+              type="text"
+              value={eqsl.username}
+              onChange={(e) => updateEqslSettings({ username: e.target.value.toUpperCase() })}
+              placeholder={settings.station.callsign || 'YOUR-CALL'}
+              className="glass-input w-full font-mono"
+            />
+            <p className="text-xs text-dark-300">Usually your callsign — the account username on eQSL.cc.</p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium font-ui text-dark-200">eQSL Password</label>
+            <input
+              type="password"
+              value={eqsl.password}
+              onChange={(e) => updateEqslSettings({ password: e.target.value })}
+              placeholder="eQSL account password"
+              className="glass-input w-full font-mono"
+            />
+            <p className="text-xs text-dark-300">Stored in the local user config only.</p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium font-ui text-dark-200">QTH Nickname (optional)</label>
+          <input
+            type="text"
+            value={eqsl.qthNickname}
+            onChange={(e) => updateEqslSettings({ qthNickname: e.target.value })}
+            placeholder="Home / Portable / …"
+            className="glass-input w-full font-mono max-w-xs"
+          />
+          <p className="text-xs text-dark-300">
+            Only needed if your eQSL account has multiple QTHs configured.
+          </p>
+        </div>
+
+        <div className="pt-2">
+          <button
+            onClick={handleTest}
+            disabled={testStatus === 'testing' || !eqsl.username || !eqsl.password}
+            className="glass-button-primary px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {testStatus === 'testing' ? 'Testing…' : 'Test Credentials'}
+          </button>
+          {testStatus === 'success' && (
+            <span className="ml-3 text-sm text-accent-success">✓ {testMessage}</span>
+          )}
+          {testStatus === 'error' && (
+            <span className="ml-3 text-sm text-red-400">✗ {testMessage}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Appearance Settings Section
 function AppearanceSettingsSection() {
   const { settings, updateAppearanceSettings } = useSettingsStore();
@@ -3215,7 +3327,7 @@ function AboutSection() {
 }
 
 // Web Logbooks — groups QRZ, LOTW, Club Log, HRDLog, and WSJT-X under one category with sub-tabs.
-type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'wsjtx' | 'countryfiles';
+type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'eqsl' | 'wsjtx' | 'countryfiles';
 
 function WebLogbooksSection() {
   const [tab, setTab] = useState<WebLogbookTab>('qrz');
@@ -3225,6 +3337,7 @@ function WebLogbooksSection() {
     { id: 'lotw', label: 'LOTW' },
     { id: 'clublog', label: 'Club Log' },
     { id: 'hrdlog', label: 'HRDLog' },
+    { id: 'eqsl', label: 'eQSL' },
     { id: 'wsjtx', label: 'WSJT-X' },
     { id: 'countryfiles', label: 'Country Files' },
   ];
@@ -3252,6 +3365,7 @@ function WebLogbooksSection() {
       {tab === 'lotw' && <LotwSettingsSection />}
       {tab === 'clublog' && <ClubLogSettingsSection />}
       {tab === 'hrdlog' && <HrdLogSettingsSection />}
+      {tab === 'eqsl' && <EqslSettingsSection />}
       {tab === 'wsjtx' && <WsjtxSettingsSection />}
       {tab === 'countryfiles' && <CountryFilesSection />}
     </div>

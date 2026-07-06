@@ -51,6 +51,9 @@ public class UserSettings
     [BsonElement("hrdLog")]
     public HrdLogSettings HrdLog { get; set; } = new();
 
+    [BsonElement("eqsl")]
+    public EqslSettings Eqsl { get; set; } = new();
+
     [BsonElement("adifMonitor")]
     public AdifMonitorSettings AdifMonitor { get; set; } = new();
 
@@ -286,6 +289,30 @@ public class HrdLogSettings
     // Per-account upload code from the hrdlog.net account page (My Account → Online Log).
     [BsonElement("uploadCode")]
     public string? UploadCode { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// eQSL.cc credentials + upload behavior. eQSL uses form-based auth
+/// (username = your callsign, password = the eQSL password) and
+/// accepts single-record ADIF via ImportADIF.cfm — same shape as the
+/// Club Log realtime uploader, ported into v2.
+/// </summary>
+public class EqslSettings
+{
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; }
+
+    // Your eQSL.cc username — typically the same as your callsign.
+    [BsonElement("username")]
+    public string? Username { get; set; } = string.Empty;
+
+    [BsonElement("password")]
+    public string? Password { get; set; } = string.Empty;
+
+    // Optional QTH nickname (eQSL supports multiple QTHs per account).
+    // Empty = eQSL uses the account's default QTH.
+    [BsonElement("qthNickname")]
+    public string? QthNickname { get; set; } = string.Empty;
 }
 
 public class AppearanceSettings
