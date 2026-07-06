@@ -198,8 +198,7 @@ function HelpTab() {
           Any of three paths works and multiple can run at once:
           <ul className="mt-1 ml-6 list-disc space-y-0.5 text-dark-300 text-xs">
             <li>
-              <span className="text-dark-100">TCI</span> — recommended for anyone
-              running a Hermes Lite 2 / 2+. Works with{' '}
+              <span className="text-dark-100">TCI</span> — works with{' '}
               <button
                 onClick={() => openLink('https://github.com/N8SDR1/Lyra-SDR-cpp/releases')}
                 className="font-bold text-accent-primary hover:underline"
