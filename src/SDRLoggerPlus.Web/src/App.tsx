@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Layout, Model, TabNode, TabSetNode, BorderNode, ITabSetRenderValues, Actions, DockLocation } from 'flexlayout-react';
-import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, AudioWaveform, Activity, TrendingUp, Gauge, Save, FolderOpen, Trash2 } from 'lucide-react';
-import { api, SavedLayoutSlot } from './api/client';
+import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, AudioWaveform, Activity, TrendingUp, Gauge } from 'lucide-react';
 import { StatusBar } from './components/StatusBar';
 import { WeatherAlertBanner } from './components/WeatherAlertBanner';
 import { Toasts } from './components/Toasts';
@@ -190,13 +189,6 @@ export function App() {
   const [showPanelPicker, setShowPanelPicker] = useState(false);
   const [targetTabSetId, setTargetTabSetId] = useState<string | null>(null);
   const [panelFilter, setPanelFilter] = useState('');
-
-  // Named layout presets — up to 3 slots stored on UserSettings.SavedLayouts.
-  // Refreshed on demand (when the Panels menu opens) so we don't need to
-  // wire a SignalR feed just for this. Save/Load/Delete flow through the
-  // client API and update this local list from the server's response.
-  const [savedLayouts, setSavedLayouts] = useState<SavedLayoutSlot[]>([]);
-  const [layoutOpMessage, setLayoutOpMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   // Apply theme from settings (dark/light/system)
   useTheme();
@@ -424,76 +416,6 @@ export function App() {
     resetLayoutStore();
   }, [resetLayoutStore]);
 
-  // ── Named layout presets ──────────────────────────────────────────
-  // Refresh the slot list from the server. Fired when the Panels menu
-  // opens so the user always sees the current state.
-  const refreshSavedLayouts = useCallback(async () => {
-    try {
-      const list = await api.getSavedLayouts();
-      setSavedLayouts(list);
-    } catch (e) {
-      console.error('Failed to load saved layouts:', e);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (showPanelPicker) refreshSavedLayouts();
-  }, [showPanelPicker, refreshSavedLayouts]);
-
-  // Save current live layout under a new (or existing) name. The server
-  // enforces the 3-slot limit and returns 409 if we try to add a fourth
-  // — surfaced as a toast in the same UI slot as success messages.
-  const handleSaveLayoutAs = useCallback(async () => {
-    const suggested = savedLayouts.length === 0 ? 'Default' : `Layout ${savedLayouts.length + 1}`;
-    const name = window.prompt(
-      savedLayouts.length >= 3
-        ? 'You have 3 saved layouts (the max). Enter one of the existing names to overwrite it:'
-        : 'Name for this layout:',
-      suggested,
-    );
-    if (!name || !name.trim()) return;
-    try {
-      const json = JSON.stringify(model.toJson());
-      const list = await api.saveNamedLayout(name.trim(), json);
-      setSavedLayouts(list);
-      setLayoutOpMessage({ kind: 'ok', text: `Saved as "${name.trim()}"` });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setLayoutOpMessage({ kind: 'err', text: msg });
-    }
-    setTimeout(() => setLayoutOpMessage(null), 4000);
-  }, [model, savedLayouts]);
-
-  const handleLoadLayout = useCallback((slot: SavedLayoutSlot) => {
-    try {
-      const json = JSON.parse(slot.layoutJson);
-      setModel(Model.fromJson(sanitizeLayout(json)));
-      // setLayout also triggers the auto-save path so this preset becomes
-      // the new "current arrangement" and comes back on next startup even
-      // without loading it explicitly.
-      setLayout(json);
-      setLayoutOpMessage({ kind: 'ok', text: `Loaded "${slot.name}"` });
-      setShowPanelPicker(false);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setLayoutOpMessage({ kind: 'err', text: `Failed to apply "${slot.name}": ${msg}` });
-    }
-    setTimeout(() => setLayoutOpMessage(null), 4000);
-  }, [setLayout]);
-
-  const handleDeleteLayout = useCallback(async (name: string) => {
-    if (!window.confirm(`Delete saved layout "${name}"?`)) return;
-    try {
-      const list = await api.deleteNamedLayout(name);
-      setSavedLayouts(list);
-      setLayoutOpMessage({ kind: 'ok', text: `Deleted "${name}"` });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setLayoutOpMessage({ kind: 'err', text: msg });
-    }
-    setTimeout(() => setLayoutOpMessage(null), 4000);
-  }, []);
-
   const showSetupWizard = !setupLoading && setupStatus !== null && !setupStatus.isConfigured;
 
   return (
@@ -602,65 +524,6 @@ export function App() {
                       </div>
                     ));
                 })()}
-              </div>
-
-              {/* Layout presets — up to 3 named arrangements the operator
-                  can save/load. Save current writes into a new or existing
-                  slot; clicking a slot loads it and the auto-save path
-                  makes it stick. */}
-              <div className="px-4 py-3 border-t border-glass-100">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs uppercase tracking-wider text-dark-300 font-ui font-medium">Layout Presets</span>
-                  <button
-                    onClick={handleSaveLayoutAs}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-ui border border-accent-success/40 text-accent-success hover:bg-accent-success/10 transition-colors"
-                    title="Save the current arrangement as a named preset"
-                  >
-                    <Save className="w-3 h-3" /> Save Current
-                  </button>
-                </div>
-                {savedLayouts.length === 0 ? (
-                  <p className="text-[11px] text-dark-400 font-ui italic">
-                    No saved layouts. Click <b>Save Current</b> to store this arrangement (up to 3 slots).
-                  </p>
-                ) : (
-                  <div className="space-y-1">
-                    {savedLayouts.map((slot) => (
-                      <div
-                        key={slot.name}
-                        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-dark-700/50 border border-glass-100 hover:bg-dark-700 transition-colors"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-ui text-dark-200 truncate">{slot.name}</div>
-                          <div className="text-[10px] text-dark-400 font-mono">
-                            {new Date(slot.savedAt).toLocaleString()}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleLoadLayout(slot)}
-                          title="Load this layout"
-                          className="p-1 rounded text-accent-primary hover:bg-accent-primary/10 transition-colors"
-                        >
-                          <FolderOpen className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteLayout(slot.name)}
-                          title="Delete this layout"
-                          className="p-1 rounded text-dark-400 hover:text-accent-danger hover:bg-accent-danger/10 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {layoutOpMessage && (
-                  <p className={`mt-2 text-[11px] font-ui ${
-                    layoutOpMessage.kind === 'ok' ? 'text-accent-success' : 'text-accent-danger'
-                  }`}>
-                    {layoutOpMessage.text}
-                  </p>
-                )}
               </div>
 
               <div className="px-4 py-3 border-t border-glass-100">

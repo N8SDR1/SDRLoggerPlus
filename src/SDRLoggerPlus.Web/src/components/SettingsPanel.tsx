@@ -35,6 +35,7 @@ import {
   CloudUpload,
   FileCode,
   FolderOpen,
+  Trash2,
   Archive,
   Waves,
   Bell,
@@ -46,7 +47,9 @@ import {
 } from 'lucide-react';
 import { useSettingsStore, SettingsSection, StationSettings } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
-import { api, type BackupStatus, type WsjtxStatus } from '../api/client';
+import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
+import { useLayoutStore } from '../store/layoutStore';
+import { Model } from 'flexlayout-react';
 import { gridToLatLon } from '../utils/maidenhead';
 import { APP_VERSION } from '../version';
 
@@ -1925,6 +1928,150 @@ function AppearanceSettingsSection() {
           />
         </button>
       </div>
+
+      <LayoutPresetsSubsection />
+    </div>
+  );
+}
+
+// Layout Presets subsection — sits inside AppearanceSettingsSection so
+// operators can save/load/delete up to 3 named panel arrangements from
+// the same place they change themes and appearance settings. Uses the
+// layoutStore's setLayout to persist swaps (which flows through the
+// normal hasEverLoaded-gated auto-save path).
+function LayoutPresetsSubsection() {
+  const { layout, setLayout } = useLayoutStore();
+  const [savedLayouts, setSavedLayouts] = useState<SavedLayoutSlot[]>([]);
+  const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.getSavedLayouts();
+        setSavedLayouts(list);
+      } catch (e) {
+        console.error('Failed to load saved layouts:', e);
+      }
+    })();
+  }, []);
+
+  const flash = (kind: 'ok' | 'err', text: string) => {
+    setMessage({ kind, text });
+    setTimeout(() => setMessage(null), 4000);
+  };
+
+  const handleSaveCurrent = async () => {
+    const suggested = savedLayouts.length === 0 ? 'Default' : `Layout ${savedLayouts.length + 1}`;
+    const name = window.prompt(
+      savedLayouts.length >= 3
+        ? 'You have 3 saved layouts (the max). Enter one of the existing names to overwrite it:'
+        : 'Name for this layout:',
+      suggested,
+    );
+    if (!name || !name.trim()) return;
+    setLoading(true);
+    try {
+      const json = JSON.stringify(layout);
+      const list = await api.saveNamedLayout(name.trim(), json);
+      setSavedLayouts(list);
+      flash('ok', `Saved as "${name.trim()}"`);
+    } catch (e) {
+      flash('err', e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoad = (slot: SavedLayoutSlot) => {
+    try {
+      const json = JSON.parse(slot.layoutJson);
+      // Sanity: FlexLayout throws if the JSON isn't a valid model.
+      Model.fromJson(json);
+      setLayout(json);
+      flash('ok', `Loaded "${slot.name}"`);
+    } catch (e) {
+      flash('err', `Failed to apply "${slot.name}": ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const handleDelete = async (name: string) => {
+    if (!window.confirm(`Delete saved layout "${name}"?`)) return;
+    setLoading(true);
+    try {
+      const list = await api.deleteNamedLayout(name);
+      setSavedLayouts(list);
+      flash('ok', `Deleted "${name}"`);
+    } catch (e) {
+      flash('err', e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="pt-4 mt-4 border-t border-glass-100">
+      <div className="flex items-center justify-between mb-2 gap-3">
+        <div className="flex-1 min-w-0">
+          <h4 className="text-sm font-semibold font-ui text-dark-200">Layout Presets</h4>
+          <p className="text-xs text-dark-300 mt-0.5">
+            Save up to 3 named panel arrangements (POTA, Contest, DXpedition, etc.) and swap between them with one click. The one you loaded last also comes back automatically on the next restart.
+          </p>
+        </div>
+        <button
+          onClick={handleSaveCurrent}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-ui border border-accent-success/40 text-accent-success hover:bg-accent-success/10 transition-colors disabled:opacity-50 whitespace-nowrap"
+          title="Save the current panel arrangement as a named preset"
+        >
+          <Save className="w-3.5 h-3.5" /> Save Current
+        </button>
+      </div>
+
+      {savedLayouts.length === 0 ? (
+        <p className="text-xs text-dark-400 font-ui italic mt-3">
+          No saved layouts yet. Arrange your panels how you like them and click <b>Save Current</b>.
+        </p>
+      ) : (
+        <div className="space-y-1.5 mt-3">
+          {savedLayouts.map((slot) => (
+            <div
+              key={slot.name}
+              className="flex items-center justify-between gap-2 px-3 py-2 rounded bg-dark-700/50 border border-glass-100 hover:bg-dark-700 transition-colors"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-ui text-dark-200 truncate">{slot.name}</div>
+                <div className="text-[10px] text-dark-400 font-mono">
+                  Saved {new Date(slot.savedAt).toLocaleString()}
+                </div>
+              </div>
+              <button
+                onClick={() => handleLoad(slot)}
+                disabled={loading}
+                title="Load this layout"
+                className="p-1.5 rounded text-accent-primary hover:bg-accent-primary/10 transition-colors disabled:opacity-50"
+              >
+                <FolderOpen className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleDelete(slot.name)}
+                disabled={loading}
+                title="Delete this layout"
+                className="p-1.5 rounded text-dark-400 hover:text-accent-danger hover:bg-accent-danger/10 transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {message && (
+        <p className={`mt-2 text-xs font-ui ${
+          message.kind === 'ok' ? 'text-accent-success' : 'text-accent-danger'
+        }`}>
+          {message.text}
+        </p>
+      )}
     </div>
   );
 }
