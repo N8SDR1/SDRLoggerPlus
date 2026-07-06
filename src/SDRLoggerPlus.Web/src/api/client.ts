@@ -47,6 +47,11 @@ export interface CreateQsoRequest {
   country?: string;
   comment?: string;
   notes?: string;
+  // v1.x General-mode fields — Qth is the worked-station QTH (e.g.
+  // "New York, NY"), Contest is a free-text contest/event/park
+  // identifier that lands on Qso.Contest.ContestId server-side.
+  qth?: string;
+  contest?: string;
 }
 
 export interface UpdateQsoRequest {

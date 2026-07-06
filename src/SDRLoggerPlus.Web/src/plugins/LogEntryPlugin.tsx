@@ -1,12 +1,18 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink } from 'lucide-react';
+import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Radio as RadioIcon } from 'lucide-react';
 import { api, CreateQsoRequest } from '../api/client';
 import { useSignalR } from '../hooks/useSignalR';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
+
+// v1.x-style log-entry mode switcher. General is functional today;
+// POTA and SAT tabs are placeholders that route to General for now
+// (their bespoke fields, separate-database routing, and S.A.T.
+// controller wiring land in follow-up commits).
+type LogMode = 'general' | 'pota' | 'sat';
 
 // Helper to format date for input
 const formatDateForInput = (date: Date): string => {
@@ -129,19 +135,24 @@ export function LogEntryPlugin() {
   const { settings, updateRadioSettings } = useSettingsStore();
   const followRadio = settings.radio.followRadio;
 
+  // Log-mode switcher — persists per session; General is fully wired,
+  // POTA and SAT are visual-only placeholders until the follow-up commits.
+  const [logMode, setLogMode] = useState<LogMode>('general');
+
   const [formData, setFormData] = useState({
     callsign: '',
     band: '20m',
-    mode: 'SSB',
+    mode: 'USB',
     rstSent: '59',
     rstSentPlus: '',
     rstRcvd: '59',
     rstRcvdPlus: '',
     frequency: '',
     name: '',
+    qth: '',
     grid: '',
-    comment: '',
-    notes: '',
+    contest: '',
+    remarks: '',
   });
 
   // Timestamp state - locked means it follows system time
@@ -174,13 +185,15 @@ export function LogEntryPlugin() {
   // Get current radio state
   const currentRadioState = selectedRadioId ? radioStates.get(selectedRadioId) : null;
 
-  // Auto-populate from radio state when followRadio is enabled
+  // Auto-populate from radio state when followRadio is enabled. Freq
+  // is stored as MHz (matches v1.x display + ADIF convention) — six
+  // decimals to preserve sub-Hz precision from the rig.
   useEffect(() => {
     if (followRadio && currentRadioState) {
-      const frequencyKhz = (currentRadioState.frequencyHz / 1000).toFixed(3);
+      const frequencyMhz = (currentRadioState.frequencyHz / 1_000_000).toFixed(6);
       setFormData(prev => ({
         ...prev,
-        frequency: frequencyKhz,
+        frequency: frequencyMhz,
         band: currentRadioState.band || prev.band,
         mode: normalizeMode(currentRadioState.mode) || prev.mode,
       }));
@@ -197,17 +210,18 @@ export function LogEntryPlugin() {
     }
   }, [nameLocked, focusedCallsignInfo?.name]);
 
-  // Auto-populate from DX cluster spot selection
+  // Auto-populate from DX cluster spot selection. selectedSpot.frequency
+  // arrives in Hz; we display MHz throughout the form (v1.x parity).
   useEffect(() => {
     if (selectedSpot) {
-      const frequencyKhz = (selectedSpot.frequency / 1000).toFixed(3);
+      const frequencyMhz = (selectedSpot.frequency / 1_000_000).toFixed(6);
       const band = getBandFromFrequency(selectedSpot.frequency);
       const mode = selectedSpot.mode ? normalizeMode(selectedSpot.mode) : formData.mode;
 
       setFormData(prev => ({
         ...prev,
         callsign: selectedSpot.dxCall,
-        frequency: frequencyKhz,
+        frequency: frequencyMhz,
         band: band || prev.band,
         mode: mode,
       }));
@@ -320,9 +334,10 @@ export function LogEntryPlugin() {
         ...formData,
         callsign: '',
         name: '',
+        qth: '',
         grid: '',
-        comment: '',
-        notes: '',
+        contest: '',
+        remarks: '',
         frequency: '',
         rstSentPlus: '',
         rstRcvdPlus: '',
@@ -357,9 +372,10 @@ export function LogEntryPlugin() {
       rstRcvdPlus: '',
       frequency: followRadio && currentRadioState ? formData.frequency : '',
       name: '',
+      qth: '',
       grid: '',
-      comment: '',
-      notes: '',
+      contest: '',
+      remarks: '',
     });
     setTimeLocked(true);
     setNameLocked(true);
@@ -386,15 +402,65 @@ export function LogEntryPlugin() {
       timeOn: qsoTime.replace(':', '') + '00',
       band: formData.band,
       mode: formData.mode,
+      // Frequency is entered as MHz (v1.x + ADIF convention). Backend
+      // Qso.Frequency stores the same MHz value, so we forward as-is.
       frequency: formData.frequency ? parseFloat(formData.frequency) : undefined,
       rstSent,
       rstRcvd,
       name: formData.name || focusedCallsignInfo?.name,
+      qth: formData.qth || undefined,
       grid: formData.grid || focusedCallsignInfo?.grid,
       country: focusedCallsignInfo?.country,
-      comment: formData.comment,
-      notes: formData.notes,
+      contest: formData.contest || undefined,
+      // v1.x has a single "Remarks" field; the backend still has both
+      // comment + notes columns. Map Remarks → comment (the primary,
+      // ADIF-exported field). Notes stays available for the POTA/SAT
+      // commits or a future secondary-notes field if we want one.
+      comment: formData.remarks || undefined,
     });
+  };
+
+  // v1.x-style mode switcher tabs. Each mode has its own accent color
+  // matching v1.x: General=cyan, POTA=green, SAT=goldish yellow.
+  // POTA + SAT are clickable placeholders — the tab switches but the
+  // fields don't change yet (bespoke fields + separate-database
+  // routing + S.A.T. controller sync land in follow-up commits).
+  const MODE_STYLES: Record<LogMode, { active: string; inactiveHover: string }> = {
+    general: {
+      active: 'border-cyan-400 text-cyan-300 bg-cyan-500/10',
+      inactiveHover: 'hover:text-cyan-300/70',
+    },
+    pota: {
+      active: 'border-green-400 text-green-300 bg-green-500/10',
+      inactiveHover: 'hover:text-green-300/70',
+    },
+    sat: {
+      active: 'border-amber-400 text-amber-300 bg-amber-500/10',
+      inactiveHover: 'hover:text-amber-300/70',
+    },
+  };
+
+  const ModeTab = ({ id, label, icon, disabledTitle }: { id: LogMode; label: string; icon: React.ReactNode; disabledTitle?: string }) => {
+    const style = MODE_STYLES[id];
+    const isActive = logMode === id;
+    return (
+      <button
+        type="button"
+        onClick={() => setLogMode(id)}
+        title={disabledTitle}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t border-b-2 font-ui text-xs font-semibold transition-colors ${
+          isActive
+            ? style.active
+            : `border-transparent text-dark-300 ${style.inactiveHover} hover:bg-dark-700/20`
+        }`}
+      >
+        {icon}
+        <span>{label}</span>
+        {disabledTitle && (
+          <span className="ml-1 px-1 rounded bg-dark-600 text-[9px] text-dark-300 tracking-wider">soon</span>
+        )}
+      </button>
+    );
   };
 
   return (
@@ -426,6 +492,18 @@ export function LogEntryPlugin() {
         </button>
       }
     >
+      {/* Mode switcher row — "Log Mode:" label + General / POTA / SAT
+          tabs. Label makes the tabs' purpose obvious for a new operator
+          who hasn't seen v1.x's General/POTA/SAT split before. */}
+      <div className="flex items-center gap-2 px-3 pt-2 border-b border-glass-100">
+        <span className="text-[10px] font-ui text-dark-300 font-semibold tracking-wider uppercase pr-1">
+          Log&nbsp;Mode
+        </span>
+        <ModeTab id="general" label="General" icon={<RadioIcon className="w-3.5 h-3.5" />} />
+        <ModeTab id="pota"    label="POTA"    icon={<Trees className="w-3.5 h-3.5" />}    disabledTitle="POTA-specific fields + separate database — coming soon" />
+        <ModeTab id="sat"     label="SAT"     icon={<Satellite className="w-3.5 h-3.5" />} disabledTitle="Satellite fields + S.A.T. controller sync — coming soon" />
+      </div>
+
       <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); handleClear(); } }} className="p-3 space-y-3">
         {/* Callsign, Band, Mode on one line */}
         <div className="flex gap-2 items-end">
@@ -610,11 +688,26 @@ export function LogEntryPlugin() {
           </div>
         </div>
 
+        {/* QTH/Location — v1.x General field, worked-station location */}
+        <div>
+          <label className="text-xs font-ui text-dark-300 mb-1 block flex items-center gap-1">
+            <MapPin className="w-3 h-3" />
+            QTH / Location
+          </label>
+          <input
+            type="text"
+            value={formData.qth}
+            onChange={(e) => setFormData(prev => ({ ...prev, qth: e.target.value }))}
+            placeholder="City, State"
+            className="glass-input w-full text-sm"
+          />
+        </div>
+
         {/* Frequency, RST Sent, RST Rcvd on one line */}
         <div className="flex gap-3 items-end">
-          <div className="w-28">
+          <div className="w-32">
             <label className="text-xs font-ui text-dark-300 mb-1 flex items-center gap-1">
-              Freq (kHz)
+              Frequency (MHz)
               {followRadio && currentRadioState && (
                 <span className="w-1.5 h-1.5 rounded-full bg-accent-success" title="From radio" />
               )}
@@ -624,15 +717,17 @@ export function LogEntryPlugin() {
               value={formData.frequency}
               onChange={(e) => {
                 const frequency = e.target.value;
-                const freqKhz = parseFloat(frequency);
-                const newBand = !isNaN(freqKhz) ? getBandFromFrequency(freqKhz * 1000) : null;
+                const freqMhz = parseFloat(frequency);
+                // Recompute the band from the entered MHz value so the
+                // Band dropdown stays consistent with the frequency.
+                const newBand = !isNaN(freqMhz) ? getBandFromFrequency(freqMhz * 1_000_000) : null;
                 setFormData(prev => ({
                   ...prev,
                   frequency,
                   band: newBand || prev.band,
                 }));
               }}
-              placeholder="14250"
+              placeholder="14.250"
               className={`glass-input w-full font-mono text-sm ${
                 followRadio && currentRadioState ? 'border-accent-success/30' : ''
               }`}
@@ -640,10 +735,10 @@ export function LogEntryPlugin() {
             />
           </div>
 
-          {/* TX RST */}
+          {/* My RST Sent — v1.x label wording */}
           <div>
             <label className="text-xs font-ui text-dark-300 mb-1 flex items-center gap-1">
-              <span className="text-accent-success">TX</span> RST
+              <span className="text-accent-success">My</span> RST Sent
             </label>
             <div className="flex items-center gap-1">
               <RstCombobox
@@ -676,10 +771,10 @@ export function LogEntryPlugin() {
             <span className="text-dark-600 text-lg">/</span>
           </div>
 
-          {/* RX RST */}
+          {/* Their RST Rcvd — v1.x label wording */}
           <div>
             <label className="text-xs font-ui text-dark-300 mb-1 flex items-center gap-1">
-              <span className="text-accent-secondary">RX</span> RST
+              <span className="text-accent-secondary">Their</span> RST Rcvd
             </label>
             <div className="flex items-center gap-1">
               <RstCombobox
@@ -708,26 +803,29 @@ export function LogEntryPlugin() {
           </div>
         </div>
 
-        {/* Comment */}
+        {/* Contest / Event / Park — v1.x General field, free-text
+            contest name / event / park reference. Backend maps into
+            Qso.Contest.ContestId. */}
         <div>
-          <label className="text-xs font-ui text-dark-300 mb-1 block">Comment</label>
+          <label className="text-xs font-ui text-dark-300 mb-1 block">Contest / Event / Park</label>
           <input
             type="text"
-            value={formData.comment}
-            onChange={(e) => setFormData(prev => ({ ...prev, comment: e.target.value }))}
-            placeholder="QSO comment..."
+            value={formData.contest}
+            onChange={(e) => setFormData(prev => ({ ...prev, contest: e.target.value }))}
+            placeholder="Optional"
             className="glass-input w-full text-sm"
           />
         </div>
 
-        {/* Notes */}
+        {/* Remarks — v1.x consolidates Comment + Notes into one field.
+            Stored server-side in Qso.Comment (the ADIF-exported field). */}
         <div>
-          <label className="text-xs font-ui text-dark-300 mb-1 block">Notes</label>
+          <label className="text-xs font-ui text-dark-300 mb-1 block">Remarks</label>
           <input
             type="text"
-            value={formData.notes}
-            onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-            placeholder="Personal notes..."
+            value={formData.remarks}
+            onChange={(e) => setFormData(prev => ({ ...prev, remarks: e.target.value }))}
+            placeholder="Notes, contest exchange, antenna used..."
             className="glass-input w-full text-sm"
           />
         </div>
@@ -776,7 +874,11 @@ export function LogEntryPlugin() {
           )}
         </div>
 
-        {/* Submit / Clear */}
+        {/* Submit / Clear / Spot — v1.x General button row minus QRZ
+            (the callsign info card already exposes a QRZ.com link via the
+            ExternalLink icon, so a second button here would be redundant).
+            Spot is a placeholder until the "send-a-spot-to-the-cluster"
+            hub method lands (v2 currently only RECEIVES spots). */}
         <div className="flex gap-2">
           <button
             type="submit"
@@ -790,11 +892,20 @@ export function LogEntryPlugin() {
             type="button"
             onClick={handleClear}
             disabled={createQso.isPending}
-            className="glass-button flex items-center justify-center gap-2 py-2 px-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="glass-button flex items-center justify-center gap-1.5 py-2 px-3 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Clear QSO details"
           >
             <X className="w-4 h-4" />
             Clear
+          </button>
+          <button
+            type="button"
+            disabled
+            className="glass-button flex items-center justify-center gap-1.5 py-2 px-3 opacity-40 cursor-not-allowed"
+            title="Send a spot to the DX cluster — coming soon (backend needs a spot-emit hub method)"
+          >
+            <Send className="w-4 h-4" />
+            Spot
           </button>
         </div>
       </form>

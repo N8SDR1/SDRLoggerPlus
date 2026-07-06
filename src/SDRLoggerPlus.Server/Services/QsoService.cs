@@ -60,9 +60,18 @@ public class QsoService : IQsoService
             RstSent = request.RstSent,
             RstRcvd = request.RstRcvd,
             Comment = request.Comment,
+            // v1.x General-mode fields — Contest maps into ContestInfo.ContestId
+            // (the free-text contest/event/park identifier the operator
+            // types), Notes stays as a top-level free-text string, and Qth
+            // sits on the nested StationInfo (worked-station QTH).
+            Contest = !string.IsNullOrWhiteSpace(request.Contest)
+                ? new ContestInfo { ContestId = request.Contest }
+                : null,
+            Notes = request.Notes,
             Station = new StationInfo
             {
                 Name = request.Name,
+                Qth = request.Qth,
                 Grid = request.Grid,
                 Country = request.Country
             }

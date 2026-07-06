@@ -12,7 +12,12 @@ public record CreateQsoRequest(
     string? Name = null,
     string? Grid = null,
     string? Country = null,
-    string? Comment = null
+    string? Comment = null,
+    // v1.x General-mode fields ported into v2 (contest name, general
+    // notes distinct from remarks, and worked-station QTH string).
+    string? Contest = null,
+    string? Notes = null,
+    string? Qth = null
 );
 
 public record UpdateQsoRequest(
