@@ -442,6 +442,38 @@ public class TciRadioService : BackgroundService
         return await connection.SendCwAsync(message, speedWpm);
     }
 
+    /// <summary>True when at least one TCI radio is connected — lets callers
+    /// skip building spot payloads when there's no radio to push them to.</summary>
+    public bool AnyConnected => _connections.Values.Any(c => c.IsConnected);
+
+    /// <summary>
+    /// Push a DX spot onto every connected TCI radio's panadapter. Used by
+    /// DxClusterService to mirror received cluster spots onto Lyra / Thetis
+    /// (v1 SDRLogger+ parity). Fan-out is fine — each radio is a distinct
+    /// panadapter, so pushing to all connected radios is the intended
+    /// behaviour (unlike outbound cluster spots, where we pick one).
+    /// </summary>
+    public async Task BroadcastSpotAsync(string callsign, string mode, long freqHz, uint argb)
+    {
+        foreach (var connection in _connections.Values)
+        {
+            if (!connection.IsConnected) continue;
+            try { await connection.SendSpotAsync(callsign, mode, freqHz, argb); }
+            catch (Exception ex) { _logger.LogDebug(ex, "TCI spot push failed for {Callsign}", callsign); }
+        }
+    }
+
+    /// <summary>Clear pushed spots on every connected TCI radio.</summary>
+    public async Task ClearAllSpotsAsync()
+    {
+        foreach (var connection in _connections.Values)
+        {
+            if (!connection.IsConnected) continue;
+            try { await connection.ClearSpotsAsync(); }
+            catch (Exception ex) { _logger.LogDebug(ex, "TCI spot_clear failed"); }
+        }
+    }
+
     public async Task<bool> SetCwSpeedAsync(string radioId, int speedWpm)
     {
         if (!_connections.TryGetValue(radioId, out var connection))
@@ -858,6 +890,31 @@ internal class TciRadioConnection
         var command = $"cw_text:{_selectedInstance},{message};";
         _logger.LogInformation("Sending CW via TCI: {Message} at {Wpm} WPM", message, speedWpm);
         await SendCommandAsync(command);
+        return true;
+    }
+
+    /// <summary>
+    /// Push a DX spot onto the connected TCI radio's panadapter/waterfall.
+    /// TCI protocol: spot:callsign,mode,freqHz,argb; — the argb is an
+    /// unsigned 32-bit colour (alpha in the top byte). Lyra / Thetis
+    /// render it as a click-to-tune coloured marker on the spectrum.
+    /// Mirrors v1 SDRLogger+'s tci_spot behaviour.
+    /// </summary>
+    public async Task<bool> SendSpotAsync(string callsign, string mode, long freqHz, uint argb)
+    {
+        if (!IsConnected) return false;
+        // TCI spot mode is lowercase (usb/lsb/cw/…) per the spec + Thetis.
+        var spotMode = string.IsNullOrWhiteSpace(mode) ? "ssb" : mode.Trim().ToLowerInvariant();
+        var command = $"spot:{callsign.ToUpperInvariant()},{spotMode},{freqHz},{argb};";
+        await SendCommandAsync(command);
+        return true;
+    }
+
+    /// <summary>Clear all pushed spots from the TCI radio (spot_clear;).</summary>
+    public async Task<bool> ClearSpotsAsync()
+    {
+        if (!IsConnected) return false;
+        await SendCommandAsync("spot_clear;");
         return true;
     }
 

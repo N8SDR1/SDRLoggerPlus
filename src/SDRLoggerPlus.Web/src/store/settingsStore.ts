@@ -225,6 +225,8 @@ export interface ClusterSettings {
   trackRig: boolean;
   /** Which of the configured telnet clusters receives outbound spots. Empty = auto (only when a single cluster is connected). */
   primarySpotClusterId: string;
+  /** Mirror received DX spots onto the connected TCI radio's panadapter (Lyra / Thetis). */
+  pushSpotsToTci: boolean;
   /** Max spots kept in memory (backing store + backend replay buffer). 50–300. */
   maxSpots: number;
   /** Age filter — spots older than this minute count drop off the visible list. */
@@ -561,6 +563,7 @@ const defaultSettings: Settings = {
     spotholeSpotterCountry: '', // empty = worldwide (fuller band-activity heat map)
     trackRig: false,
     primarySpotClusterId: '', // empty = auto-pick when a single cluster is connected
+    pushSpotsToTci: true,
     maxSpots: 200,
     spotAgeMinutes: 10,
   },

@@ -543,6 +543,50 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
             _recentBroadcasts.TryDequeue(out _);
 
         await _hubContext.Clients.All.OnSpotReceived(evt);
+
+        // Mirror the spot onto any connected TCI radio's panadapter
+        // (Lyra / Thetis) — v1 SDRLogger+ parity. Best-effort, gated on the
+        // PushSpotsToTci setting, and skipped entirely when no TCI radio is
+        // connected so we don't build payloads for nothing.
+        try
+        {
+            var tci = _serviceProvider.GetService<TciRadioService>();
+            if (tci is { AnyConnected: true })
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var cluster = (await scope.ServiceProvider
+                    .GetRequiredService<ISettingsService>().GetSettingsAsync()).Cluster;
+                if (cluster.PushSpotsToTci)
+                {
+                    var argb = SpotArgb(spotStatus, evt.IsHot);
+                    var freqHz = (long)(parsedSpot.Frequency * 1000); // kHz → Hz
+                    await tci.BroadcastSpotAsync(parsedSpot.DxCall, parsedSpot.Mode ?? "ssb", freqHz, argb);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to push spot {Call} to TCI radio", parsedSpot.DxCall);
+        }
+    }
+
+    /// <summary>
+    /// Map a spot's worked-before status (+ hot-list flag) to the ARGB colour
+    /// used on the TCI panadapter marker. Mirrors v1 SDRLogger+'s palette:
+    /// hot = pink-red, new DXCC = red, new band = gold, already worked = dim
+    /// grey, everything else = cyan. Alpha is always fully opaque.
+    /// </summary>
+    private static uint SpotArgb(string? status, bool isHot)
+    {
+        // 0xAARRGGBB.
+        if (isHot) return 0xFFFF1744;          // hot list — pink-red
+        return status switch
+        {
+            "newDxcc" => 0xFFFF3344,           // never worked this entity — red
+            "newBand" => 0xFFFFD700,           // new band for the entity — gold
+            "worked"  => 0xFF888888,           // already worked band+mode — dim grey
+            _         => 0xFF00E5FF,            // default — cyan
+        };
     }
 
     private readonly ConcurrentQueue<SpotReceivedEvent> _recentBroadcasts = new();

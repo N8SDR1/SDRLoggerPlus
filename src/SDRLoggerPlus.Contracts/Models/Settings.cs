@@ -644,6 +644,14 @@ public class ClusterSettings
     [BsonElement("primarySpotClusterId")]
     public string? PrimarySpotClusterId { get; set; } = "";
 
+    // Mirror received DX spots onto the connected TCI radio's panadapter
+    // (Lyra / Thetis) as coloured click-to-tune markers — v1 SDRLogger+
+    // behaviour. Default on; operators who don't want their SDR waterfall
+    // cluttered can turn it off. Colour follows worked-before status
+    // (new DXCC / new band / worked / default).
+    [BsonElement("pushSpotsToTci")]
+    public bool PushSpotsToTci { get; set; } = true;
+
     // Max spots kept in memory (both the backend replay buffer handed to
     // new clients and the frontend backing store). v1 SDRLogger+ hard-
     // capped at 200; v2 lets the operator dial it up to 300 for
