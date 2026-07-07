@@ -265,7 +265,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const lastBeamPolyKeyRef = useRef<string | null>(null);
 
   const { stationGrid, rotatorPosition, focusedCallsignInfo, radioStates, selectedRadioId, potaSpots, dxClusterSpots: spots, dxClusterMapEnabled } = useAppStore();
-  const { settings, updateMapSettings } = useSettingsStore();
+  const { settings, updateMapSettings, saveSettings } = useSettingsStore();
   const { commandRotator, focusCallsign, selectSpot } = useSignalR();
 
   const [currentAzimuth, setCurrentAzimuth] = useState(0);
@@ -1569,7 +1569,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         {/* Lightning strikes overlay toggle (Top Right, left of rotation button) */}
         {!hideOverlays && (
           <button
-            onClick={() => updateMapSettings({ showLightning: !settings.map.showLightning })}
+            onClick={() => { updateMapSettings({ showLightning: !settings.map.showLightning }); saveSettings(); }}
             className={`glass-button absolute top-4 right-16 p-2 z-10 ${settings.map.showLightning ? 'text-cyan-300' : ''}`}
             title={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
             aria-label={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}

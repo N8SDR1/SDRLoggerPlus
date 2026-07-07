@@ -27,6 +27,8 @@ const BAND_RANGES: Record<string, [number, number]> = {
   '12m': [24890, 24990],
   '10m': [28000, 29700],
   '6m': [50000, 54000],
+  '2m': [144000, 148000],
+  '70cm': [420000, 450000],
 };
 
 const BAND_OPTIONS: MultiSelectOption[] = [
@@ -41,6 +43,8 @@ const BAND_OPTIONS: MultiSelectOption[] = [
   { value: '12m', label: '12m' },
   { value: '10m', label: '10m' },
   { value: '6m', label: '6m' },
+  { value: '2m', label: '2m' },
+  { value: '70cm', label: '70cm' },
 ];
 
 const MODE_OPTIONS: MultiSelectOption[] = [
@@ -1049,13 +1053,17 @@ export function ClusterPlugin() {
                   : 'Follow rig band/mode'
               }
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-ui whitespace-nowrap border transition-colors ${
-                trackRig
+                tracking
                   ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/30'
-                  : 'bg-dark-800 text-dark-300 border-glass-100 hover:text-dark-200'
-              } ${trackRig && !rigConnected ? 'opacity-70' : ''}`}
+                  : trackRig
+                    // Armed but no rig connected — amber so it can't be mistaken
+                    // for actively filtering (it isn't, until a rig connects).
+                    ? 'bg-accent-warning/15 text-accent-warning border-accent-warning/40'
+                    : 'bg-dark-800 text-dark-300 border-glass-100 hover:text-dark-200'
+              }`}
             >
               <Crosshair className="w-4 h-4" />
-              <span>Follow rig</span>
+              <span>{trackRig && !rigConnected ? 'Follow rig (no rig)' : 'Follow rig'}</span>
             </button>
 
             <MultiSelectDropdown

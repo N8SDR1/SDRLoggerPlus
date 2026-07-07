@@ -657,6 +657,13 @@ public class ClusterSettings
     // linger just because no new spot arrived to trigger a render.
     [BsonElement("spotAgeMinutes")]
     public int SpotAgeMinutes { get; set; } = 10;
+
+    // "Follow rig" — the spot list tracks the connected rig's band/mode
+    // instead of the manual Band/Mode dropdowns. The frontend always sent
+    // this; without a matching property here it was silently dropped on
+    // every save, so the toggle reset on every settings load.
+    [BsonElement("trackRig")]
+    public bool TrackRig { get; set; }
 }
 
 [BsonIgnoreExtraElements]
