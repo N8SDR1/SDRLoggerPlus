@@ -474,6 +474,24 @@ public class TciRadioService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Stage A′ name-back (docs/COMBO_LINK.md): push a callbook-resolved contact
+    /// to every linked Lyra (Combo master) over the existing TCI socket so its
+    /// CW Console {NAME}/{GRID} tokens fill. Each connection no-ops unless its
+    /// own Combo link is active, so this is safe to fan out. Callers should only
+    /// invoke it with genuinely new info (a resolved name/grid) so a bare call
+    /// we just received from Lyra doesn't bounce straight back (echo guard).
+    /// </summary>
+    public async Task PushComboContactAsync(string callsign, string? name, string? grid)
+    {
+        foreach (var connection in _connections.Values)
+        {
+            if (!connection.IsConnected) continue;
+            try { await connection.SendComboContactAsync(callsign, name, grid); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Combo name-back push failed for {Call}", callsign); }
+        }
+    }
+
     public async Task<bool> SetCwSpeedAsync(string radioId, int speedWpm)
     {
         if (!_connections.TryGetValue(radioId, out var connection))
@@ -710,6 +728,13 @@ internal class TciRadioConnection
     // relative to the carrier marker (CWU passband sits at +pitch, CWL at
     // -pitch). Default 700 matches Lyra + most rigs.
     private int _cwPitchHz = 700;
+    // Lyra ↔ SDRLogger+ "Combo" link (docs/COMBO_LINK.md). Lyra is the master
+    // and announces on/off via `lyra_combo`; we mirror it as the "Lyra Combo:
+    // Linked" indicator and only act on `lyra_contact` while linked.
+    // _lastComboCall dedups repeated contact pushes so a resend doesn't
+    // re-trigger the callbook lookup (and, with the name-back, can't loop).
+    private bool _comboLinked;
+    private string? _lastComboCall;
     private readonly Tci.TciMeterAggregator _meters = new();
 
     // IQ panadapter: accumulate the TCI IQ stream, FFT it in the backend, and
@@ -733,38 +758,95 @@ internal class TciRadioConnection
         _hubContext = hubContext;
     }
 
+    // Reconnect-on-drop backoff bounds. The link is retried with capped
+    // exponential backoff after any non-operator-initiated drop.
+    private const int InitialReconnectDelayMs = 1000;
+    private const int MaxReconnectDelayMs = 15000;
+
     public async Task ConnectAsync()
     {
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
 
-        try
+        // Reconnect-on-drop: keep (re)establishing the TCI link with capped
+        // exponential backoff until the operator explicitly disconnects (which
+        // cancels _cts). Without this, a Lyra restart — e.g. a dev rebuild —
+        // silently kills the connection AND the Combo link with it until a
+        // manual reconnect. Backoff resets to 1 s on every successful connect.
+        var backoffMs = InitialReconnectDelayMs;
+        var firstAttempt = true;
+
+        while (!ct.IsCancellationRequested)
         {
-            _logger.LogInformation("Connecting to TCI radio at {Ip}:{Port}",
-                _device.IpAddress, _device.TciPort);
+            try
+            {
+                if (firstAttempt)
+                {
+                    _logger.LogInformation("Connecting to TCI radio at {Ip}:{Port}",
+                        _device.IpAddress, _device.TciPort);
+                }
+                else
+                {
+                    _logger.LogInformation("Reconnecting to TCI radio {Id} at {Ip}:{Port}",
+                        _device.Id, _device.IpAddress, _device.TciPort);
+                    await _hubContext.BroadcastRadioConnectionStateChanged(
+                        new RadioConnectionStateChangedEvent(_device.Id, RadioConnectionState.Connecting));
+                }
+                firstAttempt = false;
 
-            _webSocket = new ClientWebSocket();
-            var uri = new Uri($"ws://{_device.IpAddress}:{_device.TciPort}");
+                _webSocket = new ClientWebSocket();
+                var uri = new Uri($"ws://{_device.IpAddress}:{_device.TciPort}");
 
-            await _webSocket.ConnectAsync(uri, ct);
+                await _webSocket.ConnectAsync(uri, ct);
 
-            _logger.LogInformation("Connected to TCI radio {Id}", _device.Id);
+                _logger.LogInformation("Connected to TCI radio {Id}", _device.Id);
+                backoffMs = InitialReconnectDelayMs;   // healthy connect → reset backoff
 
-            await _hubContext.BroadcastRadioConnectionStateChanged(
-                new RadioConnectionStateChangedEvent(_device.Id, RadioConnectionState.Connected));
+                await _hubContext.BroadcastRadioConnectionStateChanged(
+                    new RadioConnectionStateChangedEvent(_device.Id, RadioConnectionState.Connected));
 
-            // TCI protocol: server pushes updates to us automatically
-            // No need to send subscription commands - just listen for incoming messages
+                // TCI protocol: server pushes updates to us automatically — just
+                // listen. Runs until the socket closes / errors / is cancelled.
+                await ReceiveLoopAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                break;   // operator disconnect / radio removal — stop retrying
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "TCI connection lost for {Id} — will retry", _device.Id);
+            }
+            finally
+            {
+                try { _webSocket?.Dispose(); } catch { /* already gone */ }
+                _webSocket = null;
+            }
 
-            // Start receive loop
-            await ReceiveLoopAsync(ct);
+            if (ct.IsCancellationRequested) break;
+
+            // Dropped but the operator didn't ask to disconnect. Clear the Combo
+            // "linked" state so the badge doesn't falsely claim a live link while
+            // Lyra is away; the reconnect's sendInit re-announces lyra_combo.
+            if (_comboLinked)
+            {
+                _comboLinked = false;
+                _lastComboCall = null;
+                try
+                {
+                    await _hubContext.BroadcastComboLinkChanged(
+                        new ComboLinkChangedEvent(false, _device.Id));
+                }
+                catch (Exception ex) { _logger.LogDebug(ex, "Combo unlink broadcast failed"); }
+            }
+
+            try { await Task.Delay(backoffMs, ct); }
+            catch (OperationCanceledException) { break; }
+            backoffMs = Math.Min(backoffMs * 2, MaxReconnectDelayMs);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "TCI connection error for {Id}", _device.Id);
-            await _hubContext.BroadcastRadioConnectionStateChanged(
-                new RadioConnectionStateChangedEvent(_device.Id, RadioConnectionState.Error, ex.Message));
-        }
+
+        await _hubContext.BroadcastRadioConnectionStateChanged(
+            new RadioConnectionStateChangedEvent(_device.Id, RadioConnectionState.Disconnected));
     }
 
     public async Task DisconnectAsync()
@@ -918,6 +1000,34 @@ internal class TciRadioConnection
         return true;
     }
 
+    /// <summary>
+    /// Stage A′ "name-back" (docs/COMBO_LINK.md): send a callbook-resolved
+    /// contact back to a linked Lyra so its CW Console {NAME}/{GRID} tokens fill.
+    /// Wire format (Lyra parses on ',' with empties preserved):
+    ///   lyra_contact:sdrlog,call,rstSent,rstRcvd,name,qth,grid,serial;
+    /// The src=sdrlog tag marks our provenance so Lyra applies it under its echo
+    /// guard and never bounces it back. No-op unless this connection's Combo
+    /// link is active (Lyra is master) — so we never drive an unlinked radio.
+    /// Commas/semicolons in free-text fields would corrupt the TCI framing, so
+    /// they are stripped first.
+    /// </summary>
+    public async Task<bool> SendComboContactAsync(string callsign, string? name, string? grid)
+    {
+        if (!IsConnected || !_comboLinked) return false;
+        if (string.IsNullOrWhiteSpace(callsign)) return false;
+
+        // src,call,rstSent,rstRcvd,name,qth,grid,serial — only name + grid filled.
+        var command = $"lyra_contact:sdrlog,{callsign.ToUpperInvariant()},,,{TciField(name)},,{TciField(grid)},;";
+        await SendCommandAsync(command);
+        return true;
+    }
+
+    /// <summary>Strip TCI framing chars (',' arg and ';' command separators) from
+    /// a free-text field so a name/QTH like "Smith, John" can't corrupt the
+    /// frame or shift Lyra's positional arg parsing.</summary>
+    private static string TciField(string? s) =>
+        string.IsNullOrWhiteSpace(s) ? "" : s.Replace(',', ' ').Replace(';', ' ').Trim();
+
     public async Task<bool> SetCwSpeedAsync(int speedWpm)
     {
         if (!IsConnected) return false;
@@ -977,13 +1087,13 @@ internal class TciRadioConnection
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "TCI receive error");
+                // A drop is expected + recoverable now — ConnectAsync's loop
+                // reconnects. Return so it can retry (don't broadcast state here;
+                // the reconnect loop owns Connecting/Connected/Disconnected).
+                _logger.LogWarning(ex, "TCI receive error for {Id} — reconnecting", _device.Id);
                 break;
             }
         }
-
-        await _hubContext.BroadcastRadioConnectionStateChanged(
-            new RadioConnectionStateChangedEvent(_device.Id, RadioConnectionState.Disconnected));
     }
 
     /// <summary>
@@ -1275,6 +1385,107 @@ internal class TciRadioConnection
                             _logger.LogWarning(ex,
                                 "TCI spot_activated broadcast failed for {Call}", spotCall);
                         }
+                    }
+                    break;
+
+                case "lyra_combo":
+                    // Lyra ↔ SDRLogger+ Combo link (docs/COMBO_LINK.md). Lyra is
+                    // the master; it announces on/off. We reflect it as the
+                    // read-only "Lyra Combo: Linked" indicator and only act on
+                    // lyra_contact while linked.
+                    {
+                        var on = args.Length >= 1
+                                 && args[0].Equals("on", StringComparison.OrdinalIgnoreCase);
+                        if (on != _comboLinked)
+                        {
+                            _comboLinked = on;
+                            if (!on) _lastComboCall = null;
+                            try
+                            {
+                                await _hubContext.BroadcastComboLinkChanged(
+                                    new ComboLinkChangedEvent(_comboLinked, _device.Id));
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Combo link status broadcast failed");
+                            }
+                        }
+                    }
+                    break;
+
+                case "lyra_contact":
+                    // Inbound shared CW contact from Lyra:
+                    //   lyra_contact:<src>,<call>,<rstSent>,<rstRcvd>,<name>,<qth>,<grid>,<serial>
+                    // Act only on src=lyra (never our own src=sdrlog echoes) and
+                    // only while linked. Reuse the SpotSelected pipeline so the
+                    // log-entry callsign populates + the QRZ/HamQTH lookup fires,
+                    // exactly like a spot click. Dedup on the call so a resend
+                    // (or the name-back round-trip) can't re-fire the lookup.
+                    if (_comboLinked && args.Length >= 2
+                        && args[0].Equals("lyra", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var comboCall = args[1].ToUpperInvariant();
+                        if (comboCall.Length > 0
+                            && !string.Equals(comboCall, _lastComboCall, StringComparison.Ordinal))
+                        {
+                            _lastComboCall = comboCall;
+                            var comboGrid = args.Length >= 7 && !string.IsNullOrWhiteSpace(args[6])
+                                ? args[6]
+                                : null;
+                            // TCI carries no freq here; use the current RX freq (kHz).
+                            var comboFreqKhz = _currentFrequencyHz / 1000.0;
+                            try
+                            {
+                                await _hubContext.BroadcastSpotSelected(
+                                    new SpotSelectedEvent(comboCall, comboFreqKhz, "CW", comboGrid));
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex,
+                                    "Combo contact populate failed for {Call}", comboCall);
+                            }
+                        }
+                    }
+                    break;
+
+                case "lyra_log":
+                    // Combo Stage B (docs/COMBO_LINK.md): Lyra sent a {LOG}-tagged
+                    // CW macro → log the current QSO.
+                    //   lyra_log:<call>,<rstSent>,<rstRcvd>,<mode>,<freqHz>
+                    // Only while linked (Lyra is master + the {LOG} tag is the
+                    // operator's explicit consent). Surface it to the frontend,
+                    // which submits the populated Log Entry form; the RST/mode/
+                    // freq ride along so the logged QSO matches the on-air
+                    // exchange even if the operator never touched those fields.
+                    if (_comboLinked && args.Length >= 1 && !string.IsNullOrWhiteSpace(args[0]))
+                    {
+                        var logCall = args[0].ToUpperInvariant();
+                        var logFreqHz = args.Length >= 5 && long.TryParse(args[4], out var lf) ? lf : 0;
+                        try
+                        {
+                            await _hubContext.BroadcastComboLogRequested(new ComboLogRequestedEvent(
+                                logCall,
+                                args.Length >= 2 && args[1].Length > 0 ? args[1] : null,
+                                args.Length >= 3 && args[2].Length > 0 ? args[2] : null,
+                                args.Length >= 4 && args[3].Length > 0 ? args[3] : null,
+                                logFreqHz,
+                                _device.Id));
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Combo log request failed for {Call}", logCall);
+                        }
+                    }
+                    break;
+
+                case "lyra_snr":
+                    // Combo received-S auto-fill: Lyra's in-passband SNR (dB),
+                    // sent alongside the S-meter while Combo is on. Feeds the
+                    // meter stream so the frontend can gate its auto RST-Rcvd
+                    // suggestion. lyra_snr:<snrDb>
+                    if (args.Length >= 1 && double.TryParse(args[0], out var snrDb))
+                    {
+                        _meters.UpdateSnr(snrDb);
                     }
                     break;
 

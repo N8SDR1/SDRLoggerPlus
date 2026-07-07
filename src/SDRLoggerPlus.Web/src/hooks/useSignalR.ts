@@ -38,6 +38,7 @@ export function useSignalRConnection() {
     setLotwUploadProgress,
     setAdifImportProgress,
     setSelectedSpot,
+    setComboLinked,
     setLogHistoryCallsignFilter,
     setClusterStatus,
     setCwKeyerStatus,
@@ -206,6 +207,10 @@ export function useSignalRConnection() {
             setFocusedCallsignInfo(null);
             setLookingUpCallsign(true);
             signalRService.focusCallsign({ callsign: evt.dxCall, source: 'cluster-spot' });
+          },
+          onComboLinkChanged: (evt) => {
+            console.log('Lyra Combo link:', evt.linked ? 'linked' : 'unlinked');
+            setComboLinked(evt.linked);
           },
           onRotatorPosition: (evt) => {
             console.log('Rotator position:', evt.currentAzimuth, 'moving:', evt.isMoving);

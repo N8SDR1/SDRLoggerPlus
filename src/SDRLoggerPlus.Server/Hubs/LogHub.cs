@@ -19,6 +19,8 @@ public interface ILogHubClient
     Task OnWindStatus(SDRLoggerPlus.Server.Services.Weather.WindStatus status);
     Task OnSatState(SDRLoggerPlus.Server.Services.Sat.SatState state);
     Task OnSpotSelected(SpotSelectedEvent evt);
+    Task OnComboLinkChanged(ComboLinkChangedEvent evt);
+    Task OnComboLogRequested(ComboLogRequestedEvent evt);
     Task OnRotatorPosition(RotatorPositionEvent evt);
     Task OnAdifMonitorImport(AdifMonitorImportEvent evt);
     Task OnBandOpening(BandOpeningEvent evt);
@@ -337,6 +339,47 @@ public class LogHub : Hub<ILogHubClient>
             info != null, hqInfo != null, isApproximate);
 
         await Clients.All.OnCallsignLookedUp(lookedUpEvent);
+
+        // Stage A′ name-back (docs/COMBO_LINK.md): if a Lyra Combo link is
+        // active, push the resolved contact back over the existing TCI socket so
+        // Lyra's CW Console {NAME}/{GRID} tokens fill. Only when the callbook
+        // actually resolved new info (a name or grid) — a bare call, likely the
+        // very one Lyra just sent us, carries nothing new and must not bounce
+        // back (the echo guard). PushComboContactAsync no-ops on any radio whose
+        // Combo link is off, and Lyra applies our src=sdrlog frame under its own
+        // echo guard, so this can't loop.
+        // CW ops address each other by first name, so the {NAME} token should
+        // carry just the given name — not the composed "First Last". Prefer the
+        // callbook's dedicated first-name field (QRZ <fname> / HamQTH <nick>);
+        // fall back to the first token of the composed name. Note QRZ's `Name`
+        // is the SURNAME, so `name` alone (when <fname> is absent) is the last
+        // name — hence the fallback still takes only the first token. Sending
+        // the whole "John Smith" would make a "TNX {NAME} 73" macro read
+        // "TNX JOHN SMITH 73".
+        var cwName = info?.FirstName ?? hqInfo?.FirstName ?? name;
+        cwName = cwName?.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+
+        // Stage C — reverse call push. A deliberate SELECT (spot / globe click,
+        // combo populate — any non-'log-entry' source) carries a COMPLETE call,
+        // so push it to Lyra's His Call even when the callbook resolved nothing,
+        // so His Call tracks SDRLogger+ for unlisted/DX calls too. Manual typing
+        // ('log-entry') fires FocusCallsign on every keystroke ≥3 chars, so it's
+        // pushed ONLY when a name/grid resolved (the A′ path) — otherwise a
+        // partial call would spam Lyra's His Call as the operator types.
+        // Loop-safe: Lyra applies our src=sdrlog frame under its own echo guard,
+        // so a call it originally sent us doesn't bounce back.
+        var isDeliberateSelect = !string.Equals(evt.Source, "log-entry", StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(cwName) || !string.IsNullOrWhiteSpace(lookedUpEvent.Grid) || isDeliberateSelect)
+        {
+            try
+            {
+                await _tciRadioService.PushComboContactAsync(evt.Callsign, cwName, lookedUpEvent.Grid);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Combo call/name push failed for {Call}", evt.Callsign);
+            }
+        }
     }
 
     private static double CalculateBearing(double lat1, double lon1, double lat2, double lon2)
@@ -1285,6 +1328,16 @@ public static class LogHubExtensions
     public static async Task BroadcastSpotSelected(this IHubContext<LogHub, ILogHubClient> hub, SpotSelectedEvent evt)
     {
         await hub.Clients.All.OnSpotSelected(evt);
+    }
+
+    public static async Task BroadcastComboLinkChanged(this IHubContext<LogHub, ILogHubClient> hub, ComboLinkChangedEvent evt)
+    {
+        await hub.Clients.All.OnComboLinkChanged(evt);
+    }
+
+    public static async Task BroadcastComboLogRequested(this IHubContext<LogHub, ILogHubClient> hub, ComboLogRequestedEvent evt)
+    {
+        await hub.Clients.All.OnComboLogRequested(evt);
     }
 
     public static async Task BroadcastQso(this IHubContext<LogHub, ILogHubClient> hub, QsoLoggedEvent evt)

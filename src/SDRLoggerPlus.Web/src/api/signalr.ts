@@ -135,6 +135,26 @@ export interface SpotSelectedEvent {
   grid?: string;
 }
 
+// Lyra ↔ SDRLogger+ "Combo" link state (docs/COMBO_LINK.md). Lyra owns the
+// on/off master toggle; SDRLogger+ shows a read-only "Lyra Combo: Linked"
+// indicator while linked.
+export interface ComboLinkChangedEvent {
+  linked: boolean;
+  radioId: string;
+}
+
+// Lyra ↔ SDRLogger+ "Combo" link — Stage B "log this QSO" request, fired when
+// the operator sends a Lyra CW macro carrying the {LOG} tag. SDRLogger+ submits
+// the current Log Entry form; RST/mode/frequency stamp the on-air exchange.
+export interface ComboLogRequestedEvent {
+  callsign: string;
+  rstSent?: string;
+  rstRcvd?: string;
+  mode?: string;
+  frequencyHz: number;
+  radioId: string;
+}
+
 export interface RotatorPositionEvent {
   rotatorId: string;
   currentAzimuth: number;
@@ -160,6 +180,8 @@ export interface TciMetersEvent {
   radioId: string;
   rxSignalDbm: number | null;
   rxAvgSignalDbm: number | null;
+  // In-passband SNR (dB) from Lyra (Combo only) — gates the auto RST-Rcvd fill.
+  rxSnrDb: number | null;
   txMicDbm: number | null;
   txPowerWatts: number | null;
   txPeakPowerWatts: number | null;
@@ -628,17 +650,19 @@ export function clearSpectrumDataCallback(cb: (evt: SpectrumDataEvent) => void):
   spectrumDataCallbacks.remove(cb);
 }
 
-// Direct callback for TCI meter data (bypasses React state, ≤12 Hz needle updates)
-let tciMetersCallback: ((evt: TciMetersEvent) => void) | null = null;
+// Direct callbacks for TCI meter data (bypasses React state, ≤12 Hz needle
+// updates). A SET, not a single slot, so independent consumers coexist — the
+// Meter panel needle AND the Log Entry auto RST-Rcvd both read the stream.
+const tciMetersCallbacks = createCallbackSet<TciMetersEvent>();
 
 export function setTciMetersCallback(cb: ((evt: TciMetersEvent) => void) | null): void {
-  tciMetersCallback = cb;
+  if (cb) tciMetersCallbacks.add(cb);
+  else tciMetersCallbacks.clear();
 }
 
-/** Clears the callback only if it is still the given one — prevents an
- * unmounting duplicate panel from killing the surviving panel's feed. */
+/** Removes just this callback — an unmounting panel can't kill another's feed. */
 export function clearTciMetersCallback(cb: (evt: TciMetersEvent) => void): void {
-  if (tciMetersCallback === cb) tciMetersCallback = null;
+  tciMetersCallbacks.remove(cb);
 }
 
 export interface LightningStrikeMsg { lat: number; lon: number; timestampUtc: string; local: boolean }
@@ -665,6 +689,8 @@ type EventHandlers = {
   onHotListChanged?: (evt: HotListChangedEvent) => void;
   onSatState?: (state: SatState) => void;
   onSpotSelected?: (evt: SpotSelectedEvent) => void;
+  onComboLinkChanged?: (evt: ComboLinkChangedEvent) => void;
+  onComboLogRequested?: (evt: ComboLogRequestedEvent) => void;
   onRotatorPosition?: (evt: RotatorPositionEvent) => void;
   onRigStatus?: (evt: RigStatusEvent) => void;
   // Antenna Genius handlers
@@ -944,6 +970,14 @@ class SignalRService {
       this.handlers.onSpotSelected?.(evt);
     });
 
+    this.connection.on('OnComboLinkChanged', (evt: ComboLinkChangedEvent) => {
+      this.handlers.onComboLinkChanged?.(evt);
+    });
+
+    this.connection.on('OnComboLogRequested', (evt: ComboLogRequestedEvent) => {
+      this.handlers.onComboLogRequested?.(evt);
+    });
+
     this.connection.on('OnRotatorPosition', (evt: RotatorPositionEvent) => {
       this.handlers.onRotatorPosition?.(evt);
     });
@@ -1070,7 +1104,7 @@ class SignalRService {
 
     // TCI meter events (direct callback, bypasses React state)
     this.connection.on('OnTciMeters', (evt: TciMetersEvent) => {
-      tciMetersCallback?.(evt);
+      tciMetersCallbacks.emit(evt);
     });
 
     this.connection.on('OnLightningStrikes', (evt: LightningStrikesEvent) => {

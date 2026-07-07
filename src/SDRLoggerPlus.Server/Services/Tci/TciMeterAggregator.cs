@@ -22,6 +22,7 @@ public sealed class TciMeterAggregator
 
     private double? _rxSignalDbm;
     private double? _rxAvgSignalDbm;
+    private double? _rxSnrDb;
     private double? _txMicDbm;
     private double? _txPowerWatts;
     private double? _txPeakPowerWatts;
@@ -45,6 +46,16 @@ public sealed class TciMeterAggregator
         lock (_lock)
         {
             _rxSignalDbm = reading.Dbm;
+            _dirty = true;
+        }
+    }
+
+    /// <summary>Latest in-passband SNR (dB) from Lyra's Combo `lyra_snr` frame.</summary>
+    public void UpdateSnr(double snrDb)
+    {
+        lock (_lock)
+        {
+            _rxSnrDb = snrDb;
             _dirty = true;
         }
     }
@@ -79,6 +90,7 @@ public sealed class TciMeterAggregator
                 radioId,
                 _rxSignalDbm,
                 _rxAvgSignalDbm,
+                _rxSnrDb,
                 _txMicDbm,
                 _txPowerWatts,
                 _txPeakPowerWatts,

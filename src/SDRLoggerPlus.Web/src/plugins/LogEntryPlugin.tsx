@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Radio as RadioIcon, Pencil, Megaphone, ArrowUp, ArrowDown } from 'lucide-react';
 import { api, CreateQsoRequest, SatState } from '../api/client';
-import { signalRService } from '../api/signalr';
+import { signalRService, setTciMetersCallback, clearTciMetersCallback, type TciMetersEvent } from '../api/signalr';
+import { S9_DBM, DB_PER_S_UNIT } from '../utils/smeter';
 import { useSignalR } from '../hooks/useSignalR';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -66,6 +67,19 @@ const isCwMode = (m: string) => m === 'CW' || m === 'CWU' || m === 'CWL';
 const RST_PHONE = ['59', '58', '57', '56', '55', '54', '53', '52', '51'];
 // Common RST values for CW and digital modes
 const RST_CW_DIGITAL = ['599', '589', '579', '569', '559', '549', '539', '529', '519'];
+
+// Combo auto RST-Rcvd (Lyra link): map a received-signal dBm to the "S" digit
+// of an RST report (1..9). HF convention (S9 = -73 dBm, 6 dB/unit — the same
+// scale the analog meter uses); clamped 1..9 (RST strength caps at 9, and
+// anything over S9 reports "9"). R stays 5 and T stays 9 by convention — only
+// S is measurable. VHF/UHF uses a -93 dBm S9; we keep the HF scale to match the
+// meter, so a VHF report reads a few S-units low (operator can override).
+const dbmToSDigit = (dbm: number): number =>
+  Math.max(1, Math.min(9, Math.round((dbm - S9_DBM) / DB_PER_S_UNIT) + 9));
+// Only auto-suggest the received S when the signal is clearly above the noise
+// floor; below this the S-meter is just reading noise and would report a
+// phantom S-unit. Lyra supplies the SNR (lyra_snr); this is the trust gate.
+const AUTO_RST_SNR_GATE_DB = 3;
 
 // Get default RST based on mode. CW-family and DIGI/RTTY use 3-digit RST;
 // phone modes use 2-digit.
@@ -139,7 +153,7 @@ function RstCombobox({ value, onChange, options, className }: {
 export function LogEntryPlugin() {
   const queryClient = useQueryClient();
   const { focusCallsign, persistCallsignMapImage, setRadioMode, tuneToBand, sendDxSpot } = useSignalR();
-  const { focusedCallsignInfo, radioStates, selectedRadioId, isLookingUpCallsign, setFocusedCallsign, setFocusedCallsignInfo, setLogHistoryCallsignFilter, clearCallsignFromAllControls, selectedSpot, setSelectedSpot, addCallsignMapImage } = useAppStore();
+  const { focusedCallsignInfo, radioStates, selectedRadioId, isLookingUpCallsign, setFocusedCallsign, setFocusedCallsignInfo, setLogHistoryCallsignFilter, clearCallsignFromAllControls, selectedSpot, setSelectedSpot, addCallsignMapImage, comboLinked } = useAppStore();
   const { settings, updateRadioSettings } = useSettingsStore();
   const followRadio = settings.radio.followRadio;
 
@@ -223,6 +237,20 @@ export function LogEntryPlugin() {
 
   // Name state - locked means it auto-fills from QRZ
   const [nameLocked, setNameLocked] = useState(true);
+
+  // Combo auto RST-Rcvd (Stage B+): when linked to Lyra, suggest the received
+  // "S" from the shared, calibrated S-meter — peak-held over the exchange and
+  // SNR-gated so noise never reads as signal. The toggle persists; the field
+  // re-arms to AUTO each new QSO and latches to MANUAL the instant the operator
+  // edits it. Not offered in SAT mode (its reports are hand-entered).
+  const [autoRstEnabled, setAutoRstEnabled] = useState<boolean>(() => {
+    try { return localStorage.getItem('sdrl_auto_rst_s') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('sdrl_auto_rst_s', autoRstEnabled ? '1' : '0'); } catch { /* no-op */ }
+  }, [autoRstEnabled]);
+  const [rstRcvdAuto, setRstRcvdAuto] = useState(true);  // field is AUTO vs operator-edited
+  const peakRxDbmRef = useRef<number | null>(null);      // peak-hold of received dBm, this QSO
 
   // Update time every second when locked
   useEffect(() => {
@@ -480,17 +508,31 @@ export function LogEntryPlugin() {
     clearCallsignFromAllControls();
   }, [formData.band, formData.mode, formData.frequency, followRadio, currentRadioState, clearCallsignFromAllControls]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Build + submit the current QSO. `overrides` lets the Combo {LOG} path
+  // (Stage B) stamp the on-air RST / mode / frequency Lyra reports at macro
+  // send time, while the populated form supplies call / name / grid / etc.
+  // Called with no args by the "Log QSO" button (handleSubmit).
+  const submitQso = (overrides?: {
+    rstSent?: string | null;
+    rstRcvd?: string | null;
+    mode?: string | null;
+    frequencyHz?: number | null;
+  }) => {
     if (!formData.callsign) return;
 
-    // Format RST with plus values if present
-    const rstSent = formData.rstSentPlus
-      ? `${formData.rstSent}+${formData.rstSentPlus}`
-      : formData.rstSent;
-    const rstRcvd = formData.rstRcvdPlus
-      ? `${formData.rstRcvd}+${formData.rstRcvdPlus}`
-      : formData.rstRcvd;
+    // Format RST with plus values if present (form path); the Combo path
+    // passes explicit sent/rcvd strings that win when provided.
+    const rstSent = overrides?.rstSent
+      ?? (formData.rstSentPlus ? `${formData.rstSent}+${formData.rstSentPlus}` : formData.rstSent);
+    const rstRcvd = overrides?.rstRcvd
+      ?? (formData.rstRcvdPlus ? `${formData.rstRcvd}+${formData.rstRcvdPlus}` : formData.rstRcvd);
+    // Combo sends Lyra's app mode (CWU/CWL/USB/…); normalizeMode maps it into
+    // our canonical set. Absent override → the form's mode (already synced).
+    const mode = overrides?.mode ? normalizeMode(overrides.mode) : formData.mode;
+    // Combo carries Hz; the form + backend Qso.Frequency use MHz (v1.x + ADIF).
+    const frequency = (overrides?.frequencyHz && overrides.frequencyHz > 0)
+      ? overrides.frequencyHz / 1e6
+      : (formData.frequency ? parseFloat(formData.frequency) : undefined);
 
     // Use the timestamp from state (either live or manual)
     const qsoDateTime = new Date(`${qsoDate}T${qsoTime}:00.000Z`);
@@ -499,10 +541,8 @@ export function LogEntryPlugin() {
       qsoDate: qsoDateTime.toISOString(),
       timeOn: qsoTime.replace(':', '') + '00',
       band: formData.band,
-      mode: formData.mode,
-      // Frequency is entered as MHz (v1.x + ADIF convention). Backend
-      // Qso.Frequency stores the same MHz value, so we forward as-is.
-      frequency: formData.frequency ? parseFloat(formData.frequency) : undefined,
+      mode,
+      frequency,
       rstSent,
       rstRcvd,
       name: formData.name || focusedCallsignInfo?.name,
@@ -536,6 +576,64 @@ export function LogEntryPlugin() {
       downMode: logMode === 'sat' && formData.downMode ? formData.downMode : undefined,
     });
   };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitQso();
+  };
+
+  // Stage B: a {LOG}-tagged Lyra CW macro logs the current QSO. Register a
+  // stable handler ONCE that calls the latest submitQso via a ref, so it never
+  // captures a stale formData snapshot. setHandlers merges, so this leaves the
+  // other combo / SAT handlers untouched. No-ops if the form has no callsign.
+  const submitQsoRef = useRef(submitQso);
+  submitQsoRef.current = submitQso;
+  useEffect(() => {
+    signalRService.setHandlers({
+      onComboLogRequested: (evt) => submitQsoRef.current({
+        rstSent: evt.rstSent,
+        rstRcvd: evt.rstRcvd,
+        mode: evt.mode,
+        frequencyHz: evt.frequencyHz,
+      }),
+    });
+    return () => signalRService.setHandlers({ onComboLogRequested: undefined });
+  }, []);
+
+  // Combo auto RST-Rcvd — drive the "S" digit from the live S-meter stream.
+  // Registered ONCE; the ref always holds the latest closure so it reads
+  // current formData/flags without re-subscribing on every (≤12 Hz) meter tick.
+  // Uses a SET-backed callback (see signalr.ts) so it coexists with the Meter
+  // panel's own subscription.
+  const onMeterForRstRef = useRef<(evt: TciMetersEvent) => void>(() => {});
+  onMeterForRstRef.current = (evt: TciMetersEvent) => {
+    if (!autoRstEnabled || !comboLinked || logMode === 'sat' || !rstRcvdAuto) return;
+    if (!formData.callsign) return;              // nothing being worked yet
+    if (evt.isTransmitting) return;              // only sample while receiving them
+    const dbm = evt.rxSignalDbm;
+    const snr = evt.rxSnrDb;
+    if (dbm == null || snr == null || snr < AUTO_RST_SNR_GATE_DB) return;
+    // Peak-hold: only climbs, so the field settles on their strongest reading
+    // over the exchange and doesn't flicker with QSB.
+    if (peakRxDbmRef.current !== null && dbm <= peakRxDbmRef.current) return;
+    peakRxDbmRef.current = dbm;
+    const s = dbmToSDigit(dbm);
+    const rst = isCwMode(formData.mode) ? `5${s}9` : `5${s}`;
+    setFormData(prev => (prev.rstRcvd === rst ? prev : { ...prev, rstRcvd: rst }));
+  };
+  useEffect(() => {
+    const handler = (evt: TciMetersEvent) => onMeterForRstRef.current(evt);
+    setTciMetersCallback(handler);
+    return () => clearTciMetersCallback(handler);
+  }, []);
+
+  // New QSO (call changed or cleared) → reset the peak-hold and re-arm AUTO, so
+  // each contact starts fresh and a prior manual override never sticks to the
+  // next station.
+  useEffect(() => {
+    peakRxDbmRef.current = null;
+    setRstRcvdAuto(true);
+  }, [formData.callsign]);
 
   // v1.x-style mode switcher tabs. Each mode has its own accent color
   // matching v1.x: General=cyan, POTA=green, SAT=goldish yellow.
@@ -585,28 +683,41 @@ export function LogEntryPlugin() {
       title="Log Entry"
       icon={<NotebookPen className="w-5 h-5" />}
       actions={
-        <button
-          type="button"
-          onClick={toggleFollowRadio}
-          className={`flex items-center gap-1.5 px-2 py-1 text-xs font-ui rounded transition-all ${
-            followRadio
-              ? 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30'
-              : 'bg-dark-600 text-dark-300 hover:bg-dark-500'
-          }`}
-          title={followRadio ? 'Following radio frequency' : 'Not following radio'}
-        >
-          {followRadio ? (
-            <>
-              <Link className="w-3.5 h-3.5" />
-              <span>Following</span>
-            </>
-          ) : (
-            <>
-              <Unlink className="w-3.5 h-3.5" />
-              <span>Manual</span>
-            </>
+        <div className="flex items-center gap-2">
+          {/* Lyra ↔ SDRLogger+ Combo link indicator (read-only; Lyra owns the
+              toggle). Shows only while a Combo-enabled Lyra is connected. */}
+          {comboLinked && (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-ui bg-accent-primary/15 border border-accent-primary/30 text-accent-primary"
+              title="Lyra Combo linked — grabbed CW callsigns populate here; a {LOG} macro logs the QSO"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-primary" />
+              Lyra Combo
+            </span>
           )}
-        </button>
+          <button
+            type="button"
+            onClick={toggleFollowRadio}
+            className={`flex items-center gap-1.5 px-2 py-1 text-xs font-ui rounded transition-all ${
+              followRadio
+                ? 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30'
+                : 'bg-dark-600 text-dark-300 hover:bg-dark-500'
+            }`}
+            title={followRadio ? 'Following radio frequency' : 'Not following radio'}
+          >
+            {followRadio ? (
+              <>
+                <Link className="w-3.5 h-3.5" />
+                <span>Following</span>
+              </>
+            ) : (
+              <>
+                <Unlink className="w-3.5 h-3.5" />
+                <span>Manual</span>
+              </>
+            )}
+          </button>
+        </div>
       }
     >
       {/* Mode switcher row — "Log Mode:" label + General / POTA / SAT
@@ -1095,15 +1206,46 @@ export function LogEntryPlugin() {
             <span className="text-dark-600 text-lg">/</span>
           </div>
 
-          {/* Their RST Rcvd — v1.x label wording */}
+          {/* Their RST Rcvd — v1.x label wording. Combo (Lyra link) adds an
+              "S-auto" toggle that fills the S digit from the signal meter, with
+              an AUTO/MANUAL badge; hidden in SAT mode + when not linked. */}
           <div>
             <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
               <span className="text-accent-secondary">Their</span> RST Rcvd
+              {comboLinked && logMode !== 'sat' && (
+                <>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setAutoRstEnabled(v => !v)}
+                    title={autoRstEnabled
+                      ? 'Auto received-S from Lyra’s signal meter is ON — click to turn off'
+                      : 'Auto-fill the received S from Lyra’s signal meter (Combo)'}
+                    className={`ml-1 rounded px-1 leading-tight text-[9px] uppercase tracking-wide border ${
+                      autoRstEnabled
+                        ? 'border-accent-secondary/50 text-accent-secondary bg-accent-secondary/10'
+                        : 'border-dark-600 text-dark-400 hover:text-dark-200'
+                    }`}
+                  >
+                    S-auto
+                  </button>
+                  {autoRstEnabled && (
+                    <span
+                      className={`text-[9px] uppercase tracking-wide ${rstRcvdAuto ? 'text-accent-success' : 'text-dark-400'}`}
+                      title={rstRcvdAuto
+                        ? 'Tracking the signal meter — fills from peak strength'
+                        : 'You edited it — auto is paused until the next QSO'}
+                    >
+                      {rstRcvdAuto ? 'auto' : 'manual'}
+                    </span>
+                  )}
+                </>
+              )}
             </label>
             <div className="flex items-center gap-1">
               <RstCombobox
                 value={formData.rstRcvd}
-                onChange={(v) => setFormData(prev => ({ ...prev, rstRcvd: v }))}
+                onChange={(v) => { setFormData(prev => ({ ...prev, rstRcvd: v })); setRstRcvdAuto(false); }}
                 options={getRstOptions(formData.mode)}
                 className="glass-input w-16 font-mono text-sm"
               />
@@ -1112,7 +1254,7 @@ export function LogEntryPlugin() {
                   <span className="text-dark-300">+</span>
                   <select
                     value={formData.rstRcvdPlus}
-                    onChange={(e) => setFormData(prev => ({ ...prev, rstRcvdPlus: e.target.value }))}
+                    onChange={(e) => { setFormData(prev => ({ ...prev, rstRcvdPlus: e.target.value })); setRstRcvdAuto(false); }}
                     className="glass-input w-20 font-mono text-sm"
                   >
                     <option value="">--</option>

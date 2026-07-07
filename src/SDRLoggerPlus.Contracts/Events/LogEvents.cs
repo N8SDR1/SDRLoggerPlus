@@ -110,6 +110,32 @@ public record SpotSelectedEvent(
 );
 
 /// <summary>
+/// Lyra ↔ SDRLogger+ "Combo" link state (docs/COMBO_LINK.md). Lyra is the
+/// master and announces on/off over the TCI connection; SDRLogger+ reflects it
+/// as a read-only "Lyra Combo: Linked" indicator and only acts while linked.
+/// </summary>
+public record ComboLinkChangedEvent(
+    bool Linked,
+    string RadioId
+);
+
+/// <summary>
+/// Lyra ↔ SDRLogger+ "Combo" link — Stage B "log this QSO" request. Fired when
+/// the operator sends a Lyra CW Console macro carrying the {LOG} action token
+/// (self-authorizing consent). SDRLogger+ submits the current Log Entry form.
+/// RST/Mode/FrequencyHz come from Lyra at send time so the logged QSO matches
+/// the on-air exchange; the form's populated call/name/grid supply the rest.
+/// </summary>
+public record ComboLogRequestedEvent(
+    string Callsign,
+    string? RstSent,
+    string? RstRcvd,
+    string? Mode,
+    long FrequencyHz,
+    string RadioId
+);
+
+/// <summary>
 /// Current rotator position
 /// </summary>
 public record RotatorPositionEvent(
@@ -853,6 +879,9 @@ public record TciMetersEvent(
     string RadioId,
     double? RxSignalDbm,
     double? RxAvgSignalDbm,
+    // In-passband SNR (dB) from Lyra's `lyra_snr` (Combo only) — gates the auto
+    // RST-received suggestion so a noise-only S9 isn't reported as a real S9.
+    double? RxSnrDb,
     double? TxMicDbm,
     double? TxPowerWatts,
     double? TxPeakPowerWatts,

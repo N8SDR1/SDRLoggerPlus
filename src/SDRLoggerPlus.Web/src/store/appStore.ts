@@ -118,6 +118,11 @@ interface AppState {
   selectedSpot: SpotSelectedEvent | null;
   setSelectedSpot: (spot: SpotSelectedEvent | null) => void;
 
+  // Lyra ↔ SDRLogger+ "Combo" link — true while a Lyra with Combo on is
+  // connected over TCI. Drives the read-only "Lyra Combo: Linked" indicator.
+  comboLinked: boolean;
+  setComboLinked: (linked: boolean) => void;
+
   // DX Cluster connection statuses
   clusterStatuses: Record<string, ClusterStatus>;
   setClusterStatus: (clusterId: string, status: ClusterStatus) => void;
@@ -464,6 +469,10 @@ export const useAppStore = create<AppState>((set) => ({
   // Selected DX Cluster spot
   selectedSpot: null,
   setSelectedSpot: (spot) => set({ selectedSpot: spot }),
+
+  // Lyra Combo link status
+  comboLinked: false,
+  setComboLinked: (linked) => set({ comboLinked: linked }),
 
   // DX Cluster connection statuses
   clusterStatuses: {},
