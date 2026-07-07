@@ -3,13 +3,14 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useEffect, useState } from 'react';
 import { APP_VERSION } from '../version';
-import { AboutDialog } from './AboutDialog';
+import { AboutDialog, type TabId } from './AboutDialog';
 
 export function StatusBar() {
   const { connectionState, reconnectAttempt, stationCallsign, stationGrid, rigStatus } = useAppStore();
   const { openSettings } = useSettingsStore();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showAbout, setShowAbout] = useState(false);
+  const [aboutTab, setAboutTab] = useState<TabId>('about');
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -21,6 +22,14 @@ export function StatusBar() {
       window.electronAPI.onOpenAbout(() => setShowAbout(true));
       return () => window.electronAPI?.removeOpenAboutListener?.();
     }
+  }, []);
+
+  // Settings → About → "Open the User Guide" fires this window event; open the
+  // About dialog straight on the Help tab.
+  useEffect(() => {
+    const openHelp = () => { setAboutTab('help'); setShowAbout(true); };
+    window.addEventListener('open-help-guide', openHelp);
+    return () => window.removeEventListener('open-help-guide', openHelp);
   }, []);
 
   const formatUtcTime = (date: Date) => {
@@ -123,7 +132,11 @@ export function StatusBar() {
         </div>
       </div>
     </div>
-    <AboutDialog isOpen={showAbout} onClose={() => setShowAbout(false)} />
+    <AboutDialog
+      isOpen={showAbout}
+      initialTab={aboutTab}
+      onClose={() => { setShowAbout(false); setAboutTab('about'); }}
+    />
     </>
   );
 }

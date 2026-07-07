@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Coffee, BookOpen, Info, ScrollText } from 'lucide-react';
+import { X, Coffee, BookOpen, Info, ScrollText, Github, MessageCircle } from 'lucide-react';
 import { APP_VERSION } from '../version';
 
 interface AboutDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Tab to show when the dialog opens (default About). Settings → About →
+   *  "Open the User Guide" opens it on 'help'. */
+  initialTab?: TabId;
 }
 
-type TabId = 'about' | 'help' | 'changelog';
+export type TabId = 'about' | 'help' | 'changelog';
 
 // Support link — the SDRLoggerPlus PayPal donation URL used by v1. Same
 // account, same "Built by a fellow ham, for the community" note so the
@@ -21,11 +24,17 @@ const SUPPORT_URL = 'https://www.paypal.com/donate/?business=NP2ZQS4LR454L&no_re
  * CHANGELOG.md at runtime so a release-time bump doesn't require a
  * frontend rebuild.
  */
-export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
+export function AboutDialog({ isOpen, onClose, initialTab = 'about' }: AboutDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState<TabId>('about');
+  const [tab, setTab] = useState<TabId>(initialTab);
   const [changelog, setChangelog] = useState<string | null>(null);
   const [changelogError, setChangelogError] = useState<string | null>(null);
+
+  // Jump to the requested tab each time the dialog opens (so "Open the User
+  // Guide" from Settings lands on Help, while the normal open lands on About).
+  useEffect(() => {
+    if (isOpen) setTab(initialTab);
+  }, [isOpen, initialTab]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -65,14 +74,16 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         ref={dialogRef}
-        className="relative glass-panel border border-glass-200 rounded-xl shadow-2xl max-w-2xl w-full mx-4 animate-scale-in flex flex-col max-h-[85vh]"
+        className={`relative glass-panel border border-glass-200 rounded-xl shadow-2xl w-full mx-4 animate-scale-in flex flex-col max-h-[85vh] transition-[max-width] ${
+          tab === 'help' ? 'max-w-4xl' : 'max-w-2xl'
+        }`}
       >
         <button
           onClick={onClose}
@@ -169,6 +180,37 @@ function AboutTab({ openLink }: { openLink: (url: string) => void }) {
   );
 }
 
+// ── Help guide ─────────────────────────────────────────────────────────
+// A proper, navigable user manual: a sticky table-of-contents on the left,
+// scroll-to sections on the right. Sections are sourced from the real UI —
+// panel names + Settings paths match what the operator actually sees.
+
+const GITHUB_URL = 'https://github.com/N8SDR1/SDRLoggerPlus';
+const DISCORD_URL = 'https://discord.gg/r3Cuj5NA9p';
+const LYRA_URL = 'https://github.com/N8SDR1/Lyra-SDR-cpp/releases';
+
+const HELP_SECTIONS = [
+  { id: 'start',    title: 'Getting Started' },
+  { id: 'radio',    title: 'Your Radio' },
+  { id: 'combo',    title: 'The Lyra Combo Link' },
+  { id: 'logging',  title: 'Logging QSOs' },
+  { id: 'spots',    title: 'DX Spots & the Map' },
+  { id: 'weather',  title: 'Weather & Alerts' },
+  { id: 'meters',   title: 'Meters & Panadapter' },
+  { id: 'callbook', title: 'Callbook, Uploads & Import' },
+  { id: 'awards',   title: 'Awards & Statistics' },
+  { id: 'settings', title: 'Settings & Shortcuts' },
+  { id: 'updates',  title: 'Updates & Support' },
+] as const;
+
+// A settings path chip, e.g. "Settings → Web Logbooks".
+function P({ children }: { children: React.ReactNode }) {
+  return <span className="font-mono text-[11px] text-accent-primary">{children}</span>;
+}
+function B({ children }: { children: React.ReactNode }) {
+  return <strong className="text-white font-semibold">{children}</strong>;
+}
+
 function HelpTab() {
   const openLink = (url: string) => {
     if (window.electronAPI && 'openExternal' in window.electronAPI) {
@@ -177,98 +219,170 @@ function HelpTab() {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
+  const secRefs = useRef<Record<string, HTMLElement | null>>({});
+  const [active, setActive] = useState<string>('start');
+  const go = (id: string) => {
+    secRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActive(id);
+  };
+
+  const Section = ({ id, title, children }: { id: string; title: string; children: React.ReactNode }) => (
+    <section
+      ref={(el) => { secRefs.current[id] = el; }}
+      className="scroll-mt-1"
+    >
+      <h2 className="text-base font-semibold font-ui text-white mb-1.5">{title}</h2>
+      <div className="space-y-2 text-[13px]">{children}</div>
+    </section>
+  );
+
   return (
-    <div className="text-sm text-dark-200 space-y-5 leading-relaxed">
-      <div>
-        <h2 className="text-lg font-semibold font-ui text-white mb-1">Quick start</h2>
-        <p className="text-dark-300 text-xs">
-          Five minutes to your first QSO in the log.
-        </p>
-      </div>
-
-      <ol className="space-y-3 list-decimal list-inside">
-        <li>
-          <strong className="text-white">Set your callsign + grid.</strong>{' '}
-          Open <span className="font-mono text-accent-primary">Settings → Station</span> and fill in
-          your callsign, name, and grid square. QRZ / HamQTH lookups won't work
-          without your call.
-        </li>
-        <li>
-          <strong className="text-white">Connect a radio (optional but recommended).</strong>{' '}
-          Any of three paths works and multiple can run at once:
-          <ul className="mt-1 ml-6 list-disc space-y-1 text-dark-100 text-xs">
-            <li>
-              <span className="text-dark-100">TCI</span> — works with{' '}
+    <div className="flex gap-5">
+      {/* Sticky table of contents */}
+      <nav className="sticky top-0 self-start shrink-0 w-40 hidden sm:block">
+        <p className="text-[10px] uppercase tracking-wide text-dark-400 mb-2 px-2">Contents</p>
+        <ul className="space-y-0.5">
+          {HELP_SECTIONS.map((s) => (
+            <li key={s.id}>
               <button
-                onClick={() => openLink('https://github.com/N8SDR1/Lyra-SDR-cpp/releases')}
-                className="font-bold text-accent-primary hover:underline"
-                title="Lyra SDR — open the GitHub releases page"
+                onClick={() => go(s.id)}
+                className={`w-full text-left px-2 py-1 rounded text-xs transition-colors ${
+                  active === s.id
+                    ? 'bg-accent-primary/10 text-accent-primary'
+                    : 'text-dark-300 hover:text-dark-100 hover:bg-dark-700/40'
+                }`}
               >
-                Lyra
-              </button>{' '}
-              (built by the same team as SDRLoggerPlus), Thetis, and ExpertSDR3.
-              The panadapter panel is <span className="text-dark-100">TCI-only</span> —
-              it draws its spectrum from the TCI IQ stream, so a TCI radio is
-              required for the waterfall to light up. Enable at Settings → Radio → TCI.
+                {s.title}
+              </button>
             </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 space-y-7 text-sm text-dark-200 leading-relaxed">
+        <Section id="start" title="Getting Started">
+          <p>Five minutes to your first logged QSO:</p>
+          <ol className="ml-4 list-decimal space-y-1.5">
+            <li><B>Set your station.</B> <P>Settings → Station</P> — callsign, name, grid. Callbook lookups need your call.</li>
+            <li><B>Add a callbook.</B> <P>Settings → Web Logbooks → QRZ</P> (or HamQTH). Auto-fills name / country / grid / coords on every lookup. Each has a Test Credentials button.</li>
+            <li><B>Connect a radio</B> (optional) — from the <B>Rig</B> panel, pick TCI, Hamlib, or flrig (see <em>Your Radio</em>).</li>
+            <li><B>Pick a log mode</B> — the Log Entry panel has General / POTA / SAT tabs (remembered across sessions).</li>
+            <li><B>Log it.</B> Type a callsign, let the callbook fill the rest, adjust freq / mode / RST, and hit <span className="font-mono text-accent-secondary text-[11px]">Log QSO</span>.</li>
+          </ol>
+        </Section>
+
+        <Section id="radio" title="Your Radio">
+          <p>Connect from the <B>Rig</B> panel — three paths, and more than one can run at once:</p>
+          <ul className="ml-4 list-disc space-y-1.5">
             <li>
-              <span className="text-dark-100">Hamlib</span> — universal (Icom /
-              Yaesu / Kenwood / etc.) via rigctld. Tunes the radio but doesn't
-              feed the panadapter.
+              <B>TCI</B> — works with{' '}
+              <button onClick={() => openLink(LYRA_URL)} className="font-bold text-accent-primary hover:underline" title="Lyra SDR releases">Lyra</button>{' '}
+              (built by the same team as SDRLoggerPlus), Thetis, and ExpertSDR3. TCI is the richest link — it also drives the <B>panadapter</B> (spectrum + waterfall) and the S-meter, and it's the connection the <em>Lyra Combo Link</em> rides. The panadapter is <B>TCI-only</B>.
             </li>
-            <li>
-              <span className="text-dark-100">flrig</span> — XML-RPC bridge to
-              flrig's rig database. Tunes the radio but doesn't feed the
-              panadapter.
-            </li>
+            <li><B>Hamlib</B> — universal (Icom / Yaesu / Kenwood / …) via rigctld. Tunes + reads the rig; no panadapter.</li>
+            <li><B>flrig</B> — XML-RPC bridge to flrig's rig database (auto-detects data-mode names). Tunes + reads the rig; no panadapter.</li>
           </ul>
-        </li>
-        <li>
-          <strong className="text-white">Add a QRZ / HamQTH account.</strong>{' '}
-          Settings → Web Logbooks → QRZ (or HamQTH). Auto-fills operator name,
-          country, grid, and coords on every callsign lookup. Each has a Test
-          Credentials button so you know the login works before saving.
-        </li>
-        <li>
-          <strong className="text-white">Pick a log-entry mode.</strong>{' '}
-          The Log Entry panel has three tabs — General for daily logging,
-          POTA for park activations, SAT for satellite QSOs. The tab remembers
-          across sessions.
-        </li>
-        <li>
-          <strong className="text-white">Log a QSO.</strong>{' '}
-          Type a callsign. QRZ / HamQTH fill everything else. Adjust freq / mode /
-          RST as needed and hit <span className="font-mono text-accent-secondary">Log QSO</span>.
-        </li>
-      </ol>
+        </Section>
 
-      <div>
-        <h3 className="text-white font-semibold font-ui mb-1">Where to find more</h3>
-        <ul className="ml-4 list-disc space-y-1 text-xs">
-          <li>
-            Every panel has its own <em>Settings</em> button (the gear icon in
-            the top-right of the panel header) — start there for panel-specific
-            tuning.
-          </li>
-          <li>
-            Weather, POTA, SAT, DX-cluster, awards, statistics, propagation,
-            and rotator settings each live in <span className="font-mono text-accent-primary">Settings</span> under
-            their own sections.
-          </li>
-          <li>
-            Full documentation, release notes, and issue tracker live on the
-            GitHub repository — see the About tab.
-          </li>
-        </ul>
-      </div>
+        <Section id="combo" title="The Lyra Combo Link">
+          <p className="text-accent-secondary">★ The headline feature — a deep two-way link with <B>Lyra</B> (our sibling SDR) that rides the <em>same TCI connection</em> you already use. No extra setup, no bridge app.</p>
+          <p><B>Turn it on in Lyra</B> (Lyra is the master): <span className="font-mono text-[11px] text-dark-100">Lyra → Settings → Network → TCI server → "SDRLogger+ Combo"</span>. SDRLogger+ shows a read-only <span className="text-accent-secondary">● Lyra Combo</span> badge in the Log Entry header while linked. When it's on:</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>Grab → log entry.</B> Grab a callsign in Lyra's CW decoder and it populates here + fires the callbook lookup.</li>
+            <li><B>Name back to Lyra.</B> The first name the callbook resolves flows back into Lyra's CW Console <span className="font-mono text-[11px] text-dark-100">{'{NAME}'}</span> macro token — so "TNX {'{NAME}'} 73" fills itself.</li>
+            <li><B>{'{LOG}'} logs the QSO.</B> A CW macro in Lyra carrying the <span className="font-mono text-[11px] text-dark-100">{'{LOG}'}</span> tag auto-logs the current QSO here — send your 73 and log it in one keystroke.</li>
+            <li><B>Call push.</B> Click a spot or select a call here and Lyra's His Call follows.</li>
+            <li>
+              <B>Auto received-S.</B> The <B>S</B> of your RST-Rcvd fills automatically from the shared signal meter — peak-held over the exchange, gated by Lyra's SNR so noise never reads as signal. Use the <span className="font-mono text-[11px] text-dark-100">S-auto</span> toggle by the RST-Rcvd field; it shows <span className="text-accent-success">auto</span> / manual and re-arms each new QSO (General / POTA). Typing your own value latches it to manual.
+            </li>
+            <li><B>Survives restarts.</B> If Lyra restarts, the link reconnects on its own.</li>
+          </ul>
+          <p className="text-xs text-dark-300">Transmit power, audio, and protection stay entirely in Lyra — the combo only shares logging data.</p>
+        </Section>
 
-      <div className="border-t border-glass-100 pt-4">
-        <h3 className="text-white font-semibold font-ui mb-1">Keyboard shortcuts</h3>
-        <ul className="ml-4 list-disc space-y-1 text-xs">
-          <li><span className="font-mono text-accent-primary">Esc</span> — close this dialog / cancel a form.</li>
-          <li><span className="font-mono text-accent-primary">Ctrl/Shift + Mouse wheel</span> — zoom the panadapter around the VFO.</li>
-          <li><span className="font-mono text-accent-primary">Mouse wheel</span> (over panadapter or Rig VFO) — tune by the step you pick in the STEP dropdown.</li>
-        </ul>
+        <Section id="logging" title="Logging QSOs">
+          <p>The Log Entry panel has three modes (tabs), remembered across sessions:</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>General</B> — daily logging. Type a call → callbook fills name / QTH / grid / country. With a rig connected, <B>Follow Radio</B> keeps frequency + mode tracking the dial.</li>
+            <li><B>POTA</B> — park activations. Set your activating park (rides as <span className="font-mono text-[11px] text-dark-100">my_pota_ref</span>) and an optional P2P park for park-to-park. Self-spot to POTA with <P>Settings → Web Logbooks → POTA</P> credentials.</li>
+            <li><B>SAT</B> — satellite QSOs. Auto-fills satellite + uplink/downlink freq &amp; mode from a connected CSN S.A.T. controller (<P>Settings → S.A.T.</P>); writes ADIF sat fields for LoTW credit.</li>
+          </ul>
+          <p>RST defaults sensibly per mode (599 CW / 59 phone). With the Combo link on, the received <B>S</B> can auto-fill from the meter (see above).</p>
+        </Section>
+
+        <Section id="spots" title="DX Spots & the Map">
+          <p><B>Spot sources</B>:</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>DX cluster (telnet)</B> — connect up to four clusters (with per-cluster call / password / auto-reconnect) from the <B>Cluster</B> panel.</li>
+            <li><B>SpotHole</B> — a polled REST aggregator, the default when no cluster is connected; filter by spotter country.</li>
+            <li><B>RBN band openings</B> — separate VHF/UHF opening alerts (10/6/2m, 70cm) with distance + optional voice announce: <P>Settings → Band Openings</P>.</li>
+          </ul>
+          <p><B>Filters</B> (Cluster panel + <P>Settings</P>): max age (1–60 min), capacity (50–300), band/mode multi-select, <B>Track Rig</B> (show only the rig's current band+mode), and status colors — new DXCC (orange), new band (green), worked (gray, dimmable).</p>
+          <p><B>Click a spot</B> to tune the radio and prefill the Log Entry. Spots can also be <B>pushed to a TCI radio's panadapter</B> (Lyra / Thetis) as click-to-tune markers.</p>
+          <p><B>DXpeditions & Hot List (auto hot spots).</B> The <B>DXpeditions</B> panel lists current and upcoming operations (NG3K feed). Click any callsign to drop it on your <B>Hot List</B> — a watchlist that makes matching DX spots light up as <B>hot spots</B> the instant they appear, and, with the announce mode on, calls them out by <B>voice</B>. Cycle the pill Off → Visual → Visual + Voice; the counter shows how many you're watching, and Clear All empties the list. Manage watched calls + text-to-speech under <P>Settings → Alerts → Hot List</P>.</p>
+          <p><B>The 3D globe</B> shows spots + spotter→DX arcs, lightning strikes, POTA parks, your station, satellite tracks + footprints, the day/night terminator, gray line, aurora, PSK-Reporter coverage, and cached QRZ profile photos. Click a point to focus that call. Overlays are all in <P>Settings → Map</P>.</p>
+        </Section>
+
+        <Section id="weather" title="Weather & Alerts">
+          <p>SDRLoggerPlus watches your local weather and warns you on-screen — handy for pulling down an antenna before a storm.</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>Lightning detection</B> — aggregates Blitzortung, NWS warnings, and your own Ambient or Ecowitt station; alerts within a range you set, with strike count + direction.</li>
+            <li><B>High-wind alerts</B> — NWS warnings, METAR (airport) observations, and Ambient / Ecowitt data, with low / moderate / high tiers and separate sustained + gust thresholds.</li>
+          </ul>
+          <p>All under <P>Settings → Alerts → Weather</P> — per-source toggles, units (mph / kph), range, cooldown, and a METAR station code, plus Preview buttons to see the alert banner without waiting for real weather. Alerts appear as an animated banner above the status bar. (Header-bar space-weather indices — SFI / K-index / SSN — live in <P>Settings → Header Bar</P>.)</p>
+        </Section>
+
+        <Section id="meters" title="Meters & Panadapter">
+          <p><B>Meter</B> panel — an analog or round S-meter (switch in the panel), with mode + frequency on one line: <span className="text-white">white on receive</span>, <span className="text-red-400">red on transmit</span>. Fed by the connected radio's meter stream (TCI). S-meter calibration lives in the panel's gear menu.</p>
+          <p><B>Panadapter</B> — live spectrum + waterfall, drawn from a <B>TCI</B> radio's IQ stream (TCI-only). Mouse-wheel over it to tune by the STEP you pick; Ctrl/Shift + wheel to zoom around the VFO; click to tune.</p>
+        </Section>
+
+        <Section id="callbook" title="Callbook, Uploads & Import">
+          <p><B>Callbook lookups</B>: QRZ then HamQTH (<P>Settings → Web Logbooks</P>), falling back to the bundled AD1C <B>cty.dat</B> for country + approximate coords. Keep cty.dat current with the update button under <P>Settings → Web Logbooks → Country Files</P>.</p>
+          <p><B>Upload logbooks</B> (per-QSO or on demand), each in <P>Settings → Web Logbooks</P>: <B>LoTW</B> (signs via TQSL), <B>eQSL</B>, <B>Club Log</B>, <B>HRDLog</B>, and <B>QRZ Logbook</B>.</p>
+          <p><B>Import</B> — <P>Settings → ADIF Monitor</P> watches external <span className="font-mono text-[11px] text-dark-100">.adi</span> files (VarAC, MSHV, …) and listens for ADIF-over-UDP from N1MM / Logger32 / DXKeeper; <B>WSJT-X</B> auto-log is under <P>Settings → Web Logbooks → WSJT-X</P>.</p>
+          <p><B>Backup &amp; Restore</B> (<P>Settings → Backup &amp; Restore</P>) — turn on <B>Scheduled Backups</B> to save your logbook automatically (daily, weekly, or on exit) to a folder you choose, keeping the last N copies. You can also <B>Export / Import all app settings</B> to a single file — ideal for moving your whole setup to another PC or keeping a safe copy off-machine.</p>
+        </Section>
+
+        <Section id="awards" title="Awards & Statistics">
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>Statistics</B> panel — DXCC, WAS, WAZ, WPX, WAC, 5-band awards, VUCC, POTA, IOTA; worked vs. confirmed, filterable by band / continent.</li>
+            <li><B>Propagation</B> panel — HF band conditions (from N0NBH) as a 24-hour heatmap by band and UTC hour.</li>
+            <li><B>Rotator</B> panel — azimuth / elevation readout + preset headings; configure the hamlib rotctld / serial connection in <P>Settings → Rotator</P>.</li>
+          </ul>
+        </Section>
+
+        <Section id="settings" title="Settings & Shortcuts">
+          <p><B>Arrange your workspace.</B> Every panel <B>docks and drags</B> — grab a panel's title bar to move it, split the view, or tab panels together however you like, and the arrangement is remembered across sessions. Once you've built an operating position you like, save it: <P>Settings → Appearance → Layout Presets</P> holds up to <B>3 named layouts</B> to switch between (say, one for casual logging and one for a DX pileup).</p>
+          <p>Every panel has its own <B>gear</B> (top-right of the header) for panel-specific tuning. The main <P>Settings</P> sections: Station · Web Logbooks · Alerts · ADIF Monitor · Band Openings · Rotator · Backup &amp; Restore · S.A.T. · Appearance · Map · Header Bar · Chat AI · About.</p>
+          <p className="text-xs text-dark-300">Tip: the <B>Appearance</B> section has the theme picker (dark, night-ops, midnight, and more).</p>
+          <p className="pt-1"><B>Keyboard &amp; mouse:</B></p>
+          <ul className="ml-4 list-disc space-y-1 text-xs">
+            <li><span className="font-mono text-accent-primary">Esc</span> — close this dialog / clear the Log Entry form.</li>
+            <li><span className="font-mono text-accent-primary">Mouse wheel</span> over the panadapter or the Rig VFO — tune by the STEP dropdown.</li>
+            <li><span className="font-mono text-accent-primary">Ctrl / Shift + wheel</span> — zoom the panadapter / globe.</li>
+          </ul>
+        </Section>
+
+        <Section id="updates" title="Updates & Support">
+          <p>SDRLoggerPlus checks GitHub for new releases and lets you know when one is available (also on startup); the update prompt opens the download page.</p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              onClick={() => openLink(GITHUB_URL)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-dark-700 border border-glass-200 text-accent-primary hover:bg-dark-600 text-xs font-ui transition-colors"
+            >
+              <Github className="w-3.5 h-3.5" /> GitHub — releases, issues, docs
+            </button>
+            <button
+              onClick={() => openLink(DISCORD_URL)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#5865F2]/15 border border-[#5865F2]/40 text-[#a3abff] hover:bg-[#5865F2]/25 text-xs font-ui transition-colors"
+            >
+              <MessageCircle className="w-3.5 h-3.5" /> Discord — community &amp; support
+            </button>
+          </div>
+          <p className="text-xs text-dark-300 pt-1">Enjoying it? There's a “Support the project” link on the About tab. 73!</p>
+        </Section>
       </div>
     </div>
   );
