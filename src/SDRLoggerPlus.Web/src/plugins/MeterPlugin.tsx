@@ -80,12 +80,6 @@ function sweepAngle(fraction: number): number {
   return SWEEP_START + (SWEEP_END - SWEEP_START) * fraction;
 }
 
-function swrColor(swr: number | null): string {
-  if (swr === null) return 'var(--text-muted, #8b96a5)';
-  if (swr < 1.5) return '#2ecc71';
-  if (swr < 2.5) return '#f1c40f';
-  return '#e74c3c';
-}
 
 /** Major tick fractions and labels for the S-meter face. */
 const S_TICKS: Array<{ frac: number; label: string; red: boolean }> = [
@@ -314,27 +308,31 @@ export function MeterPlugin() {
               style={{ width: '100%', maxWidth: FACE_W, aspectRatio: '2 / 1' }}
             />
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center font-mono">
-            <div className="rounded bg-black/30 px-2 py-1">
-              <div className="text-[10px] uppercase opacity-60">Pwr</div>
-              <div className="text-base" data-testid="meter-pwr">
-                {tiles.txPowerW !== null ? `${tiles.txPowerW.toFixed(1)} W` : '—'}
-              </div>
-            </div>
-            <div className="rounded bg-black/30 px-2 py-1">
-              <div className="text-[10px] uppercase opacity-60">SWR</div>
-              <div className="text-base" style={{ color: swrColor(tiles.swr) }} data-testid="meter-swr">
-                {tiles.swr !== null ? tiles.swr.toFixed(2) : '—'}
-              </div>
-            </div>
-            <div className="rounded bg-black/30 px-2 py-1">
-              <div className="text-[10px] uppercase opacity-60">
-                {rigStatus ? rigStatus.mode : 'Freq'}
-              </div>
-              <div className="text-base" data-testid="meter-freq">
-                {rigStatus ? (rigStatus.frequency / 1e6).toFixed(4) : '—'}
-              </div>
-            </div>
+          {/* Mode + frequency on one horizontal line. White on RX, red (with a
+              soft glow) on TX. Power / SWR / protection / faults are TX-side and
+              live in Lyra (the radio owns them), so those tiles were removed.
+              Uses the unified frequencyHz/mode (TCI radio state first, then
+              rigStatus) so it populates on a TCI radio (Lyra) where rigStatus
+              is null. */}
+          <div
+            className={`flex items-baseline justify-center gap-2 rounded bg-black/30 px-2 py-1 font-mono transition-colors ${
+              isTransmitting ? 'text-red-500' : 'text-white'
+            }`}
+            style={isTransmitting ? { textShadow: '0 0 8px rgba(239,68,68,0.7)' } : undefined}
+            data-testid="meter-freq-line"
+          >
+            <span className="text-[11px] uppercase tracking-wide opacity-80">
+              {mode ?? 'Freq'}
+            </span>
+            <span className="text-lg font-semibold tabular-nums leading-none" data-testid="meter-freq">
+              {frequencyHz !== null ? (frequencyHz / 1e6).toFixed(4) : '—'}
+            </span>
+            <span className="text-[10px] uppercase opacity-50">MHz</span>
+            {isTransmitting && (
+              <span className="ml-1 rounded bg-red-500/20 px-1 text-[9px] font-bold uppercase tracking-wider">
+                TX
+              </span>
+            )}
           </div>
         </div>
       )}
