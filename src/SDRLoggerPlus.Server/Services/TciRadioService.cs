@@ -1241,6 +1241,43 @@ internal class TciRadioConnection
                     }
                     break;
 
+                case "spot_activated":
+                    // Lyra (and Thetis) broadcast this when the operator clicks
+                    // a spot marker on the SDR's own panadapter:
+                    //   spot_activated:CALLSIGN,MODE,FREQ_HZ,ARGB;
+                    // Round-trip the click back into SDRLogger+ by reusing the
+                    // SAME SpotSelectedEvent that the cluster / POTA / globe spot
+                    // clicks fire — so the log-entry panel auto-populates the
+                    // callsign, the QRZ lookup kicks off, and the log-history
+                    // filter sets, exactly as an internal spot click does. This
+                    // is the reverse of the outbound spot push (SDRLogger+ →
+                    // Lyra waterfall): click a pushed spot on Lyra, log it here.
+                    // Lyra also emits `rx_clicked_on_spot:0,0,CALL,HZ;` for the
+                    // same click (no mode) — we ignore it so we don't fire twice.
+                    if (args.Length >= 3 && !string.IsNullOrWhiteSpace(args[0]))
+                    {
+                        var spotCall = args[0].ToUpperInvariant();
+                        var spotMode = !string.IsNullOrWhiteSpace(args[1])
+                            ? args[1].ToUpperInvariant()
+                            : null;
+                        // TCI carries the spot frequency in Hz; SpotSelectedEvent
+                        // (like all our spot events) is in kHz.
+                        double spotFreqKhz = long.TryParse(args[2], out var spotHz)
+                            ? spotHz / 1000.0
+                            : 0;
+                        try
+                        {
+                            await _hubContext.BroadcastSpotSelected(
+                                new SpotSelectedEvent(spotCall, spotFreqKhz, spotMode, null));
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex,
+                                "TCI spot_activated broadcast failed for {Call}", spotCall);
+                        }
+                    }
+                    break;
+
                 case "protocol":
                     // Server identification: protocol:name,version;
                     _logger.LogInformation("TCI protocol: {Args}", argsStr);

@@ -1238,6 +1238,11 @@ public static class LogHubExtensions
         await hub.Clients.All.OnSpotReceived(evt);
     }
 
+    public static async Task BroadcastSpotSelected(this IHubContext<LogHub, ILogHubClient> hub, SpotSelectedEvent evt)
+    {
+        await hub.Clients.All.OnSpotSelected(evt);
+    }
+
     public static async Task BroadcastQso(this IHubContext<LogHub, ILogHubClient> hub, QsoLoggedEvent evt)
     {
         await hub.Clients.All.OnQsoLogged(evt);
