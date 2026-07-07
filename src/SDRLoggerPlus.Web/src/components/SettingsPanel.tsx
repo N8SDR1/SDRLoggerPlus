@@ -3399,6 +3399,16 @@ function AboutSection() {
           </div>
         </div>
 
+        {/* Jump straight to the in-app User Guide (Help tab of the About
+            dialog). The dialog lives in the always-mounted StatusBar, so a
+            window event opens it on the Help tab from here. */}
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('open-help-guide'))}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent-primary/10 border border-accent-primary/30 text-accent-primary hover:bg-accent-primary/20 transition-colors text-sm font-ui"
+        >
+          <HelpCircle className="w-4 h-4" /> Open the User Guide
+        </button>
+
         <div className="space-y-2 text-sm text-dark-300">
           <p>
             <strong className="text-dark-200">Authors:</strong> Rick Langford (N8SDR) and Brent Crier (N9BC)
