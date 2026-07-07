@@ -32,7 +32,13 @@ public record CallsignLookedUpEvent(
     string? ImageUrl,
     double? Bearing = null,
     double? Distance = null,
-    bool LatLonIsApproximate = false
+    bool LatLonIsApproximate = false,
+    // Compound / portable call handling. When the focused call is compound
+    // (e.g. "F/HB9GUX"), the callbook lookup targets the base call and
+    // BaseCallsign carries it ("HB9GUX"); CompoundNote is a short human note
+    // ("HB9GUX operating from France"). Both null for a plain base call.
+    string? BaseCallsign = null,
+    string? CompoundNote = null
 );
 
 /// <summary>

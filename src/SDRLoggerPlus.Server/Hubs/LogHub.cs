@@ -164,6 +164,17 @@ public class LogHub : Hub<ILogHubClient>
         _logger.LogDebug("Callsign focused: {Callsign} from {Source}", evt.Callsign, evt.Source);
         await Clients.Others.OnCallsignFocused(evt);
 
+        // Compound / portable calls (e.g. "F/HB9GUX") aren't in the callbooks
+        // under the literal string — QRZ/HamQTH are keyed on the operator's
+        // home ("base") call. Strip to the base call for the lookup so it
+        // resolves instead of spinning; the DXCC entity still comes from the
+        // FULL call via cty.dat below (France for "F/HB9GUX", not Switzerland).
+        var baseCall = CallsignHelper.ExtractBaseCall(evt.Callsign);
+        var isCompound = CallsignHelper.IsCompound(evt.Callsign);
+        var isPrefixForm = CallsignHelper.IsPrefixForm(evt.Callsign);
+        var compoundNote = CallsignHelper.DescribeCompound(
+            evt.Callsign, c => CtyService.GetEntityFromCallsign(c).Country);
+
         // Lookup chain: QRZ → HamQTH → cty.dat centroid. Each source is tried
         // in order; whichever supplies coords first wins. The operator always
         // gets *some* lat/lon for the bearing line — even without QRZ or
@@ -171,11 +182,19 @@ public class LogHub : Hub<ILogHubClient>
         QrzCallsignInfo? info = null;
         try
         {
-            info = await _qrzService.LookupCallsignAsync(evt.Callsign);
+            // Hard 6 s ceiling — the QRZ XML call is on the UI hot path and a
+            // slow/hanging response (or a session re-auth stall) must never
+            // leave the profile panel spinning. Mirrors the HamQTH ceiling.
+            info = await _qrzService.LookupCallsignAsync(baseCall)
+                .WaitAsync(TimeSpan.FromSeconds(6));
+        }
+        catch (TimeoutException)
+        {
+            _logger.LogInformation("QRZ lookup timed out for {Callsign} — using HamQTH/cty.dat fallback", baseCall);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "QRZ lookup failed for {Callsign}", evt.Callsign);
+            _logger.LogWarning(ex, "QRZ lookup failed for {Callsign}", baseCall);
             // fall through — HamQTH + cty.dat fallbacks still apply
         }
 
@@ -193,7 +212,7 @@ public class LogHub : Hub<ILogHubClient>
             try
             {
                 using var hqCts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
-                hqInfo = await _hamQthService.LookupCallsignAsync(evt.Callsign, hqCts.Token);
+                hqInfo = await _hamQthService.LookupCallsignAsync(baseCall, hqCts.Token);
             }
             catch (OperationCanceledException)
             {
@@ -235,6 +254,25 @@ public class LogHub : Hub<ILogHubClient>
         string? country = info?.Country ?? hqInfo?.Country;
         int? cqZone = info?.CqZone ?? hqInfo?.CqZone;
 
+        // A PREFIX-form compound ("F/HB9GUX") means the operator is portable in
+        // the leading prefix's DXCC — so the base call's callbook country and
+        // home coordinates are the wrong entity. Take the DXCC (country / CQ
+        // zone) from the FULL call via cty.dat and drop the home coords so the
+        // bearing falls through to the correct-country centroid below. (SUFFIX
+        // forms like "HB9GUX/P" stay in the same entity, so we keep the precise
+        // callbook coords untouched.)
+        if (isPrefixForm)
+        {
+            var (ctyCountry, _, ctyCqZone) = CtyService.GetEntityFromCallsign(evt.Callsign);
+            if (ctyCountry != null)
+            {
+                country = ctyCountry;
+                cqZone = ctyCqZone ?? cqZone;
+            }
+            targetLat = null;
+            targetLon = null;
+        }
+
         if (!targetLat.HasValue || !targetLon.HasValue)
         {
             var centroid = CtyService.GetCentroidFromCallsign(evt.Callsign);
@@ -271,7 +309,11 @@ public class LogHub : Hub<ILogHubClient>
             : (hqInfo != null ? BuildFullName(hqInfo.FirstName, hqInfo.Name) : null);
 
         var lookedUpEvent = new CallsignLookedUpEvent(
-            Callsign: info?.Callsign ?? hqInfo?.Callsign ?? evt.Callsign,
+            // Always echo the ORIGINAL focused call ("F/HB9GUX"), not the base
+            // call the callbook was queried with — the frontend clears its
+            // lookup spinner only when the returned callsign matches the
+            // focused one, and the QSO should log the compound call as worked.
+            Callsign: evt.Callsign,
             Name: name,
             Grid: info?.Grid ?? hqInfo?.Grid,
             Latitude: targetLat,
@@ -284,7 +326,9 @@ public class LogHub : Hub<ILogHubClient>
             ImageUrl: info?.ImageUrl ?? hqInfo?.ImageUrl,
             Bearing: bearing,
             Distance: distance,
-            LatLonIsApproximate: isApproximate
+            LatLonIsApproximate: isApproximate,
+            BaseCallsign: isCompound ? baseCall : null,
+            CompoundNote: compoundNote
         );
 
         _logger.LogDebug(

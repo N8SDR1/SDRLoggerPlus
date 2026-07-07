@@ -30,6 +30,12 @@ export interface CallsignLookedUpEvent {
   // rather than a real QRZ/HamQTH lookup — the UI renders the bearing
   // line dimmer/dashed and shows an "APPROX" chip.
   latLonIsApproximate?: boolean;
+  // Compound / portable calls: baseCallsign is the home call the callbook
+  // was actually queried with ("HB9GUX" for a focused "F/HB9GUX"), and
+  // compoundNote is a short human note ("HB9GUX operating from France").
+  // Both absent for a plain base call.
+  baseCallsign?: string;
+  compoundNote?: string;
 }
 
 export interface QsoLoggedEvent {

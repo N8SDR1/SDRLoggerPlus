@@ -7,7 +7,10 @@ export function QrzProfilePlugin() {
   const { focusedCallsignInfo, isLookingUpCallsign } = useAppStore();
 
   const callsign = focusedCallsignInfo?.callsign;
-  const qrzUrl = callsign ? `https://www.qrz.com/db/${callsign}` : null;
+  // For a compound call ("F/HB9GUX") link to the base call's QRZ page — the
+  // compound string isn't a QRZ record.
+  const qrzLookupCall = focusedCallsignInfo?.baseCallsign || callsign;
+  const qrzUrl = qrzLookupCall ? `https://www.qrz.com/db/${qrzLookupCall}` : null;
 
   const handleOpenQrz = () => {
     if (qrzUrl) {
@@ -81,6 +84,14 @@ export function QrzProfilePlugin() {
               <p className="text-lg text-dark-200 font-ui">
                 {focusedCallsignInfo.name || 'No name on file'}
               </p>
+              {/* Compound / portable call notice — explains that the profile
+                  below is the base call the callbook was queried with. */}
+              {focusedCallsignInfo.compoundNote && (
+                <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-ui">
+                  <ContactRound className="w-3 h-3" />
+                  {focusedCallsignInfo.compoundNote}
+                </div>
+              )}
             </div>
 
             {/* Location info */}

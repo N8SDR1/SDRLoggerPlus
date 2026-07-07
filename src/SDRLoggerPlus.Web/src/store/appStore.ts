@@ -206,6 +206,10 @@ export interface AdifImportProgress {
   message: string | null;
 }
 
+// Watchdog handle for the callsign-lookup spinner (see setLookingUpCallsign).
+// Module-scoped so it survives across store updates.
+let _lookupWatchdog: ReturnType<typeof setTimeout> | null = null;
+
 export const useAppStore = create<AppState>((set) => ({
   // Connection
   isConnected: false,
@@ -230,7 +234,24 @@ export const useAppStore = create<AppState>((set) => ({
   isLookingUpCallsign: false,
   setFocusedCallsign: (callsign) => set({ focusedCallsign: callsign }),
   setFocusedCallsignInfo: (info) => set({ focusedCallsignInfo: info, isLookingUpCallsign: false }),
-  setLookingUpCallsign: (loading) => set({ isLookingUpCallsign: loading }),
+  // Safety net: the backend always broadcasts a lookup result (with hard
+  // per-source timeouts), but if that SignalR message is ever dropped the
+  // spinner would hang forever. Arm a watchdog whenever a lookup starts and
+  // auto-clear it after 15 s so the QRZ profile panel can never spin
+  // indefinitely. Any completing lookup (setFocusedCallsignInfo) or a new
+  // lookup start replaces/cancels the pending watchdog.
+  setLookingUpCallsign: (loading) => {
+    if (_lookupWatchdog !== null) { clearTimeout(_lookupWatchdog); _lookupWatchdog = null; }
+    if (loading) {
+      _lookupWatchdog = setTimeout(() => {
+        _lookupWatchdog = null;
+        if (useAppStore.getState().isLookingUpCallsign) {
+          set({ isLookingUpCallsign: false });
+        }
+      }, 15000);
+    }
+    set({ isLookingUpCallsign: loading });
+  },
 
   // Rotator
   rotatorPosition: null,
