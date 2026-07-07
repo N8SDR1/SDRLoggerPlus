@@ -44,4 +44,26 @@ public class BlitzortungStrikesTests
             TimeSpan.FromMilliseconds(1));
         strikes[1].TimestampUtc.Year.Should().Be(2025); // 1.7518e18 ns → 2025
     }
+
+    [Fact]
+    public async Task GetStrikesAsync_fetches_fresh_time_slices_and_filters_by_range()
+    {
+        var handler = new MockHttpMessageHandler();
+        // Only the FRESH slices (n=00 current 5-min bucket, n=01 previous) are
+        // mocked. The pre-fix code fetched n=07/12/13 — worldwide strikes
+        // 35–70 minutes old, mislabeled as "Americas regions" — and would get
+        // nothing here. Rows use the live feed's string-timestamp format.
+        handler.When("*getjson.php*").WithQueryString("n", "00")
+            .Respond("application/json",
+                "[[-91.6,44.9,\"2026-07-06 12:00:01.000000000\",1]," +   // ~11 km from station
+                "[2.3,48.9,\"2026-07-06 12:00:02.000000000\",1]]");      // Paris — far outside range
+        handler.When("*getjson.php*").WithQueryString("n", "01")
+            .Respond("application/json", "[]");
+
+        var client = new BlitzortungClient(Factory(handler), NullLogger<BlitzortungClient>.Instance);
+        var strikes = await client.GetStrikesAsync(44.8, -91.6, rangeKm: 100, CancellationToken.None);
+
+        strikes.Should().HaveCount(1);
+        strikes[0].DistanceKm.Should().BeLessThan(100);
+    }
 }

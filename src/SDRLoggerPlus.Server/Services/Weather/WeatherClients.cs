@@ -313,14 +313,19 @@ public class EcowittClient : IEcowittClient
 /// <summary>
 /// Blitzortung.org public strike feed. The GEOjson `n` parameter selects a
 /// worldwide 5-minute time slice (0 = newest) — NOT a geographic region, despite
-/// the historical naming here. The alert path still fetches slices 7/12/13 as
-/// SDRLogger+ always did; strikes are filtered to the configured range.
+/// what this client historically assumed. Both paths fetch fresh slices {0,1};
+/// the alert path filters strikes to the configured range.
 /// </summary>
 public class BlitzortungClient : IBlitzortungClient
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<BlitzortungClient> _logger;
-    private static readonly int[] Regions = [7, 12, 13];
+
+    // Fresh worldwide coverage: the current 5-minute bucket plus the previous
+    // one. The old value [7, 12, 13] — believed to be Americas regions — was
+    // actually strikes 35–70 minutes old, so proximity alerts fired up to an
+    // hour late.
+    private static readonly int[] AlertSlices = [0, 1];
 
     public BlitzortungClient(IHttpClientFactory httpClientFactory, ILogger<BlitzortungClient> logger)
     {
@@ -331,7 +336,7 @@ public class BlitzortungClient : IBlitzortungClient
     public async Task<List<StrikeInfo>> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default)
     {
         var strikes = new List<StrikeInfo>();
-        foreach (var region in Regions)
+        foreach (var slice in AlertSlices)
         {
             try
             {
@@ -340,7 +345,7 @@ public class BlitzortungClient : IBlitzortungClient
                 client.DefaultRequestHeaders.Add("Referer", "https://map.blitzortung.org/");
                 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) SDRLoggerPlus");
                 var json = await client.GetStringAsync(
-                    $"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={region:D2}", ct);
+                    $"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={slice:D2}", ct);
                 using var doc = JsonDocument.Parse(json);
                 if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
                 foreach (var item in doc.RootElement.EnumerateArray())
@@ -357,7 +362,7 @@ public class BlitzortungClient : IBlitzortungClient
             }
             catch (Exception ex)
             {
-                _logger.LogDebug("Blitzortung region {Region} error: {Error}", region, ex.Message);
+                _logger.LogDebug("Blitzortung slice {Slice} error: {Error}", slice, ex.Message);
             }
         }
         return strikes;
