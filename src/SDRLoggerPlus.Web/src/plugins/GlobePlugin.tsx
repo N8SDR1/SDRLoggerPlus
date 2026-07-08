@@ -1384,18 +1384,19 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     };
   }, [globeReady, settings.map.showLightning]);
 
-  // Day/night terminator + grey line → shader shell uniforms. The shell is
-  // created at globe init; this effect drives it from settings and refreshes
-  // the sun direction (terminator moves 0.25°/min — 60 s is plenty).
+  // Day/night terminator → shader shell uniforms. The shell is created at
+  // globe init; this effect drives it from settings and refreshes the sun
+  // direction (terminator moves 0.25°/min — 60 s is plenty). The shell's
+  // second opacity (grey-line band) is unused: the band didn't look good on
+  // the satellite tiles, so it stays at 0.
   useEffect(() => {
     if (!globeReady || !globeRef.current) return;
     const shell = dayNightShellRef.current;
     if (!shell) return;
 
     const night = settings.map.showDayNightOverlay ? settings.map.dayNightOpacity : 0;
-    const gray = settings.map.showGrayLine ? settings.map.grayLineOpacity : 0;
-    shell.setOpacities(night, gray);
-    if (night <= 0 && gray <= 0) return;
+    shell.setOpacities(night, 0);
+    if (night <= 0) return;
 
     const updateSun = () => {
       if (!globeRef.current) return;
@@ -1406,7 +1407,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     updateSun();
     const interval = setInterval(updateSun, 60_000);
     return () => clearInterval(interval);
-  }, [globeReady, settings.map.showDayNightOverlay, settings.map.showGrayLine, settings.map.dayNightOpacity, settings.map.grayLineOpacity]);
+  }, [globeReady, settings.map.showDayNightOverlay, settings.map.dayNightOpacity]);
 
   // Fly to target when focused callsign changes
   useEffect(() => {

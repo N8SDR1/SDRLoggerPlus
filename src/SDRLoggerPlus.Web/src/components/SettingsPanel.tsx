@@ -2394,40 +2394,6 @@ function MapSettingsSection() {
           </div>
         )}
 
-        {/* Gray Line — glowing twilight band along the terminator (the
-            gray-line propagation zone). Settings-only; no globe button. */}
-        <label className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100 cursor-pointer hover:bg-dark-700 transition-colors">
-          <div className="flex items-center gap-3">
-            <Moon className="w-5 h-5 text-dark-100" />
-            <div>
-              <div className="font-medium font-ui text-dark-200">Gray Line</div>
-              <div className="text-sm text-dark-300">Highlight the twilight band along the terminator on the 3D Globe</div>
-            </div>
-          </div>
-          <input
-            type="checkbox"
-            checked={map.showGrayLine}
-            onChange={(e) => updateMapSettings({ showGrayLine: e.target.checked })}
-            className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
-          />
-        </label>
-
-        {map.showGrayLine && (
-          <div className="flex items-center gap-3 px-4">
-            <span className="text-sm text-dark-300 w-28">Band opacity</span>
-            <input
-              type="range"
-              min={0.1}
-              max={1}
-              step={0.05}
-              value={map.grayLineOpacity}
-              onChange={(e) => updateMapSettings({ grayLineOpacity: parseFloat(e.target.value) })}
-              className="flex-1 h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-accent-primary"
-            />
-            <span className="text-sm font-mono text-dark-200 w-10 text-right">{Math.round(map.grayLineOpacity * 100)}%</span>
-          </div>
-        )}
-
         {/* Satellite Selection */}
         {map.showSatellites && (
           <div className="space-y-2">

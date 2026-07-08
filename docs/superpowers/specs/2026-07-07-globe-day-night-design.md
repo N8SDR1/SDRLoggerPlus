@@ -44,6 +44,12 @@ sliders), plus a sun/moon toggle button on the globe panel.
   `dayNightOpacity` (0.5), `grayLineOpacity` (0.6) in both the frontend store and
   the backend model, with working Settings → Map UI — but **no consumer renders
   anything** (v1-port leftovers). This feature claims them.
+  - **AMENDMENT (2026-07-08, post-verification user decision):** the grey-line
+    band was REMOVED after live testing — it didn't look good on the satellite
+    tiles. The Settings → Map Gray Line checkbox/slider are gone and the
+    GlobePlugin effect pins the shell's gray opacity to 0. The `dayNightShell`
+    module keeps its (tested) second-opacity support; `showGrayLine` /
+    `grayLineOpacity` return to being dead settings.
   - **DISCOVERY (2026-07-08, manual verification):** the "working Settings →
     Map UI" premise was WRONG — the four settings existed in the store/backend
     but NO Settings controls rendered them. A follow-on Task 4 added the
