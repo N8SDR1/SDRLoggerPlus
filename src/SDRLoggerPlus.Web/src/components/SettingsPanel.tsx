@@ -2360,26 +2360,18 @@ function MapSettingsSection() {
           />
         </label>
 
-        {/* Day/Night Shading — drives the 3D Globe's terminator shader shell
-            (same setting as the sun button on the Globe panel). */}
-        <label className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100 cursor-pointer hover:bg-dark-700 transition-colors">
-          <div className="flex items-center gap-3">
+        {/* Day/Night Shading — intensity for the 3D Globe's terminator shader
+            shell. On/off lives on the Globe panel's sun button; this slider
+            only sets how dark the night side gets. */}
+        <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+          <div className="flex items-center gap-3 mb-3">
             <Sun className="w-5 h-5 text-amber-300" />
             <div>
               <div className="font-medium font-ui text-dark-200">Day/Night Shading</div>
-              <div className="text-sm text-dark-300">Shade the night hemisphere on the 3D Globe (also toggled from the Globe panel)</div>
+              <div className="text-sm text-dark-300">Night-side shade intensity on the 3D Globe — toggle it with the sun button on the Globe panel</div>
             </div>
           </div>
-          <input
-            type="checkbox"
-            checked={map.showDayNightOverlay}
-            onChange={(e) => updateMapSettings({ showDayNightOverlay: e.target.checked })}
-            className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
-          />
-        </label>
-
-        {map.showDayNightOverlay && (
-          <div className="flex items-center gap-3 px-4">
+          <div className="flex items-center gap-3">
             <span className="text-sm text-dark-300 w-28">Shade opacity</span>
             <input
               type="range"
@@ -2388,11 +2380,12 @@ function MapSettingsSection() {
               step={0.05}
               value={map.dayNightOpacity}
               onChange={(e) => updateMapSettings({ dayNightOpacity: parseFloat(e.target.value) })}
+              aria-label="Day/night shade opacity"
               className="flex-1 h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-accent-primary"
             />
             <span className="text-sm font-mono text-dark-200 w-10 text-right">{Math.round(map.dayNightOpacity * 100)}%</span>
           </div>
-        )}
+        </div>
 
         {/* Satellite Selection */}
         {map.showSatellites && (
