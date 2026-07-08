@@ -157,7 +157,7 @@ const PLUGINS: Record<string, PluginDef> = {
     tags: ['dxcc', 'awards', 'stats', 'countries', 'bands'],
   },
   'map': {
-    name: 'Map',
+    name: '2D Map',
     icon: <Map className="w-4 h-4" />,
     component: MapPlugin,
     category: 'Maps & Navigation',
