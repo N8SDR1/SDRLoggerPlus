@@ -44,6 +44,7 @@ import {
   Sparkles,
   Snowflake,
   MessageSquare,
+  Newspaper,
 } from 'lucide-react';
 import { useSettingsStore, SettingsSection, StationSettings } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
@@ -2360,6 +2361,24 @@ function MapSettingsSection() {
           />
         </label>
 
+
+        {/* DX News Ticker — scrolling DX-World.net headlines at the bottom
+            of the 2D Map panel */}
+        <label className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100 cursor-pointer hover:bg-dark-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <Newspaper className="w-5 h-5 text-accent-warning" />
+            <div>
+              <div className="font-medium font-ui text-dark-200">DX News Ticker</div>
+              <div className="text-sm text-dark-300">Scroll DX-World.net news across the bottom of the 2D Map</div>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={map.showDxNewsTicker}
+            onChange={(e) => updateMapSettings({ showDxNewsTicker: e.target.checked })}
+            className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
+          />
+        </label>
 
         {/* Satellite Selection */}
         {map.showSatellites && (

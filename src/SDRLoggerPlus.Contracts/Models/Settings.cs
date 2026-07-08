@@ -543,6 +543,9 @@ public class MapSettings
 
     [BsonElement("maxCallsignImages")]
     public int MaxCallsignImages { get; set; } = 50;
+
+    [BsonElement("showDxNewsTicker")]
+    public bool ShowDxNewsTicker { get; set; } = true;
 }
 
 [BsonIgnoreExtraElements]

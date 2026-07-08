@@ -1632,7 +1632,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
         )}
 
         {/* DX News Ticker */}
-        <DXNewsTicker />
+        {settings.map.showDxNewsTicker && <DXNewsTicker />}
         
         {children}
     </div>
