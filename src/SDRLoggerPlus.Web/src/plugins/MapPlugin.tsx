@@ -1489,29 +1489,6 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Target info overlay */}
-        {focusedCallsignInfo && (
-          <div className="absolute top-4 left-4 glass-panel px-3 py-2 z-[1000]">
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4 text-accent-primary" />
-              <div>
-                <p className="font-mono font-bold text-accent-primary">
-                  {focusedCallsignInfo.callsign}
-                </p>
-                {focusedCallsignInfo.grid && (
-                  <p className="text-xs font-mono text-dark-300">{focusedCallsignInfo.grid}</p>
-                )}
-                {focusedCallsignInfo.bearing != null && (
-                  <p className="text-xs font-mono text-accent-secondary">
-                    {focusedCallsignInfo.bearing.toFixed(0)}°
-                    {focusedCallsignInfo.distance != null && ` / ${Math.round(focusedCallsignInfo.distance)} km`}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Instructions overlay */}
         <div className="absolute bottom-12 right-4 glass-panel px-3 py-2 z-[1000] text-xs font-ui text-dark-300">
           {rotatorEnabled ? 'Click on map to set bearing' : 'Rotator disabled'}
@@ -1653,7 +1630,7 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
 export function MapPlugin() {
   const { settings } = useSettingsStore();
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { rotatorPosition, selectedRadioId, radioStates } = useAppStore();
+  const { rotatorPosition, selectedRadioId, radioStates, focusedCallsignInfo } = useAppStore();
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1805,6 +1782,35 @@ export function MapPlugin() {
           )}
 
         </div>
+
+        {/* Target callsign chip — centered over the open map area (right of
+            the globe circle) so the rotor chip can never cover it. Lives at
+            panel level (not inside MapCore) because MapCore's z-0 stacking
+            context caps its overlays below the panel-level chips. */}
+        {focusedCallsignInfo && (
+          <div
+            className="absolute top-4 glass-panel px-3 py-2 z-30 -translate-x-1/2"
+            style={{ left: `calc((100% + ${globeOffset + globeSize}px) / 2)` }}
+          >
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-accent-primary" />
+              <div>
+                <p className="font-mono font-bold text-accent-primary">
+                  {focusedCallsignInfo.callsign}
+                </p>
+                {focusedCallsignInfo.grid && (
+                  <p className="text-xs font-mono text-dark-300">{focusedCallsignInfo.grid}</p>
+                )}
+                {focusedCallsignInfo.bearing != null && (
+                  <p className="text-xs font-mono text-accent-secondary">
+                    {focusedCallsignInfo.bearing.toFixed(0)}°
+                    {focusedCallsignInfo.distance != null && ` / ${Math.round(focusedCallsignInfo.distance)} km`}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Rotor heading chip — floats just above the globe circle (user call:
             rotor position above the globe, grid dropped). Independent of the
