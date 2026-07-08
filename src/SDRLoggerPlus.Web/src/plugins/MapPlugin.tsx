@@ -1664,16 +1664,18 @@ export function MapPlugin() {
   const { settings } = useSettingsStore();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { stationGrid, rotatorPosition, selectedRadioId, radioStates } = useAppStore();
-  const [containerHeight, setContainerHeight] = useState(0);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Track container height to hide top/bottom content if no space
+  // Track container size: hides top/bottom sidebar content when short, and
+  // drives the globe-circle diameter so the cockpit scales with the panel
   useEffect(() => {
     const el = document.getElementById('map-plugin-container');
     if (!el) return;
 
     const observer = new ResizeObserver((entries) => {
-      setContainerHeight(entries[0].contentRect.height);
+      const rect = entries[0].contentRect;
+      setContainerSize({ width: rect.width, height: rect.height });
     });
 
     observer.observe(el);
@@ -1681,8 +1683,19 @@ export function MapPlugin() {
   }, []);
 
   // Determine visibility based on container height
+  const containerHeight = containerSize.height;
   const showTopContent = containerHeight >= 740;
   const showBottomContent = containerHeight >= 800;
+
+  // Globe-circle geometry. The original cockpit was drawn for a fixed
+  // 700px-diameter circle shifted 100px off the left edge, with the bulge
+  // backdrop and arc border clipped at the sidebar's x=198 border. Scale
+  // that whole construction from the panel size instead: fill the height,
+  // but never take more than ~60% of the width so the flat map stays usable.
+  const globeSize = Math.max(320, Math.min(700, containerHeight, containerSize.width * 0.6));
+  const globeOffset = -globeSize / 7;               // was -100 at 700
+  const sidebarEdge = 198;                          // sidebar border x
+  const bulgeWidth = Math.max(0, globeOffset + globeSize - sidebarEdge);
 
   // Get active radio state if available
   const radioState = selectedRadioId ? radioStates.get(selectedRadioId) : null;
@@ -1733,9 +1746,15 @@ export function MapPlugin() {
           <div className="absolute top-0 bottom-0 left-0 w-[200px] bg-[#0a0e14] border-r-[2px] border-[#334155] pointer-events-auto" />
           
           {/* Bulge Base (clipped to only show exactly to the right of the sidebar border) */}
-          <div className="absolute top-1/2 -translate-y-1/2 left-[198px] w-[502px] h-[700px] overflow-hidden pointer-events-none">
-             {/* The circle perfectly aligns with x=0, so its arc perfectly intersects the x=198 straight line */}
-             <div className="absolute top-1/2 -translate-y-1/2 left-[-298px] w-[700px] h-[700px] rounded-full bg-[#0a0e14] border-[2px] border-[#334155] pointer-events-auto" />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 overflow-hidden pointer-events-none"
+            style={{ left: sidebarEdge, width: bulgeWidth, height: globeSize }}
+          >
+             {/* The circle's arc intersects the sidebar's straight border line */}
+             <div
+               className="absolute top-1/2 -translate-y-1/2 rounded-full bg-[#0a0e14] border-[2px] border-[#334155] pointer-events-auto"
+               style={{ left: globeOffset - sidebarEdge, width: globeSize, height: globeSize }}
+             />
           </div>
 
         </div>
@@ -1743,10 +1762,13 @@ export function MapPlugin() {
         {/* Z-20: Interactive Content Layer */}
         <div className="absolute inset-0 z-20 pointer-events-none">
           
-          {/* Globe Component (Touching Left, 700x700, moved left by 100px) */}
-          {/* Since it sits at z-20, it perfectly covers the straight x=198 background border behind it, 
+          {/* Globe Component (touching left, shifted 1/7 of its diameter off-edge) */}
+          {/* Since it sits at z-20, it perfectly covers the straight sidebar background border behind it,
               preventing the straight line from drawing "through" the globe */}
-          <div className="absolute top-1/2 -translate-y-1/2 left-[-100px] w-[700px] h-[700px] pointer-events-auto rounded-full overflow-hidden bg-[#020304]">
+          <div
+            className="absolute top-1/2 -translate-y-1/2 pointer-events-auto rounded-full overflow-hidden bg-[#020304]"
+            style={{ left: globeOffset, width: globeSize, height: globeSize }}
+          >
             <GlobeCore hideOverlays={true} />
           </div>
 
@@ -1794,10 +1816,16 @@ export function MapPlugin() {
         </div>
 
         {/* Z-30: Globe Border Overlay */}
-        {/* Because the Globe at z-20 covered the background circle's right border, 
+        {/* Because the Globe at z-20 covered the background circle's right border,
             we redraw just the protruding arc border over the globe here. */}
-        <div className="absolute top-1/2 -translate-y-1/2 left-[198px] w-[502px] h-[700px] overflow-hidden z-30 pointer-events-none">
-           <div className="absolute top-1/2 -translate-y-1/2 left-[-298px] w-[700px] h-[700px] rounded-full border-[2px] border-[#334155]" />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 overflow-hidden z-30 pointer-events-none"
+          style={{ left: sidebarEdge, width: bulgeWidth, height: globeSize }}
+        >
+           <div
+             className="absolute top-1/2 -translate-y-1/2 rounded-full border-[2px] border-[#334155]"
+             style={{ left: globeOffset - sidebarEdge, width: globeSize, height: globeSize }}
+           />
         </div>
 
       </div>
