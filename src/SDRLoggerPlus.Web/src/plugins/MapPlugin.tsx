@@ -1668,9 +1668,11 @@ export function MapPlugin() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Track container size: hides top/bottom sidebar content when short, and
-  // drives the globe-circle diameter so the cockpit scales with the panel
+  // drives the globe-circle diameter so the cockpit scales with the panel.
+  // Observe via ref, not getElementById — the id can transiently match a
+  // stale duplicate (maximize/remount), leaving the size state frozen.
   useEffect(() => {
-    const el = document.getElementById('map-plugin-container');
+    const el = containerRef.current;
     if (!el) return;
 
     const observer = new ResizeObserver((entries) => {
@@ -1782,9 +1784,12 @@ export function MapPlugin() {
 
           {/* Sidebar Content (Rendered after Globe to stay on top if screen is very short) */}
           {showCockpit && (
-          <div className="absolute top-0 bottom-0 left-0 w-[200px] py-8">
+          <div className="absolute top-0 bottom-0 left-0 w-[200px] py-8 z-30">
             {/* Station info + rotor heading, all above the globe (user call:
-                no grid; rotor position replaces it) */}
+                no grid; rotor position replaces it). z-30: the globe circle
+                is vertically centered and can reach up under this block, and
+                its WebGL canvas paints over plain siblings — so the text
+                must explicitly stack above it. */}
             <div className={`px-6 pointer-events-auto transition-opacity duration-300 ${showTopContent ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                <div className="flex items-center gap-2 mb-4 text-accent-primary font-display font-bold text-sm tracking-wider">
                  <Radio className="w-4 h-4" />
@@ -1805,19 +1810,32 @@ export function MapPlugin() {
                  )}
                </div>
 
-               {settings.rotator.enabled && (
-                 <div className="flex flex-col items-center justify-center mt-5">
-                   <span className="text-[10px] text-dark-400 font-ui uppercase tracking-widest mb-1">Rotor</span>
-                   <div className="text-5xl font-display font-bold text-accent-primary drop-shadow-[0_2px_10px_rgba(255,180,50,0.3)]">
-                      {rotatorPosition?.currentAzimuth?.toFixed(0) || 0}&deg;
-                   </div>
-                 </div>
-               )}
             </div>
           </div>
           )}
 
         </div>
+
+        {/* Rotor heading chip — floats just above the globe circle (user call:
+            rotor position above the globe, grid dropped). Independent of the
+            cockpit frame so it is visible at ANY panel size; when the circle
+            touches the panel top it tucks inside onto the starfield, which is
+            always dark enough to read against. */}
+        {settings.rotator.enabled && (
+          <div
+            className="absolute z-30 flex items-baseline gap-2 px-3 py-1.5 rounded-full bg-[#0a0e14]/80 border border-glass-100/20 backdrop-blur-sm pointer-events-none"
+            style={{
+              left: globeOffset + globeSize / 2,
+              top: Math.max((containerHeight - globeSize) / 2 - 44, 8),
+              transform: 'translateX(-50%)',
+            }}
+          >
+            <span className="text-[10px] text-dark-400 font-ui uppercase tracking-widest">Rotor</span>
+            <span className="text-2xl font-display font-bold text-accent-primary drop-shadow-[0_2px_10px_rgba(255,180,50,0.3)]">
+              {rotatorPosition?.currentAzimuth?.toFixed(0) || 0}&deg;
+            </span>
+          </div>
+        )}
 
         {/* Z-30: Globe Border Overlay */}
         {/* Because the Globe at z-20 covered the background circle's right border,
