@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
-import { Map as MapIcon, MapPin, Target, Maximize2, ZoomIn, ZoomOut, Layers, Satellite, Radio, Sun } from 'lucide-react';
+import { Map as MapIcon, Target, Maximize2, ZoomIn, ZoomOut, Layers, Satellite, Radio, Sun } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { useAppStore, Spot } from '../store/appStore';
@@ -1488,16 +1488,6 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
             )}
           </div>
         </div>
-
-        {/* Station info overlay */}
-        {stationGrid && (
-          <div className="absolute bottom-12 left-4 glass-panel px-3 py-2 z-[1000]">
-            <div className="flex items-center gap-2 text-accent-primary">
-              <MapPin className="w-4 h-4" />
-              <span className="font-mono text-sm">{stationGrid}</span>
-            </div>
-          </div>
-        )}
 
         {/* Target info overlay */}
         {focusedCallsignInfo && (
