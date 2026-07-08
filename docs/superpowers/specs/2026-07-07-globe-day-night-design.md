@@ -44,6 +44,12 @@ sliders), plus a sun/moon toggle button on the globe panel.
   `dayNightOpacity` (0.5), `grayLineOpacity` (0.6) in both the frontend store and
   the backend model, with working Settings → Map UI — but **no consumer renders
   anything** (v1-port leftovers). This feature claims them.
+  - **DISCOVERY (2026-07-08, manual verification):** the "working Settings →
+    Map UI" premise was WRONG — the four settings existed in the store/backend
+    but NO Settings controls rendered them. A follow-on Task 4 added the
+    Day/Night Shading + Gray Line checkboxes and opacity sliders to
+    `MapSettingsSection` (SettingsPanel.tsx), matching the section's existing
+    checkbox/slider patterns (persist via the panel's Save button).
 - globe.gl data layers are spoken for: `polygonsData` = rotator beam,
   `ringsData`/`customLayerData` = lightning, `pointsData`/`arcsData` = markers.
   Rejected approaches: terminator polygon via `polygonsData` (owner collision +
