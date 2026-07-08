@@ -13,6 +13,7 @@ export type ThemeId =
   | 'light'
   | 'dark'
   | 'nightops'
+  | 'lyra'
   | 'midnight'
   | 'dracula'
   | 'nord'
@@ -72,6 +73,17 @@ export const PRESETS: Record<string, ThemePalette> = {
     border: '#1e2a3a', text: '#cdd9e5', muted: '#5a7080',
     accent: '#00e5ff', accent2: '#39ff14',
   },
+  // Styled after the Lyra SDR (our sibling app) — bright cyan on a near-black
+  // teal-navy canvas with an amber secondary (Lyra's SP/LP "tower" accent).
+  // Colors sampled from lyra-cpp's panadapter QML + matched to a side-by-side
+  // screenshot: DARK glass — the panels sit only just above the deep background
+  // (≈ Lyra's own #161e28 panel), so the glass reads from the blur + the crisp,
+  // luminous cyan edges rather than from bright panel fills.
+  lyra: {
+    bg: '#06090e', surfaceAlt: '#090d12', panel: '#0f1720', card: '#16222d',
+    border: '#274150', text: '#cdd9e5', muted: '#8399ac',
+    accent: '#00e5ff', accent2: '#e0a030',
+  },
   // GitHub-Dark / VS Code Dark+ family.
   midnight: {
     bg: '#0d1117', panel: '#161b22', border: '#30363d',
@@ -92,7 +104,7 @@ export const PRESETS: Record<string, ThemePalette> = {
   },
 };
 
-export const PRESET_IDS = ['nightops', 'midnight', 'dracula', 'nord', 'blurple'] as const;
+export const PRESET_IDS = ['nightops', 'lyra', 'midnight', 'dracula', 'nord', 'blurple'] as const;
 
 /** Base colors of the built-in themes, used to seed the Custom pickers. */
 const BUILTIN_SEEDS: Record<'light' | 'dark', CustomColors> = {

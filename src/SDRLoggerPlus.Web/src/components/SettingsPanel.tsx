@@ -1984,6 +1984,13 @@ function AppearanceSettingsSection() {
       preview: { bg: '#0a0d12', panel: '#111620', accent: '#00e5ff', text: '#cdd9e5' },
     },
     {
+      id: 'lyra',
+      label: 'Lyra',
+      icon: <Waves className="w-5 h-5" />,
+      description: 'Styled after the Lyra SDR — glassy cyan & amber',
+      preview: { bg: '#06090e', panel: '#0f1720', accent: '#00e5ff', text: '#cdd9e5' },
+    },
+    {
       id: 'midnight',
       label: 'Midnight',
       icon: <Moon className="w-5 h-5" />,
