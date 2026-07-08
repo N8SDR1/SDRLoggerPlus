@@ -956,6 +956,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       }
       dayNightShellRef.current?.dispose();
       dayNightShellRef.current = null;
+      setGlobeReady(false);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stationLat, stationLon, stationGrid]);
