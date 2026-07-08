@@ -189,6 +189,7 @@ export interface MapSettings {
   grayLineOpacity: number;
   showCallsignImages: boolean;
   maxCallsignImages: number;
+  showDxNewsTicker: boolean; // scrolling DX-World news bar at the bottom of the 2D Map
   showPskOverlay: boolean;
   pskCallsign: string; // callsign to look up on PSK Reporter; empty = use station callsign
   showAuroraOverlay: boolean;
@@ -555,6 +556,7 @@ const defaultSettings: Settings = {
     grayLineOpacity: 0.6,
     showCallsignImages: true,
     maxCallsignImages: 50,
+    showDxNewsTicker: true,
     showPskOverlay: false,
     pskCallsign: '',
     showAuroraOverlay: false,
