@@ -75,31 +75,6 @@ function createCallsignImageIconHtml(params: CallsignImageIconParams): CallsignI
   return { html, size, borderWidth, borderColor, shadowSpread, fontSize };
 }
 
-// Replicated from MapPlugin.tsx visibleCallsignImages logic (lines 652-658)
-interface CallsignMapImage {
-  callsign: string;
-  imageUrl?: string;
-  latitude: number;
-  longitude: number;
-  name?: string;
-  country?: string;
-  grid?: string;
-  savedAt: string;
-}
-
-function computeVisibleCallsignImages(
-  callsignMapImages: CallsignMapImage[],
-  showCallsignImages: boolean,
-  maxCallsignImages: number,
-  focusedCallsign: string | undefined
-): CallsignMapImage[] {
-  if (!showCallsignImages) return [];
-  const focusedCall = focusedCallsign?.toUpperCase();
-  return callsignMapImages
-    .filter(img => img.callsign.toUpperCase() !== focusedCall)
-    .slice(0, maxCallsignImages);
-}
-
 // --- Tests ---
 
 describe('createCallsignImageIcon', () => {
@@ -349,62 +324,6 @@ describe('createCallsignImageIcon', () => {
 
       expect(result.html).toContain('font-family: monospace');
     });
-  });
-});
-
-describe('visibleCallsignImages', () => {
-  const sampleImages: CallsignMapImage[] = [
-    { callsign: 'W1AW', imageUrl: 'https://example.com/w1aw.jpg', latitude: 41.7, longitude: -72.7, savedAt: '2024-01-03T00:00:00Z' },
-    { callsign: 'EI2KC', imageUrl: 'https://example.com/ei2kc.jpg', latitude: 52.6, longitude: -8.6, savedAt: '2024-01-02T00:00:00Z' },
-    { callsign: 'JA1ABC', latitude: 35.6, longitude: 139.6, savedAt: '2024-01-01T00:00:00Z' },
-    { callsign: 'VK3ABC', imageUrl: 'https://example.com/vk3abc.jpg', latitude: -37.8, longitude: 144.9, savedAt: '2024-01-04T00:00:00Z' },
-  ];
-
-  it('returns empty array when showCallsignImages is false', () => {
-    const result = computeVisibleCallsignImages(sampleImages, false, 100, undefined);
-    expect(result).toHaveLength(0);
-  });
-
-  it('returns all images when showCallsignImages is true and no focused callsign', () => {
-    const result = computeVisibleCallsignImages(sampleImages, true, 100, undefined);
-    expect(result).toHaveLength(4);
-  });
-
-  it('excludes the focused callsign from results', () => {
-    const result = computeVisibleCallsignImages(sampleImages, true, 100, 'W1AW');
-    expect(result).toHaveLength(3);
-    expect(result.find(img => img.callsign === 'W1AW')).toBeUndefined();
-  });
-
-  it('excludes focused callsign case-insensitively', () => {
-    const result = computeVisibleCallsignImages(sampleImages, true, 100, 'w1aw');
-    expect(result).toHaveLength(3);
-    expect(result.find(img => img.callsign === 'W1AW')).toBeUndefined();
-  });
-
-  it('respects maxCallsignImages limit', () => {
-    const result = computeVisibleCallsignImages(sampleImages, true, 2, undefined);
-    expect(result).toHaveLength(2);
-    // Should be the first 2 in order
-    expect(result[0].callsign).toBe('W1AW');
-    expect(result[1].callsign).toBe('EI2KC');
-  });
-
-  it('includes entries without imageUrl (placeholder markers)', () => {
-    const result = computeVisibleCallsignImages(sampleImages, true, 100, undefined);
-    const noImageEntry = result.find(img => img.callsign === 'JA1ABC');
-    expect(noImageEntry).toBeDefined();
-    expect(noImageEntry!.imageUrl).toBeUndefined();
-  });
-
-  it('returns empty array for empty input', () => {
-    const result = computeVisibleCallsignImages([], true, 100, undefined);
-    expect(result).toHaveLength(0);
-  });
-
-  it('limit of 0 returns empty array', () => {
-    const result = computeVisibleCallsignImages(sampleImages, true, 0, undefined);
-    expect(result).toHaveLength(0);
   });
 });
 

@@ -403,7 +403,7 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const lastTargetCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
-  const { stationGrid, rotatorPosition, focusedCallsignInfo, potaSpots, dxClusterMapEnabled, hoveredSpotId, callsignMapImages, setCallsignMapImages } = useAppStore();
+  const { stationGrid, rotatorPosition, focusedCallsignInfo, potaSpots, dxClusterMapEnabled, hoveredSpotId } = useAppStore();
   const { settings, updateMapSettings, saveSettings } = useSettingsStore();
   const { commandRotator, selectSpot } = useSignalR();
 
@@ -689,31 +689,6 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [rbnSettings.enabled, rbnSettings.timeWindowMinutes, settings.station.callsign]);
 
-  // Load callsign map images from MongoDB on mount
-  useEffect(() => {
-    if (!settings.map.showCallsignImages) return;
-
-    const loadImages = async () => {
-      try {
-        const images = await api.getCallsignMapImages(settings.map.maxCallsignImages);
-        setCallsignMapImages(images);
-      } catch (error) {
-        console.error('Failed to load callsign map images:', error);
-      }
-    };
-
-    loadImages();
-  }, [settings.map.showCallsignImages, settings.map.maxCallsignImages, setCallsignMapImages]);
-
-  // Callsign images to show on map (only logged QSOs, not browsed callsigns) (limited by maxCallsignImages, excluding the currently focused one)
-  const visibleCallsignImages = useMemo(() => {
-    if (!settings.map.showCallsignImages) return [];
-    const focusedCall = focusedCallsignInfo?.callsign?.toUpperCase();
-    return callsignMapImages
-      .filter(img => img.callsign.toUpperCase() !== focusedCall)
-      .slice(0, settings.map.maxCallsignImages);
-  }, [callsignMapImages, settings.map.showCallsignImages, settings.map.maxCallsignImages, focusedCallsignInfo?.callsign]);
-
   // Helper function to get SNR color
   const getSNRColor = (snr: number | undefined): string => {
     if (snr === null || snr === undefined) return '#888888';
@@ -906,37 +881,6 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
             )
           )}
 
-          {/* Saved callsign image markers (1x) */}
-          {settings.map.showCallsignImages && visibleCallsignImages.map((img) => (
-            <Marker
-              key={`csimg-${img.callsign}`}
-              position={[img.latitude, img.longitude]}
-              icon={createCallsignImageIcon(img.imageUrl, img.callsign, '1x')}
-            >
-              <Popup>
-                <div className="text-center">
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: '#00ddff', marginBottom: 2 }}>{img.callsign}</div>
-                  {img.name && (
-                    <div style={{ fontSize: '12px', color: '#cdd7e4', marginBottom: 2 }}>{img.name}</div>
-                  )}
-                  {img.country && (
-                    <div style={{ fontSize: '11px', color: '#a5b4c8' }}>{img.country}</div>
-                  )}
-                  {img.grid && (
-                    <div style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", color: '#a5b4c8' }}>{img.grid}</div>
-                  )}
-                  <a
-                    href={`https://www.qrz.com/db/${img.callsign}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="map-popup-qrz-btn"
-                  >
-                    QRZ.com ↗
-                  </a>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
 
           {/* RBN Spots Overlay */}
           {rbnSettings.enabled && rbnSpots.map((spot, idx) => {
@@ -1520,9 +1464,11 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
                   )}
                 </div>
 
-                {/* Callsign Images on Map */}
+                {/* Callsign image — QRZ photo icon for the currently worked
+                    callsign only (historical/worked markers were removed by
+                    user decision: the map shows just the active QSO). */}
                 <div className="mt-3 pt-2 border-t border-dark-600">
-                  <div className="text-xs font-ui text-dark-200 mb-2 font-semibold">Callsign Images</div>
+                  <div className="text-xs font-ui text-dark-200 mb-2 font-semibold">Callsign Image</div>
 
                   <label className="flex items-center gap-2 mb-2 cursor-pointer">
                     <input
@@ -1535,28 +1481,8 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
                       }}
                       className="w-4 h-4"
                     />
-                    <span className="text-sm font-ui text-dark-200">Show on Map</span>
+                    <span className="text-sm font-ui text-dark-200">Show photo for current callsign</span>
                   </label>
-
-                  {settings.map.showCallsignImages && (
-                    <div className="ml-6">
-                      <label className="flex items-center gap-2 text-xs text-dark-300">
-                        <input
-                          type="range"
-                          min="1"
-                          max="200"
-                          step="1"
-                          value={settings.map.maxCallsignImages}
-                          onChange={(e) => {
-                            updateMapSettings({ maxCallsignImages: parseInt(e.target.value) });
-                          }}
-                          onMouseUp={() => saveSettings()}
-                          className="flex-1"
-                        />
-                        <span className="w-6 text-right">{settings.map.maxCallsignImages}</span>
-                      </label>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
