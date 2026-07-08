@@ -1,6 +1,7 @@
 export { LogEntryPlugin } from './LogEntryPlugin';
 export { LogHistoryPlugin } from './LogHistoryPlugin';
 export { ClusterPlugin } from './ClusterPlugin';
+export { MapPlugin } from './MapPlugin';
 export { RotatorPlugin } from './RotatorPlugin';
 export { GlobePlugin } from './GlobePlugin';
 export { AntennaGeniusPlugin } from './AntennaGeniusPlugin';
