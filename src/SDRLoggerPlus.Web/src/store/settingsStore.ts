@@ -221,8 +221,11 @@ export interface ClusterSettings {
   spotholeEnabled: boolean;
   /** Only show spots whose spotter resolves to this country; empty = all. */
   spotholeSpotterCountry: string;
-  /** When true, the spot list follows the connected rig's live band + mode. */
-  trackRig: boolean;
+  /** "Follow rig" band tracking — restrict spots to the connected rig's live band. */
+  followRigBand: boolean;
+  /** "Follow rig" mode tracking — restrict spots to the connected rig's live mode.
+   *  Independent of followRigBand: enable either or both. */
+  followRigMode: boolean;
   /** Which of the configured telnet clusters receives outbound spots. Empty = auto (only when a single cluster is connected). */
   primarySpotClusterId: string;
   /** Mirror received DX spots onto the connected TCI radio's panadapter (Lyra / Thetis). */
@@ -561,7 +564,8 @@ const defaultSettings: Settings = {
     connections: [],
     spotholeEnabled: true,
     spotholeSpotterCountry: '', // empty = worldwide (fuller band-activity heat map)
-    trackRig: false,
+    followRigBand: false,
+    followRigMode: false,
     primarySpotClusterId: '', // empty = auto-pick when a single cluster is connected
     pushSpotsToTci: true,
     maxSpots: 200,

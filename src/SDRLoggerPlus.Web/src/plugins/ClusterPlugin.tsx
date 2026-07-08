@@ -27,6 +27,8 @@ const BAND_RANGES: Record<string, [number, number]> = {
   '12m': [24890, 24990],
   '10m': [28000, 29700],
   '6m': [50000, 54000],
+  '2m': [144000, 148000],
+  '70cm': [420000, 450000],
 };
 
 const BAND_OPTIONS: MultiSelectOption[] = [
@@ -41,6 +43,8 @@ const BAND_OPTIONS: MultiSelectOption[] = [
   { value: '12m', label: '12m' },
   { value: '10m', label: '10m' },
   { value: '6m', label: '6m' },
+  { value: '2m', label: '2m' },
+  { value: '70cm', label: '70cm' },
 ];
 
 const MODE_OPTIONS: MultiSelectOption[] = [
@@ -556,8 +560,13 @@ export function ClusterPlugin() {
   } = useSettingsStore();
 
   const clusterConnections = settings.cluster.connections;
-  const trackRig = settings.cluster.trackRig;
-  const tracking = trackRig && rigConnected;
+  // "Follow rig" is two INDEPENDENT toggles: follow the rig's BAND and/or its
+  // MODE. Either or both — so you can chase the whole band, one mode across all
+  // bands, or one mode on one band. Each only bites with a rig connected.
+  const followBand = settings.cluster.followRigBand;
+  const followMode = settings.cluster.followRigMode;
+  const bandTracking = followBand && rigConnected;
+  const modeTracking = followMode && rigConnected;
   const stationCallsign = settings.station.callsign;
   const spotStatusSettings = settings.spotStatus;
   const spotStatusEnabled = spotStatusSettings.enabled;
@@ -584,15 +593,17 @@ export function ClusterPlugin() {
 
     const query = searchQuery.trim().toLowerCase();
 
-    const rigBand = tracking ? getBandFromFrequency((rigFreqHz ?? 0) / 1000) : null;
-    const rigModes = tracking ? rigModeToSpotModes(rigMode) : null;
+    const rigBand = bandTracking ? getBandFromFrequency((rigFreqHz ?? 0) / 1000) : null;
+    const rigModes = modeTracking ? rigModeToSpotModes(rigMode) : null;
 
-    // '?' = rig is outside any known band -> skip band filter rather than show nothing.
-    const effectiveBands = tracking
+    // Band: Follow Band on -> restrict to the rig's band ('?' = rig outside any
+    // known band -> skip rather than show nothing); else the manual Band dropdown.
+    const effectiveBands = bandTracking
       ? (rigBand && rigBand !== '?' ? [rigBand] : [])
       : selectedBands;
-    // null = unknown rig mode -> skip mode filter (band-only tracking).
-    const effectiveModes = tracking
+    // Mode: Follow Mode on -> restrict to the rig's mode(s) (null = unknown rig
+    // mode -> skip); else the manual Mode dropdown. Fully independent of band.
+    const effectiveModes = modeTracking
       ? (rigModes ?? [])
       : selectedModes;
 
@@ -637,7 +648,7 @@ export function ClusterPlugin() {
 
       return true;
     });
-  }, [spots, selectedBands, selectedModes, selectedStatuses, searchQuery, tracking, rigFreqHz, rigMode]);
+  }, [spots, selectedBands, selectedModes, selectedStatuses, searchQuery, bandTracking, modeTracking, rigFreqHz, rigMode]);
 
   // Row style callback for status coloring
   const hotListEnabled = useSettingsStore(state => state.settings.hotList.enabled);
@@ -703,8 +714,12 @@ export function ClusterPlugin() {
     setSearchQuery('');
   };
 
-  const handleToggleTrackRig = () => {
-    updateClusterSettings({ trackRig: !trackRig });
+  const handleToggleFollowBand = () => {
+    updateClusterSettings({ followRigBand: !followBand });
+    saveSettings();
+  };
+  const handleToggleFollowMode = () => {
+    updateClusterSettings({ followRigMode: !followMode });
     saveSettings();
   };
 
@@ -1058,24 +1073,39 @@ export function ClusterPlugin() {
               )}
             </div>
 
-            <button
-              onClick={handleToggleTrackRig}
-              title={
-                trackRig
-                  ? (rigConnected
-                      ? 'Following rig band/mode — click to stop'
-                      : 'Follow rig armed — waiting for a connected rig')
-                  : 'Follow rig band/mode'
-              }
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-ui whitespace-nowrap border transition-colors ${
-                trackRig
-                  ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/30'
-                  : 'bg-dark-800 text-dark-300 border-glass-100 hover:text-dark-200'
-              } ${trackRig && !rigConnected ? 'opacity-70' : ''}`}
-            >
-              <Crosshair className="w-4 h-4" />
-              <span>Follow rig</span>
-            </button>
+            {/* Follow rig — two INDEPENDENT toggles (Band and/or Mode). Cyan when
+                actively filtering (rig connected), amber when armed but no rig,
+                gray when off. */}
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <span className="text-xs text-dark-300 font-ui flex items-center gap-1">
+                <Crosshair className="w-4 h-4" /> Follow rig:
+              </span>
+              {([
+                { key: 'band', label: 'Band', on: followBand, active: bandTracking, onClick: handleToggleFollowBand },
+                { key: 'mode', label: 'Mode', on: followMode, active: modeTracking, onClick: handleToggleFollowMode },
+              ] as const).map((p) => (
+                <button
+                  key={p.key}
+                  onClick={p.onClick}
+                  title={
+                    p.on
+                      ? (rigConnected
+                          ? `Following rig ${p.key} — click to stop`
+                          : `Follow ${p.key} armed — waiting for a connected rig`)
+                      : `Follow the rig's ${p.key}`
+                  }
+                  className={`px-2.5 py-2 rounded-lg text-sm font-ui border transition-colors ${
+                    p.active
+                      ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/30'
+                      : p.on
+                        ? 'bg-accent-warning/15 text-accent-warning border-accent-warning/40'
+                        : 'bg-dark-800 text-dark-300 border-glass-100 hover:text-dark-200'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
 
             <MultiSelectDropdown
               options={BAND_OPTIONS}
@@ -1083,8 +1113,8 @@ export function ClusterPlugin() {
               onChange={setSelectedBands}
               placeholder="All Bands"
               className="w-32"
-              disabled={tracking}
-              title={tracking ? 'Following rig band' : undefined}
+              disabled={bandTracking}
+              title={bandTracking ? 'Following rig band' : undefined}
             />
 
             <MultiSelectDropdown
@@ -1093,8 +1123,8 @@ export function ClusterPlugin() {
               onChange={setSelectedModes}
               placeholder="All Modes"
               className="w-32"
-              disabled={tracking}
-              title={tracking ? 'Following rig mode' : undefined}
+              disabled={modeTracking}
+              title={modeTracking ? 'Following rig mode' : undefined}
             />
 
             <MultiSelectDropdown

@@ -14,10 +14,18 @@ export function rigModeToSpotModes(rigMode: string | undefined | null): string[]
   switch (m) {
     case 'USB':
     case 'LSB':
+    case 'SSB':
     case 'AM':
+    case 'SAM':
+    case 'DSB':
     case 'FM':
+    case 'FMN':
       return ['SSB'];
+    // Lyra / TCI report CW as CWU / CWL (sideband derived from the dial), not a
+    // bare "CW" — without these the mode filter silently no-ops on every CW QSO.
     case 'CW':
+    case 'CWU':
+    case 'CWL':
     case 'CW-R':
     case 'CWR':
       return ['CW'];
@@ -30,8 +38,11 @@ export function rigModeToSpotModes(rigMode: string | undefined | null): string[]
     case 'DIGU':
     case 'DIGL':
     case 'DATA':
+    case 'DATA-U':
+    case 'DATA-L':
     case 'PKT':
     case 'PSK':
+    case 'DIGI':
       return ['FT8', 'FT4', 'DIGI'];
     default:
       return null;

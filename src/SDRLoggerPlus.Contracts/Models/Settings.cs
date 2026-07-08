@@ -652,6 +652,17 @@ public class ClusterSettings
     [BsonElement("pushSpotsToTci")]
     public bool PushSpotsToTci { get; set; } = true;
 
+    // "Follow rig" — the spot list can track the connected rig independently by
+    // BAND and/or MODE. Two toggles so the operator can chase "everything on the
+    // rig's band", "the rig's mode across all bands", or both. The frontend
+    // always sends these; without matching properties they'd be silently dropped
+    // on save and the toggles would reset on every settings load.
+    [BsonElement("followRigBand")]
+    public bool FollowRigBand { get; set; }
+
+    [BsonElement("followRigMode")]
+    public bool FollowRigMode { get; set; }
+
     // Max spots kept in memory (both the backend replay buffer handed to
     // new clients and the frontend backing store). v1 SDRLogger+ hard-
     // capped at 200; v2 lets the operator dial it up to 300 for
