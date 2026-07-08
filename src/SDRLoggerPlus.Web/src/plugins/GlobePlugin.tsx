@@ -994,7 +994,9 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       type: 'station',
     }];
 
-    if (focusedCallsignInfo?.latitude != null && focusedCallsignInfo?.longitude != null) {
+    // On the clean 2D-map globe (hideOverlays) skip the red target point — the
+    // radio-tower icon marks the DX QTH instead of a reddish blob.
+    if (!hideOverlays && focusedCallsignInfo?.latitude != null && focusedCallsignInfo?.longitude != null) {
       markerData.push({
         lat: focusedCallsignInfo.latitude,
         lng: focusedCallsignInfo.longitude,
@@ -1132,7 +1134,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     globeRef.current.pointsData(markerData);
     globeRef.current.arcsData(arcData);
     setGlobeLabels(labelData);
-  }, [focusedCallsignInfo, stationLat, stationLon, stationGrid, potaSpots, settings.map.showPotaOverlay, spots, dxClusterMapEnabled, globeReady, gridTick, rigFreqHz, rigMode]);
+  }, [focusedCallsignInfo, stationLat, stationLon, stationGrid, potaSpots, settings.map.showPotaOverlay, spots, dxClusterMapEnabled, globeReady, gridTick, rigFreqHz, rigMode, hideOverlays]);
 
   // Fill in missing spot locations via QRZ. For any spot whose DX or spotter
   // callsign has no grid from the cluster, look it up on QRZ (once, cached) so
@@ -1462,8 +1464,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
             gentle wave pulse to reinforce "beam pointing here." Positioned
             every frame by the same projection tick that drives the labels.
             Hidden CSS-wise; the tick makes it visible + sets its transform. */}
-        {!hideOverlays && (
-          <div
+        {/* Rendered on the full globe AND the 2D-map's globe (hideOverlays) —
+            the DX tower marker is wanted in both; the per-frame tick positions
+            it and keeps it display:none until a callsign is focused. */}
+        <div
             ref={targetIconRef}
             className="absolute pointer-events-none"
             style={{
@@ -1510,7 +1514,6 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
               <RadioTower className="w-6 h-6 relative" strokeWidth={2.4} />
             </div>
           </div>
-        )}
 
         {/* Callsign label overlay — black boxes positioned over the globe each
             frame by the effect above (independent of globe.gl's label layers). */}
