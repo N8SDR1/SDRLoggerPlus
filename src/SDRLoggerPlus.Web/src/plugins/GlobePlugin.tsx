@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Globe as GlobeIcon, Navigation, Target, Maximize2, RadioTower, Pause, Play, Zap } from 'lucide-react';
+import { Globe as GlobeIcon, Navigation, Target, Maximize2, RadioTower, Pause, Play, Zap, SunMoon } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSignalR } from '../hooks/useSignalR';
@@ -271,7 +271,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const lastBeamPolyKeyRef = useRef<string | null>(null);
 
   const { stationGrid, rotatorPosition, focusedCallsignInfo, radioStates, selectedRadioId, potaSpots, dxClusterSpots: spots, dxClusterMapEnabled } = useAppStore();
-  const { settings, updateMapSettings } = useSettingsStore();
+  const { settings, updateMapSettings, saveSettings } = useSettingsStore();
   const { commandRotator, focusCallsign, selectSpot } = useSignalR();
 
   const [currentAzimuth, setCurrentAzimuth] = useState(0);
@@ -1617,6 +1617,18 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
             aria-label={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
           >
             <Zap className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Day/night terminator toggle (Top Right, left of lightning) */}
+        {!hideOverlays && (
+          <button
+            onClick={() => { updateMapSettings({ showDayNightOverlay: !settings.map.showDayNightOverlay }); saveSettings(); }}
+            className={`glass-button absolute top-4 right-28 p-2 z-10 ${settings.map.showDayNightOverlay ? 'text-amber-300' : ''}`}
+            title={settings.map.showDayNightOverlay ? 'Hide day/night shading' : 'Show day/night shading'}
+            aria-label={settings.map.showDayNightOverlay ? 'Hide day/night shading' : 'Show day/night shading'}
+          >
+            <SunMoon className="w-4 h-4" />
           </button>
         )}
 
