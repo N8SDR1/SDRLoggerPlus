@@ -399,7 +399,7 @@ function isValidCoord(v: number | null | undefined): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
-export function MapCore({ children }: { children?: React.ReactNode }) {
+export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.ReactNode; flyToOffsetX?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const lastTargetCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
@@ -550,12 +550,24 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
     // Update last coordinates ref
     lastTargetCoordsRef.current = { lat: targetLat, lon: targetLon };
 
-    // Fly to target with calculated duration
-    mapRef.current.flyTo([targetLat, targetLon], 5, {
+    // Fly to target with calculated duration. When something overlays the
+    // left side of the map (the 2D Map panel's globe circle), shift the map
+    // center left by flyToOffsetX px so the target lands in the open area
+    // to the right of the overlay instead of underneath it.
+    let center: L.LatLngExpression = [targetLat, targetLon];
+    if (flyToOffsetX > 0) {
+      // Clamp so the target never lands off the right edge when the overlay
+      // is nearly as wide as (or wider than) the map itself.
+      const halfWidth = mapRef.current.getSize().x / 2;
+      const offsetX = Math.min(flyToOffsetX, Math.max(0, halfWidth - 48));
+      const targetPoint = mapRef.current.project([targetLat, targetLon], 5);
+      center = mapRef.current.unproject(targetPoint.subtract(L.point(offsetX, 0)), 5);
+    }
+    mapRef.current.flyTo(center, 5, {
       duration: duration,
       easeLinearity: 0.1, // Smooth curved motion
     });
-  }, [focusedCallsignInfo?.latitude, focusedCallsignInfo?.longitude, stationLat, stationLon]);
+  }, [focusedCallsignInfo?.latitude, focusedCallsignInfo?.longitude, stationLat, stationLon, flyToOffsetX]);
 
   // Invalidate map size when container is resized (e.g., FlexLayout panel drag)
   useEffect(() => {
@@ -1710,7 +1722,10 @@ export function MapPlugin() {
         
         {/* Background Map - Full Screen */}
         <div className="absolute inset-0 z-0">
-          <MapCore />
+          {/* Fly-to targets land centered in the open area right of the globe
+              circle (offset = half the circle's right edge) instead of
+              underneath it */}
+          <MapCore flyToOffsetX={(globeOffset + globeSize) / 2} />
         </div>
         
         {/* Z-10: Unified Cockpit Background Shapes (casts the single master shadow) */}
