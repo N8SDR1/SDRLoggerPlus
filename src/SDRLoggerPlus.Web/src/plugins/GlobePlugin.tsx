@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Globe as GlobeIcon, Navigation, Target, Maximize2, RadioTower, Pause, Play, Zap } from 'lucide-react';
+import { Globe as GlobeIcon, Navigation, Target, Maximize2, RadioTower, Pause, Play, Zap, SunMoon } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSignalR } from '../hooks/useSignalR';
@@ -11,6 +11,8 @@ import { rigModeToSpotModes } from '../utils/rigTracking';
 import type { CallsignLookedUpEvent } from '../api/signalr';
 import { StrikeStore, type Strike } from '../utils/lightningStrikes';
 import { setLightningStrikesCallback, clearLightningStrikesCallback } from '../api/signalr';
+import { createDayNightShell, type DayNightShell } from '../utils/dayNightShell';
+import { getSunPosition } from '../utils/solarCalculations';
 // Globe is dynamically imported to catch WebGL errors at load time
 
 // Default station location (can be overridden by store)
@@ -244,7 +246,11 @@ interface GlobeInstance {
   // Three.js scene graph + renderer — used to raise texture anisotropy on the
   // globe surface and streamed map tiles so the sphere stays crisp at oblique
   // viewing angles (default anisotropy of 1 reads as "grainy").
-  scene(): { traverse(cb: (obj: unknown) => void): void };
+  scene(): {
+    add(obj: object): void;
+    remove(obj: object): void;
+    traverse(cb: (obj: unknown) => void): void;
+  };
   renderer(): { capabilities: { getMaxAnisotropy(): number } };
   onGlobeClick(fn: (coords: { lat: number; lng: number }) => void): GlobeInstance;
   onPointClick(fn: (point: unknown, event: MouseEvent, coords: { lat: number; lng: number; altitude: number }) => void): GlobeInstance;
@@ -265,7 +271,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const lastBeamPolyKeyRef = useRef<string | null>(null);
 
   const { stationGrid, rotatorPosition, focusedCallsignInfo, radioStates, selectedRadioId, potaSpots, dxClusterSpots: spots, dxClusterMapEnabled } = useAppStore();
-  const { settings, updateMapSettings } = useSettingsStore();
+  const { settings, updateMapSettings, saveSettings } = useSettingsStore();
   const { commandRotator, focusCallsign, selectSpot } = useSignalR();
 
   const [currentAzimuth, setCurrentAzimuth] = useState(0);
@@ -283,6 +289,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const selectSpotRef = useRef(selectSpot);
   selectSpotRef.current = selectSpot;
   const strikeStoreRef = useRef(new StrikeStore());
+  const dayNightShellRef = useRef<DayNightShell | null>(null);
   // Throttle timestamp for the texture-anisotropy sweep (see the label tick).
   const lastAnisoSweepRef = useRef(0);
 
@@ -870,6 +877,14 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         })
         .customLayerData([]);
 
+      // Day/night terminator shell — a plain scene child (no globe.gl data
+      // layer, so it cannot collide with beam/lightning/marker layers).
+      // Hidden until the settings effect enables a layer. globe.gl's globe
+      // radius is 100 world units.
+      const dayNightShell = createDayNightShell(THREE, 100);
+      globe.scene().add(dayNightShell.mesh);
+      dayNightShellRef.current = dayNightShell;
+
       globeRef.current = globe;
       setGlobeReady(true);
 
@@ -939,6 +954,9 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
+      dayNightShellRef.current?.dispose();
+      dayNightShellRef.current = null;
+      setGlobeReady(false);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stationLat, stationLon, stationGrid]);
@@ -1366,6 +1384,31 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     };
   }, [globeReady, settings.map.showLightning]);
 
+  // Day/night terminator → shader shell uniforms. The shell is created at
+  // globe init; this effect drives it from settings and refreshes the sun
+  // direction (terminator moves 0.25°/min — 60 s is plenty). The shell's
+  // second opacity (grey-line band) is unused: the band didn't look good on
+  // the satellite tiles, so it stays at 0.
+  useEffect(() => {
+    if (!globeReady || !globeRef.current) return;
+    const shell = dayNightShellRef.current;
+    if (!shell) return;
+
+    const night = settings.map.showDayNightOverlay ? settings.map.dayNightOpacity : 0;
+    shell.setOpacities(night, 0);
+    if (night <= 0) return;
+
+    const updateSun = () => {
+      if (!globeRef.current) return;
+      const sun = getSunPosition(new Date());
+      const p = globeRef.current.getCoords(sun.lat, sun.lon, 0);
+      shell.setSunDirection(p.x, p.y, p.z);
+    };
+    updateSun();
+    const interval = setInterval(updateSun, 60_000);
+    return () => clearInterval(interval);
+  }, [globeReady, settings.map.showDayNightOverlay, settings.map.dayNightOpacity]);
+
   // Fly to target when focused callsign changes
   useEffect(() => {
     if (!globeRef.current) return;
@@ -1575,6 +1618,18 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
             aria-label={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
           >
             <Zap className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Day/night terminator toggle (Top Right, left of lightning) */}
+        {!hideOverlays && (
+          <button
+            onClick={() => { updateMapSettings({ showDayNightOverlay: !settings.map.showDayNightOverlay }); saveSettings(); }}
+            className={`glass-button absolute top-4 right-28 p-2 z-10 ${settings.map.showDayNightOverlay ? 'text-amber-300' : ''}`}
+            title={settings.map.showDayNightOverlay ? 'Hide day/night shading' : 'Show day/night shading'}
+            aria-label={settings.map.showDayNightOverlay ? 'Hide day/night shading' : 'Show day/night shading'}
+          >
+            <SunMoon className="w-4 h-4" />
           </button>
         )}
 
