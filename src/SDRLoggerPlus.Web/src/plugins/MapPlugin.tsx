@@ -1663,7 +1663,7 @@ export function MapCore({ children }: { children?: React.ReactNode }) {
 export function MapPlugin() {
   const { settings } = useSettingsStore();
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { stationGrid, rotatorPosition, selectedRadioId, radioStates } = useAppStore();
+  const { rotatorPosition, selectedRadioId, radioStates } = useAppStore();
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1685,7 +1685,6 @@ export function MapPlugin() {
   // Determine visibility based on container height
   const containerHeight = containerSize.height;
   const showTopContent = containerHeight >= 740;
-  const showBottomContent = containerHeight >= 800;
 
   // Globe-circle geometry. The original cockpit was drawn for a fixed
   // 700px-diameter circle shifted 100px off the left edge, with the bulge
@@ -1783,8 +1782,9 @@ export function MapPlugin() {
 
           {/* Sidebar Content (Rendered after Globe to stay on top if screen is very short) */}
           {showCockpit && (
-          <div className="absolute top-0 bottom-0 left-0 w-[200px] flex flex-col justify-between py-8">
-            {/* Top Section: Station Info */}
+          <div className="absolute top-0 bottom-0 left-0 w-[200px] py-8">
+            {/* Station info + rotor heading, all above the globe (user call:
+                no grid; rotor position replaces it) */}
             <div className={`px-6 pointer-events-auto transition-opacity duration-300 ${showTopContent ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                <div className="flex items-center gap-2 mb-4 text-accent-primary font-display font-bold text-sm tracking-wider">
                  <Radio className="w-4 h-4" />
@@ -1795,10 +1795,6 @@ export function MapPlugin() {
                    <span>Call:</span>
                    <span className="text-gray-100 font-bold">{settings.station.callsign || 'N/A'}</span>
                  </div>
-                 <div className="flex justify-between items-center border-b border-glass-100/10 pb-2">
-                   <span>Grid:</span>
-                   <span className="text-gray-100 font-bold">{stationGrid || 'N/A'}</span>
-                 </div>
 
                  {/* Rig Info */}
                  {frequency && (
@@ -1808,14 +1804,11 @@ export function MapPlugin() {
                    </div>
                  )}
                </div>
-            </div>
 
-            {/* Bottom Section: System & Rotator */}
-            <div className={`px-6 pointer-events-auto transition-opacity duration-300 ${showBottomContent ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                {settings.rotator.enabled && (
-                 <div className="flex flex-col items-center justify-center">
-                   <span className="text-[10px] text-dark-400 font-ui uppercase tracking-widest mb-1">Current Heading</span>
-                   <div className="text-5xl font-display font-bold text-accent-primary drop-shadow-[0_2px_10px_rgba(255,180,50,0.3)] mb-4">
+                 <div className="flex flex-col items-center justify-center mt-5">
+                   <span className="text-[10px] text-dark-400 font-ui uppercase tracking-widest mb-1">Rotor</span>
+                   <div className="text-5xl font-display font-bold text-accent-primary drop-shadow-[0_2px_10px_rgba(255,180,50,0.3)]">
                       {rotatorPosition?.currentAzimuth?.toFixed(0) || 0}&deg;
                    </div>
                  </div>
