@@ -1697,6 +1697,12 @@ export function MapPlugin() {
   const sidebarEdge = 198;                          // sidebar border x
   const bulgeWidth = Math.max(0, globeOffset + globeSize - sidebarEdge);
 
+  // The cockpit frame (sidebar column + bulge + arc) only earns its space
+  // when the panel is tall enough for the sidebar to show its content.
+  // Below that the sidebar is a dead black band (user feedback), so the map
+  // runs full-bleed and the globe floats as a plain bordered circle.
+  const showCockpit = showTopContent;
+
   // Get active radio state if available
   const radioState = selectedRadioId ? radioStates.get(selectedRadioId) : null;
   const frequency = radioState?.frequencyHz ? (radioState.frequencyHz / 1000000).toFixed(3) : null;
@@ -1740,39 +1746,43 @@ export function MapPlugin() {
         </div>
         
         {/* Z-10: Unified Cockpit Background Shapes (casts the single master shadow) */}
-        <div className="absolute top-0 bottom-0 left-0 z-10 pointer-events-none drop-shadow-[15px_0_30px_rgba(0,0,0,0.85)]">
-          
-          {/* Main Sidebar Base */}
-          <div className="absolute top-0 bottom-0 left-0 w-[200px] bg-[#0a0e14] border-r-[2px] border-[#334155] pointer-events-auto" />
-          
-          {/* Bulge Base (clipped to only show exactly to the right of the sidebar border) */}
-          <div
-            className="absolute top-1/2 -translate-y-1/2 overflow-hidden pointer-events-none"
-            style={{ left: sidebarEdge, width: bulgeWidth, height: globeSize }}
-          >
-             {/* The circle's arc intersects the sidebar's straight border line */}
-             <div
-               className="absolute top-1/2 -translate-y-1/2 rounded-full bg-[#0a0e14] border-[2px] border-[#334155] pointer-events-auto"
-               style={{ left: globeOffset - sidebarEdge, width: globeSize, height: globeSize }}
-             />
-          </div>
+        {showCockpit && (
+          <div className="absolute top-0 bottom-0 left-0 z-10 pointer-events-none drop-shadow-[15px_0_30px_rgba(0,0,0,0.85)]">
 
-        </div>
+            {/* Main Sidebar Base */}
+            <div className="absolute top-0 bottom-0 left-0 w-[200px] bg-[#0a0e14] border-r-[2px] border-[#334155] pointer-events-auto" />
+
+            {/* Bulge Base (clipped to only show exactly to the right of the sidebar border) */}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 overflow-hidden pointer-events-none"
+              style={{ left: sidebarEdge, width: bulgeWidth, height: globeSize }}
+            >
+               {/* The circle's arc intersects the sidebar's straight border line */}
+               <div
+                 className="absolute top-1/2 -translate-y-1/2 rounded-full bg-[#0a0e14] border-[2px] border-[#334155] pointer-events-auto"
+                 style={{ left: globeOffset - sidebarEdge, width: globeSize, height: globeSize }}
+               />
+            </div>
+
+          </div>
+        )}
 
         {/* Z-20: Interactive Content Layer */}
         <div className="absolute inset-0 z-20 pointer-events-none">
           
           {/* Globe Component (touching left, shifted 1/7 of its diameter off-edge) */}
           {/* Since it sits at z-20, it perfectly covers the straight sidebar background border behind it,
-              preventing the straight line from drawing "through" the globe */}
+              preventing the straight line from drawing "through" the globe. Without the cockpit frame
+              it floats directly on the map, so it carries its own border ring. */}
           <div
-            className="absolute top-1/2 -translate-y-1/2 pointer-events-auto rounded-full overflow-hidden bg-[#020304]"
+            className={`absolute top-1/2 -translate-y-1/2 pointer-events-auto rounded-full overflow-hidden bg-[#020304] ${showCockpit ? '' : 'border-[2px] border-[#334155] drop-shadow-[0_0_20px_rgba(0,0,0,0.85)]'}`}
             style={{ left: globeOffset, width: globeSize, height: globeSize }}
           >
             <GlobeCore hideOverlays={true} />
           </div>
 
           {/* Sidebar Content (Rendered after Globe to stay on top if screen is very short) */}
+          {showCockpit && (
           <div className="absolute top-0 bottom-0 left-0 w-[200px] flex flex-col justify-between py-8">
             {/* Top Section: Station Info */}
             <div className={`px-6 pointer-events-auto transition-opacity duration-300 ${showTopContent ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
@@ -1812,21 +1822,24 @@ export function MapPlugin() {
                )}
             </div>
           </div>
+          )}
 
         </div>
 
         {/* Z-30: Globe Border Overlay */}
         {/* Because the Globe at z-20 covered the background circle's right border,
             we redraw just the protruding arc border over the globe here. */}
-        <div
-          className="absolute top-1/2 -translate-y-1/2 overflow-hidden z-30 pointer-events-none"
-          style={{ left: sidebarEdge, width: bulgeWidth, height: globeSize }}
-        >
-           <div
-             className="absolute top-1/2 -translate-y-1/2 rounded-full border-[2px] border-[#334155]"
-             style={{ left: globeOffset - sidebarEdge, width: globeSize, height: globeSize }}
-           />
-        </div>
+        {showCockpit && (
+          <div
+            className="absolute top-1/2 -translate-y-1/2 overflow-hidden z-30 pointer-events-none"
+            style={{ left: sidebarEdge, width: bulgeWidth, height: globeSize }}
+          >
+             <div
+               className="absolute top-1/2 -translate-y-1/2 rounded-full border-[2px] border-[#334155]"
+               style={{ left: globeOffset - sidebarEdge, width: globeSize, height: globeSize }}
+             />
+          </div>
+        )}
 
       </div>
     </GlassPanel>
