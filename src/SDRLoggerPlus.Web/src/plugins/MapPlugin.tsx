@@ -119,15 +119,16 @@ function createCallsignImageIcon(imageUrl: string | undefined | null, callsign: 
     : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${emojiPx}px">📻</div>`;
 
   // Geometry in a 40×52 viewBox: circular bulge centered (20,18) r18,
-  // tapering to the point at (20,50). Hole = circle (20,18) r12.
+  // tapering to the point at (20,50). Hole = circle (20,18) r14.5 — the
+  // photo nearly fills the bulge, leaving a thin coloured rim.
   const pin = `
     <svg width="${pinW}" height="${pinH}" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg"
          style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.55));">
       <path d="M20 50 C 9 33, 2 27, 2 18 A 18 18 0 1 1 38 18 C 38 27, 31 33, 20 50 Z"
             style="fill:${bodyColor}" stroke="#0a0e14" stroke-width="2.5" stroke-linejoin="round" />
-      <foreignObject x="8" y="6" width="24" height="24">
+      <foreignObject x="5.5" y="3.5" width="29" height="29">
         <div xmlns="http://www.w3.org/1999/xhtml"
-             style="width:24px;height:24px;border-radius:50%;overflow:hidden;background:#1a1e26;">
+             style="width:29px;height:29px;border-radius:50%;overflow:hidden;background:#1a1e26;">
           ${holeContent}
         </div>
       </foreignObject>
