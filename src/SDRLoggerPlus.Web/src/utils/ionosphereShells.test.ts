@@ -39,11 +39,26 @@ describe('createIonosphereShells', () => {
     }
   });
 
-  it('bands are fully opaque and step darker outward (diagram look)', () => {
+  it('bands are translucent glows stepping darker outward (never solid)', () => {
     const sum = (c: [number, number, number]) => c[0] + c[1] + c[2];
-    for (const l of DEFAULT_IONO_LAYERS) expect(l.intensity).toBe(1.0);
+    for (const l of DEFAULT_IONO_LAYERS) {
+      expect(l.intensity).toBeGreaterThan(0);
+      expect(l.intensity).toBeLessThan(1); // peak alpha — always transparent
+    }
     expect(sum(DEFAULT_IONO_LAYERS[0].color)).toBeGreaterThan(sum(DEFAULT_IONO_LAYERS[1].color));
     expect(sum(DEFAULT_IONO_LAYERS[1].color)).toBeGreaterThan(sum(DEFAULT_IONO_LAYERS[2].color));
+  });
+
+  it('each band fades from the previous layer boundary (uInnerN)', () => {
+    const { three } = stubThree();
+    const shells = createIonosphereShells(three, 100);
+    shells.meshes.forEach((m, i) => {
+      const mat = (m as unknown as { material: { uniforms: Record<string, { value: unknown }> } }).material;
+      const innerN = mat.uniforms.uInnerN.value as number;
+      const expected = (i === 0 ? 1.0 : DEFAULT_IONO_LAYERS[i - 1].radiusFactor) / DEFAULT_IONO_LAYERS[i].radiusFactor;
+      expect(innerN).toBeCloseTo(expected, 6);
+      expect(innerN).toBeLessThan(1); // band has nonzero width
+    });
   });
 
   it('inner bands draw AFTER outer ones (higher renderOrder) so the steps stay visible', () => {

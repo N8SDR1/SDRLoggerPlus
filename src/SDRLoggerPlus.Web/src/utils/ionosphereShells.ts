@@ -44,12 +44,12 @@ export interface IonoLayer {
 // The F (outer) shell sits at the short-path hop peak (globe radius + 0.28,
 // = the hop altitude the globe uses) so the hops bounce right off it; D and E
 // stack below. Keep 1.28 in sync if that hop height changes.
-// Colours match the classic layered-atmosphere diagram: solid navy-blue
-// steps, lightest against the globe and darkest at the outer edge.
+// Navy-blue hues stepping darker outward; intensity = each band's PEAK alpha
+// (at its outer edge). All translucent — never a solid fill.
 export const DEFAULT_IONO_LAYERS: IonoLayer[] = [
-  { radiusFactor: 1.13, color: [0.26, 0.44, 0.72], intensity: 1.0 },  // D — inner, lightest blue
-  { radiusFactor: 1.205, color: [0.16, 0.29, 0.52], intensity: 1.0 }, // E — mid blue
-  { radiusFactor: 1.28, color: [0.09, 0.17, 0.33], intensity: 1.0 },  // F — outer, darkest (hop peak)
+  { radiusFactor: 1.13, color: [0.30, 0.50, 0.82], intensity: 0.75 },  // D — inner, lightest blue
+  { radiusFactor: 1.205, color: [0.20, 0.36, 0.66], intensity: 0.7 },  // E — mid blue
+  { radiusFactor: 1.28, color: [0.12, 0.24, 0.48], intensity: 0.65 },  // F — outer, darkest (hop peak)
 ];
 
 const VERTEX_SHADER = `
@@ -66,14 +66,24 @@ void main() {
 const FRAGMENT_SHADER = `
 uniform vec3 uColor;
 uniform float uIntensity;
+uniform float uInnerN;
 varying vec3 vNormalW;
 varying vec3 vViewDir;
 void main() {
-  // Solid opaque band. Each shell renders BACK-SIDE ONLY with the depth test
-  // on, so the opaque globe hides everything except the ring beyond its
-  // silhouette — stacked shells read as flat solid concentric bands
-  // (D innermost … F outermost), exactly like a layered-ionosphere diagram.
-  gl_FragColor = vec4(uColor, uIntensity);
+  // Translucent gradient band. Each shell renders BACK-SIDE ONLY with the
+  // depth test on, so the globe hides everything except the ring beyond its
+  // silhouette. The fragment's projected distance from the globe's center
+  // (in units of this shell's radius) is sqrt(1 - (n·v)^2): 1 exactly at the
+  // shell's silhouette (this band's OUTER edge), uInnerN at the previous
+  // layer's radius (this band's inner edge). Alpha ramps from transparent at
+  // the inner edge to the band's peak at its outer edge, so each layer glows
+  // brightest at its own edge and fades into the next — never a solid fill.
+  float nv = dot(normalize(vNormalW), normalize(vViewDir));
+  float dNorm = sqrt(max(0.0, 1.0 - nv * nv));
+  float band = smoothstep(uInnerN, 1.0, dNorm);
+  float alpha = pow(band, 1.15) * uIntensity;
+  if (alpha < 0.004) discard;
+  gl_FragColor = vec4(uColor, alpha);
 }
 `;
 
@@ -88,10 +98,14 @@ export function createIonosphereShells(
 
   layers.forEach((layer, i) => {
     const geometry = new three.SphereGeometry(globeRadius * layer.radiusFactor, 64, 32);
+    // This band's inner edge = the previous layer's radius (the globe surface
+    // for the first), normalized to THIS shell's radius for the shader.
+    const innerFactor = i === 0 ? 1.0 : layers[i - 1].radiusFactor;
     const material = new three.ShaderMaterial({
       uniforms: {
         uColor: { value: new three.Color(layer.color[0], layer.color[1], layer.color[2]) },
         uIntensity: { value: layer.intensity },
+        uInnerN: { value: innerFactor / layer.radiusFactor },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
