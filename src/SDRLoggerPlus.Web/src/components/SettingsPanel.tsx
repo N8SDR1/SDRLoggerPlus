@@ -54,6 +54,7 @@ import { useLayoutStore } from '../store/layoutStore';
 import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
 import { Model } from 'flexlayout-react';
 import { gridToLatLon } from '../utils/maidenhead';
+import { distanceUnitFor, resolveSpeedUnit } from '../utils/units';
 import { APP_VERSION } from '../version';
 
 // Settings navigation items
@@ -2158,24 +2159,27 @@ function AppearanceSettingsSection() {
         </button>
       </div>
 
-      {/* Distance units (metric / imperial) */}
+      {/* Units — master imperial/metric preference driving every physical readout.
+          Keeps distanceUnit in sync so distance consumers read it directly. */}
       <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
         <div>
-          <p className="font-medium font-ui text-dark-200">Distance Units</p>
-          <p className="text-sm text-dark-300">How distances are shown app-wide</p>
+          <p className="font-medium font-ui text-dark-200">Units</p>
+          <p className="text-sm text-dark-300">
+            Imperial or metric app-wide — distance, satellite, wind, temperature
+          </p>
         </div>
         <div className="flex rounded-lg overflow-hidden border border-glass-100">
-          {(['km', 'mi'] as const).map((u) => (
+          {(['metric', 'imperial'] as const).map((sys) => (
             <button
-              key={u}
-              onClick={() => updateAppearanceSettings({ distanceUnit: u })}
+              key={sys}
+              onClick={() => updateAppearanceSettings({ unitSystem: sys, distanceUnit: distanceUnitFor(sys) })}
               className={`px-3 py-1.5 text-sm font-ui transition-colors ${
-                (appearance.distanceUnit ?? 'km') === u
+                (appearance.unitSystem ?? 'metric') === sys
                   ? 'bg-accent-success text-dark-900 font-semibold'
                   : 'bg-dark-800 text-dark-300 hover:text-dark-200'
               }`}
             >
-              {u === 'km' ? 'km (metric)' : 'mi (imperial)'}
+              {sys === 'metric' ? 'Metric · km °C' : 'Imperial · mi °F'}
             </button>
           ))}
         </div>
@@ -3173,7 +3177,8 @@ function WsjtxSettingsSection() {
 function WeatherSettingsSection() {
   const { settings, updateWeatherSettings } = useSettingsStore();
   const weather = settings.weather;
-  const isKph = weather.wind.displayUnit === 'kph';
+  // The wind switch may be 'auto' — resolve it against the master unit system.
+  const isKph = resolveSpeedUnit(weather.wind.displayUnit, settings.appearance.unitSystem) === 'kph';
   const toDisplay = (mph: number) => isKph ? Math.round(mph * 1.60934) : mph;
   const fromDisplay = (v: number) => isKph ? v / 1.60934 : v;
 
@@ -3275,8 +3280,9 @@ function WeatherSettingsSection() {
             onChange={(e) => updateWeatherSettings({ wind: { threshGustMph: fromDisplay(parseInt(e.target.value) || 45) } as never })}
             className="glass-input w-16" />
           <select value={weather.wind.displayUnit}
-            onChange={(e) => updateWeatherSettings({ wind: { displayUnit: e.target.value as 'mph' | 'kph' } as never })}
+            onChange={(e) => updateWeatherSettings({ wind: { displayUnit: e.target.value as 'auto' | 'mph' | 'kph' } as never })}
             className="glass-input px-2 py-1">
+            <option value="auto">Auto</option>
             <option value="mph">mph</option>
             <option value="kph">kph</option>
           </select>
@@ -3344,7 +3350,9 @@ function WeatherSettingsSection() {
 // banner so it fires even when weather alerts are otherwise disabled.
 function WeatherPreviewSubsection() {
   const { startPreview } = useWeatherPreviewStore();
-  const kph = useSettingsStore(state => state.settings.weather.wind.displayUnit === 'kph');
+  const kph = useSettingsStore(
+    state => resolveSpeedUnit(state.settings.weather.wind.displayUnit, state.settings.appearance.unitSystem) === 'kph',
+  );
 
   const fakeLightning = () => startPreview({
     lightning: {

@@ -365,8 +365,12 @@ public class AppearanceSettings
     [BsonElement("customColors")]
     public Dictionary<string, string>? CustomColors { get; set; }
 
+    // Master unit system driving all physical readouts app-wide.
+    [BsonElement("unitSystem")]
+    public string? UnitSystem { get; set; } = "metric"; // imperial | metric
+
     [BsonElement("distanceUnit")]
-    public string? DistanceUnit { get; set; } = "km"; // km | mi
+    public string? DistanceUnit { get; set; } = "km"; // km | mi (kept in sync with unitSystem)
 }
 
 [BsonIgnoreExtraElements]
@@ -864,9 +868,9 @@ public class WindSettings
     [BsonElement("threshGustMph")]
     public double ThreshGustMph { get; set; } = 45;
 
-    /// <summary>"mph" | "kph"</summary>
+    /// <summary>"auto" (follow master unit system) | "mph" | "kph". Display-only.</summary>
     [BsonElement("displayUnit")]
-    public string DisplayUnit { get; set; } = "mph";
+    public string DisplayUnit { get; set; } = "auto";
 
     [BsonElement("cooldownMinutes")]
     public int CooldownMinutes { get; set; } = 20;

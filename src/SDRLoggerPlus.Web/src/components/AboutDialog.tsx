@@ -330,7 +330,7 @@ function HelpTab() {
             <li><B>Lightning detection</B> — aggregates Blitzortung, NWS warnings, and your own Ambient or Ecowitt station; alerts within a range you set, with strike count + direction.</li>
             <li><B>High-wind alerts</B> — NWS warnings, METAR (airport) observations, and Ambient / Ecowitt data, with low / moderate / high tiers and separate sustained + gust thresholds.</li>
           </ul>
-          <p>All under <P>Settings → Alerts → Weather</P> — per-source toggles, units (mph / kph), range, cooldown, and a METAR station code, plus Preview buttons to see the alert banner without waiting for real weather. Alerts appear as an animated banner above the status bar. (Header-bar space-weather indices — SFI / K-index / SSN — live in <P>Settings → Header Bar</P>.)</p>
+          <p>All under <P>Settings → Alerts → Weather</P> — per-source toggles, a wind-speed unit override (<B>Auto / mph / kph</B>, where Auto follows your app-wide <P>Settings → Appearance → Units</P> choice), range, cooldown, and a METAR station code, plus Preview buttons to see the alert banner without waiting for real weather. Alerts appear as an animated banner above the status bar. (Header-bar space-weather indices — SFI / K-index / SSN — live in <P>Settings → Header Bar</P>.)</p>
         </Section>
 
         <Section id="meters" title="Meters & Panadapter">
@@ -356,6 +356,7 @@ function HelpTab() {
         <Section id="settings" title="Settings & Shortcuts">
           <p><B>Arrange your workspace.</B> Every panel <B>docks and drags</B> — grab a panel's title bar to move it, split the view, or tab panels together however you like, and the arrangement is remembered across sessions. Once you've built an operating position you like, save it: <P>Settings → Appearance → Layout Presets</P> holds up to <B>3 named layouts</B> to switch between (say, one for casual logging and one for a DX pileup).</p>
           <p>Every panel has its own <B>gear</B> (top-right of the header) for panel-specific tuning. The main <P>Settings</P> sections: Station · Web Logbooks · Alerts · ADIF Monitor · Band Openings · Rotator · Backup &amp; Restore · S.A.T. · Appearance · Map · Header Bar · Chat AI · About.</p>
+          <p><B>Units (imperial / metric).</B> One master switch — <P>Settings → Appearance → Units</P> — sets how every physical value is shown app-wide: distance to DX, satellite range / altitude / footprint, header temperature &amp; wind, and lightning proximity. A few features can override it: the Weather <B>wind</B> switch defaults to <B>Auto</B> (follow the master) but can be pinned to mph or kph on its own, and the RBN Band-Openings and lightning-range settings keep their own mi / km pickers.</p>
           <p className="text-xs text-dark-300">Tip: the <B>Appearance</B> section has the theme picker (dark, night-ops, midnight, and more).</p>
           <p className="pt-1"><B>Keyboard &amp; mouse:</B></p>
           <ul className="ml-4 list-disc space-y-1 text-xs">

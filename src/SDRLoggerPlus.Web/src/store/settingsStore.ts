@@ -96,7 +96,16 @@ export interface AppearanceSettings {
   compactMode: boolean;
   /** Used when theme === 'custom'; seeded from the previously active theme. */
   customColors: CustomColors;
-  /** Distance display units app-wide: km (metric) or mi (imperial). */
+  /**
+   * Master unit system. Drives every physical readout app-wide (distance,
+   * satellite range/altitude, lightning proximity, wind, temperature) unless a
+   * feature explicitly overrides it.
+   */
+  unitSystem: 'imperial' | 'metric';
+  /**
+   * Effective distance unit, kept in sync with unitSystem (imperial → mi,
+   * metric → km). Retained as the value distance consumers read directly.
+   */
   distanceUnit: 'km' | 'mi';
 }
 
@@ -285,7 +294,8 @@ export interface WindAlertSettings {
   useEcowitt: boolean;
   threshSustainedMph: number;
   threshGustMph: number;
-  displayUnit: 'mph' | 'kph';
+  /** 'auto' follows the master unit system; 'mph'/'kph' force a display unit. */
+  displayUnit: 'auto' | 'mph' | 'kph';
   cooldownMinutes: number;
 }
 
@@ -502,6 +512,7 @@ const defaultSettings: Settings = {
     theme: 'dark',
     compactMode: false,
     customColors: getSeedColors('dark'),
+    unitSystem: 'metric',
     distanceUnit: 'km',
   },
   rotator: {
@@ -651,7 +662,7 @@ const defaultSettings: Settings = {
       useEcowitt: false,
       threshSustainedMph: 30,
       threshGustMph: 45,
-      displayUnit: 'mph',
+      displayUnit: 'auto',
       cooldownMinutes: 20,
     },
     credentials: {
@@ -1081,6 +1092,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           appearance: {
             ...defaultSettings.appearance,
             ...settings.appearance,
+            // Seed the master unit system for installs that predate it, from the
+            // legacy standalone distance toggle (mi → imperial, else metric).
+            unitSystem: settings.appearance?.unitSystem
+              ?? (settings.appearance?.distanceUnit === 'mi' ? 'imperial' : 'metric'),
             customColors: {
               ...defaultSettings.appearance.customColors,
               ...settings.appearance?.customColors,
