@@ -206,8 +206,8 @@ interface GlobeInstance {
   pathPoints(accessor: string): GlobeInstance;
   pathColor(accessor: string): GlobeInstance;
   pathStroke(accessor: string): GlobeInstance;
-  pathDashLength(len: number): GlobeInstance;
-  pathDashGap(gap: number): GlobeInstance;
+  pathDashLength(len: number | ((d: unknown) => number)): GlobeInstance;
+  pathDashGap(gap: number | ((d: unknown) => number)): GlobeInstance;
   pathDashAnimateTime(time: number): GlobeInstance;
   pathTransitionDuration(duration: number): GlobeInstance;
   polygonsData(data: unknown[]): GlobeInstance;
