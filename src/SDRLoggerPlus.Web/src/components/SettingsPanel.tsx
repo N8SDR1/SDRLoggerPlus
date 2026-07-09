@@ -40,6 +40,7 @@ import {
   Waves,
   Bell,
   Satellite,
+  RadioTower,
   Radar,
   Sparkles,
   Snowflake,
@@ -47,7 +48,7 @@ import {
   Newspaper,
   Activity,
 } from 'lucide-react';
-import { useSettingsStore, SettingsSection, StationSettings } from '../store/settingsStore';
+import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
 import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
 import { useLayoutStore } from '../store/layoutStore';
@@ -69,7 +70,7 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     id: 'weblogbooks',
     name: 'Web Logbooks',
     icon: <CloudUpload className="w-5 h-5" />,
-    description: 'QRZ, LOTW, Club Log, HRDLog, WSJT-X',
+    description: 'QRZ, LOTW, Club Log, HRDLog, eQSL',
   },
   {
     id: 'alerts',
@@ -82,6 +83,12 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     name: 'ADIF Monitor',
     icon: <FileCode className="w-5 h-5" />,
     description: 'Auto-import QSOs from external .adi files',
+  },
+  {
+    id: 'wsjtx',
+    name: 'WSJT-X / JTDX',
+    icon: <RadioTower className="w-5 h-5" />,
+    description: 'Auto-log FT8/FT4 QSOs over UDP (WSJT-X, JTDX, MSHV)',
   },
   {
     id: 'rbnalerts',
@@ -3073,20 +3080,21 @@ function HotListSettingsSection() {
   );
 }
 
-// WSJT-X Settings Section
+// WSJT-X Settings Section — up to two independent decoder sources (e.g. WSJT-X
+// on the primary port and JTDX on a second), each its own UDP listener.
 function WsjtxSettingsSection() {
   const { settings, updateWsjtxSettings } = useSettingsStore();
   const wsjtx = settings.wsjtx;
-  const [status, setStatus] = useState<WsjtxStatus | null>(null);
+  const [statuses, setStatuses] = useState<WsjtxStatus[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
       try {
         const st = await api.getWsjtxStatus();
-        if (!cancelled) setStatus(st);
+        if (!cancelled) setStatuses(st);
       } catch {
-        if (!cancelled) setStatus(null);
+        if (!cancelled) setStatuses(null);
       }
     };
     poll();
@@ -3094,81 +3102,122 @@ function WsjtxSettingsSection() {
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
+  const statusFor = (source: number) => statuses?.find((s) => s.source === source) ?? null;
+
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">WSJT-X / JTDX Auto-Logging</h3>
         <p className="text-sm text-dark-300">
           Listen for the WSJT-X UDP protocol and automatically log FT8/FT4 QSOs the moment they
-          complete. Works with WSJT-X, JTDX, and MSHV.
+          complete. Works with WSJT-X, JTDX, and MSHV. Enable a second source to run two decoders
+          at once — each on its own port.
         </p>
       </div>
 
-      <div className="flex items-center justify-between p-3 bg-dark-700 rounded-lg">
+      <WsjtxSourceCard
+        title="Source 1"
+        subtitle="Primary decoder — default WSJT-X on port 2237"
+        source={{ enabled: wsjtx.enabled, port: wsjtx.port, multicastAddress: wsjtx.multicastAddress }}
+        defaultPort={2237}
+        onPatch={(p) => updateWsjtxSettings(p)}
+        status={statusFor(1)}
+      />
+
+      <WsjtxSourceCard
+        title="Source 2"
+        subtitle="Optional second decoder on its own port — e.g. JTDX on 2333"
+        source={wsjtx.source2}
+        defaultPort={2333}
+        onPatch={(p) => updateWsjtxSettings({ source2: { ...wsjtx.source2, ...p } })}
+        status={statusFor(2)}
+      />
+    </div>
+  );
+}
+
+// One WSJT-X source: enable toggle, and (when enabled) its port, multicast and
+// live listener status. onPatch applies to whichever source the parent wires in.
+function WsjtxSourceCard({ title, subtitle, source, defaultPort, onPatch, status }: {
+  title: string;
+  subtitle: string;
+  source: WsjtxSource;
+  defaultPort: number;
+  onPatch: (patch: Partial<WsjtxSource>) => void;
+  status: WsjtxStatus | null;
+}) {
+  return (
+    <div className="rounded-lg border border-glass-100 bg-dark-700/40 p-4 space-y-4">
+      <div className="flex items-center justify-between">
         <div>
-          <label className="text-sm font-medium text-dark-200">Enable Auto-Logging</label>
-          <p className="text-xs text-dark-400 mt-0.5">Bind the UDP listener and log completed QSOs</p>
+          <label className="text-sm font-medium text-dark-200">{title}</label>
+          <p className="text-xs text-dark-400 mt-0.5">{subtitle}</p>
         </div>
         <button
-          onClick={() => updateWsjtxSettings({ enabled: !wsjtx.enabled })}
-          className={`relative w-11 h-6 rounded-full transition-colors ${wsjtx.enabled ? 'bg-accent-primary' : 'bg-dark-500'}`}
+          onClick={() => onPatch({ enabled: !source.enabled })}
+          className={`relative w-11 h-6 rounded-full transition-colors ${source.enabled ? 'bg-accent-primary' : 'bg-dark-500'}`}
         >
-          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${wsjtx.enabled ? 'translate-x-5' : ''}`} />
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${source.enabled ? 'translate-x-5' : ''}`} />
         </button>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-dark-200 mb-1">UDP Port</label>
-        <input
-          type="number"
-          value={wsjtx.port}
-          onChange={(e) => updateWsjtxSettings({ port: parseInt(e.target.value) || 2237 })}
-          className="glass-input w-32"
-          min={1024}
-          max={65535}
-        />
-        <p className="text-xs text-dark-400 mt-1">Default: 2237 (WSJT-X Settings → Reporting → UDP Server)</p>
-      </div>
+      {source.enabled && (
+        <>
+          <div className="flex flex-wrap gap-6">
+            <div>
+              <label className="block text-sm font-medium text-dark-200 mb-1">UDP Port</label>
+              <input
+                type="number"
+                value={source.port}
+                onChange={(e) => onPatch({ port: parseInt(e.target.value) || defaultPort })}
+                className="glass-input w-32"
+                min={1024}
+                max={65535}
+              />
+            </div>
+            <div className="flex-1 min-w-[12rem]">
+              <label className="block text-sm font-medium text-dark-200 mb-1">Multicast Group (optional)</label>
+              <input
+                type="text"
+                value={source.multicastAddress ?? ''}
+                onChange={(e) => onPatch({ multicastAddress: e.target.value })}
+                className="glass-input w-full max-w-xs"
+                placeholder="e.g. 224.0.0.1 (blank = unicast)"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-dark-400">
+            WSJT-X / JTDX: Settings → Reporting → UDP Server. Give each source a different port.
+            Set a multicast group only if the decoder is configured for multicast.
+          </p>
 
-      <div>
-        <label className="block text-sm font-medium text-dark-200 mb-1">Multicast Group (optional)</label>
-        <input
-          type="text"
-          value={wsjtx.multicastAddress ?? ''}
-          onChange={(e) => updateWsjtxSettings({ multicastAddress: e.target.value })}
-          className="glass-input w-64"
-          placeholder="e.g. 224.0.0.1 (blank = unicast)"
-        />
-        <p className="text-xs text-dark-400 mt-1">
-          Set this when WSJT-X is configured for multicast so several loggers can listen at once.
-        </p>
-      </div>
-
-      <div className="p-3 bg-dark-700 rounded-lg border border-glass-100 space-y-1 text-xs">
-        <h4 className="text-sm font-medium text-dark-200 mb-1">Status</h4>
-        {status ? (
-          <>
-            <p className="text-dark-300">
-              Listener: {status.listening
-                ? <span className="text-accent-success">active on port {status.port}</span>
-                : <span className="text-dark-400">not listening{status.error ? ` — ${status.error}` : ''}</span>}
-            </p>
-            <p className="text-dark-300">
-              Clients: {status.clients.length > 0
-                ? status.clients.map(c => `${c.id}${c.version ? ` v${c.version}` : ''}`).join(', ')
-                : 'none heard yet'}
-            </p>
-            {status.lastQsoCall && (
-              <p className="text-dark-300">
-                Last auto-logged: <span className="font-mono text-accent-secondary">{status.lastQsoCall}</span>
-                {status.lastQsoAtUtc && ` at ${new Date(status.lastQsoAtUtc).toLocaleTimeString()}`}
-              </p>
+          <div className="p-3 bg-dark-700 rounded-lg border border-glass-100 space-y-1 text-xs">
+            <h4 className="text-sm font-medium text-dark-200 mb-1">Status</h4>
+            {status ? (
+              <>
+                <p className="text-dark-300">
+                  Listener: {status.listening
+                    ? <span className="text-accent-success">active on port {status.port}</span>
+                    : <span className="text-dark-400">not listening{status.error ? ` — ${status.error}` : ''}</span>}
+                </p>
+                <p className="text-dark-300">
+                  Clients: {status.clients.length > 0
+                    ? status.clients.map((c) => `${c.id}${c.version ? ` v${c.version}` : ''}`).join(', ')
+                    : 'none heard yet'}
+                </p>
+                {status.lastQsoCall && (
+                  <p className="text-dark-300">
+                    Last auto-logged: <span className="font-mono text-accent-secondary">{status.lastQsoCall}</span>
+                    {status.lastQsoAtUtc && ` at ${new Date(status.lastQsoAtUtc).toLocaleTimeString()}`}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-dark-400">Status unavailable</p>
             )}
-          </>
-        ) : (
-          <p className="text-dark-400">Status unavailable</p>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3580,8 +3629,8 @@ function AboutSection() {
   );
 }
 
-// Web Logbooks — groups QRZ, LOTW, Club Log, HRDLog, and WSJT-X under one category with sub-tabs.
-type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'eqsl' | 'pota' | 'wsjtx' | 'countryfiles';
+// Web Logbooks — groups QRZ, LOTW, Club Log, HRDLog, eQSL and POTA under one category with sub-tabs.
+type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'eqsl' | 'pota' | 'countryfiles';
 
 function WebLogbooksSection() {
   const [tab, setTab] = useState<WebLogbookTab>('qrz');
@@ -3593,7 +3642,6 @@ function WebLogbooksSection() {
     { id: 'hrdlog', label: 'HRDLog' },
     { id: 'eqsl', label: 'eQSL' },
     { id: 'pota', label: 'POTA' },
-    { id: 'wsjtx', label: 'WSJT-X' },
     { id: 'countryfiles', label: 'Country Files' },
   ];
 
@@ -3622,7 +3670,6 @@ function WebLogbooksSection() {
       {tab === 'hrdlog' && <HrdLogSettingsSection />}
       {tab === 'eqsl' && <EqslSettingsSection />}
       {tab === 'pota' && <PotaSettingsSection />}
-      {tab === 'wsjtx' && <WsjtxSettingsSection />}
       {tab === 'countryfiles' && <CountryFilesSection />}
     </div>
   );
@@ -3913,6 +3960,8 @@ export function SettingsPanel() {
         return <StationSettingsSection />;
       case 'weblogbooks':
         return <WebLogbooksSection />;
+      case 'wsjtx':
+        return <WsjtxSettingsSection />;
       case 'rotator':
         return <RotatorSettingsSection />;
       case 'appearance':

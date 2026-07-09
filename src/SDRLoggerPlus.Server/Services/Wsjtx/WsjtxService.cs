@@ -7,6 +7,7 @@ namespace SDRLoggerPlus.Server.Services.Wsjtx;
 public record WsjtxClientInfo(string Id, string? Version, DateTime LastHeardUtc);
 
 public record WsjtxStatus(
+    int Source,
     bool Listening,
     int Port,
     string? MulticastAddress,
@@ -19,8 +20,12 @@ public record WsjtxStatus(
 /// Listens on the WSJT-X/JTDX UDP protocol and auto-logs completed QSOs
 /// (QSO Logged, message type 5) through IQsoService — so the new QSO raises
 /// the same SignalR events and spot-status updates as a manual entry.
-/// Settings-gated: the socket is only bound while enabled, and rebinds when
-/// port/multicast settings change.
+///
+/// Two independent sources are supported (e.g. WSJT-X on one port and JTDX on
+/// another). Each has its own socket, client table and last-QSO state, but they
+/// share one dedupe so the same QSO heard on both is only logged once. Each
+/// source is settings-gated: its socket is only bound while enabled, and
+/// rebinds when its port/multicast changes.
 /// </summary>
 public class WsjtxService : BackgroundService
 {
@@ -28,16 +33,8 @@ public class WsjtxService : BackgroundService
     private readonly ILogger<WsjtxService> _logger;
     private readonly WsjtxDedupe _dedupe = new();
 
-    private UdpClient? _udpClient;
-    private bool _currentEnabled;
-    private int _currentPort;
-    private string? _currentMulticast;
-    private string? _lastError;
-
-    private readonly Dictionary<string, WsjtxClientInfo> _clients = new();
-    private string? _lastQsoCall;
-    private DateTime? _lastQsoAtUtc;
-    private readonly object _stateLock = new();
+    private readonly Listener _primary = new(1);
+    private readonly Listener _secondary = new(2);
 
     public WsjtxService(IServiceProvider serviceProvider, ILogger<WsjtxService> logger)
     {
@@ -45,20 +42,42 @@ public class WsjtxService : BackgroundService
         _logger = logger;
     }
 
-    public WsjtxStatus GetStatus()
+    /// <summary>One UDP source: its own socket, client table and last-QSO state.</summary>
+    private sealed class Listener(int source)
     {
-        lock (_stateLock)
+        public int Source { get; } = source;
+        public UdpClient? Udp;
+        public bool CurrentEnabled;
+        public int CurrentPort;
+        public string? CurrentMulticast;
+        public string? LastError;
+        public readonly Dictionary<string, WsjtxClientInfo> Clients = new();
+        public string? LastQsoCall;
+        public DateTime? LastQsoAtUtc;
+        public readonly object StateLock = new();
+
+        public WsjtxStatus Snapshot()
         {
-            return new WsjtxStatus(
-                _udpClient != null,
-                _currentPort,
-                _currentMulticast,
-                _lastError,
-                _clients.Values.OrderBy(c => c.Id).ToList(),
-                _lastQsoCall,
-                _lastQsoAtUtc);
+            lock (StateLock)
+            {
+                return new WsjtxStatus(
+                    Source,
+                    Udp != null,
+                    CurrentPort,
+                    CurrentMulticast,
+                    LastError,
+                    Clients.Values.OrderBy(c => c.Id).ToList(),
+                    LastQsoCall,
+                    LastQsoAtUtc);
+            }
         }
     }
+
+    /// <summary>Primary source status — retained for callers that expect a single status.</summary>
+    public WsjtxStatus GetStatus() => _primary.Snapshot();
+
+    /// <summary>Status for every source (primary first, then secondary).</summary>
+    public IReadOnlyList<WsjtxStatus> GetStatuses() => new[] { _primary.Snapshot(), _secondary.Snapshot() };
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -70,25 +89,11 @@ public class WsjtxService : BackgroundService
             {
                 var settings = await ReadSettingsAsync();
 
-                if (!settings.Enabled)
-                {
-                    StopListener();
-                    _currentEnabled = false;
-                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
-                    continue;
-                }
+                Reconcile(_primary, settings.Enabled, settings.Port, settings.MulticastAddress);
+                var s2 = settings.Source2;
+                Reconcile(_secondary, s2?.Enabled ?? false, s2?.Port ?? 0, s2?.MulticastAddress);
 
-                if (!_currentEnabled || settings.Port != _currentPort ||
-                    settings.MulticastAddress != _currentMulticast)
-                {
-                    StopListener();
-                    StartListener(settings.Port, settings.MulticastAddress);
-                    _currentEnabled = true;
-                    _currentPort = settings.Port;
-                    _currentMulticast = settings.MulticastAddress;
-                }
-
-                await ReceiveLoopAsync(stoppingToken);
+                await ReceiveWindowAsync(stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -97,75 +102,123 @@ public class WsjtxService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "WSJT-X service error, restarting in 5s");
-                StopListener();
+                StopListener(_primary);
+                StopListener(_secondary);
                 try { await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); }
                 catch (OperationCanceledException) { break; }
             }
         }
 
-        StopListener();
+        StopListener(_primary);
+        StopListener(_secondary);
         _logger.LogInformation("WSJT-X service stopped");
     }
 
-    private void StartListener(int port, string? multicastAddress)
+    /// <summary>Bring a source's socket in line with its settings; self-heals a failed bind next cycle.</summary>
+    private void Reconcile(Listener l, bool enabled, int port, string? multicast)
+    {
+        if (!enabled)
+        {
+            if (l.Udp != null) StopListener(l);
+            l.CurrentEnabled = false;
+            return;
+        }
+
+        var changed = port != l.CurrentPort || multicast != l.CurrentMulticast;
+        if (l.Udp == null || changed)
+        {
+            StopListener(l);
+            l.CurrentPort = port;
+            l.CurrentMulticast = multicast;
+            l.CurrentEnabled = true;
+            StartListener(l, port, multicast);
+        }
+    }
+
+    private void StartListener(Listener l, int port, string? multicastAddress)
     {
         try
         {
-            _udpClient = new UdpClient();
-            _udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, port));
+            var udp = new UdpClient();
+            udp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            udp.Client.Bind(new IPEndPoint(IPAddress.Any, port));
 
             if (!string.IsNullOrWhiteSpace(multicastAddress) &&
                 IPAddress.TryParse(multicastAddress, out var group))
             {
-                _udpClient.JoinMulticastGroup(group);
-                _logger.LogInformation("WSJT-X listener on port {Port}, multicast group {Group}", port, group);
+                udp.JoinMulticastGroup(group);
+                _logger.LogInformation("WSJT-X source {N} on port {Port}, multicast group {Group}", l.Source, port, group);
             }
             else
             {
-                _logger.LogInformation("WSJT-X listener on port {Port} (unicast)", port);
+                _logger.LogInformation("WSJT-X source {N} on port {Port} (unicast)", l.Source, port);
             }
-            _lastError = null;
+            l.Udp = udp;
+            l.LastError = null;
         }
         catch (Exception ex)
         {
-            _lastError = ex.Message;
-            _udpClient?.Dispose();
-            _udpClient = null;
-            _logger.LogWarning("WSJT-X listener bind failed on port {Port}: {Error}", port, ex.Message);
-            throw;
+            // Record the error and leave the socket unbound; the next reconcile
+            // cycle retries. A failed source never takes down the other.
+            l.LastError = ex.Message;
+            l.Udp = null;
+            _logger.LogWarning("WSJT-X source {N} bind failed on port {Port}: {Error}", l.Source, port, ex.Message);
         }
     }
 
-    private void StopListener()
+    private static void StopListener(Listener l)
     {
-        _udpClient?.Dispose();
-        _udpClient = null;
+        l.Udp?.Dispose();
+        l.Udp = null;
     }
 
-    private async Task ReceiveLoopAsync(CancellationToken stoppingToken)
+    /// <summary>Pump every bound socket for a 5-second window, then re-check settings.</summary>
+    private async Task ReceiveWindowAsync(CancellationToken stoppingToken)
     {
-        if (_udpClient == null) return;
-
-        // Process datagrams for 5 seconds, then re-check settings
         using var loopCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         loopCts.CancelAfter(TimeSpan.FromSeconds(5));
 
-        while (!loopCts.IsCancellationRequested)
+        var tasks = new List<Task>(2);
+        if (_primary.Udp != null) tasks.Add(PumpAsync(_primary, loopCts.Token));
+        if (_secondary.Udp != null) tasks.Add(PumpAsync(_secondary, loopCts.Token));
+
+        if (tasks.Count == 0)
+        {
+            // Nothing bound (both disabled or failing) — idle until the next cycle.
+            try { await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); }
+            catch (OperationCanceledException) { }
+            return;
+        }
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task PumpAsync(Listener l, CancellationToken ct)
+    {
+        var udp = l.Udp;
+        if (udp == null) return;
+
+        while (!ct.IsCancellationRequested)
         {
             UdpReceiveResult result;
             try
             {
-                result = await _udpClient.ReceiveAsync(loopCts.Token);
+                result = await udp.ReceiveAsync(ct);
             }
             catch (OperationCanceledException)
             {
                 return;
             }
+            catch (Exception ex)
+            {
+                // Socket faulted — surface it and drop out so the next cycle rebinds.
+                l.LastError = ex.Message;
+                return;
+            }
 
             try
             {
-                await HandleDatagramAsync(result.Buffer);
+                await HandleDatagramAsync(l, result.Buffer);
             }
             catch (Exception ex)
             {
@@ -174,32 +227,35 @@ public class WsjtxService : BackgroundService
         }
     }
 
-    internal async Task HandleDatagramAsync(byte[] buffer)
+    /// <summary>Test / default entry point — attributes datagrams to the primary source.</summary>
+    internal Task HandleDatagramAsync(byte[] buffer) => HandleDatagramAsync(_primary, buffer);
+
+    private async Task HandleDatagramAsync(Listener l, byte[] buffer)
     {
         var message = WsjtxMessageReader.Parse(buffer);
         switch (message)
         {
             case WsjtxHeartbeat hb:
-                lock (_stateLock)
+                lock (l.StateLock)
                 {
-                    _clients[hb.Id] = new WsjtxClientInfo(hb.Id, hb.Version, DateTime.UtcNow);
+                    l.Clients[hb.Id] = new WsjtxClientInfo(hb.Id, hb.Version, DateTime.UtcNow);
                 }
                 break;
 
             case WsjtxClose close:
-                lock (_stateLock)
+                lock (l.StateLock)
                 {
-                    _clients.Remove(close.Id);
+                    l.Clients.Remove(close.Id);
                 }
                 break;
 
             case WsjtxQsoLogged qso:
-                await LogQsoAsync(qso);
+                await LogQsoAsync(l, qso);
                 break;
         }
     }
 
-    private async Task LogQsoAsync(WsjtxQsoLogged qso)
+    private async Task LogQsoAsync(Listener l, WsjtxQsoLogged qso)
     {
         var request = WsjtxQsoMapper.ToCreateRequest(qso);
         if (request == null) return;
@@ -214,13 +270,13 @@ public class WsjtxService : BackgroundService
         var qsoService = scope.ServiceProvider.GetRequiredService<IQsoService>();
         var created = await qsoService.CreateAsync(request);
 
-        lock (_stateLock)
+        lock (l.StateLock)
         {
-            _lastQsoCall = created.Callsign;
-            _lastQsoAtUtc = DateTime.UtcNow;
+            l.LastQsoCall = created.Callsign;
+            l.LastQsoAtUtc = DateTime.UtcNow;
         }
-        _logger.LogInformation("WSJT-X auto-logged {Mode} QSO with {Call} on {Band}",
-            request.Mode, created.Callsign, request.Band);
+        _logger.LogInformation("WSJT-X source {N} auto-logged {Mode} QSO with {Call} on {Band}",
+            l.Source, request.Mode, created.Callsign, request.Band);
     }
 
     private async Task<WsjtxSettings> ReadSettingsAsync()

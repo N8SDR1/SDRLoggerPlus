@@ -894,8 +894,23 @@ public class WeatherCredentials
     public string? EcowittMac { get; set; }
 }
 
+/// <summary>One WSJT-X/JTDX UDP listener (a decoder app reporting to a host:port).</summary>
+public class WsjtxSource
+{
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; }
+
+    [BsonElement("port")]
+    public int Port { get; set; } = 2333;
+
+    /// <summary>Empty = unicast; set to e.g. 224.0.0.1 to join a multicast group</summary>
+    [BsonElement("multicastAddress")]
+    public string? MulticastAddress { get; set; }
+}
+
 public class WsjtxSettings
 {
+    // Source 1 (primary) — flat fields, unchanged for backward compatibility.
     [BsonElement("enabled")]
     public bool Enabled { get; set; }
 
@@ -905,6 +920,10 @@ public class WsjtxSettings
     /// <summary>Empty = unicast; set to e.g. 224.0.0.1 to join a multicast group</summary>
     [BsonElement("multicastAddress")]
     public string? MulticastAddress { get; set; }
+
+    /// <summary>Source 2 (secondary) — a second decoder on its own port. Disabled by default.</summary>
+    [BsonElement("source2")]
+    public WsjtxSource Source2 { get; set; } = new();
 }
 
 public class HotListSettings

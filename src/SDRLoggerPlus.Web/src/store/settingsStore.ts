@@ -320,10 +320,21 @@ export interface SatControllerSettings {
   adifPort: number;
 }
 
-export interface WsjtxSettings {
+/** One WSJT-X/JTDX UDP listener (a decoder app reporting to a host:port). */
+export interface WsjtxSource {
   enabled: boolean;
   port: number;
   multicastAddress?: string | null;
+}
+
+export interface WsjtxSettings {
+  // Source 1 (primary) — flat fields, unchanged for backward compatibility.
+  enabled: boolean;
+  port: number;
+  multicastAddress?: string | null;
+  // Source 2 (secondary) — a second decoder on its own port (e.g. JTDX while
+  // WSJT-X runs on the primary). Disabled by default.
+  source2: WsjtxSource;
 }
 
 export interface HotListSettings {
@@ -378,7 +389,7 @@ export interface Settings {
   gridStates: Record<string, string>;
 }
 
-export type SettingsSection = 'station' | 'weblogbooks' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'about';
+export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'about';
 
 interface SettingsState {
   // Settings data
@@ -642,6 +653,7 @@ const defaultSettings: Settings = {
     enabled: false,
     port: 2237,
     multicastAddress: '',
+    source2: { enabled: false, port: 2333, multicastAddress: '' },
   },
   weather: {
     lightning: {
@@ -1129,7 +1141,11 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           ai: { ...defaultSettings.ai, ...settings.ai },
           backup: { ...defaultSettings.backup, ...settings.backup },
           hotList: { ...defaultSettings.hotList, ...settings.hotList },
-          wsjtx: { ...defaultSettings.wsjtx, ...settings.wsjtx },
+          wsjtx: {
+            ...defaultSettings.wsjtx,
+            ...settings.wsjtx,
+            source2: { ...defaultSettings.wsjtx.source2, ...settings.wsjtx?.source2 },
+          },
           weather: {
             lightning: { ...defaultSettings.weather.lightning, ...settings.weather?.lightning },
             wind: { ...defaultSettings.weather.wind, ...settings.weather?.wind },

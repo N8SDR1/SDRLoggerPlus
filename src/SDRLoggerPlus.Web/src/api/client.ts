@@ -547,7 +547,7 @@ class ApiClient {
   }
 
   // WSJT-X
-  async getWsjtxStatus(): Promise<WsjtxStatus> {
+  async getWsjtxStatus(): Promise<WsjtxStatus[]> {
     return this.fetch('/wsjtx/status');
   }
 
@@ -1182,6 +1182,7 @@ export interface WsjtxClientInfo {
 }
 
 export interface WsjtxStatus {
+  source: number; // 1 = primary, 2 = secondary
   listening: boolean;
   port: number;
   multicastAddress?: string | null;

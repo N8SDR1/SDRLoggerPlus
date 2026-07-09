@@ -12,5 +12,5 @@ public class WsjtxController : ControllerBase
     public WsjtxController(WsjtxService wsjtxService) => _wsjtxService = wsjtxService;
 
     [HttpGet("status")]
-    public ActionResult<WsjtxStatus> GetStatus() => Ok(_wsjtxService.GetStatus());
+    public ActionResult<IReadOnlyList<WsjtxStatus>> GetStatus() => Ok(_wsjtxService.GetStatuses());
 }
