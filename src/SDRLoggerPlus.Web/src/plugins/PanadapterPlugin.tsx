@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Activity, Pause, Play, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
+import { Activity, Palette, Pause, Play, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
 import { GlassPanel } from '../components/GlassPanel';
 import {
   clearSpectrumDataCallback,
@@ -106,6 +106,19 @@ const PALETTE_STORAGE_KEY = 'sdrloggerplus-panadapter-palette';       // Palette
 const WF_FLOOR_STORAGE_KEY = 'sdrloggerplus-panadapter-wf-floor';     // 0.0..0.6, values below scale*floor render black
 const WF_CEIL_STORAGE_KEY = 'sdrloggerplus-panadapter-wf-ceil';       // 0.3..1.5, values above scale*ceil saturate to LUT top
 const WF_GRID_STORAGE_KEY = 'sdrloggerplus-panadapter-wf-grid';       // 'on' | 'off'
+const SPEC_SCALE_STORAGE_KEY = 'sdrloggerplus-panadapter-spec-scale'; // 0.3..1.0 vertical scale of the spectrum trace
+const SPEC_COLOR_STORAGE_KEY = 'sdrloggerplus-panadapter-spec-color'; // hex colour of the spectrum trace
+const DEFAULT_SPEC_COLOR = '#00e5ff';
+
+/** Hex (#rgb or #rrggbb) → an rgba() string, for the translucent fill under the trace. */
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const r = parseInt(full.slice(0, 2), 16) || 0;
+  const g = parseInt(full.slice(2, 4), 16) || 0;
+  const b = parseInt(full.slice(4, 6), 16) || 0;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 const AXIS_HEIGHT = 20;     // pixels for frequency axis between spectrum and waterfall
 const MAX_SMOOTH = 0.95;    // cap so the trace never fully freezes
 const MIN_ZOOM = 1;
@@ -161,6 +174,24 @@ export function PanadapterPlugin() {
     localStorage.setItem(SMOOTH_STORAGE_KEY, smoothing.toFixed(2));
     if (smoothing <= 0) smoothedRef.current = null;
   }, [smoothing]);
+
+  // Spectrum trace vertical scale — fraction of the spectrum pane the trace
+  // amplitude uses. Lower it so the signal line rides lower (default gives a
+  // little headroom off the top).
+  const [specScale, setSpecScale] = useState(() => loadNumber(SPEC_SCALE_STORAGE_KEY, 0.8, 0.3, 1.0));
+  const specScaleRef = useRef(specScale);
+  useEffect(() => {
+    specScaleRef.current = specScale;
+    localStorage.setItem(SPEC_SCALE_STORAGE_KEY, specScale.toFixed(2));
+  }, [specScale]);
+
+  // Spectrum trace colour (line + translucent fill under it).
+  const [specColor, setSpecColor] = useState(() => localStorage.getItem(SPEC_COLOR_STORAGE_KEY) || DEFAULT_SPEC_COLOR);
+  const specColorRef = useRef(specColor);
+  useEffect(() => {
+    specColorRef.current = specColor;
+    localStorage.setItem(SPEC_COLOR_STORAGE_KEY, specColor);
+  }, [specColor]);
 
   // Waterfall intensity — brightness gain on the mapped LUT position.
   // With the new auto-tracked noise-floor mapping, 1.0 = neutral (noise
@@ -243,6 +274,10 @@ export function PanadapterPlugin() {
   const [panelWidth, setPanelWidth] = useState(0);
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef<HTMLDivElement>(null);
+  // Appearance popover (palette + spectrum line colour) — rarely changed, so
+  // it lives behind a gear to keep the main control row short.
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const appearanceRef = useRef<HTMLDivElement>(null);
   const compactToolbar = panelWidth < 1150;
   const narrowToolbar = panelWidth > 0 && panelWidth < 1000;
 
@@ -257,6 +292,18 @@ export function PanadapterPlugin() {
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [toolsOpen]);
+
+  // Close the appearance popover on any outside click
+  useEffect(() => {
+    if (!appearanceOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (appearanceRef.current && !appearanceRef.current.contains(e.target as Node)) {
+        setAppearanceOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [appearanceOpen]);
 
   // Zoom: 1× = full IQ span; higher zooms into the RX (window centered on the VFO).
   const [zoom, setZoom] = useState(() => loadNumber(ZOOM_STORAGE_KEY, 1, MIN_ZOOM, MAX_ZOOM));
@@ -454,15 +501,19 @@ export function PanadapterPlugin() {
     };
 
     // --- Spectrum line graph ---
+    // specScale compresses the trace toward the baseline so the operator can
+    // stop it riding high in the pane; specColor recolours the line + fill.
+    const specScale = specScaleRef.current;
+    const specColor = specColorRef.current;
     ctx.save();
     ctx.beginPath();
     for (let x = 0; x <= w; x++) {
       const normalized = Math.min(points[xToIdx(x)] / scale, 1);
-      const y = spectrumH - normalized * spectrumH;
+      const y = spectrumH - normalized * spectrumH * specScale;
       if (x === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
-    ctx.strokeStyle = '#00e5ff';
+    ctx.strokeStyle = specColor;
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -470,7 +521,7 @@ export function PanadapterPlugin() {
     ctx.lineTo(w, spectrumH);
     ctx.lineTo(0, spectrumH);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(0, 229, 255, 0.08)';
+    ctx.fillStyle = hexToRgba(specColor, 0.08);
     ctx.fill();
     ctx.restore();
 
@@ -864,6 +915,20 @@ export function PanadapterPlugin() {
             className={slider('w-16')}
           />
         </div>
+        {/* Spectrum trace height — lower it so the signal line rides lower */}
+        <div className={row} title={`Spectrum height: ${Math.round(specScale * 100)}% of the pane — mouse wheel to adjust, Shift+wheel 5×`}>
+          <span className={label}>SPC</span>
+          <input
+            type="range"
+            min={0.3}
+            max={1.0}
+            step={0.05}
+            value={specScale}
+            onChange={(e) => setSpecScale(parseFloat(e.target.value))}
+            onWheel={sliderWheel(specScale, setSpecScale, 0.3, 1.0, 0.05)}
+            className={slider('w-16')}
+          />
+        </div>
         {/* Waterfall intensity */}
         <div className={row} title={`Waterfall intensity: ${wfIntensity.toFixed(2)}× — mouse wheel to adjust, Shift+wheel 5×`}>
           <span className={label}>INT</span>
@@ -936,19 +1001,6 @@ export function PanadapterPlugin() {
             ))}
           </select>
         </div>
-        {/* Palette picker */}
-        <div className={row} title="Waterfall colour palette">
-          <span className={label}>PAL</span>
-          <select
-            value={palette}
-            onChange={(e) => setPalette(e.target.value as PaletteId)}
-            className={`glass-input text-[10px] font-mono px-1 py-0.5${stacked ? ' flex-1' : ''}`}
-          >
-            {(Object.keys(PALETTES) as PaletteId[]).map((id) => (
-              <option key={id} value={id}>{PALETTES[id].label}</option>
-            ))}
-          </select>
-        </div>
         {/* Grid toggle */}
         <button
           onClick={() => setWfGrid((g) => !g)}
@@ -961,6 +1013,51 @@ export function PanadapterPlugin() {
         >
           Grid
         </button>
+      </>
+    );
+  };
+
+  // Appearance controls (palette + spectrum line colour) — always shown stacked
+  // inside the gear popover, since they change rarely and don't belong in the
+  // live control row.
+  const renderAppearanceControls = () => {
+    const row = 'flex items-center justify-between gap-2';
+    const label = 'text-[10px] font-ui text-dark-300 uppercase tracking-wide w-10 flex-shrink-0';
+    return (
+      <>
+        <div className={row} title="Waterfall colour palette">
+          <span className={label}>PAL</span>
+          <select
+            value={palette}
+            onChange={(e) => setPalette(e.target.value as PaletteId)}
+            className="glass-input text-[10px] font-mono px-1 py-0.5 flex-1"
+          >
+            {(Object.keys(PALETTES) as PaletteId[]).map((id) => (
+              <option key={id} value={id}>{PALETTES[id].label}</option>
+            ))}
+          </select>
+        </div>
+        <div className={row} title="Spectrum line colour">
+          <span className={label}>LINE</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={specColor}
+              onChange={(e) => setSpecColor(e.target.value)}
+              className="h-5 w-8 cursor-pointer rounded border border-dark-500 bg-transparent p-0"
+              title="Spectrum line colour"
+            />
+            {specColor.toLowerCase() !== DEFAULT_SPEC_COLOR && (
+              <button
+                onClick={() => setSpecColor(DEFAULT_SPEC_COLOR)}
+                title="Reset spectrum line colour"
+                className="text-[10px] font-ui text-dark-400 hover:text-dark-200 uppercase tracking-wide"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
       </>
     );
   };
@@ -1002,6 +1099,22 @@ export function PanadapterPlugin() {
               )}
             </div>
           )}
+          {/* Appearance gear — palette + spectrum line colour (set-and-forget) */}
+          <div ref={appearanceRef} className="relative">
+            <button
+              onClick={() => setAppearanceOpen((o) => !o)}
+              className={`glass-button p-1.5 ${appearanceOpen ? 'text-accent-secondary' : ''}`}
+              title="Colours — palette & spectrum line"
+              aria-label="Colour settings"
+            >
+              <Palette className="w-3.5 h-3.5" />
+            </button>
+            {appearanceOpen && (
+              <div className="absolute right-0 top-full mt-2 z-50 glass-panel p-3 w-56 flex flex-col gap-2.5 shadow-xl">
+                {renderAppearanceControls()}
+              </div>
+            )}
+          </div>
           {/* Zoom */}
           <div className="flex items-center gap-1" title="Zoom (or Ctrl/Shift + scroll)">
             <button
