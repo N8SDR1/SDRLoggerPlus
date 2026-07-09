@@ -197,6 +197,10 @@ export interface MapSettings {
   // is always drawn when a callsign is focused; the cyan long-path arc is
   // opt-in so operators who only care about SP get a cleaner view.
   showLongPath: boolean;
+  // Draw the short path as an ionospheric-skip zigzag (bouncing between the
+  // ground and the ionosphere) on the 3D Globe, and tilt the view to an
+  // oblique angle so the hops are visible. Off = a single smooth arc.
+  showIonosphereHops: boolean;
 }
 
 export interface HeaderSettings {
@@ -561,6 +565,7 @@ const defaultSettings: Settings = {
     pskCallsign: '',
     showAuroraOverlay: false,
     showLongPath: true, // default ON — hams commonly want to see both paths
+    showIonosphereHops: false, // opt-in — tilts the globe when on
   },
   cluster: {
     connections: [],

@@ -4,7 +4,7 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSignalR } from '../hooks/useSignalR';
 import { GlassPanel } from '../components/GlassPanel';
-import { gridToLatLon, calculateDistance, getAnimationDuration } from '../utils/maidenhead';
+import { gridToLatLon, calculateDistance, calculateBearing, getAnimationDuration } from '../utils/maidenhead';
 import { RotatorControls } from './RotatorPlugin';
 import { api } from '../api/client';
 import { rigModeToSpotModes } from '../utils/rigTracking';
@@ -411,6 +411,8 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   // Long-path visibility — read once per render outside the animation loop.
   const showLongPathRef = useRef<boolean>(settings.map.showLongPath !== false);
   showLongPathRef.current = settings.map.showLongPath !== false;
+  const showIonoHopsRef = useRef<boolean>(!!settings.map.showIonosphereHops);
+  showIonoHopsRef.current = !!settings.map.showIonosphereHops;
 
   const renderBeam = useCallback((azimuth: number, isConnected: boolean) => {
     if (!globeRef.current) return;
@@ -531,14 +533,17 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       const hops = Math.max(2, Math.min(9, Math.round(distKm / 3300)));
       const SP_SEGMENTS = hops * 40; // enough points to keep the peaks sharp
 
+      const ionoHops = showIonoHopsRef.current;
       const targetPath: [number, number, number][] = [];
       for (let i = 0; i <= SP_SEGMENTS; i++) {
         const t = i / SP_SEGMENTS;
         const point = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
-        // Sharp triangle wave: ground → ionosphere → ground per hop.
-        const phase = (hops * t) % 1;
-        const tri = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
-        targetPath.push([point.lat, point.lng, tri * SP_PEAK_ALT]);
+        // Ionospheric skip on: sharp triangle wave (ground → ionosphere →
+        // ground per hop). Off: a single smooth arc bulge.
+        const alt = ionoHops
+          ? (((hops * t) % 1) < 0.5 ? ((hops * t) % 1) * 2 : (1 - ((hops * t) % 1)) * 2) * SP_PEAK_ALT
+          : Math.sin(Math.PI * t) * 0.12;
+        targetPath.push([point.lat, point.lng, alt]);
       }
       // Steady (gently breathing) base line showing the whole hop zigzag.
       pathsData.push({ path: targetPath, color: SP_COLOR, stroke: 3, dashLength: 0, dashGap: 0 });
@@ -1465,14 +1470,22 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     lastTargetCoordsRef.current = { lat: targetLat, lng: targetLon };
 
     const startPov = globeRef.current.pointOfView();
-    // Center on the SHORT-PATH MIDPOINT (not the DX) and pull back enough to
-    // frame the whole path, so the ionospheric hop zigzag faces the camera
-    // instead of curving onto the far side of the globe. Farther DX → higher
-    // altitude to fit the longer arc.
-    const spMid = interpolateGreatCircle(stationLat, stationLon, targetLat, targetLon, 0.5);
-    const spDistKm = calculateDistance(stationLat, stationLon, targetLat, targetLon);
-    const framedAlt = Math.max(1.6, Math.min(3.2, 1.2 + spDistKm / 7000));
-    const targetPov = { lat: spMid.lat, lng: spMid.lng, altitude: framedAlt };
+    let targetPov: { lat: number; lng: number; altitude: number };
+    if (showIonoHopsRef.current) {
+      // Ionospheric-hops view: aim at a point offset PERPENDICULAR to the
+      // short path from its midpoint, so we look at the hop zigzag obliquely
+      // (arcs rising off the globe) instead of straight down. Pull back to
+      // frame the whole arc — farther DX → higher altitude.
+      const spMid = interpolateGreatCircle(stationLat, stationLon, targetLat, targetLon, 0.5);
+      const spDistKm = calculateDistance(stationLat, stationLon, targetLat, targetLon);
+      const framedAlt = Math.max(1.6, Math.min(3.2, 1.2 + spDistKm / 7000));
+      const bearing = calculateBearing(stationLat, stationLon, targetLat, targetLon);
+      const aim = getDestinationPoint(spMid.lat, spMid.lng, (bearing + 90) % 360, 3300);
+      targetPov = { lat: aim.lat, lng: aim.lng, altitude: framedAlt };
+    } else {
+      // Standard view: fly to the DX location.
+      targetPov = { lat: targetLat, lng: targetLon, altitude: 1.7 };
+    }
 
     const startTime = performance.now();
     const durationMs = duration * 1000;

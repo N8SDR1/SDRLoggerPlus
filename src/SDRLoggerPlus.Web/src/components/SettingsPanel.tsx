@@ -2368,6 +2368,24 @@ function MapSettingsSection() {
           />
         </label>
 
+        {/* Ionospheric Hops — short path bounces off the ionosphere and the
+            globe tilts to an oblique angle so the hops are visible. */}
+        <label className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100 cursor-pointer hover:bg-dark-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <Radio className="w-5 h-5 text-accent-danger" />
+            <div>
+              <div className="font-medium font-ui text-dark-200">Ionospheric Hops</div>
+              <div className="text-sm text-dark-300">Show the short path skipping off the ionosphere on the 3D Globe (tilts the view when a callsign is focused)</div>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={map.showIonosphereHops}
+            onChange={(e) => updateMapSettings({ showIonosphereHops: e.target.checked })}
+            className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
+          />
+        </label>
+
         {/* Day/Night Shading — intensity for the 3D Globe's terminator shader
             shell. On/off lives on the Globe panel's sun button; this slider
             only sets how dark the night side gets. */}
