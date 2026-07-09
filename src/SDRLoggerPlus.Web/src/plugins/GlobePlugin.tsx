@@ -577,12 +577,14 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
           : Math.sin(Math.PI * t) * 0.12;
         targetPath.push([point.lat, point.lng, alt]);
       }
-      // With hops on, the line takes the colour of the layer it bounces off
-      // (E green / F cyan) so path + band read as one; hops off keeps the
-      // classic red-orange short path. Same breathing alpha either way.
+      // With hops on, the line takes a brightened tint of the band it bounces
+      // off (the bands are dark navy per the diagram look — the raw colour
+      // would vanish against space) so path + layer still read as one; hops
+      // off keeps the classic red-orange short path. Same breathing alpha.
       const layerDef = DEFAULT_IONO_LAYERS[layer === 'E' ? 1 : 2];
+      const tint = (c: number) => Math.round((c + (1 - c) * 0.65) * 255);
       const spPathColor = ionoHops && layerDef
-        ? `rgba(${Math.round(layerDef.color[0] * 255)}, ${Math.round(layerDef.color[1] * 255)}, ${Math.round(layerDef.color[2] * 255)}, ${spAlpha})`
+        ? `rgba(${tint(layerDef.color[0])}, ${tint(layerDef.color[1])}, ${tint(layerDef.color[2])}, ${spAlpha})`
         : SP_COLOR;
       // Steady (gently breathing) base line showing the whole hop zigzag.
       pathsData.push({ path: targetPath, color: spPathColor, stroke: 3, dashLength: 0, dashGap: 0 });

@@ -43,12 +43,13 @@ export interface IonoLayer {
 
 // The F (outer) shell sits at the short-path hop peak (globe radius + 0.28,
 // = the hop altitude the globe uses) so the hops bounce right off it; D and E
-// stack below. Keep 1.28 in sync if that hop height changes. Intensity is the
-// band's overall alpha (solid-band look, F slightly strongest).
+// stack below. Keep 1.28 in sync if that hop height changes.
+// Colours match the classic layered-atmosphere diagram: solid navy-blue
+// steps, lightest against the globe and darkest at the outer edge.
 export const DEFAULT_IONO_LAYERS: IonoLayer[] = [
-  { radiusFactor: 1.13, color: [1.0, 0.42, 0.28], intensity: 0.5 },  // D — red/amber (inner)
-  { radiusFactor: 1.205, color: [0.38, 1.0, 0.48], intensity: 0.55 }, // E — green (mid)
-  { radiusFactor: 1.28, color: [0.36, 0.76, 1.0], intensity: 0.6 },  // F — cyan (outer, hop peak)
+  { radiusFactor: 1.13, color: [0.17, 0.29, 0.50], intensity: 1.0 },  // D — inner, lightest blue
+  { radiusFactor: 1.205, color: [0.12, 0.23, 0.41], intensity: 1.0 }, // E — mid blue
+  { radiusFactor: 1.28, color: [0.08, 0.16, 0.31], intensity: 1.0 },  // F — outer, darkest (hop peak)
 ];
 
 const VERTEX_SHADER = `
@@ -68,14 +69,11 @@ uniform float uIntensity;
 varying vec3 vNormalW;
 varying vec3 vViewDir;
 void main() {
-  // Solid band. Each shell renders BACK-SIDE ONLY with the depth test on, so
-  // the opaque globe hides everything except the ring beyond its silhouette —
-  // stacked shells read as solid concentric bands (D innermost … F outermost),
-  // exactly like a layered-ionosphere diagram. A touch of rim falloff keeps
-  // the outer edge from aliasing.
-  float rim = 1.0 - abs(dot(normalize(vNormalW), normalize(vViewDir)));
-  float alpha = uIntensity * (0.75 + 0.25 * rim);
-  gl_FragColor = vec4(uColor, alpha);
+  // Solid opaque band. Each shell renders BACK-SIDE ONLY with the depth test
+  // on, so the opaque globe hides everything except the ring beyond its
+  // silhouette — stacked shells read as flat solid concentric bands
+  // (D innermost … F outermost), exactly like a layered-ionosphere diagram.
+  gl_FragColor = vec4(uColor, uIntensity);
 }
 `;
 

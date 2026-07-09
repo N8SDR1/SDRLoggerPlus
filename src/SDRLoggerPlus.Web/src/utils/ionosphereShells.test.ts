@@ -39,8 +39,11 @@ describe('createIonosphereShells', () => {
     }
   });
 
-  it('outer F layer is the brightest', () => {
-    expect(DEFAULT_IONO_LAYERS[2].intensity).toBeGreaterThan(DEFAULT_IONO_LAYERS[0].intensity);
+  it('bands are fully opaque and step darker outward (diagram look)', () => {
+    const sum = (c: [number, number, number]) => c[0] + c[1] + c[2];
+    for (const l of DEFAULT_IONO_LAYERS) expect(l.intensity).toBe(1.0);
+    expect(sum(DEFAULT_IONO_LAYERS[0].color)).toBeGreaterThan(sum(DEFAULT_IONO_LAYERS[1].color));
+    expect(sum(DEFAULT_IONO_LAYERS[1].color)).toBeGreaterThan(sum(DEFAULT_IONO_LAYERS[2].color));
   });
 
   it('setVisible toggles every shell', () => {
