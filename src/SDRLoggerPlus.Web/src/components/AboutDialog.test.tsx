@@ -39,13 +39,13 @@ describe('AboutDialog', () => {
     render(<AboutDialog isOpen={true} onClose={vi.fn()} />);
     expect(screen.getByText('Credits')).toBeInTheDocument();
     expect(screen.getByText('Log4YM')).toBeInTheDocument();
-    expect(screen.getByText(/SDRLogger\+/)).toBeInTheDocument();
+    expect(screen.getByText(/Rick Langford/)).toBeInTheDocument();
   });
 
   it('calls onClose when the X close button is clicked', () => {
     const onClose = vi.fn();
     render(<AboutDialog isOpen={true} onClose={onClose} />);
-    const closeButton = screen.getByTitle('Close');
+    const closeButton = screen.getByTitle(/Close/);
     fireEvent.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
   });

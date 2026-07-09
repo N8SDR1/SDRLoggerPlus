@@ -36,7 +36,7 @@ describe('color helpers', () => {
 
 describe('PRESETS', () => {
   it('defines the agreed lineup', () => {
-    expect(PRESET_IDS).toEqual(['nightops', 'midnight', 'dracula', 'nord', 'blurple']);
+    expect(PRESET_IDS).toEqual(['nightops', 'lyra', 'midnight', 'dracula', 'nord', 'blurple']);
   });
 
   it('Night Ops carries the SDRLogger-derived palette', () => {
