@@ -47,9 +47,9 @@ export interface IonoLayer {
 // Colours match the classic layered-atmosphere diagram: solid navy-blue
 // steps, lightest against the globe and darkest at the outer edge.
 export const DEFAULT_IONO_LAYERS: IonoLayer[] = [
-  { radiusFactor: 1.13, color: [0.17, 0.29, 0.50], intensity: 1.0 },  // D — inner, lightest blue
-  { radiusFactor: 1.205, color: [0.12, 0.23, 0.41], intensity: 1.0 }, // E — mid blue
-  { radiusFactor: 1.28, color: [0.08, 0.16, 0.31], intensity: 1.0 },  // F — outer, darkest (hop peak)
+  { radiusFactor: 1.13, color: [0.26, 0.44, 0.72], intensity: 1.0 },  // D — inner, lightest blue
+  { radiusFactor: 1.205, color: [0.16, 0.29, 0.52], intensity: 1.0 }, // E — mid blue
+  { radiusFactor: 1.28, color: [0.09, 0.17, 0.33], intensity: 1.0 },  // F — outer, darkest (hop peak)
 ];
 
 const VERTEX_SHADER = `
@@ -86,7 +86,7 @@ export function createIonosphereShells(
   const materials: { dispose(): void }[] = [];
   const meshes: SceneObject[] = [];
 
-  for (const layer of layers) {
+  layers.forEach((layer, i) => {
     const geometry = new three.SphereGeometry(globeRadius * layer.radiusFactor, 64, 32);
     const material = new three.ShaderMaterial({
       uniforms: {
@@ -103,12 +103,17 @@ export function createIonosphereShells(
     });
     const mesh = new three.Mesh(geometry, material);
     mesh.visible = false;
-    mesh.renderOrder = 2;      // above the day/night shell
+    // With depthWrite off, draw order decides which opaque band wins where
+    // they overlap: every shell's ring covers all the inner rings' area, so
+    // draw OUTER FIRST and INNER LAST (higher renderOrder) — each inner band
+    // paints its annulus over the outer ones, leaving clean stacked steps.
+    // (All still above the day/night shell at renderOrder 1.)
+    mesh.renderOrder = 2 + (layers.length - 1 - i);
     mesh.raycast = () => {};   // never intercept globe clicks
     geometries.push(geometry);
     materials.push(material);
     meshes.push(mesh);
-  }
+  });
 
   return {
     meshes,

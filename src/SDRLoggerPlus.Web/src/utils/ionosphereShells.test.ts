@@ -46,6 +46,17 @@ describe('createIonosphereShells', () => {
     expect(sum(DEFAULT_IONO_LAYERS[1].color)).toBeGreaterThan(sum(DEFAULT_IONO_LAYERS[2].color));
   });
 
+  it('inner bands draw AFTER outer ones (higher renderOrder) so the steps stay visible', () => {
+    const { three } = stubThree();
+    const shells = createIonosphereShells(three, 100);
+    const orders = shells.meshes.map((m) => (m as { renderOrder: number }).renderOrder);
+    // D (inner) must have the highest renderOrder, F (outer) the lowest —
+    // with depthWrite off, a last-drawn outer band would paint over the rest.
+    expect(orders[0]).toBeGreaterThan(orders[1]);
+    expect(orders[1]).toBeGreaterThan(orders[2]);
+    expect(Math.min(...orders)).toBeGreaterThanOrEqual(2);
+  });
+
   it('setVisible toggles every shell', () => {
     const { three } = stubThree();
     const shells = createIonosphereShells(three, 100);
