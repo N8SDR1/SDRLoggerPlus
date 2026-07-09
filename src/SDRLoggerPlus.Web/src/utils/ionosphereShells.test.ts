@@ -39,24 +39,25 @@ describe('createIonosphereShells', () => {
     }
   });
 
-  it('bands are translucent glows stepping darker outward (never solid)', () => {
-    const sum = (c: [number, number, number]) => c[0] + c[1] + c[2];
+  it('bands are translucent prism hues (green inner, orange mid, yellow outer)', () => {
+    const [d, e, f] = DEFAULT_IONO_LAYERS;
     for (const l of DEFAULT_IONO_LAYERS) {
       expect(l.intensity).toBeGreaterThan(0);
       expect(l.intensity).toBeLessThan(1); // peak alpha — always transparent
     }
-    expect(sum(DEFAULT_IONO_LAYERS[0].color)).toBeGreaterThan(sum(DEFAULT_IONO_LAYERS[1].color));
-    expect(sum(DEFAULT_IONO_LAYERS[1].color)).toBeGreaterThan(sum(DEFAULT_IONO_LAYERS[2].color));
+    expect(d.color[1]).toBeGreaterThan(d.color[0]); // D green: G > R
+    expect(e.color[0]).toBeGreaterThan(e.color[2]); // E orange: R > B
+    expect(f.color[0]).toBeGreaterThan(0.9);        // F yellow: high R
+    expect(f.color[1]).toBeGreaterThan(0.7);        //          high G
   });
 
-  it('each band fades from the previous layer boundary (uInnerN)', () => {
+  it('every band fades from the globe surface (overlapping, blended)', () => {
     const { three } = stubThree();
     const shells = createIonosphereShells(three, 100);
     shells.meshes.forEach((m, i) => {
       const mat = (m as unknown as { material: { uniforms: Record<string, { value: unknown }> } }).material;
       const innerN = mat.uniforms.uInnerN.value as number;
-      const expected = (i === 0 ? 1.0 : DEFAULT_IONO_LAYERS[i - 1].radiusFactor) / DEFAULT_IONO_LAYERS[i].radiusFactor;
-      expect(innerN).toBeCloseTo(expected, 6);
+      expect(innerN).toBeCloseTo(1.0 / DEFAULT_IONO_LAYERS[i].radiusFactor, 6);
       expect(innerN).toBeLessThan(1); // band has nonzero width
     });
   });

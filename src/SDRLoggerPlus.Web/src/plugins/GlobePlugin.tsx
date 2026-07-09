@@ -577,12 +577,12 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
           : Math.sin(Math.PI * t) * 0.12;
         targetPath.push([point.lat, point.lng, alt]);
       }
-      // With hops on, the line takes a brightened tint of the band it bounces
-      // off (the bands are dark navy per the diagram look — the raw colour
-      // would vanish against space) so path + layer still read as one; hops
-      // off keeps the classic red-orange short path. Same breathing alpha.
+      // With hops on, the line takes the colour of the band it bounces off
+      // (E orange / F yellow), lightly brightened so it reads against space,
+      // so path + layer match; hops off keeps the classic red-orange short
+      // path. Same breathing alpha either way.
       const layerDef = DEFAULT_IONO_LAYERS[layer === 'E' ? 1 : 2];
-      const tint = (c: number) => Math.round((c + (1 - c) * 0.65) * 255);
+      const tint = (c: number) => Math.round((c + (1 - c) * 0.25) * 255);
       const spPathColor = ionoHops && layerDef
         ? `rgba(${tint(layerDef.color[0])}, ${tint(layerDef.color[1])}, ${tint(layerDef.color[2])}, ${spAlpha})`
         : SP_COLOR;

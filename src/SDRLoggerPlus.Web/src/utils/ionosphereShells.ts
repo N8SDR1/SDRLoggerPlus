@@ -44,12 +44,14 @@ export interface IonoLayer {
 // The F (outer) shell sits at the short-path hop peak (globe radius + 0.28,
 // = the hop altitude the globe uses) so the hops bounce right off it; D and E
 // stack below. Keep 1.28 in sync if that hop height changes.
-// Navy-blue hues stepping darker outward; intensity = each band's PEAK alpha
-// (at its outer edge). All translucent — never a solid fill.
+// Prism hues, outer→inner: F yellow, E orange, D green. Each band fades from
+// transparent (at the globe surface) to its peak at its own outer edge, and
+// the bands overlap so the colours blend continuously like a prism. intensity
+// = each band's PEAK alpha — all translucent, never a solid fill.
 export const DEFAULT_IONO_LAYERS: IonoLayer[] = [
-  { radiusFactor: 1.13, color: [0.30, 0.50, 0.82], intensity: 0.75 },  // D — inner, lightest blue
-  { radiusFactor: 1.205, color: [0.20, 0.36, 0.66], intensity: 0.7 },  // E — mid blue
-  { radiusFactor: 1.28, color: [0.12, 0.24, 0.48], intensity: 0.65 },  // F — outer, darkest (hop peak)
+  { radiusFactor: 1.13, color: [0.35, 0.90, 0.40], intensity: 0.6 },  // D — inner, green
+  { radiusFactor: 1.205, color: [1.0, 0.55, 0.12], intensity: 0.6 },  // E — mid, orange
+  { radiusFactor: 1.28, color: [1.0, 0.88, 0.22], intensity: 0.62 },  // F — outer, yellow (hop peak)
 ];
 
 const VERTEX_SHADER = `
@@ -98,9 +100,9 @@ export function createIonosphereShells(
 
   layers.forEach((layer, i) => {
     const geometry = new three.SphereGeometry(globeRadius * layer.radiusFactor, 64, 32);
-    // This band's inner edge = the previous layer's radius (the globe surface
-    // for the first), normalized to THIS shell's radius for the shader.
-    const innerFactor = i === 0 ? 1.0 : layers[i - 1].radiusFactor;
+    // Every band fades from the globe surface (radiusFactor 1.0) up to its own
+    // outer edge, so adjacent bands overlap and their hues blend like a prism.
+    const innerFactor = 1.0;
     const material = new three.ShaderMaterial({
       uniforms: {
         uColor: { value: new three.Color(layer.color[0], layer.color[1], layer.color[2]) },
