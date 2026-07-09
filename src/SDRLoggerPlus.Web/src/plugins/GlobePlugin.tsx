@@ -117,6 +117,23 @@ function interpolateGreatCircleLongPath(
   };
 }
 
+/**
+ * Rough estimate of the number of ionospheric hops for a path, from distance,
+ * band, and whether the path is in daylight. Not a propagation prediction —
+ * just a plausible hop count for the visual. The max single-hop ground
+ * distance grows with the reflecting layer's virtual height: at night the F2
+ * layer sits high (~long hops), by day lower E/F1 layers shorten them; higher
+ * bands work lower takeoff angles so reach a bit farther per hop.
+ */
+function estimateHopCount(distKm: number, freqMHz: number, daytime: boolean): number {
+  let maxHopKm = daytime ? 2800 : 4000;
+  if (freqMHz >= 21) maxHopKm += 400;        // 15/12/10 m
+  else if (freqMHz >= 14) maxHopKm += 200;   // 20/17 m
+  else if (freqMHz > 0 && freqMHz < 7) maxHopKm -= 500; // 160/80 m
+  maxHopKm = Math.max(1800, Math.min(4200, maxHopKm));
+  return Math.max(1, Math.min(12, Math.ceil(distKm / maxHopKm)));
+}
+
 // Marker data structure for globe points
 interface GlobeMarkerData {
   lat: number;
@@ -413,6 +430,8 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   showLongPathRef.current = settings.map.showLongPath !== false;
   const showIonoHopsRef = useRef<boolean>(!!settings.map.showIonosphereHops);
   showIonoHopsRef.current = !!settings.map.showIonosphereHops;
+  const rigFreqRef = useRef<number | undefined>(rigFreqHz);
+  rigFreqRef.current = rigFreqHz;
 
   const renderBeam = useCallback((azimuth: number, isConnected: boolean) => {
     if (!globeRef.current) return;
@@ -529,8 +548,13 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       const hav = Math.sin(dLat / 2) ** 2 +
         Math.cos(stationLat * toRadHop) * Math.cos(targetCoords.lat * toRadHop) * Math.sin(dLon / 2) ** 2;
       const distKm = 2 * R_KM * Math.asin(Math.min(1, Math.sqrt(hav)));
-      // ~1 F-hop per 3300 km (5 hops ≈ 16 500 km, like the reference), min 2.
-      const hops = Math.max(2, Math.min(9, Math.round(distKm / 3300)));
+      // Hop count estimated from distance, band, and day/night at the path
+      // midpoint (falls back to 20 m if no rig frequency is known).
+      const midHop = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, 0.5);
+      const sunHop = getSunPosition(new Date());
+      const daytimeMid = calculateDistance(midHop.lat, midHop.lng, sunHop.lat, sunHop.lon) < 10000;
+      const freqMHz = (rigFreqRef.current ?? 0) / 1e6 || 14;
+      const hops = estimateHopCount(distKm, freqMHz, daytimeMid);
       const SP_SEGMENTS = hops * 40; // enough points to keep the peaks sharp
 
       const ionoHops = showIonoHopsRef.current;
@@ -1443,6 +1467,18 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     const interval = setInterval(updateSun, 60_000);
     return () => clearInterval(interval);
   }, [globeReady, settings.map.showDayNightOverlay, settings.map.dayNightOpacity]);
+
+  // Ionosphere glow — tint the globe's atmosphere a slight warm yellow while
+  // the ionospheric-hops layer is on, to read as the reflecting layer;
+  // otherwise the default dark limb glow.
+  useEffect(() => {
+    if (!globeReady || !globeRef.current) return;
+    if (settings.map.showIonosphereHops) {
+      globeRef.current.atmosphereColor('rgba(255, 231, 150, 0.55)').atmosphereAltitude(0.3);
+    } else {
+      globeRef.current.atmosphereColor('rgba(10, 14, 20, 0.4)').atmosphereAltitude(0.25);
+    }
+  }, [globeReady, settings.map.showIonosphereHops]);
 
   // Fly to target when focused callsign changes
   useEffect(() => {
