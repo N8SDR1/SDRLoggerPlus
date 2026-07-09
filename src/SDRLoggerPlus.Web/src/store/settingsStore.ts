@@ -351,10 +351,14 @@ export interface BackupSettings {
   destinationPath?: string | null;
 }
 
+export type AiProvider = 'anthropic' | 'openai' | 'groq' | 'openrouter' | 'ollama' | 'custom';
+
 export interface AiSettings {
-  provider: 'anthropic' | 'openai';
+  provider: AiProvider;
   apiKey: string;
   model: string;
+  /** OpenAI-compatible API base URL; blank = the provider preset's default. */
+  baseUrl: string;
   autoGenerateTalkPoints: boolean;
   includeQrzProfile: boolean;
   includeQsoHistory: boolean;
@@ -632,6 +636,7 @@ const defaultSettings: Settings = {
     provider: 'anthropic',
     apiKey: '',
     model: 'claude-sonnet-4-5-20250929',
+    baseUrl: '',
     autoGenerateTalkPoints: true,
     includeQrzProfile: true,
     includeQsoHistory: true,

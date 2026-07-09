@@ -36,7 +36,7 @@ public class AiService : IAiService
         var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
         var aiSettings = settings.Ai;
 
-        if (string.IsNullOrEmpty(aiSettings.ApiKey))
+        if (RequiresApiKey(aiSettings) && string.IsNullOrEmpty(aiSettings.ApiKey))
         {
             throw new InvalidOperationException("AI API key not configured");
         }
@@ -77,7 +77,7 @@ public class AiService : IAiService
         var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
         var aiSettings = settings.Ai;
 
-        if (string.IsNullOrEmpty(aiSettings.ApiKey))
+        if (RequiresApiKey(aiSettings) && string.IsNullOrEmpty(aiSettings.ApiKey))
         {
             throw new InvalidOperationException("AI API key not configured");
         }
@@ -111,7 +111,7 @@ public class AiService : IAiService
         var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
         var aiSettings = settings.Ai;
 
-        if (string.IsNullOrEmpty(aiSettings.ApiKey))
+        if (RequiresApiKey(aiSettings) && string.IsNullOrEmpty(aiSettings.ApiKey))
         {
             throw new InvalidOperationException("AI API key not configured");
         }
@@ -146,7 +146,8 @@ public class AiService : IAiService
                 {
                     Provider = request.Provider,
                     ApiKey = request.ApiKey,
-                    Model = request.Model
+                    Model = request.Model,
+                    BaseUrl = request.BaseUrl
                 },
                 testPrompt
             );
@@ -347,18 +348,13 @@ public class AiService : IAiService
 
     private async Task<string> CallLlmWithMessagesAsync(AiSettings settings, List<object> messages)
     {
-        if (settings.Provider.ToLower() == "anthropic")
+        // Anthropic uses its native Messages API; every other preset speaks the
+        // OpenAI chat-completions format (OpenAI, Groq, Gemini, OpenRouter, Ollama…).
+        if (IsAnthropic(settings))
         {
             return await CallAnthropicAsync(settings, messages);
         }
-        else if (settings.Provider.ToLower() == "openai")
-        {
-            return await CallOpenAiAsync(settings, messages);
-        }
-        else
-        {
-            throw new InvalidOperationException($"Unsupported AI provider: {settings.Provider}");
-        }
+        return await CallOpenAiAsync(settings, messages);
     }
 
     private async Task<string> CallAnthropicAsync(AiSettings settings, List<object> messages)
@@ -379,7 +375,7 @@ public class AiService : IAiService
         httpRequest.Content = content;
 
         var response = await _httpClient.SendAsync(httpRequest);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessOrThrowAsync(response);
 
         var responseJson = await response.Content.ReadAsStringAsync();
         var responseObj = JsonSerializer.Deserialize<AnthropicResponse>(responseJson);
@@ -399,12 +395,13 @@ public class AiService : IAiService
         var json = JsonSerializer.Serialize(request);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ResolveOpenAiBaseUrl(settings) + "/chat/completions");
+        if (!string.IsNullOrEmpty(settings.ApiKey))
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
         httpRequest.Content = content;
 
         var response = await _httpClient.SendAsync(httpRequest);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessOrThrowAsync(response);
 
         var responseJson = await response.Content.ReadAsStringAsync();
         var responseObj = JsonSerializer.Deserialize<OpenAiResponse>(responseJson);
@@ -412,15 +409,85 @@ public class AiService : IAiService
         return responseObj?.Choices?.FirstOrDefault()?.Message?.Content ?? "No response from AI";
     }
 
+    private static bool IsAnthropic(AiSettings s) =>
+        string.Equals(s.Provider, "anthropic", StringComparison.OrdinalIgnoreCase);
+
+    // Local providers (Ollama) don't need a key; everything else does.
+    private static bool RequiresApiKey(AiSettings s) =>
+        !string.Equals(s.Provider, "ollama", StringComparison.OrdinalIgnoreCase);
+
+    // The OpenAI-compatible base URL for this provider. An explicit BaseUrl wins;
+    // otherwise fall back to the preset's known default.
+    private static string ResolveOpenAiBaseUrl(AiSettings s)
+    {
+        if (!string.IsNullOrWhiteSpace(s.BaseUrl))
+            return s.BaseUrl.TrimEnd('/');
+
+        return (s.Provider?.ToLowerInvariant()) switch
+        {
+            "groq" => "https://api.groq.com/openai/v1",
+            "openrouter" => "https://openrouter.ai/api/v1",
+            "ollama" => "http://localhost:11434/v1",
+            _ => "https://api.openai.com/v1",
+        };
+    }
+
+    // EnsureSuccessStatusCode() throws away the response body, so a bad model
+    // name or parameter surfaces only as "400 Bad Request". Read the provider's
+    // JSON error and put its message in the exception instead.
+    private static async Task EnsureSuccessOrThrowAsync(HttpResponseMessage response, CancellationToken ct = default)
+    {
+        if (response.IsSuccessStatusCode) return;
+
+        string body;
+        try { body = await response.Content.ReadAsStringAsync(ct); }
+        catch { body = string.Empty; }
+
+        // Prefer the provider's structured message; fall back to a raw snippet.
+        var detail = TryExtractErrorMessage(body);
+        if (string.IsNullOrWhiteSpace(detail) && !string.IsNullOrWhiteSpace(body))
+            detail = body.Length > 300 ? body[..300] + "…" : body;
+
+        var suffix = string.IsNullOrWhiteSpace(detail) ? "" : $" — {detail!.Trim()}";
+        throw new HttpRequestException(
+            $"AI provider returned {(int)response.StatusCode} {response.ReasonPhrase}{suffix}");
+    }
+
+    // Pull the human message from a provider error body. Handles the common
+    // { "error": { "message": ... } } (OpenAI / Anthropic) and Google's variant
+    // that wraps the error object in a top-level array. Never throws — a parsing
+    // quirk must not mask the real HTTP failure.
+    private static string? TryExtractErrorMessage(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
+                root = root[0];
+            if (root.ValueKind != JsonValueKind.Object) return null;
+
+            if (root.TryGetProperty("error", out var err))
+            {
+                if (err.ValueKind == JsonValueKind.Object && err.TryGetProperty("message", out var m))
+                    return m.GetString();
+                if (err.ValueKind == JsonValueKind.String)
+                    return err.GetString();
+            }
+            if (root.TryGetProperty("message", out var rootMsg))
+                return rootMsg.GetString();
+        }
+        catch (Exception) { }
+        return null;
+    }
+
     private IAsyncEnumerable<string> StreamLlmAsync(
         AiSettings settings, List<object> messages, CancellationToken cancellationToken)
     {
-        if (settings.Provider.Equals("anthropic", StringComparison.OrdinalIgnoreCase))
+        if (IsAnthropic(settings))
             return StreamAnthropicAsync(settings, messages, cancellationToken);
-        else if (settings.Provider.Equals("openai", StringComparison.OrdinalIgnoreCase))
-            return StreamOpenAiAsync(settings, messages, cancellationToken);
-        else
-            throw new InvalidOperationException($"Unsupported AI provider: {settings.Provider}");
+        return StreamOpenAiAsync(settings, messages, cancellationToken);
     }
 
     private async IAsyncEnumerable<string> StreamAnthropicAsync(
@@ -444,7 +511,7 @@ public class AiService : IAiService
         httpRequest.Content = content;
 
         using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessOrThrowAsync(response, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);
@@ -500,12 +567,13 @@ public class AiService : IAiService
         var json = JsonSerializer.Serialize(requestBody);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ResolveOpenAiBaseUrl(settings) + "/chat/completions");
+        if (!string.IsNullOrEmpty(settings.ApiKey))
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
         httpRequest.Content = content;
 
         using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessOrThrowAsync(response, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);

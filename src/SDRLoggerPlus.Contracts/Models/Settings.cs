@@ -751,13 +751,21 @@ public class HeaderSettings
 public class AiSettings
 {
     [BsonElement("provider")]
-    public string? Provider { get; set; } = "anthropic"; // "anthropic" | "openai"
+    // Preset id: "anthropic" uses the native Claude API; everything else
+    // ("openai" | "groq" | "openrouter" | "ollama" | "custom") speaks
+    // the OpenAI chat-completions format against BaseUrl.
+    public string? Provider { get; set; } = "anthropic";
 
     [BsonElement("apiKey")]
-    public string? ApiKey { get; set; } = string.Empty; // Stored obfuscated
+    public string? ApiKey { get; set; } = string.Empty; // Stored obfuscated; optional for local providers (Ollama)
 
     [BsonElement("model")]
     public string? Model { get; set; } = "claude-sonnet-4-5-20250929"; // Provider-specific model name
+
+    [BsonElement("baseUrl")]
+    // OpenAI-compatible API base, e.g. https://api.groq.com/openai/v1. Blank = the
+    // provider preset's default endpoint (see AiService.ResolveOpenAiBaseUrl).
+    public string? BaseUrl { get; set; } = string.Empty;
 
     [BsonElement("autoGenerateTalkPoints")]
     public bool AutoGenerateTalkPoints { get; set; } = true;

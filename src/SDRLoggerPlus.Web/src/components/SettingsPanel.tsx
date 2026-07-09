@@ -48,7 +48,7 @@ import {
   Newspaper,
   Activity,
 } from 'lucide-react';
-import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource } from '../store/settingsStore';
+import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type AiProvider } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
 import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
 import { useLayoutStore } from '../store/layoutStore';
@@ -2643,6 +2643,27 @@ function HeaderSettingsSection() {
 
 
 // AI Settings Section
+// AI provider presets. Anthropic uses its native API; every other preset speaks
+// the OpenAI chat-completions format against baseUrl — so free/cheap providers
+// (Groq, Gemini, OpenRouter, Ollama) work with just a URL + model.
+const AI_PRESETS: Record<AiProvider, { label: string; baseUrl: string; defaultModel: string; keyUrl: string; needsKey: boolean; free?: boolean; note?: string }> = {
+  anthropic:  { label: 'Anthropic (Claude)',        baseUrl: '',                                                        defaultModel: 'claude-sonnet-4-5-20250929',              keyUrl: 'https://console.anthropic.com/settings/keys', needsKey: true },
+  openai:     { label: 'OpenAI',                     baseUrl: '',                                                        defaultModel: 'gpt-4o-mini',                             keyUrl: 'https://platform.openai.com/api-keys',        needsKey: true },
+  groq:       { label: 'Groq — free & fast',         baseUrl: 'https://api.groq.com/openai/v1',                          defaultModel: 'llama-3.3-70b-versatile',                 keyUrl: 'https://console.groq.com/keys',               needsKey: true, free: true },
+  openrouter: { label: 'OpenRouter — free models',   baseUrl: 'https://openrouter.ai/api/v1',                            defaultModel: 'meta-llama/llama-3.3-70b-instruct:free',  keyUrl: 'https://openrouter.ai/keys',                  needsKey: true, free: true },
+  ollama:     { label: 'Ollama — local, no key',     baseUrl: 'http://localhost:11434/v1',                               defaultModel: 'llama3.2',                                keyUrl: '',                                            needsKey: false, free: true, note: 'ollama' },
+  custom:     { label: 'Custom (OpenAI-compatible)', baseUrl: '',                                                        defaultModel: '',                                        keyUrl: '',                                            needsKey: false },
+};
+
+const AI_MODEL_SUGGESTIONS: Record<AiProvider, string[]> = {
+  anthropic:  ['claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'],
+  openai:     ['gpt-4o-mini', 'gpt-4o'],
+  groq:       ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+  openrouter: ['meta-llama/llama-3.3-70b-instruct:free', 'google/gemma-2-9b-it:free', 'deepseek/deepseek-chat'],
+  ollama:     ['llama3.2', 'phi3', 'gemma2', 'mistral'],
+  custom:     [],
+};
+
 function AiSettingsSection() {
   const { settings, updateAiSettings } = useSettingsStore();
   const ai = settings.ai;
@@ -2650,20 +2671,30 @@ function AiSettingsSection() {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message?: string } | null>(null);
 
+  const preset = AI_PRESETS[ai.provider] ?? AI_PRESETS.custom;
+  const keyRequired = preset.needsKey;
+  const showKey = ai.provider !== 'ollama';
+
+  const selectProvider = (p: AiProvider) => {
+    const next = AI_PRESETS[p];
+    updateAiSettings({ provider: p, baseUrl: next.baseUrl, model: next.defaultModel || ai.model });
+    setTestResult(null);
+  };
+
   const handleTestApiKey = async () => {
-    if (!ai.apiKey) return;
+    if (keyRequired && !ai.apiKey) return;
     setIsTesting(true);
     setTestResult(null);
     try {
       const response = await fetch('/api/ai/test-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: ai.provider, apiKey: ai.apiKey, model: ai.model }),
+        body: JSON.stringify({ provider: ai.provider, apiKey: ai.apiKey, model: ai.model, baseUrl: ai.baseUrl }),
       });
       const result = await response.json();
-      setTestResult({ success: result.isValid, message: result.errorMessage || 'API key is valid!' });
+      setTestResult({ success: result.isValid, message: result.errorMessage || 'Connection works!' });
     } catch (error) {
-      setTestResult({ success: false, message: 'Failed to test API key' });
+      setTestResult({ success: false, message: 'Failed to reach the provider' });
     } finally {
       setIsTesting(false);
     }
@@ -2673,53 +2704,77 @@ function AiSettingsSection() {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-gray-100 mb-1">AI Provider Settings</h3>
-        <p className="text-sm text-gray-500">Configure your LLM provider for AI-powered talk points.</p>
+        <p className="text-sm text-gray-500">Pick an LLM provider for AI talk points. Free options: <b>Ollama</b> (local, no key), <b>Groq</b>, <b>OpenRouter</b>.</p>
       </div>
       <div className="space-y-2">
         <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
           <Bot className="w-4 h-4 text-accent-primary" />
           Provider
         </label>
-        <div className="flex gap-2">
-          <button onClick={() => updateAiSettings({ provider: 'anthropic', model: 'claude-sonnet-4-5-20250929' })} className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${ai.provider === 'anthropic' ? 'bg-accent-primary/10 border-accent-primary text-accent-primary' : 'bg-dark-700/50 border-glass-100 text-gray-400 hover:bg-dark-700'}`}>Anthropic</button>
-          <button onClick={() => updateAiSettings({ provider: 'openai', model: 'gpt-5.2-chat-latest' })} className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${ai.provider === 'openai' ? 'bg-accent-primary/10 border-accent-primary text-accent-primary' : 'bg-dark-700/50 border-glass-100 text-gray-400 hover:bg-dark-700'}`}>OpenAI</button>
-        </div>
+        <select value={ai.provider} onChange={(e) => selectProvider(e.target.value as AiProvider)} className="glass-input w-full">
+          {(Object.keys(AI_PRESETS) as AiProvider[]).map((p) => (
+            <option key={p} value={p}>{AI_PRESETS[p].label}</option>
+          ))}
+        </select>
+        {ai.provider === 'ollama' && (
+          <p className="text-xs text-amber-300/80">
+            Runs on your PC — install from{' '}
+            <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">ollama.com</a>
+            , then run <code className="text-amber-200">ollama pull llama3.2</code>
+          </p>
+        )}
       </div>
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
-          <Key className="w-4 h-4 text-accent-primary" />
-          API Key
-        </label>
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
+      {ai.provider !== 'anthropic' && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-300">API Base URL</label>
+          <input type="text" value={ai.baseUrl} onChange={(e) => updateAiSettings({ baseUrl: e.target.value })}
+            placeholder={preset.baseUrl || 'https://api.openai.com/v1'} className="glass-input w-full font-mono text-sm" />
+          <p className="text-xs text-gray-500">OpenAI-compatible endpoint. Leave blank to use the provider's default.</p>
+        </div>
+      )}
+      {showKey && (
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+            <Key className="w-4 h-4 text-accent-primary" />
+            API Key{!keyRequired && <span className="text-gray-500 font-normal">(optional)</span>}
+          </label>
+          <div className="relative">
             <input type={showApiKey ? 'text' : 'password'} value={ai.apiKey} onChange={(e) => updateAiSettings({ apiKey: e.target.value })} placeholder={ai.provider === 'anthropic' ? 'sk-ant-...' : 'sk-...'} className="glass-input w-full font-mono pr-10" />
             <button type="button" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-gray-300 transition-colors">
               {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          <button onClick={handleTestApiKey} disabled={!ai.apiKey || isTesting} className="glass-button px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed">
-            {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Test'}
-          </button>
+          {preset.keyUrl && (
+            <p className="text-xs text-gray-500">
+              Get a{preset.free ? ' free' : 'n'} API key from{' '}
+              <a href={preset.keyUrl} target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">
+                {preset.keyUrl.replace(/^https?:\/\//, '')}
+              </a>
+            </p>
+          )}
         </div>
+      )}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button onClick={handleTestApiKey} disabled={isTesting || (keyRequired && !ai.apiKey)} className="glass-button px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed">
+          {isTesting ? <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Testing…</span> : 'Test connection'}
+        </button>
         {testResult && <div className={`text-sm flex items-center gap-2 ${testResult.success ? 'text-green-400' : 'text-red-400'}`}>{testResult.success ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}{testResult.message}</div>}
-        <p className="text-xs text-gray-500">Get your API key from {ai.provider === 'anthropic' ? 'console.anthropic.com' : 'platform.openai.com'}</p>
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-300">Model</label>
-        <select value={ai.model} onChange={(e) => updateAiSettings({ model: e.target.value })} className="glass-input w-full">
-          {ai.provider === 'anthropic' ? (
-            <>
-              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Recommended)</option>
-              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Faster)</option>
-            </>
-          ) : (
-            <>
-              <option value="gpt-5.2-chat-latest">GPT-5.2 Instant (Recommended)</option>
-              <option value="gpt-5-mini">GPT-5 Mini (Faster)</option>
-              <option value="gpt-5.2">GPT-5.2 Thinking (Most Capable)</option>
-            </>
-          )}
-        </select>
+        {(AI_MODEL_SUGGESTIONS[ai.provider] ?? []).length > 0 && (
+          <select
+            value={(AI_MODEL_SUGGESTIONS[ai.provider] ?? []).includes(ai.model) ? ai.model : ''}
+            onChange={(e) => { if (e.target.value) updateAiSettings({ model: e.target.value }); }}
+            className="glass-input w-full"
+          >
+            <option value="" disabled>Choose a model…</option>
+            {(AI_MODEL_SUGGESTIONS[ai.provider] ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        )}
+        <input type="text" value={ai.model} onChange={(e) => updateAiSettings({ model: e.target.value })}
+          placeholder={preset.defaultModel || 'model name'} className="glass-input w-full font-mono text-sm" />
+        <p className="text-xs text-gray-500">Pick a suggested model above, or type any model your key supports.</p>
       </div>
       <div className="border-t border-glass-100 pt-4">
         <h4 className="text-sm font-medium text-gray-300 mb-3">Behavior</h4>

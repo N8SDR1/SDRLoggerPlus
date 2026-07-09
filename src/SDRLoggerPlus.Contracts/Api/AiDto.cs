@@ -71,9 +71,10 @@ public record ChatMessage(
 /// Request to test an API key
 /// </summary>
 public record TestApiKeyRequest(
-    string Provider,  // "anthropic" or "openai"
+    string Provider,  // "anthropic" | "openai" | "groq" | "openrouter" | "ollama" | "custom"
     string ApiKey,
-    string Model
+    string Model,
+    string? BaseUrl = null  // OpenAI-compatible base URL; blank = provider default
 );
 
 /// <summary>
