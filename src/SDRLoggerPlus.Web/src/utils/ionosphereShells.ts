@@ -19,11 +19,11 @@ export interface ThreeLike {
     fragmentShader: string;
     transparent: boolean;
     depthWrite: boolean;
-    blending: number;
+    side: number;
   }) => { uniforms: Record<string, { value: unknown }>; dispose(): void };
   Color: new (r: number, g: number, b: number) => object;
   Mesh: new (geometry: object, material: object) => SceneObject;
-  AdditiveBlending: number;
+  BackSide: number;
 }
 
 export interface IonosphereShells {
@@ -42,12 +42,13 @@ export interface IonoLayer {
 }
 
 // The F (outer) shell sits at the short-path hop peak (globe radius + 0.28,
-// = GlobePlugin's SP_PEAK_ALT) so the hops bounce right off it; D and E stack
-// below. Keep the 1.28 in sync with SP_PEAK_ALT if that hop height changes.
+// = the hop altitude the globe uses) so the hops bounce right off it; D and E
+// stack below. Keep 1.28 in sync if that hop height changes. Intensity is the
+// band's overall alpha (solid-band look, F slightly strongest).
 export const DEFAULT_IONO_LAYERS: IonoLayer[] = [
-  { radiusFactor: 1.13, color: [1.0, 0.42, 0.28], intensity: 0.35 }, // D — red/amber (low)
-  { radiusFactor: 1.205, color: [0.38, 1.0, 0.48], intensity: 0.5 }, // E — green (mid)
-  { radiusFactor: 1.28, color: [0.36, 0.76, 1.0], intensity: 0.78 }, // F — cyan (hop peak, brightest)
+  { radiusFactor: 1.13, color: [1.0, 0.42, 0.28], intensity: 0.5 },  // D — red/amber (inner)
+  { radiusFactor: 1.205, color: [0.38, 1.0, 0.48], intensity: 0.55 }, // E — green (mid)
+  { radiusFactor: 1.28, color: [0.36, 0.76, 1.0], intensity: 0.6 },  // F — cyan (outer, hop peak)
 ];
 
 const VERTEX_SHADER = `
@@ -67,16 +68,14 @@ uniform float uIntensity;
 varying vec3 vNormalW;
 varying vec3 vViewDir;
 void main() {
-  // Fresnel rim: 0 facing the camera, 1 at the silhouette (limb / outer edge).
+  // Solid band. Each shell renders BACK-SIDE ONLY with the depth test on, so
+  // the opaque globe hides everything except the ring beyond its silhouette —
+  // stacked shells read as solid concentric bands (D innermost … F outermost),
+  // exactly like a layered-ionosphere diagram. A touch of rim falloff keeps
+  // the outer edge from aliasing.
   float rim = 1.0 - abs(dot(normalize(vNormalW), normalize(vViewDir)));
-  // Thin bright band right at the limb plus a soft wider halo around it —
-  // the inner face stays essentially transparent so the glow never washes
-  // over the globe. Brightest at the very edge (rim→1).
-  float band = smoothstep(0.82, 1.0, rim);
-  float halo = smoothstep(0.62, 1.0, rim) * 0.3;
-  float glow = (band + halo) * uIntensity;
-  if (glow < 0.004) discard;
-  gl_FragColor = vec4(uColor, glow);
+  float alpha = uIntensity * (0.75 + 0.25 * rim);
+  gl_FragColor = vec4(uColor, alpha);
 }
 `;
 
@@ -100,7 +99,9 @@ export function createIonosphereShells(
       fragmentShader: FRAGMENT_SHADER,
       transparent: true,
       depthWrite: false,
-      blending: three.AdditiveBlending,
+      // Back side only: the globe occludes the shell's far hemisphere except
+      // the ring beyond its silhouette — the solid-band diagram look.
+      side: three.BackSide,
     });
     const mesh = new three.Mesh(geometry, material);
     mesh.visible = false;

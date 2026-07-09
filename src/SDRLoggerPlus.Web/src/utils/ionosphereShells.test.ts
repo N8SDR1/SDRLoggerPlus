@@ -20,7 +20,7 @@ function stubThree() {
       raycast: (...args: unknown[]) => void = () => { throw new Error('not replaced'); };
       constructor(public geometry: object, public material: object) {}
     },
-    AdditiveBlending: 2,
+    BackSide: 1,
   } as unknown as ThreeLike;
   return { three, calls };
 }
