@@ -97,56 +97,63 @@ const satelliteIcon = new L.DivIcon({
   iconAnchor: [9, 9],
 });
 
-// Create callsign image marker icon
+// Create callsign image marker icon — a map pin (teardrop) whose circular
+// hole holds the operator's QRZ photo; the pin's point anchors on the
+// station coordinate, callsign label sits just below.
 function createCallsignImageIcon(imageUrl: string | undefined | null, callsign: string, scale: '1x' | '2x') {
-  const size = scale === '2x' ? 56 : 44;
-  const borderWidth = scale === '2x' ? 3 : 2;
-  const borderColor = scale === '2x' ? '#ffb432' : '#00ddff';
-  const shadowSpread = scale === '2x' ? 8 : 5;
-  const fontSize = scale === '2x' ? 11 : 10;
+  const pinW = scale === '2x' ? 52 : 42;   // pin width in px
+  const pinH = Math.round(pinW * 1.32);    // teardrop taller than wide
+  const bodyColor = scale === '2x' ? '#ffb432' : '#00ddff';
+  const fontSize = scale === '2x' ? 12 : 10;
+  const emojiPx = Math.round(pinW * 0.42);
   // Escape HTML special chars in callsign to prevent XSS
   const safeCallsign = callsign.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const contentHtml = imageUrl
-    ? `<img
-            src="${imageUrl}"
-            alt="${safeCallsign}"
-            style="width: 100%; height: 100%; object-fit: cover; display: block;"
-            onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${Math.round(size * 0.5)}px\\'>📻</div>'"
-          />`
-    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${Math.round(size * 0.5)}px">📻</div>`;
+  // Photo (or 📻 fallback) rides in a foreignObject over the pin's hole, so
+  // the browser's <img> onerror fallback still works inside the SVG.
+  const holeContent = imageUrl
+    ? `<img src="${imageUrl}" alt="${safeCallsign}"
+            style="width:100%;height:100%;object-fit:cover;display:block;"
+            onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${emojiPx}px\\'>📻</div>'" />`
+    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${emojiPx}px">📻</div>`;
+
+  // Geometry in a 40×52 viewBox: circular bulge centered (20,18) r18,
+  // tapering to the point at (20,50). Hole = circle (20,18) r12.
+  const pin = `
+    <svg width="${pinW}" height="${pinH}" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg"
+         style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.55));">
+      <path d="M20 50 C 9 33, 2 27, 2 18 A 18 18 0 1 1 38 18 C 38 27, 31 33, 20 50 Z"
+            fill="${bodyColor}" stroke="#0a0e14" stroke-width="2.5" stroke-linejoin="round" />
+      <foreignObject x="8" y="6" width="24" height="24">
+        <div xmlns="http://www.w3.org/1999/xhtml"
+             style="width:24px;height:24px;border-radius:50%;overflow:hidden;background:#1a1e26;">
+          ${holeContent}
+        </div>
+      </foreignObject>
+    </svg>`;
 
   return new L.DivIcon({
     className: 'custom-callsign-image-marker',
+    // translate so the pin's point (bottom-center of the SVG) sits on the
+    // geographic coordinate; the label hangs just beneath it.
     html: `
       <div style="
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 2px;
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, -${pinH}px);
         pointer-events: auto;
       ">
-        <div style="
-          width: ${size}px;
-          height: ${size}px;
-          border-radius: 50%;
-          border: ${borderWidth}px solid ${borderColor};
-          box-shadow: 0 0 ${shadowSpread}px ${borderColor}80;
-          overflow: hidden;
-          background: #1a1e26;
-          flex-shrink: 0;
-        ">
-          ${contentHtml}
-        </div>
+        ${pin}
         <span style="
           font-family: monospace;
           font-size: ${fontSize}px;
           font-weight: bold;
-          color: ${borderColor};
-          text-shadow: 0 0 4px rgba(0,0,0,0.8), 0 1px 2px rgba(0,0,0,0.9);
+          color: ${bodyColor};
+          text-shadow: 0 0 4px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.9);
           white-space: nowrap;
           line-height: 1;
+          margin-top: 1px;
         ">${safeCallsign}</span>
       </div>
     `,
