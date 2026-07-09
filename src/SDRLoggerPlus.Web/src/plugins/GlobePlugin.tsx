@@ -1480,7 +1480,9 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       const spDistKm = calculateDistance(stationLat, stationLon, targetLat, targetLon);
       const framedAlt = Math.max(1.6, Math.min(3.2, 1.2 + spDistKm / 7000));
       const bearing = calculateBearing(stationLat, stationLon, targetLat, targetLon);
-      const aim = getDestinationPoint(spMid.lat, spMid.lng, (bearing + 90) % 360, 3300);
+      // Larger perpendicular offset → more oblique (more tilt) so the hops
+      // are seen rising off the globe rather than close to straight down.
+      const aim = getDestinationPoint(spMid.lat, spMid.lng, (bearing + 90) % 360, 5200);
       targetPov = { lat: aim.lat, lng: aim.lng, altitude: framedAlt };
     } else {
       // Standard view: fly to the DX location.
