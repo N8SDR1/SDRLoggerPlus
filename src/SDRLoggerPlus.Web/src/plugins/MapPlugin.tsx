@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { Map as MapIcon, Target, Maximize2, ZoomIn, ZoomOut, Layers, Satellite, Radio, Sun } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { useAppStore, Spot } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -97,56 +97,65 @@ const satelliteIcon = new L.DivIcon({
   iconAnchor: [9, 9],
 });
 
-// Create callsign image marker icon
+// Create callsign image marker icon — a map pin (teardrop) whose circular
+// hole holds the operator's QRZ photo; the pin's point anchors on the
+// station coordinate, callsign label sits just below.
 function createCallsignImageIcon(imageUrl: string | undefined | null, callsign: string, scale: '1x' | '2x') {
-  const size = scale === '2x' ? 56 : 44;
-  const borderWidth = scale === '2x' ? 3 : 2;
-  const borderColor = scale === '2x' ? '#ffb432' : '#00ddff';
-  const shadowSpread = scale === '2x' ? 8 : 5;
-  const fontSize = scale === '2x' ? 11 : 10;
+  const pinW = scale === '2x' ? 52 : 42;   // pin width in px
+  const pinH = Math.round(pinW * 1.32);    // teardrop taller than wide
+  // Panel-name green (accent-secondary), via the CSS var so it tracks themes.
+  const bodyColor = 'rgb(var(--accent-secondary))';
+  const fontSize = scale === '2x' ? 12 : 10;
+  const emojiPx = Math.round(pinW * 0.42);
   // Escape HTML special chars in callsign to prevent XSS
   const safeCallsign = callsign.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const contentHtml = imageUrl
-    ? `<img
-            src="${imageUrl}"
-            alt="${safeCallsign}"
-            style="width: 100%; height: 100%; object-fit: cover; display: block;"
-            onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${Math.round(size * 0.5)}px\\'>📻</div>'"
-          />`
-    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${Math.round(size * 0.5)}px">📻</div>`;
+  // Photo (or 📻 fallback) rides in a foreignObject over the pin's hole, so
+  // the browser's <img> onerror fallback still works inside the SVG.
+  const holeContent = imageUrl
+    ? `<img src="${imageUrl}" alt="${safeCallsign}"
+            style="width:100%;height:100%;object-fit:cover;display:block;"
+            onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${emojiPx}px\\'>📻</div>'" />`
+    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${emojiPx}px">📻</div>`;
+
+  // Geometry in a 40×52 viewBox: circular bulge centered (20,18) r18,
+  // tapering to the point at (20,50). Hole = circle (20,18) r14.5 — the
+  // photo nearly fills the bulge, leaving a thin coloured rim.
+  const pin = `
+    <svg width="${pinW}" height="${pinH}" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg"
+         style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.55));">
+      <path d="M20 50 C 9 33, 2 27, 2 18 A 18 18 0 1 1 38 18 C 38 27, 31 33, 20 50 Z"
+            style="fill:${bodyColor}" stroke="#0a0e14" stroke-width="2.5" stroke-linejoin="round" />
+      <foreignObject x="5.5" y="3.5" width="29" height="29">
+        <div xmlns="http://www.w3.org/1999/xhtml"
+             style="width:29px;height:29px;border-radius:50%;overflow:hidden;background:#1a1e26;">
+          ${holeContent}
+        </div>
+      </foreignObject>
+    </svg>`;
 
   return new L.DivIcon({
     className: 'custom-callsign-image-marker',
+    // translate so the pin's point (bottom-center of the SVG) sits on the
+    // geographic coordinate; the label hangs just beneath it.
     html: `
       <div style="
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 2px;
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, -${pinH}px);
         pointer-events: auto;
       ">
-        <div style="
-          width: ${size}px;
-          height: ${size}px;
-          border-radius: 50%;
-          border: ${borderWidth}px solid ${borderColor};
-          box-shadow: 0 0 ${shadowSpread}px ${borderColor}80;
-          overflow: hidden;
-          background: #1a1e26;
-          flex-shrink: 0;
-        ">
-          ${contentHtml}
-        </div>
+        ${pin}
         <span style="
           font-family: monospace;
           font-size: ${fontSize}px;
           font-weight: bold;
-          color: ${borderColor};
-          text-shadow: 0 0 4px rgba(0,0,0,0.8), 0 1px 2px rgba(0,0,0,0.9);
+          color: ${bodyColor};
+          text-shadow: 0 0 4px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.9);
           white-space: nowrap;
           line-height: 1;
+          margin-top: 1px;
         ">${safeCallsign}</span>
       </div>
     `,
@@ -219,31 +228,6 @@ function calculateAzimuth(lat1: number, lon1: number, lat2: number, lon2: number
 
   return Math.round(azimuth);
 }
-
-// Calculate destination point from start, azimuth, and distance
-function getDestinationPoint(lat: number, lon: number, azimuth: number, distanceKm: number): [number, number] {
-  const R = 6371;
-  const toRad = Math.PI / 180;
-  const toDeg = 180 / Math.PI;
-
-  const lat1Rad = lat * toRad;
-  const lon1Rad = lon * toRad;
-  const azimuthRad = azimuth * toRad;
-  const angularDistance = distanceKm / R;
-
-  const lat2Rad = Math.asin(
-    Math.sin(lat1Rad) * Math.cos(angularDistance) +
-    Math.cos(lat1Rad) * Math.sin(angularDistance) * Math.cos(azimuthRad)
-  );
-
-  const lon2Rad = lon1Rad + Math.atan2(
-    Math.sin(azimuthRad) * Math.sin(angularDistance) * Math.cos(lat1Rad),
-    Math.cos(angularDistance) - Math.sin(lat1Rad) * Math.sin(lat2Rad)
-  );
-
-  return [lat2Rad * toDeg, ((lon2Rad * toDeg + 540) % 360) - 180];
-}
-
 
 // Band colors for DX cluster spot paths (matching typical ham radio conventions)
 const BAND_COLORS: Record<string, string> = {
@@ -345,6 +329,100 @@ function generateGreatCirclePoints(
   return segments;
 }
 
+/**
+ * Animated great-circle path drawn as a traveling sine wave. Each base point
+ * of the segment is offset perpendicular to the local path direction by a
+ * sine whose phase advances every frame (so the wave travels from the station
+ * toward the DX). A sin() envelope tapers the amplitude to zero at both ends,
+ * keeping the wave anchored to the two markers. Rendered as a direct Leaflet
+ * layer (updated in a rAF loop, no React re-render per frame); colour + the
+ * gentle opacity breath come from the shared .dx-target-path CSS class.
+ */
+function SineWavePath({ segment, color }: { segment: [number, number][]; color: string }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!segment || segment.length < 3) return;
+    const toRad = Math.PI / 180, toDeg = 180 / Math.PI, R = 6371;
+    // Cumulative along-path distance (km) of the coarse base points.
+    const baseCum = [0];
+    for (let i = 1; i < segment.length; i++) {
+      baseCum[i] = baseCum[i - 1] + calculateDistance(segment[i - 1][0], segment[i - 1][1], segment[i][0], segment[i][1]);
+    }
+    const total = baseCum[segment.length - 1];
+    if (total <= 0) return;
+
+    // Wave geometry proportional to path length so density/height read the
+    // same for a 500 km hop or a 15 000 km path.
+    const waves = Math.max(6, Math.min(40, Math.round(total / 450)));
+    const wavelengthKm = total / waves;
+    const amplitudeKm = Math.max(20, Math.min(280, wavelengthKm * 0.32));
+
+    // Resample the coarse great-circle path to many evenly-spaced points —
+    // ~28 per wave — so each oscillation is a smooth curve, not a few straight
+    // segments. Linear interpolation between adjacent base points is fine at
+    // this spacing (they're only tens of km apart).
+    const N = Math.max(200, Math.min(1100, waves * 28));
+    const dense: { lat: number; lon: number; d: number }[] = [];
+    let j = 0;
+    for (let k = 0; k <= N; k++) {
+      const target = (total * k) / N;
+      while (j < segment.length - 2 && baseCum[j + 1] < target) j++;
+      const segLen = baseCum[j + 1] - baseCum[j];
+      const t = segLen > 0 ? (target - baseCum[j]) / segLen : 0;
+      dense.push({
+        lat: segment[j][0] + (segment[j + 1][0] - segment[j][0]) * t,
+        lon: segment[j][1] + (segment[j + 1][1] - segment[j][1]) * t,
+        d: target,
+      });
+    }
+
+    // Perpendicular bearing at each dense point (path bearing + 90°).
+    const perp = dense.map((_, i) => {
+      const a = dense[Math.max(0, i - 1)];
+      const b = dense[Math.min(dense.length - 1, i + 1)];
+      return (calculateBearing(a.lat, a.lon, b.lat, b.lon) + 90) % 360;
+    });
+
+    // Offset a lat/lon by a signed distance (km) along a bearing.
+    const offset = (lat: number, lon: number, brg: number, distKm: number): [number, number] => {
+      let b = brg, d = distKm;
+      if (d < 0) { b = (brg + 180) % 360; d = -d; }
+      const delta = d / R, theta = b * toRad, phi1 = lat * toRad, lam1 = lon * toRad;
+      const phi2 = Math.asin(Math.sin(phi1) * Math.cos(delta) + Math.cos(phi1) * Math.sin(delta) * Math.cos(theta));
+      const lam2 = lam1 + Math.atan2(Math.sin(theta) * Math.sin(delta) * Math.cos(phi1), Math.cos(delta) - Math.sin(phi1) * Math.sin(phi2));
+      return [phi2 * toDeg, lam2 * toDeg];
+    };
+
+    // Wave points for a given phase.
+    const waveAt = (phase: number): [number, number][] =>
+      dense.map((p, i) => {
+        const envelope = Math.sin(Math.PI * p.d / total); // 0 at ends, 1 mid
+        const off = amplitudeKm * envelope * Math.sin(2 * Math.PI * p.d / wavelengthKm - phase);
+        return offset(p.lat, p.lon, perp[i], off);
+      });
+
+    // Draw the first frame synchronously so the smooth wave shows immediately
+    // (independent of the rAF loop, which only drives the travel animation).
+    // smoothFactor: 0 disables Leaflet's Douglas-Peucker simplification —
+    // otherwise it decimates our dense wave points back into jagged segments.
+    const poly = L.polyline(waveAt(0), { weight: 2, smoothFactor: 0, color, className: 'dx-target-path' }).addTo(map);
+    let raf = 0;
+    let phase = 0;
+    const frame = () => {
+      phase += 0.30; // travel speed (rad/frame)
+      poly.setLatLngs(waveAt(phase));
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      map.removeLayer(poly);
+    };
+  }, [segment, map, color]);
+  return null;
+}
+
 // Custom DX spot marker (small diamond)
 function createSpotIcon(color: string, isHighlighted: boolean) {
   const size = isHighlighted ? 10 : 6;
@@ -403,13 +481,12 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const lastTargetCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
-  const { stationGrid, rotatorPosition, focusedCallsignInfo, potaSpots, dxClusterMapEnabled, hoveredSpotId } = useAppStore();
+  const { stationGrid, focusedCallsignInfo, potaSpots, dxClusterMapEnabled, hoveredSpotId } = useAppStore();
   const { settings, updateMapSettings, saveSettings } = useSettingsStore();
   const { commandRotator, selectSpot } = useSignalR();
 
   // DX cluster spots from ephemeral in-memory store (populated via SignalR)
   const spots = useAppStore((state) => state.dxClusterSpots);
-  const [currentAzimuth, setCurrentAzimuth] = useState(0);
   const [showLayerPicker, setShowLayerPicker] = useState(false);
   const [satellitePositions, setSatellitePositions] = useState<Map<string, SatellitePosition>>(new Map());
   const [satelliteTLEs, setSatelliteTLEs] = useState<Map<string, SatelliteTLE>>(new Map());
@@ -508,13 +585,6 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
     const bands = new Set(spotPaths.map(sp => sp.band));
     return Object.entries(BAND_COLORS).filter(([band]) => bands.has(band));
   }, [spotPaths]);
-
-  // Update azimuth from rotator position only
-  useEffect(() => {
-    if (rotatorPosition?.currentAzimuth !== undefined) {
-      setCurrentAzimuth(rotatorPosition.currentAzimuth);
-    }
-  }, [rotatorPosition]);
 
   // Update map center when station coordinates change
   useEffect(() => {
@@ -641,7 +711,6 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
   // Handle click on map to set bearing (only when rotator enabled)
   const handleBearingClick = useCallback((azimuth: number) => {
     if (!rotatorEnabled) return; // Ignore clicks when rotator disabled
-    setCurrentAzimuth(azimuth);
     commandRotator(azimuth, 'map');
   }, [commandRotator, rotatorEnabled]);
 
@@ -650,13 +719,6 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
     updateMapSettings({ showSatellites: !settings.map.showSatellites });
     saveSettings();
   }, [settings.map.showSatellites, updateMapSettings, saveSettings]);
-
-  // Generate rotator beam visualization line (cyan)
-  const beamLinePoints: [number, number][] = [];
-  const beamDistance = 5000; // 5000km beam visualization
-  for (let d = 0; d <= beamDistance; d += 100) {
-    beamLinePoints.push(getDestinationPoint(stationLat, stationLon, currentAzimuth, d));
-  }
 
   // Target location from focused callsign
   const targetLat = focusedCallsignInfo?.latitude;
@@ -783,31 +845,29 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
             }}
           />
 
-          {/* Rotator beam direction line - only show when rotator enabled (cyan) */}
-          {rotatorEnabled && (
-            <Polyline
-              positions={beamLinePoints}
-              pathOptions={{
-                color: '#00ddff',
-                weight: 3,
-                opacity: 0.7,
-                dashArray: '10, 5',
-              }}
-            />
-          )}
-
-          {/* Great circle path to focused callsign (amber) */}
+          {/* Great circle path to focused callsign — animated sine wave or a
+              plain dashed line, in the user-picked colour (Settings → Map →
+              Signal Path). Short segments (< 3 pts, antimeridian slivers)
+              always fall back to a plain line. */}
           {targetPathSegments.map((segment, segmentIndex) => (
-            <Polyline
-              key={`target-path-${segmentIndex}`}
-              positions={segment}
-              pathOptions={{
-                color: '#ffb432',
-                weight: 2,
-                opacity: 0.8,
-                dashArray: '5, 10',
-              }}
-            />
+            segment.length >= 3 && (settings.map.dxPathStyle ?? 'sine') === 'sine' ? (
+              <SineWavePath
+                key={`target-wave-${segmentIndex}`}
+                segment={segment}
+                color={settings.map.dxPathColor || '#39ff14'}
+              />
+            ) : (
+              <Polyline
+                key={`target-path-${segmentIndex}`}
+                positions={segment}
+                pathOptions={{
+                  weight: 2,
+                  color: settings.map.dxPathColor || '#39ff14',
+                  dashArray: '5, 10',
+                  className: 'dx-target-path',
+                }}
+              />
+            )
           ))}
 
           {/* Target marker - show callsign image icon (2x) with image or placeholder, or standard dot if callsign images disabled */}

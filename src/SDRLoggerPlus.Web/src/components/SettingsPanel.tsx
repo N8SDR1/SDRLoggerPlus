@@ -45,6 +45,7 @@ import {
   Snowflake,
   MessageSquare,
   Newspaper,
+  Activity,
 } from 'lucide-react';
 import { useSettingsStore, SettingsSection, StationSettings } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
@@ -2412,6 +2413,41 @@ function MapSettingsSection() {
             className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
           />
         </label>
+
+        {/* Signal Path — style + colour of the 2D-map line to the focused DX */}
+        <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+          <div className="flex items-center gap-3 mb-3">
+            <Activity className="w-5 h-5 text-accent-secondary" />
+            <div>
+              <div className="font-medium font-ui text-dark-200">Signal Path</div>
+              <div className="text-sm text-dark-300">How the path to the focused DX station is drawn on the 2D Map</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 text-sm font-ui text-dark-200">
+              <span className="text-dark-300">Style</span>
+              <select
+                value={map.dxPathStyle ?? 'sine'}
+                onChange={(e) => updateMapSettings({ dxPathStyle: e.target.value as 'sine' | 'dash' })}
+                className="bg-dark-800 border border-glass-100 rounded px-2 py-1.5 text-sm font-ui text-gray-100 focus:outline-none focus:border-accent-secondary/50"
+              >
+                <option value="sine">Sine wave (animated)</option>
+                <option value="dash">Dashed line</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm font-ui text-dark-200">
+              <span className="text-dark-300">Color</span>
+              <input
+                type="color"
+                value={map.dxPathColor || '#39ff14'}
+                onChange={(e) => updateMapSettings({ dxPathColor: e.target.value })}
+                className="w-9 h-7 rounded border border-glass-100 bg-dark-800 cursor-pointer p-0.5"
+                title="Signal path color"
+              />
+              <span className="font-mono text-xs text-dark-300">{(map.dxPathColor || '#39ff14').toUpperCase()}</span>
+            </label>
+          </div>
+        </div>
 
         {/* Satellite Selection */}
         {map.showSatellites && (

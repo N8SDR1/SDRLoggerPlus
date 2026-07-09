@@ -546,6 +546,12 @@ public class MapSettings
 
     [BsonElement("showDxNewsTicker")]
     public bool ShowDxNewsTicker { get; set; } = true;
+
+    [BsonElement("dxPathStyle")]
+    public string? DxPathStyle { get; set; } = "sine"; // sine | dash
+
+    [BsonElement("dxPathColor")]
+    public string? DxPathColor { get; set; } = "#39ff14";
 }
 
 [BsonIgnoreExtraElements]
