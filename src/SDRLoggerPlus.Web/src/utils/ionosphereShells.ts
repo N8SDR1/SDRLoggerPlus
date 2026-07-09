@@ -66,7 +66,10 @@ varying vec3 vViewDir;
 void main() {
   // Fresnel rim: 0 facing the camera, 1 at the silhouette (limb / outer edge).
   float rim = 1.0 - abs(dot(normalize(vNormalW), normalize(vViewDir)));
-  float glow = pow(rim, 2.4) * uIntensity;
+  // Only a thin band right at the limb glows — the inner face stays fully
+  // transparent so the halo never washes over the globe. Brightest at the
+  // very edge (rim→1), fading in toward the globe.
+  float glow = smoothstep(0.82, 1.0, rim) * uIntensity;
   if (glow < 0.004) discard;
   gl_FragColor = vec4(uColor, glow);
 }
