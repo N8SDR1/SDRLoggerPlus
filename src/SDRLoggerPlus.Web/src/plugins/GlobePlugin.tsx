@@ -12,6 +12,7 @@ import type { CallsignLookedUpEvent } from '../api/signalr';
 import { StrikeStore, type Strike } from '../utils/lightningStrikes';
 import { setLightningStrikesCallback, clearLightningStrikesCallback } from '../api/signalr';
 import { createDayNightShell, type DayNightShell } from '../utils/dayNightShell';
+import { createIonosphereShells, type IonosphereShells } from '../utils/ionosphereShells';
 import { getSunPosition } from '../utils/solarCalculations';
 // Globe is dynamically imported to catch WebGL errors at load time
 
@@ -308,6 +309,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   selectSpotRef.current = selectSpot;
   const strikeStoreRef = useRef(new StrikeStore());
   const dayNightShellRef = useRef<DayNightShell | null>(null);
+  const ionoShellsRef = useRef<IonosphereShells | null>(null);
   // Throttle timestamp for the texture-anisotropy sweep (see the label tick).
   const lastAnisoSweepRef = useRef(0);
 
@@ -942,6 +944,11 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       globe.scene().add(dayNightShell.mesh);
       dayNightShellRef.current = dayNightShell;
 
+      // Ionosphere D/E/F glow shells (hidden until the hops layer is enabled).
+      const ionoShells = createIonosphereShells(THREE, 100);
+      for (const mesh of ionoShells.meshes) globe.scene().add(mesh);
+      ionoShellsRef.current = ionoShells;
+
       globeRef.current = globe;
       setGlobeReady(true);
 
@@ -1013,6 +1020,8 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       }
       dayNightShellRef.current?.dispose();
       dayNightShellRef.current = null;
+      ionoShellsRef.current?.dispose();
+      ionoShellsRef.current = null;
       setGlobeReady(false);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1468,16 +1477,11 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     return () => clearInterval(interval);
   }, [globeReady, settings.map.showDayNightOverlay, settings.map.dayNightOpacity]);
 
-  // Ionosphere glow — tint the globe's atmosphere a slight warm yellow while
-  // the ionospheric-hops layer is on, to read as the reflecting layer;
-  // otherwise the default dark limb glow.
+  // Ionosphere glow — show the D/E/F layer shells while the ionospheric-hops
+  // layer is on (warm→cool, brighter at the outer edge); hidden otherwise.
   useEffect(() => {
-    if (!globeReady || !globeRef.current) return;
-    if (settings.map.showIonosphereHops) {
-      globeRef.current.atmosphereColor('rgba(255, 231, 150, 0.55)').atmosphereAltitude(0.3);
-    } else {
-      globeRef.current.atmosphereColor('rgba(10, 14, 20, 0.4)').atmosphereAltitude(0.25);
-    }
+    if (!globeReady) return;
+    ionoShellsRef.current?.setVisible(!!settings.map.showIonosphereHops);
   }, [globeReady, settings.map.showIonosphereHops]);
 
   // Fly to target when focused callsign changes
