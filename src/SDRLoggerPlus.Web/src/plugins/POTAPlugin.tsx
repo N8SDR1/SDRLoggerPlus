@@ -1,6 +1,6 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { TentTree, Radio, Map } from 'lucide-react';
+import { TentTree, Radio, Map, Crosshair, Search, X } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, ICellRendererParams, RowClickedEvent } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -8,9 +8,12 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { api, PotaSpot } from '../api/client';
 import { useSignalR } from '../hooks/useSignalR';
 import { GlassPanel } from '../components/GlassPanel';
+import { MultiSelectDropdown, MultiSelectOption } from '../components/MultiSelectDropdown';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAgGridState } from '../hooks/useAgGridState';
+import { getBandFromFrequency, BAND_OPTIONS, MODE_OPTIONS } from '../utils/spotBands';
+import { rigModeToSpotModes } from '../utils/rigTracking';
 
 const formatTime = (dateStr: string) => {
   if (!dateStr) return '--:--';
@@ -79,42 +82,107 @@ export function POTAPlugin() {
     refetchInterval: 60000, // Refresh every minute
   });
 
-  // Filter and sort spots
+  // Rig state for "follow rig" — read the selected radio (independent from the
+  // DX Cluster panel's own follow-rig toggles).
+  const selectedRadioId = useAppStore((state) => state.selectedRadioId);
+  const radioStates = useAppStore((state) => state.radioStates);
+  const rigState = selectedRadioId ? radioStates.get(selectedRadioId) : undefined;
+  const rigConnected = !!rigState;
+  const rigFreqHz = rigState?.frequencyHz;
+  const rigMode = rigState?.mode;
+
+  // Filter state (local to this panel).
+  const [followBand, setFollowBand] = useState(false);
+  const [followMode, setFollowMode] = useState(false);
+  const [selectedBands, setSelectedBands] = useState<string[]>([]);
+  const [selectedModes, setSelectedModes] = useState<string[]>([]);
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const bandTracking = followBand && rigConnected;
+  const modeTracking = followMode && rigConnected;
+
+  // Region dropdown options — the park locations currently present in the feed.
+  const regionOptions = useMemo<MultiSelectOption[]>(() => {
+    const set = new Set<string>();
+    for (const s of spots ?? []) {
+      if (!s.invalid && s.locationDesc) set.add(s.locationDesc);
+    }
+    return Array.from(set).sort().map((r) => ({ value: r, label: r }));
+  }, [spots]);
+
+  // Filter and sort spots. Follow-rig (when a rig is connected) overrides the
+  // manual Band / Mode dropdowns, mirroring the DX Cluster panel.
   const filteredSpots = useMemo(() => {
     if (!spots) return [];
 
-    const now = new Date().getTime();
-    const oneHourAgo = now - 60 * 60 * 1000;
+    const oneHourAgo = new Date().getTime() - 60 * 60 * 1000;
+    const query = searchQuery.trim().toLowerCase();
+
+    const rigBand = bandTracking ? getBandFromFrequency((rigFreqHz ?? 0) / 1000) : null;
+    const rigModes = modeTracking ? rigModeToSpotModes(rigMode) : null;
+    const effectiveBands = bandTracking
+      ? (rigBand && rigBand !== '?' ? [rigBand] : [])
+      : selectedBands;
+    const effectiveModes = modeTracking ? (rigModes ?? []) : selectedModes;
 
     return spots
       .filter(spot => {
-        // Filter out invalid spots
         if (spot.invalid) return false;
 
-        // Filter out spots older than 1 hour
+        // 1-hour age cutoff
         try {
-          const spotTime = new Date(spot.spotTime).getTime();
-          if (spotTime < oneHourAgo) return false;
+          if (new Date(spot.spotTime).getTime() < oneHourAgo) return false;
         } catch {
           return false;
+        }
+
+        // Search
+        if (query) {
+          const hay = [spot.activator, spot.reference, spot.parkName, spot.locationDesc, spot.mode, spot.spotter, spot.comments]
+            .filter(Boolean).join(' ').toLowerCase();
+          if (!hay.includes(query)) return false;
+        }
+
+        // Band (derived from frequency in kHz)
+        if (effectiveBands.length > 0) {
+          const band = getBandFromFrequency(parseFloat(spot.frequency));
+          if (!effectiveBands.includes(band)) return false;
+        }
+
+        // Mode (USB/LSB normalize to SSB)
+        if (effectiveModes.length > 0) {
+          let m = spot.mode?.toUpperCase();
+          if (m === 'USB' || m === 'LSB') m = 'SSB';
+          if (!m || !effectiveModes.includes(m)) return false;
+        }
+
+        // Region (park location)
+        if (selectedRegions.length > 0) {
+          if (!spot.locationDesc || !selectedRegions.includes(spot.locationDesc)) return false;
         }
 
         return true;
       })
       .sort((a, b) => {
-        // Sort newest first
         try {
           return new Date(b.spotTime).getTime() - new Date(a.spotTime).getTime();
         } catch {
           return 0;
         }
       });
-  }, [spots]);
+  }, [spots, searchQuery, selectedBands, selectedModes, selectedRegions, bandTracking, modeTracking, rigFreqHz, rigMode]);
 
   // Sync filtered spots to app store for map visualization
   useEffect(() => {
     setPotaSpots(filteredSpots);
   }, [filteredSpots, setPotaSpots]);
+
+  const hasActiveFilters = selectedBands.length > 0 || selectedModes.length > 0 || selectedRegions.length > 0 || searchQuery.trim().length > 0;
+  const totalActiveFilters = selectedBands.length + selectedModes.length + selectedRegions.length + (searchQuery.trim() ? 1 : 0);
+  const clearAllFilters = () => {
+    setSelectedBands([]); setSelectedModes([]); setSelectedRegions([]); setSearchQuery('');
+  };
 
   const handleRowClick = async (event: RowClickedEvent<PotaSpot>) => {
     const spot = event.data;
@@ -208,6 +276,49 @@ export function POTAPlugin() {
       }
     >
       <div className="flex flex-col h-full">
+        {/* Filter toolbar — mirrors the DX Cluster panel (Region replaces Status) */}
+        <div className="flex items-center gap-2 flex-wrap px-4 pt-3 pb-2">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-dark-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search call, park, spotter…"
+              className="glass-input pl-8 pr-2 py-1.5 text-sm w-48"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <span className="text-xs text-dark-300 font-ui flex items-center gap-1"><Crosshair className="w-4 h-4" /> Follow rig:</span>
+            {([
+              { key: 'band', label: 'Band', on: followBand, active: bandTracking, onClick: () => setFollowBand(v => !v) },
+              { key: 'mode', label: 'Mode', on: followMode, active: modeTracking, onClick: () => setFollowMode(v => !v) },
+            ] as const).map((p) => (
+              <button
+                key={p.key}
+                onClick={p.onClick}
+                title={p.on ? (rigConnected ? `Following rig ${p.key} — click to stop` : `Follow ${p.key} armed — waiting for a connected rig`) : `Follow the rig's ${p.key}`}
+                className={`px-2.5 py-1.5 rounded-lg text-sm font-ui border transition-colors ${
+                  p.active
+                    ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/30'
+                    : p.on
+                      ? 'bg-accent-warning/15 text-accent-warning border-accent-warning/40'
+                      : 'bg-dark-800 text-dark-300 border-glass-100 hover:text-dark-200'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <MultiSelectDropdown options={BAND_OPTIONS} selected={selectedBands} onChange={setSelectedBands} placeholder="All Bands" className="w-32" disabled={bandTracking} title={bandTracking ? 'Following rig band' : undefined} />
+          <MultiSelectDropdown options={MODE_OPTIONS} selected={selectedModes} onChange={setSelectedModes} placeholder="All Modes" className="w-32" disabled={modeTracking} title={modeTracking ? 'Following rig mode' : undefined} />
+          <MultiSelectDropdown options={regionOptions} selected={selectedRegions} onChange={setSelectedRegions} placeholder="All Regions" className="w-36" />
+          {hasActiveFilters && (
+            <button onClick={clearAllFilters} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-warning/20 text-accent-warning rounded-lg text-sm font-ui hover:bg-accent-warning/30 transition-colors whitespace-nowrap" title="Clear all filters">
+              <X className="w-4 h-4" /> <span>Clear ({totalActiveFilters})</span>
+            </button>
+          )}
+        </div>
         {/* AG Grid Table */}
         <div className="flex-1 px-4 pb-4 min-h-0">
           <div className="ag-theme-alpine-dark h-full">
@@ -218,7 +329,12 @@ export function POTAPlugin() {
               </div>
             ) : filteredSpots?.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                No active POTA activators
+                {hasActiveFilters ? (
+                  <>
+                    <p>No activators match your filters</p>
+                    <button onClick={clearAllFilters} className="mt-2 text-accent-primary hover:underline font-ui">Clear filters</button>
+                  </>
+                ) : 'No active POTA activators'}
               </div>
             ) : (
               <AgGridReact<PotaSpot>
