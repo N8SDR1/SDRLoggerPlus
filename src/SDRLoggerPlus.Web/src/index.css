@@ -1015,6 +1015,7 @@ html:not(.dark) .header-plugin {
   50% { stroke-opacity: 0.95; }
 }
 .dx-target-path {
+  stroke: rgb(var(--accent-secondary));
   animation: dxTargetPathPulse 3.5s ease-in-out infinite;
 }
 

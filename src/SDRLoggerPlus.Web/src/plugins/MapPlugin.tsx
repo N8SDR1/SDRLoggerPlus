@@ -805,15 +805,15 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
             />
           )}
 
-          {/* Great circle path to focused callsign — matches the globe's
-              short-path colour (red-orange #ff4466) and pulses like it via
-              the .dx-target-path CSS breath. */}
+          {/* Great circle path to focused callsign — same green as the pin
+              (accent-secondary) so pin + line read as one; pulses like the
+              globe via the .dx-target-path CSS breath. Stroke colour is set
+              in that CSS class so the theme var resolves. */}
           {targetPathSegments.map((segment, segmentIndex) => (
             <Polyline
               key={`target-path-${segmentIndex}`}
               positions={segment}
               pathOptions={{
-                color: '#ff4466',
                 weight: 2,
                 dashArray: '5, 10',
                 className: 'dx-target-path',
