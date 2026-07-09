@@ -805,16 +805,18 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
             />
           )}
 
-          {/* Great circle path to focused callsign (amber) */}
+          {/* Great circle path to focused callsign — matches the globe's
+              short-path colour (red-orange #ff4466) and pulses like it via
+              the .dx-target-path CSS breath. */}
           {targetPathSegments.map((segment, segmentIndex) => (
             <Polyline
               key={`target-path-${segmentIndex}`}
               positions={segment}
               pathOptions={{
-                color: '#ffb432',
+                color: '#ff4466',
                 weight: 2,
-                opacity: 0.8,
                 dashArray: '5, 10',
+                className: 'dx-target-path',
               }}
             />
           ))}

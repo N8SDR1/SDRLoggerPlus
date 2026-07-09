@@ -1007,6 +1007,17 @@ html:not(.dark) .header-plugin {
   overflow: visible !important;
 }
 
+/* DX-target great-circle path — breathes like the globe's short path
+   (~3.5s sinusoidal alpha, 0.33..0.95). CSS overrides Leaflet's static
+   stroke-opacity presentation attribute. */
+@keyframes dxTargetPathPulse {
+  0%, 100% { stroke-opacity: 0.33; }
+  50% { stroke-opacity: 0.95; }
+}
+.dx-target-path {
+  animation: dxTargetPathPulse 3.5s ease-in-out infinite;
+}
+
 /* ============================================================
    LEAFLET POPUP OVERRIDES — dark themed
    ============================================================ */
