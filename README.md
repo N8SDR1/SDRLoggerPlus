@@ -38,9 +38,6 @@ rotator control, and more, all updating in real time.
 - CAT control via **Hamlib** (bundled)
 - **TCI** radio control (Lyra / Thetis / SunSDR) with panadapter and meters
 - **Lyra Combo Link** — two-way link with the Lyra SDR console over TCI: band / mode / frequency sync, spot push with click-to-tune, and CW logging with call + RST
-- **CW keyer** panel
-- **Rotator** control — `rotctld` and ARCO (GS-232A over TCP)
-- Station accessory integrations: Antenna Genius, Tuner Genius, PGXL amplifier
 
 **Digital & online services**
 - **WSJT-X / JTDX** auto-logging (two independent UDP sources)
