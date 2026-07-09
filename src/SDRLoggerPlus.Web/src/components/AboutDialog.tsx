@@ -336,6 +336,7 @@ function HelpTab() {
         <Section id="meters" title="Meters & Panadapter">
           <p><B>Meter</B> panel — an analog or round S-meter (switch in the panel), with mode + frequency on one line: <span className="text-white">white on receive</span>, <span className="text-red-400">red on transmit</span>. Fed by the connected radio's meter stream (TCI). S-meter calibration lives in the panel's gear menu.</p>
           <p><B>Panadapter</B> — live spectrum + waterfall, drawn from a <B>TCI</B> radio's IQ stream (TCI-only). Mouse-wheel over it to tune by the STEP you pick; Ctrl/Shift + wheel to zoom around the VFO; click to tune.</p>
+          <p>Header controls tune the display (each is also mouse-wheel adjustable): <B>SM</B> spectrum smoothing, <B>SPC</B> spectrum height — turn it down if the trace rides too high in the pane — and <B>INT / FLR / CEL / WF</B> for waterfall intensity, floor, ceiling and speed. The <B>colour gear</B> holds the waterfall <B>palette</B> and the <B>spectrum line colour</B>; <B>Grid</B> toggles the overlay. On a narrow panel the sliders fold into a controls popover so nothing clips. All of these are remembered per machine.</p>
         </Section>
 
         <Section id="callbook" title="Callbook, Uploads & Import">
