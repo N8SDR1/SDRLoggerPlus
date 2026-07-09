@@ -368,14 +368,12 @@ function SineWavePath({ segment }: { segment: [number, number][] }) {
   useEffect(() => {
     if (!segment || segment.length < 3) return;
     const toRad = Math.PI / 180, toDeg = 180 / Math.PI, R = 6371;
-    const n = segment.length;
-
-    // Cumulative along-path distance (km).
-    const cum = [0];
-    for (let i = 1; i < n; i++) {
-      cum[i] = cum[i - 1] + calculateDistance(segment[i - 1][0], segment[i - 1][1], segment[i][0], segment[i][1]);
+    // Cumulative along-path distance (km) of the coarse base points.
+    const baseCum = [0];
+    for (let i = 1; i < segment.length; i++) {
+      baseCum[i] = baseCum[i - 1] + calculateDistance(segment[i - 1][0], segment[i - 1][1], segment[i][0], segment[i][1]);
     }
-    const total = cum[n - 1];
+    const total = baseCum[segment.length - 1];
     if (total <= 0) return;
 
     // Wave geometry proportional to path length so density/height read the
@@ -384,11 +382,30 @@ function SineWavePath({ segment }: { segment: [number, number][] }) {
     const wavelengthKm = total / waves;
     const amplitudeKm = Math.max(25, Math.min(450, wavelengthKm * 0.28));
 
-    // Perpendicular bearing at each base point (path bearing + 90°).
-    const perp = segment.map((_, i) => {
-      const a = segment[Math.max(0, i - 1)];
-      const b = segment[Math.min(n - 1, i + 1)];
-      return (calculateBearing(a[0], a[1], b[0], b[1]) + 90) % 360;
+    // Resample the coarse great-circle path to many evenly-spaced points —
+    // ~28 per wave — so each oscillation is a smooth curve, not a few straight
+    // segments. Linear interpolation between adjacent base points is fine at
+    // this spacing (they're only tens of km apart).
+    const N = Math.max(160, Math.min(900, waves * 28));
+    const dense: { lat: number; lon: number; d: number }[] = [];
+    let j = 0;
+    for (let k = 0; k <= N; k++) {
+      const target = (total * k) / N;
+      while (j < segment.length - 2 && baseCum[j + 1] < target) j++;
+      const segLen = baseCum[j + 1] - baseCum[j];
+      const t = segLen > 0 ? (target - baseCum[j]) / segLen : 0;
+      dense.push({
+        lat: segment[j][0] + (segment[j + 1][0] - segment[j][0]) * t,
+        lon: segment[j][1] + (segment[j + 1][1] - segment[j][1]) * t,
+        d: target,
+      });
+    }
+
+    // Perpendicular bearing at each dense point (path bearing + 90°).
+    const perp = dense.map((_, i) => {
+      const a = dense[Math.max(0, i - 1)];
+      const b = dense[Math.min(dense.length - 1, i + 1)];
+      return (calculateBearing(a.lat, a.lon, b.lat, b.lon) + 90) % 360;
     });
 
     // Offset a lat/lon by a signed distance (km) along a bearing.
@@ -406,10 +423,10 @@ function SineWavePath({ segment }: { segment: [number, number][] }) {
     let phase = 0;
     const frame = () => {
       phase += 0.12; // travel speed (rad/frame)
-      const pts = segment.map((p, i) => {
-        const envelope = Math.sin(Math.PI * cum[i] / total); // 0 at ends, 1 mid
-        const off = amplitudeKm * envelope * Math.sin(2 * Math.PI * cum[i] / wavelengthKm - phase);
-        return offset(p[0], p[1], perp[i], off);
+      const pts = dense.map((p, i) => {
+        const envelope = Math.sin(Math.PI * p.d / total); // 0 at ends, 1 mid
+        const off = amplitudeKm * envelope * Math.sin(2 * Math.PI * p.d / wavelengthKm - phase);
+        return offset(p.lat, p.lon, perp[i], off);
       });
       poly.setLatLngs(pts);
       raf = requestAnimationFrame(frame);
