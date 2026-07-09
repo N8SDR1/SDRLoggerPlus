@@ -12,7 +12,7 @@ import type { CallsignLookedUpEvent } from '../api/signalr';
 import { StrikeStore, type Strike } from '../utils/lightningStrikes';
 import { setLightningStrikesCallback, clearLightningStrikesCallback } from '../api/signalr';
 import { createDayNightShell, type DayNightShell } from '../utils/dayNightShell';
-import { createIonosphereShells, type IonosphereShells } from '../utils/ionosphereShells';
+import { createIonosphereShells, DEFAULT_IONO_LAYERS, type IonosphereShells } from '../utils/ionosphereShells';
 import { getSunPosition } from '../utils/solarCalculations';
 // Globe is dynamically imported to catch WebGL errors at load time
 
@@ -119,20 +119,26 @@ function interpolateGreatCircleLongPath(
 }
 
 /**
- * Rough estimate of the number of ionospheric hops for a path, from distance,
- * band, and whether the path is in daylight. Not a propagation prediction —
- * just a plausible hop count for the visual. The max single-hop ground
- * distance grows with the reflecting layer's virtual height: at night the F2
- * layer sits high (~long hops), by day lower E/F1 layers shorten them; higher
- * bands work lower takeoff angles so reach a bit farther per hop.
+ * Rough estimate of the ionospheric hops for a path, from distance, band, and
+ * whether the path is in daylight. Not a propagation prediction — just a
+ * plausible picture for the visual. The max single-hop ground distance grows
+ * with the reflecting layer's virtual height: at night the F2 layer sits high
+ * (~long hops), by day lower E/F1 layers shorten them; higher bands work lower
+ * takeoff angles so reach a bit farther per hop. Also picks WHICH layer most
+ * likely does the reflecting (E for short daytime high-band skip, F otherwise;
+ * D only absorbs) so the hop peaks can touch that layer's glow shell.
  */
-function estimateHopCount(distKm: number, freqMHz: number, daytime: boolean): number {
+function estimateHops(distKm: number, freqMHz: number, daytime: boolean): { hops: number; layer: 'E' | 'F' } {
   let maxHopKm = daytime ? 2800 : 4000;
   if (freqMHz >= 21) maxHopKm += 400;        // 15/12/10 m
   else if (freqMHz >= 14) maxHopKm += 200;   // 20/17 m
   else if (freqMHz > 0 && freqMHz < 7) maxHopKm -= 500; // 160/80 m
   maxHopKm = Math.max(1800, Math.min(4200, maxHopKm));
-  return Math.max(1, Math.min(12, Math.ceil(distKm / maxHopKm)));
+  const hops = Math.max(1, Math.min(12, Math.ceil(distKm / maxHopKm)));
+  // Short daytime skip on the higher bands is classically E-layer; everything
+  // else (night paths, low bands, multi-hop DX) rides the F layer.
+  const layer: 'E' | 'F' = daytime && freqMHz >= 14 && distKm <= 4500 ? 'E' : 'F';
+  return { hops, layer };
 }
 
 // Marker data structure for globe points
@@ -538,11 +544,11 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
 
       // ── Short path — ionospheric skip ───────────────────────────────
       // The great-circle line dips to the ground and arcs up to the
-      // ionosphere `hops` times (altitude = |sin(hops·π·t)|), so it reads
-      // as the signal bouncing its way to the DX rather than a single bulge.
-      // Hop count scales with distance (~one hop per 3000 km, like real HF).
-      // A bright pulse then travels the hops from the station toward the DX.
-      const SP_PEAK_ALT = 0.28;  // tall, dramatic hop height (fraction of radius)
+      // ionosphere `hops` times, so it reads as the signal bouncing its way
+      // to the DX rather than a single bulge. Hop count AND the reflecting
+      // layer are estimated from distance, band, and day/night at the path
+      // midpoint (falls back to 20 m if no rig frequency is known); the hop
+      // peaks touch that layer's glow shell (E or F).
       const R_KM = 6371;
       const toRadHop = Math.PI / 180;
       const dLat = (targetCoords.lat - stationLat) * toRadHop;
@@ -550,13 +556,13 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       const hav = Math.sin(dLat / 2) ** 2 +
         Math.cos(stationLat * toRadHop) * Math.cos(targetCoords.lat * toRadHop) * Math.sin(dLon / 2) ** 2;
       const distKm = 2 * R_KM * Math.asin(Math.min(1, Math.sqrt(hav)));
-      // Hop count estimated from distance, band, and day/night at the path
-      // midpoint (falls back to 20 m if no rig frequency is known).
       const midHop = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, 0.5);
       const sunHop = getSunPosition(new Date());
       const daytimeMid = calculateDistance(midHop.lat, midHop.lng, sunHop.lat, sunHop.lon) < 10000;
       const freqMHz = (rigFreqRef.current ?? 0) / 1e6 || 14;
-      const hops = estimateHopCount(distKm, freqMHz, daytimeMid);
+      const { hops, layer } = estimateHops(distKm, freqMHz, daytimeMid);
+      // Peak altitude = the reflecting layer's shell height (E mid, F outer).
+      const SP_PEAK_ALT = (DEFAULT_IONO_LAYERS[layer === 'E' ? 1 : 2]?.radiusFactor ?? 1.28) - 1;
       const SP_SEGMENTS = hops * 40; // enough points to keep the peaks sharp
 
       const ionoHops = showIonoHopsRef.current;

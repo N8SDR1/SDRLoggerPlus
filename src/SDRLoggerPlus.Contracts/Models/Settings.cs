@@ -549,6 +549,9 @@ public class MapSettings
 
     [BsonElement("showIonosphereHops")]
     public bool ShowIonosphereHops { get; set; }
+
+    [BsonElement("showLongPath")]
+    public bool ShowLongPath { get; set; }
 }
 
 [BsonIgnoreExtraElements]

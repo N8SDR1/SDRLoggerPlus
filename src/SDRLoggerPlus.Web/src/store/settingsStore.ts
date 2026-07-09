@@ -564,7 +564,7 @@ const defaultSettings: Settings = {
     showPskOverlay: false,
     pskCallsign: '',
     showAuroraOverlay: false,
-    showLongPath: true, // default ON — hams commonly want to see both paths
+    showLongPath: false, // default OFF (user call) — opt-in via Settings > Map
     showIonosphereHops: false, // opt-in — tilts the globe when on
   },
   cluster: {
