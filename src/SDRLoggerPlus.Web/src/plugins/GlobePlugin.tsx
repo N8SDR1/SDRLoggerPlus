@@ -204,6 +204,7 @@ interface GlobeInstance {
   pointLabel(fn: (d: unknown) => string): GlobeInstance;
   pathsData(data: unknown[]): GlobeInstance;
   pathPoints(accessor: string): GlobeInstance;
+  pathPointAlt(accessor: number | ((p: unknown) => number)): GlobeInstance;
   pathColor(accessor: string): GlobeInstance;
   pathStroke(accessor: string): GlobeInstance;
   pathDashLength(len: number | ((d: unknown) => number)): GlobeInstance;
@@ -581,6 +582,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     globeRef.current
       .pathsData(pathsData)
       .pathPoints('path')
+      // Use each point's 3rd element as altitude — WITHOUT this globe.gl
+      // defaults to a fixed near-zero altitude and draws every path flat on
+      // the surface, silently discarding the hop/bulge heights.
+      .pathPointAlt((p: unknown) => (p as number[])[2])
       .pathColor('color')
       .pathStroke('stroke')
       .pathDashLength((d: unknown) => (d as { dashLength: number }).dashLength)
