@@ -125,19 +125,25 @@ function interpolateGreatCircleLongPath(
  * with the reflecting layer's virtual height: at night the F2 layer sits high
  * (~long hops), by day lower E/F1 layers shorten them; higher bands work lower
  * takeoff angles so reach a bit farther per hop. Also picks WHICH layer most
- * likely does the reflecting (E for short daytime high-band skip, F otherwise;
- * D only absorbs) so the hop peaks can touch that layer's glow shell.
+ * likely does the reflecting so the hop peaks + colour match that layer's
+ * glow shell.
  */
-function estimateHops(distKm: number, freqMHz: number, daytime: boolean): { hops: number; layer: 'E' | 'F' } {
+function estimateHops(distKm: number, freqMHz: number, daytime: boolean): { hops: number; layer: 'D' | 'E' | 'F' } {
   let maxHopKm = daytime ? 2800 : 4000;
   if (freqMHz >= 21) maxHopKm += 400;        // 15/12/10 m
   else if (freqMHz >= 14) maxHopKm += 200;   // 20/17 m
   else if (freqMHz > 0 && freqMHz < 7) maxHopKm -= 500; // 160/80 m
   maxHopKm = Math.max(1800, Math.min(4200, maxHopKm));
   const hops = Math.max(1, Math.min(12, Math.ceil(distKm / maxHopKm)));
-  // Short daytime skip on the higher bands is classically E-layer; everything
-  // else (night paths, low bands, multi-hop DX) rides the F layer.
-  const layer: 'E' | 'F' = daytime && freqMHz >= 14 && distKm <= 4500 ? 'E' : 'F';
+  // Reflecting layer by band + day/night:
+  //  Night — the F (F2) layer carries essentially all HF (160 m … 10 m).
+  //  Day   — >=10 MHz (30 m … 10 m) → F2; ~7 MHz (40 m) → F1 & E;
+  //          <5 MHz (80 m / 160 m) → absorbed low in the D region.
+  let layer: 'D' | 'E' | 'F';
+  if (!daytime) layer = 'F';
+  else if (freqMHz >= 10) layer = 'F';
+  else if (freqMHz >= 5) layer = 'E';
+  else layer = 'D';
   return { hops, layer };
 }
 
@@ -565,8 +571,9 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       const daytimeMid = calculateDistance(midHop.lat, midHop.lng, sunHop.lat, sunHop.lon) < 10000;
       const freqMHz = (rigFreqRef.current ?? 0) / 1e6 || 14;
       const { hops, layer } = estimateHops(distKm, freqMHz, daytimeMid);
-      // Peak altitude = the reflecting layer's shell height (E mid, F outer).
-      const SP_PEAK_ALT = (DEFAULT_IONO_LAYERS[layer === 'E' ? 1 : 2]?.radiusFactor ?? 1.28) - 1;
+      const layerIdx = layer === 'D' ? 0 : layer === 'E' ? 1 : 2;
+      // Peak altitude = the reflecting layer's shell height (D inner … F outer).
+      const SP_PEAK_ALT = (DEFAULT_IONO_LAYERS[layerIdx]?.radiusFactor ?? 1.28) - 1;
       const SP_SEGMENTS = hops * 40; // enough points to keep the peaks sharp
 
       const ionoHops = showIonoHopsRef.current;
@@ -581,11 +588,11 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
           : Math.sin(Math.PI * t) * 0.12;
         targetPath.push([point.lat, point.lng, alt]);
       }
-      // With hops on, the line takes the (theme) colour of the band it bounces
-      // off (E / F), lightly brightened so it reads against space, so path +
-      // layer match; hops off keeps the classic red-orange short path. Same
-      // breathing alpha either way.
-      const layerColor = ionoLayerColorsRef.current[layer === 'E' ? 1 : 2];
+      // With hops on, the line takes the (theme) colour of the reflecting
+      // band (D / E / F), lightly brightened so it reads against space, so
+      // path + layer match; hops off keeps the classic red-orange short path.
+      // Same breathing alpha either way.
+      const layerColor = ionoLayerColorsRef.current[layerIdx];
       const tint = (c: number) => Math.round((c + (1 - c) * 0.25) * 255);
       const spPathColor = ionoHops && layerColor
         ? `rgba(${tint(layerColor[0])}, ${tint(layerColor[1])}, ${tint(layerColor[2])}, ${spAlpha})`
