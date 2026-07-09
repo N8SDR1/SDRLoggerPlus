@@ -4,7 +4,7 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSignalR } from '../hooks/useSignalR';
 import { GlassPanel } from '../components/GlassPanel';
-import { gridToLatLon, calculateDistance, getAnimationDuration } from '../utils/maidenhead';
+import { gridToLatLon, calculateDistance, calculateBearing, getAnimationDuration } from '../utils/maidenhead';
 import { RotatorControls } from './RotatorPlugin';
 import { api } from '../api/client';
 import { rigModeToSpotModes } from '../utils/rigTracking';
@@ -12,6 +12,7 @@ import type { CallsignLookedUpEvent } from '../api/signalr';
 import { StrikeStore, type Strike } from '../utils/lightningStrikes';
 import { setLightningStrikesCallback, clearLightningStrikesCallback } from '../api/signalr';
 import { createDayNightShell, type DayNightShell } from '../utils/dayNightShell';
+import { createIonosphereShells, DEFAULT_IONO_LAYERS, type IonosphereShells } from '../utils/ionosphereShells';
 import { getSunPosition } from '../utils/solarCalculations';
 // Globe is dynamically imported to catch WebGL errors at load time
 
@@ -117,6 +118,35 @@ function interpolateGreatCircleLongPath(
   };
 }
 
+/**
+ * Rough estimate of the ionospheric hops for a path, from distance, band, and
+ * whether the path is in daylight. Not a propagation prediction — just a
+ * plausible picture for the visual. The max single-hop ground distance grows
+ * with the reflecting layer's virtual height: at night the F2 layer sits high
+ * (~long hops), by day lower E/F1 layers shorten them; higher bands work lower
+ * takeoff angles so reach a bit farther per hop. Also picks WHICH layer most
+ * likely does the reflecting so the hop peaks + colour match that layer's
+ * glow shell.
+ */
+function estimateHops(distKm: number, freqMHz: number, daytime: boolean): { hops: number; layer: 'D' | 'E' | 'F' } {
+  let maxHopKm = daytime ? 2800 : 4000;
+  if (freqMHz >= 21) maxHopKm += 400;        // 15/12/10 m
+  else if (freqMHz >= 14) maxHopKm += 200;   // 20/17 m
+  else if (freqMHz > 0 && freqMHz < 7) maxHopKm -= 500; // 160/80 m
+  maxHopKm = Math.max(1800, Math.min(4200, maxHopKm));
+  const hops = Math.max(1, Math.min(12, Math.ceil(distKm / maxHopKm)));
+  // Reflecting layer by band + day/night:
+  //  Night — the F (F2) layer carries essentially all HF (160 m … 10 m).
+  //  Day   — >=10 MHz (30 m … 10 m) → F2; ~7 MHz (40 m) → F1 & E;
+  //          <5 MHz (80 m / 160 m) → absorbed low in the D region.
+  let layer: 'D' | 'E' | 'F';
+  if (!daytime) layer = 'F';
+  else if (freqMHz >= 10) layer = 'F';
+  else if (freqMHz >= 5) layer = 'E';
+  else layer = 'D';
+  return { hops, layer };
+}
+
 // Marker data structure for globe points
 interface GlobeMarkerData {
   lat: number;
@@ -204,6 +234,7 @@ interface GlobeInstance {
   pointLabel(fn: (d: unknown) => string): GlobeInstance;
   pathsData(data: unknown[]): GlobeInstance;
   pathPoints(accessor: string): GlobeInstance;
+  pathPointAlt(accessor: number | ((p: unknown) => number)): GlobeInstance;
   pathColor(accessor: string): GlobeInstance;
   pathStroke(accessor: string): GlobeInstance;
   pathDashLength(len: number | ((d: unknown) => number)): GlobeInstance;
@@ -290,6 +321,11 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   selectSpotRef.current = selectSpot;
   const strikeStoreRef = useRef(new StrikeStore());
   const dayNightShellRef = useRef<DayNightShell | null>(null);
+  const ionoShellsRef = useRef<IonosphereShells | null>(null);
+  // Current D/E/F layer colours (0..1 RGB), tracked from the active theme.
+  const ionoLayerColorsRef = useRef<[number, number, number][]>(
+    DEFAULT_IONO_LAYERS.map((l) => [...l.color] as [number, number, number]),
+  );
   // Throttle timestamp for the texture-anisotropy sweep (see the label tick).
   const lastAnisoSweepRef = useRef(0);
 
@@ -410,6 +446,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   // Long-path visibility — read once per render outside the animation loop.
   const showLongPathRef = useRef<boolean>(settings.map.showLongPath !== false);
   showLongPathRef.current = settings.map.showLongPath !== false;
+  const showIonoHopsRef = useRef<boolean>(!!settings.map.showIonosphereHops);
+  showIonoHopsRef.current = !!settings.map.showIonosphereHops;
+  const rigFreqRef = useRef<number | undefined>(rigFreqHz);
+  rigFreqRef.current = rigFreqHz;
 
   const renderBeam = useCallback((azimuth: number, isConnected: boolean) => {
     if (!globeRef.current) return;
@@ -506,30 +546,71 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       const SP_COLOR = `rgba(255, 68, 102, ${spAlpha})`;   // red-orange
       const LP_COLOR = `rgba(163, 230, 53, ${lpAlpha})`;   // lime green
 
-      // Peak altitude of the arc bulge above the surface. LP is much longer
-      // and gets a higher bulge — reinforces visually that it's the "long
-      // way around" while keeping both curves clearly separated in 3D so
-      // they never overlap or merge as the operator rotates the globe.
-      const SP_PEAK_ALT = 0.10;
+      // Peak altitude of the LP arc bulge above the surface. LP is much
+      // longer and gets a higher bulge — reinforces visually that it's the
+      // "long way around" while keeping both curves clearly separated in 3D
+      // so they never overlap or merge as the operator rotates the globe.
       const LP_PEAK_ALT = 0.22;
 
-      // ── Short path (red-orange, low bulge) ──────────────────────────
+      // ── Short path — ionospheric skip ───────────────────────────────
+      // The great-circle line dips to the ground and arcs up to the
+      // ionosphere `hops` times, so it reads as the signal bouncing its way
+      // to the DX rather than a single bulge. Hop count AND the reflecting
+      // layer are estimated from distance, band, and day/night at the path
+      // midpoint (falls back to 20 m if no rig frequency is known); the hop
+      // peaks touch that layer's glow shell (E or F).
+      const R_KM = 6371;
+      const toRadHop = Math.PI / 180;
+      const dLat = (targetCoords.lat - stationLat) * toRadHop;
+      const dLon = (targetCoords.lng - stationLon) * toRadHop;
+      const hav = Math.sin(dLat / 2) ** 2 +
+        Math.cos(stationLat * toRadHop) * Math.cos(targetCoords.lat * toRadHop) * Math.sin(dLon / 2) ** 2;
+      const distKm = 2 * R_KM * Math.asin(Math.min(1, Math.sqrt(hav)));
+      const midHop = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, 0.5);
+      const sunHop = getSunPosition(new Date());
+      const daytimeMid = calculateDistance(midHop.lat, midHop.lng, sunHop.lat, sunHop.lon) < 10000;
+      const freqMHz = (rigFreqRef.current ?? 0) / 1e6 || 14;
+      const { hops, layer } = estimateHops(distKm, freqMHz, daytimeMid);
+      const layerIdx = layer === 'D' ? 0 : layer === 'E' ? 1 : 2;
+      // Peak altitude = the reflecting layer's shell height (D inner … F outer).
+      const SP_PEAK_ALT = (DEFAULT_IONO_LAYERS[layerIdx]?.radiusFactor ?? 1.28) - 1;
+      const SP_SEGMENTS = hops * 40; // enough points to keep the peaks sharp
+
+      const ionoHops = showIonoHopsRef.current;
       const targetPath: [number, number, number][] = [];
-      for (let i = 0; i <= numSegments; i++) {
-        const t = i / numSegments;
+      for (let i = 0; i <= SP_SEGMENTS; i++) {
+        const t = i / SP_SEGMENTS;
         const point = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
-        const alt = Math.sin(Math.PI * t) * SP_PEAK_ALT;
+        // Ionospheric skip on: sharp triangle wave (ground → ionosphere →
+        // ground per hop). Off: a single smooth arc bulge.
+        const alt = ionoHops
+          ? (((hops * t) % 1) < 0.5 ? ((hops * t) % 1) * 2 : (1 - ((hops * t) % 1)) * 2) * SP_PEAK_ALT
+          : Math.sin(Math.PI * t) * 0.12;
         targetPath.push([point.lat, point.lng, alt]);
       }
-      pathsData.push({
-        path: targetPath,
-        color: SP_COLOR,
-        stroke: 2.5,
-        // dashLength/dashGap 0 → solid line; the pulse comes from the
-        // alpha modulation above, not from dashes flowing along the path.
-        dashLength: 0,
-        dashGap: 0,
+      // With hops on, the line takes the (theme) colour of the reflecting
+      // band (D / E / F), lightly brightened so it reads against space, so
+      // path + layer match; hops off keeps the classic red-orange short path.
+      // Same breathing alpha either way.
+      const layerColor = ionoLayerColorsRef.current[layerIdx];
+      const tint = (c: number) => Math.round((c + (1 - c) * 0.25) * 255);
+      const spPathColor = ionoHops && layerColor
+        ? `rgba(${tint(layerColor[0])}, ${tint(layerColor[1])}, ${tint(layerColor[2])}, ${spAlpha})`
+        : SP_COLOR;
+      // Steady (gently breathing) base line showing the whole hop zigzag.
+      pathsData.push({ path: targetPath, color: spPathColor, stroke: 3, dashLength: 0, dashGap: 0 });
+
+      // Bright pulse travelling station → DX along the hops (~2.2 s per pass).
+      const PULSE_TRAVEL_MS = 2200;
+      const pulsePos = (performance.now() % PULSE_TRAVEL_MS) / PULSE_TRAVEL_MS;
+      const pulseHalf = 0.05; // pulse covers ~10% of the path
+      const pulsePath = targetPath.filter((_, i) => {
+        const t = i / SP_SEGMENTS;
+        return t >= pulsePos - pulseHalf && t <= pulsePos + pulseHalf;
       });
+      if (pulsePath.length >= 2) {
+        pathsData.push({ path: pulsePath, color: 'rgba(255, 235, 225, 1)', stroke: 5, dashLength: 0, dashGap: 0 });
+      }
 
       // ── Long path (lime green, higher bulge) ────────────────────────
       // The reflex-angle arc going the other way around the globe. Same
@@ -558,6 +639,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     globeRef.current
       .pathsData(pathsData)
       .pathPoints('path')
+      // Use each point's 3rd element as altitude — WITHOUT this globe.gl
+      // defaults to a fixed near-zero altitude and draws every path flat on
+      // the surface, silently discarding the hop/bulge heights.
+      .pathPointAlt((p: unknown) => (p as number[])[2])
       .pathColor('color')
       .pathStroke('stroke')
       .pathDashLength((d: unknown) => (d as { dashLength: number }).dashLength)
@@ -885,6 +970,11 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       globe.scene().add(dayNightShell.mesh);
       dayNightShellRef.current = dayNightShell;
 
+      // Ionosphere D/E/F glow shells (hidden until the hops layer is enabled).
+      const ionoShells = createIonosphereShells(THREE, 100);
+      for (const mesh of ionoShells.meshes) globe.scene().add(mesh);
+      ionoShellsRef.current = ionoShells;
+
       globeRef.current = globe;
       setGlobeReady(true);
 
@@ -956,6 +1046,8 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       }
       dayNightShellRef.current?.dispose();
       dayNightShellRef.current = null;
+      ionoShellsRef.current?.dispose();
+      ionoShellsRef.current = null;
       setGlobeReady(false);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1411,6 +1503,38 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     return () => clearInterval(interval);
   }, [globeReady, settings.map.showDayNightOverlay, settings.map.dayNightOpacity]);
 
+  // Ionosphere glow — show the D/E/F layer shells while the ionospheric-hops
+  // layer is on; hidden otherwise.
+  useEffect(() => {
+    if (!globeReady) return;
+    ionoShellsRef.current?.setVisible(!!settings.map.showIonosphereHops);
+  }, [globeReady, settings.map.showIonosphereHops]);
+
+  // Colour the ionosphere layers from the active theme: F (outer) = primary
+  // accent, D (inner) = secondary accent, E = the blend between them. Re-reads
+  // the CSS accent vars whenever the theme (or custom colours) change.
+  useEffect(() => {
+    if (!globeReady) return;
+    const readAccent = (name: string, fallback: [number, number, number]): [number, number, number] => {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      const parts = raw.split(/[\s,]+/).map(Number);
+      if (parts.length >= 3 && parts.slice(0, 3).every((n) => !Number.isNaN(n))) {
+        return [parts[0] / 255, parts[1] / 255, parts[2] / 255];
+      }
+      return fallback;
+    };
+    const primary = readAccent('--accent-primary', [0, 0.9, 1]);     // F outer
+    const secondary = readAccent('--accent-secondary', [0.35, 0.9, 0.4]); // D inner
+    const mid: [number, number, number] = [
+      (primary[0] + secondary[0]) / 2,
+      (primary[1] + secondary[1]) / 2,
+      (primary[2] + secondary[2]) / 2,
+    ];
+    const colors: [number, number, number][] = [secondary, mid, primary]; // D, E, F
+    ionoLayerColorsRef.current = colors;
+    ionoShellsRef.current?.setColors(colors);
+  }, [globeReady, settings.appearance.theme, settings.appearance.customColors]);
+
   // Fly to target when focused callsign changes
   useEffect(() => {
     if (!globeRef.current) return;
@@ -1437,7 +1561,24 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     lastTargetCoordsRef.current = { lat: targetLat, lng: targetLon };
 
     const startPov = globeRef.current.pointOfView();
-    const targetPov = { lat: targetLat, lng: targetLon, altitude: 1.7 };
+    let targetPov: { lat: number; lng: number; altitude: number };
+    if (showIonoHopsRef.current) {
+      // Ionospheric-hops view: aim at a point offset PERPENDICULAR to the
+      // short path from its midpoint, so we look at the hop zigzag obliquely
+      // (arcs rising off the globe) instead of straight down. Pull back to
+      // frame the whole arc — farther DX → higher altitude.
+      const spMid = interpolateGreatCircle(stationLat, stationLon, targetLat, targetLon, 0.5);
+      const spDistKm = calculateDistance(stationLat, stationLon, targetLat, targetLon);
+      const framedAlt = Math.max(1.6, Math.min(3.2, 1.2 + spDistKm / 7000));
+      const bearing = calculateBearing(stationLat, stationLon, targetLat, targetLon);
+      // Larger perpendicular offset → more oblique (more tilt) so the hops
+      // are seen rising off the globe rather than close to straight down.
+      const aim = getDestinationPoint(spMid.lat, spMid.lng, (bearing + 90) % 360, 5200);
+      targetPov = { lat: aim.lat, lng: aim.lng, altitude: framedAlt };
+    } else {
+      // Standard view: fly to the DX location.
+      targetPov = { lat: targetLat, lng: targetLon, altitude: 1.7 };
+    }
 
     const startTime = performance.now();
     const durationMs = duration * 1000;

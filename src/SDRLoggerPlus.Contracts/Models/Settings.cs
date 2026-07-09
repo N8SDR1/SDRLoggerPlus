@@ -552,6 +552,12 @@ public class MapSettings
 
     [BsonElement("dxPathColor")]
     public string? DxPathColor { get; set; } = "#39ff14";
+
+    [BsonElement("showIonosphereHops")]
+    public bool ShowIonosphereHops { get; set; }
+
+    [BsonElement("showLongPath")]
+    public bool ShowLongPath { get; set; }
 }
 
 [BsonIgnoreExtraElements]
