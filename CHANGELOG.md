@@ -3,6 +3,13 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-08 — v2.0.1
+
+### Fixes
+- **App icon + splash screen** — replaced the leftover QSOThief-lineage
+  artwork with the SDRLogger+ icon. (A dedicated wide splash graphic is
+  still to come in a later release.)
+
 ## 2026-07-08 — v2.0.0 "Vega" 🌟
 
 First production release of SDRLoggerPlus v2 (.NET 10 backend + React /
