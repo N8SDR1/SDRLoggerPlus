@@ -51,9 +51,9 @@ export interface IonoLayer {
 // here are only fallbacks; at runtime they're recoloured from the active
 // theme's accents via setColors().
 export const DEFAULT_IONO_LAYERS: IonoLayer[] = [
-  { radiusFactor: 1.09, color: [0.35, 0.90, 0.40], intensity: 0.28 }, // D — inner
-  { radiusFactor: 1.18, color: [0.30, 0.80, 0.75], intensity: 0.28 }, // E — mid
-  { radiusFactor: 1.27, color: [0.0, 0.9, 1.0], intensity: 0.3 },     // F — outer (hop peak)
+  { radiusFactor: 1.12, color: [0.35, 0.90, 0.40], intensity: 0.18 }, // D — inner
+  { radiusFactor: 1.24, color: [0.30, 0.80, 0.75], intensity: 0.18 }, // E — mid
+  { radiusFactor: 1.36, color: [0.0, 0.9, 1.0], intensity: 0.2 },     // F — outer (hop peak)
 ];
 
 const VERTEX_SHADER = `
