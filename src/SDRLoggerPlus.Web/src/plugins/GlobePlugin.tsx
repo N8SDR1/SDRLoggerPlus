@@ -518,7 +518,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       // as the signal bouncing its way to the DX rather than a single bulge.
       // Hop count scales with distance (~one hop per 3000 km, like real HF).
       // A bright pulse then travels the hops from the station toward the DX.
-      const SP_HOP_ALT = 0.06;   // ionosphere reflection height per hop
+      const SP_HOP_ALT = 0.10;   // ionosphere reflection height per hop
       const R_KM = 6371;
       const toRadHop = Math.PI / 180;
       const dLat = (targetCoords.lat - stationLat) * toRadHop;
@@ -526,8 +526,9 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       const hav = Math.sin(dLat / 2) ** 2 +
         Math.cos(stationLat * toRadHop) * Math.cos(targetCoords.lat * toRadHop) * Math.sin(dLon / 2) ** 2;
       const distKm = 2 * R_KM * Math.asin(Math.min(1, Math.sqrt(hav)));
-      const hops = Math.max(1, Math.min(8, Math.round(distKm / 3000)));
-      const SP_SEGMENTS = Math.max(60, hops * 26); // ~26 pts/hop → smooth arcs
+      // ~1 hop per 1400 km, min 2 so even a nearby DX visibly bounces.
+      const hops = Math.max(2, Math.min(14, Math.round(distKm / 1400)));
+      const SP_SEGMENTS = Math.max(80, hops * 24); // smooth arcs per hop
 
       const targetPath: [number, number, number][] = [];
       for (let i = 0; i <= SP_SEGMENTS; i++) {
@@ -537,7 +538,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         targetPath.push([point.lat, point.lng, alt]);
       }
       // Steady (gently breathing) base line showing the whole hop path.
-      pathsData.push({ path: targetPath, color: SP_COLOR, stroke: 2, dashLength: 0, dashGap: 0 });
+      pathsData.push({ path: targetPath, color: SP_COLOR, stroke: 2.5, dashLength: 0, dashGap: 0 });
 
       // Bright pulse travelling station → DX along the hops (~2.2 s per pass).
       const PULSE_TRAVEL_MS = 2200;
@@ -548,7 +549,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         return t >= pulsePos - pulseHalf && t <= pulsePos + pulseHalf;
       });
       if (pulsePath.length >= 2) {
-        pathsData.push({ path: pulsePath, color: 'rgba(255, 226, 214, 0.98)', stroke: 4, dashLength: 0, dashGap: 0 });
+        pathsData.push({ path: pulsePath, color: 'rgba(255, 235, 225, 1)', stroke: 5, dashLength: 0, dashGap: 0 });
       }
 
       // ── Long path (lime green, higher bulge) ────────────────────────
