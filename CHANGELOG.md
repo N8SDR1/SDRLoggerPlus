@@ -3,6 +3,43 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-08 — v2.0.0 "Vega" 🌟
+
+First production release of SDRLoggerPlus v2 (.NET 10 backend + React /
+Electron). Codename **Vega** — the alpha star of the Lyra constellation,
+for the Lyra ↔ SDRLogger+ integration at the heart of this release.
+
+### Lyra Combo Link (headline)
+- Two-way link over the existing TCI socket — no bridge app. Grab a call
+  in Lyra's CW decoder and it populates SDRLogger+ (call + lookup);
+  SDRLogger+ sends the callbook first name back so Lyra's `{NAME}` token
+  fills; a `{LOG}`-tagged CW macro logs the QSO in SDRLogger+ as it sends
+  the signoff.
+- **Auto received-S** — the "S" of RST-Rcvd is computed live from the
+  shared S-meter (SNR-gated), with an Auto/Manual toggle; works on CW,
+  SSB and digital.
+- Survives Lyra restarts (auto-reconnect); a `● Lyra Combo` badge shows
+  when linked. Requires Lyra v0.14.0.
+
+### Maps
+- **2D Map panel restored** and reworked — a responsive globe + map
+  cockpit that stays usable docked small, the focused call/spot offset
+  clear of the globe, and a **radio-tower DX marker** on the 2D-map globe.
+- **3D globe day/night terminator** with a Settings → Map shade slider.
+
+### DX cluster
+- **Follow rig** with independent **Band** and **Mode** toggles — e.g.
+  "CW across all bands" or "CW on the current band only" (CWU/CWL fix).
+
+### Elsewhere
+- **In-app User Guide** (About → Open the User Guide) covering every
+  feature, plus GitHub + Discord links.
+- **"Lyra" theme** (Settings → Appearance) styled after the Lyra SDR.
+- **Analog meter** shows mode + frequency on one line (white RX / red TX),
+  TCI-aware.
+- **Updater** matches Lyra: pre-releases visible, once-per-version, shows
+  the changelog in the prompt.
+
 ## 2026-07-06 — Panadapter deep-clean session
 
 ### Fixes
