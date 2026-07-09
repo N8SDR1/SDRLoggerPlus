@@ -49,9 +49,9 @@ export interface IonoLayer {
 // the bands overlap so the colours blend continuously like a prism. intensity
 // = each band's PEAK alpha — all translucent, never a solid fill.
 export const DEFAULT_IONO_LAYERS: IonoLayer[] = [
-  { radiusFactor: 1.13, color: [0.35, 0.90, 0.40], intensity: 0.6 },  // D — inner, green
-  { radiusFactor: 1.205, color: [1.0, 0.55, 0.12], intensity: 0.6 },  // E — mid, orange
-  { radiusFactor: 1.28, color: [1.0, 0.88, 0.22], intensity: 0.62 },  // F — outer, yellow (hop peak)
+  { radiusFactor: 1.13, color: [0.35, 0.90, 0.40], intensity: 0.28 },  // D — inner, green
+  { radiusFactor: 1.205, color: [1.0, 0.55, 0.12], intensity: 0.28 },  // E — mid, orange
+  { radiusFactor: 1.28, color: [1.0, 0.88, 0.22], intensity: 0.3 },    // F — outer, yellow (hop peak)
 ];
 
 const VERTEX_SHADER = `
@@ -82,9 +82,11 @@ void main() {
   // brightest at its own edge and fades into the next — never a solid fill.
   float nv = dot(normalize(vNormalW), normalize(vViewDir));
   float dNorm = sqrt(max(0.0, 1.0 - nv * nv));
+  // Ease the ramp from the inner edge (transparent) to the outer edge (peak)
+  // so it blends gently into the next layer rather than stepping.
   float band = smoothstep(uInnerN, 1.0, dNorm);
-  float alpha = pow(band, 1.15) * uIntensity;
-  if (alpha < 0.004) discard;
+  float alpha = smoothstep(0.0, 1.0, band) * uIntensity;
+  if (alpha < 0.003) discard;
   gl_FragColor = vec4(uColor, alpha);
 }
 `;
