@@ -229,31 +229,6 @@ function calculateAzimuth(lat1: number, lon1: number, lat2: number, lon2: number
   return Math.round(azimuth);
 }
 
-// Calculate destination point from start, azimuth, and distance
-function getDestinationPoint(lat: number, lon: number, azimuth: number, distanceKm: number): [number, number] {
-  const R = 6371;
-  const toRad = Math.PI / 180;
-  const toDeg = 180 / Math.PI;
-
-  const lat1Rad = lat * toRad;
-  const lon1Rad = lon * toRad;
-  const azimuthRad = azimuth * toRad;
-  const angularDistance = distanceKm / R;
-
-  const lat2Rad = Math.asin(
-    Math.sin(lat1Rad) * Math.cos(angularDistance) +
-    Math.cos(lat1Rad) * Math.sin(angularDistance) * Math.cos(azimuthRad)
-  );
-
-  const lon2Rad = lon1Rad + Math.atan2(
-    Math.sin(azimuthRad) * Math.sin(angularDistance) * Math.cos(lat1Rad),
-    Math.cos(angularDistance) - Math.sin(lat1Rad) * Math.sin(lat2Rad)
-  );
-
-  return [lat2Rad * toDeg, ((lon2Rad * toDeg + 540) % 360) - 180];
-}
-
-
 // Band colors for DX cluster spot paths (matching typical ham radio conventions)
 const BAND_COLORS: Record<string, string> = {
   '160m': '#8B0000', // dark red
@@ -506,13 +481,12 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const lastTargetCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
-  const { stationGrid, rotatorPosition, focusedCallsignInfo, potaSpots, dxClusterMapEnabled, hoveredSpotId } = useAppStore();
+  const { stationGrid, focusedCallsignInfo, potaSpots, dxClusterMapEnabled, hoveredSpotId } = useAppStore();
   const { settings, updateMapSettings, saveSettings } = useSettingsStore();
   const { commandRotator, selectSpot } = useSignalR();
 
   // DX cluster spots from ephemeral in-memory store (populated via SignalR)
   const spots = useAppStore((state) => state.dxClusterSpots);
-  const [currentAzimuth, setCurrentAzimuth] = useState(0);
   const [showLayerPicker, setShowLayerPicker] = useState(false);
   const [satellitePositions, setSatellitePositions] = useState<Map<string, SatellitePosition>>(new Map());
   const [satelliteTLEs, setSatelliteTLEs] = useState<Map<string, SatelliteTLE>>(new Map());
@@ -611,13 +585,6 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
     const bands = new Set(spotPaths.map(sp => sp.band));
     return Object.entries(BAND_COLORS).filter(([band]) => bands.has(band));
   }, [spotPaths]);
-
-  // Update azimuth from rotator position only
-  useEffect(() => {
-    if (rotatorPosition?.currentAzimuth !== undefined) {
-      setCurrentAzimuth(rotatorPosition.currentAzimuth);
-    }
-  }, [rotatorPosition]);
 
   // Update map center when station coordinates change
   useEffect(() => {
@@ -744,7 +711,6 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
   // Handle click on map to set bearing (only when rotator enabled)
   const handleBearingClick = useCallback((azimuth: number) => {
     if (!rotatorEnabled) return; // Ignore clicks when rotator disabled
-    setCurrentAzimuth(azimuth);
     commandRotator(azimuth, 'map');
   }, [commandRotator, rotatorEnabled]);
 
@@ -753,13 +719,6 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
     updateMapSettings({ showSatellites: !settings.map.showSatellites });
     saveSettings();
   }, [settings.map.showSatellites, updateMapSettings, saveSettings]);
-
-  // Generate rotator beam visualization line (cyan)
-  const beamLinePoints: [number, number][] = [];
-  const beamDistance = 5000; // 5000km beam visualization
-  for (let d = 0; d <= beamDistance; d += 100) {
-    beamLinePoints.push(getDestinationPoint(stationLat, stationLon, currentAzimuth, d));
-  }
 
   // Target location from focused callsign
   const targetLat = focusedCallsignInfo?.latitude;
@@ -885,19 +844,6 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
               dashArray: '5, 5',
             }}
           />
-
-          {/* Rotator beam direction line - only show when rotator enabled (cyan) */}
-          {rotatorEnabled && (
-            <Polyline
-              positions={beamLinePoints}
-              pathOptions={{
-                color: '#00ddff',
-                weight: 3,
-                opacity: 0.7,
-                dashArray: '10, 5',
-              }}
-            />
-          )}
 
           {/* Great circle path to focused callsign — an animated traveling
               sine wave in the pin green (accent-secondary), so pin + line read
