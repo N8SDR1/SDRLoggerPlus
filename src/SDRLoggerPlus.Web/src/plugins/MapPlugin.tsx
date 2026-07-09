@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { Map as MapIcon, Target, Maximize2, ZoomIn, ZoomOut, Layers, Satellite, Radio, Sun } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { useAppStore, Spot } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -352,6 +352,76 @@ function generateGreatCirclePoints(
   }
 
   return segments;
+}
+
+/**
+ * Animated great-circle path drawn as a traveling sine wave. Each base point
+ * of the segment is offset perpendicular to the local path direction by a
+ * sine whose phase advances every frame (so the wave travels from the station
+ * toward the DX). A sin() envelope tapers the amplitude to zero at both ends,
+ * keeping the wave anchored to the two markers. Rendered as a direct Leaflet
+ * layer (updated in a rAF loop, no React re-render per frame); colour + the
+ * gentle opacity breath come from the shared .dx-target-path CSS class.
+ */
+function SineWavePath({ segment }: { segment: [number, number][] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!segment || segment.length < 3) return;
+    const toRad = Math.PI / 180, toDeg = 180 / Math.PI, R = 6371;
+    const n = segment.length;
+
+    // Cumulative along-path distance (km).
+    const cum = [0];
+    for (let i = 1; i < n; i++) {
+      cum[i] = cum[i - 1] + calculateDistance(segment[i - 1][0], segment[i - 1][1], segment[i][0], segment[i][1]);
+    }
+    const total = cum[n - 1];
+    if (total <= 0) return;
+
+    // Wave geometry proportional to path length so density/height read the
+    // same for a 500 km hop or a 15 000 km path.
+    const waves = Math.max(4, Math.min(22, Math.round(total / 900)));
+    const wavelengthKm = total / waves;
+    const amplitudeKm = Math.max(25, Math.min(450, wavelengthKm * 0.28));
+
+    // Perpendicular bearing at each base point (path bearing + 90°).
+    const perp = segment.map((_, i) => {
+      const a = segment[Math.max(0, i - 1)];
+      const b = segment[Math.min(n - 1, i + 1)];
+      return (calculateBearing(a[0], a[1], b[0], b[1]) + 90) % 360;
+    });
+
+    // Offset a lat/lon by a signed distance (km) along a bearing.
+    const offset = (lat: number, lon: number, brg: number, distKm: number): [number, number] => {
+      let b = brg, d = distKm;
+      if (d < 0) { b = (brg + 180) % 360; d = -d; }
+      const delta = d / R, theta = b * toRad, phi1 = lat * toRad, lam1 = lon * toRad;
+      const phi2 = Math.asin(Math.sin(phi1) * Math.cos(delta) + Math.cos(phi1) * Math.sin(delta) * Math.cos(theta));
+      const lam2 = lam1 + Math.atan2(Math.sin(theta) * Math.sin(delta) * Math.cos(phi1), Math.cos(delta) - Math.sin(phi1) * Math.sin(phi2));
+      return [phi2 * toDeg, lam2 * toDeg];
+    };
+
+    const poly = L.polyline([], { weight: 2, className: 'dx-target-path' }).addTo(map);
+    let raf = 0;
+    let phase = 0;
+    const frame = () => {
+      phase += 0.12; // travel speed (rad/frame)
+      const pts = segment.map((p, i) => {
+        const envelope = Math.sin(Math.PI * cum[i] / total); // 0 at ends, 1 mid
+        const off = amplitudeKm * envelope * Math.sin(2 * Math.PI * cum[i] / wavelengthKm - phase);
+        return offset(p[0], p[1], perp[i], off);
+      });
+      poly.setLatLngs(pts);
+      raf = requestAnimationFrame(frame);
+    };
+    frame();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      map.removeLayer(poly);
+    };
+  }, [segment, map]);
+  return null;
 }
 
 // Custom DX spot marker (small diamond)
@@ -805,20 +875,20 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
             />
           )}
 
-          {/* Great circle path to focused callsign — same green as the pin
-              (accent-secondary) so pin + line read as one; pulses like the
-              globe via the .dx-target-path CSS breath. Stroke colour is set
-              in that CSS class so the theme var resolves. */}
+          {/* Great circle path to focused callsign — an animated traveling
+              sine wave in the pin green (accent-secondary), so pin + line read
+              as one. Short segments (< 3 pts, e.g. antimeridian slivers) fall
+              back to a plain line. */}
           {targetPathSegments.map((segment, segmentIndex) => (
-            <Polyline
-              key={`target-path-${segmentIndex}`}
-              positions={segment}
-              pathOptions={{
-                weight: 2,
-                dashArray: '5, 10',
-                className: 'dx-target-path',
-              }}
-            />
+            segment.length >= 3 ? (
+              <SineWavePath key={`target-wave-${segmentIndex}`} segment={segment} />
+            ) : (
+              <Polyline
+                key={`target-path-${segmentIndex}`}
+                positions={segment}
+                pathOptions={{ weight: 2, className: 'dx-target-path' }}
+              />
+            )
           ))}
 
           {/* Target marker - show callsign image icon (2x) with image or placeholder, or standard dot if callsign images disabled */}
