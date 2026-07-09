@@ -21,7 +21,7 @@ export interface ThreeLike {
     depthWrite: boolean;
     side: number;
   }) => { uniforms: Record<string, { value: unknown }>; dispose(): void };
-  Color: new (r: number, g: number, b: number) => object;
+  Color: new (r: number, g: number, b: number) => { setRGB(r: number, g: number, b: number): unknown };
   Mesh: new (geometry: object, material: object) => SceneObject;
   BackSide: number;
 }
@@ -29,6 +29,8 @@ export interface ThreeLike {
 export interface IonosphereShells {
   meshes: SceneObject[];
   setVisible(visible: boolean): void;
+  /** Recolour the D…F shells (0..1 RGB per layer) — used to track the theme. */
+  setColors(colors: [number, number, number][]): void;
   dispose(): void;
 }
 
@@ -41,17 +43,17 @@ export interface IonoLayer {
   intensity: number;
 }
 
-// The F (outer) shell sits at the short-path hop peak (globe radius + 0.28,
-// = the hop altitude the globe uses) so the hops bounce right off it; D and E
-// stack below. Keep 1.28 in sync if that hop height changes.
-// Prism hues, outer→inner: F yellow, E orange, D green. Each band fades from
-// transparent (at the globe surface) to its peak at its own outer edge, and
-// the bands overlap so the colours blend continuously like a prism. intensity
-// = each band's PEAK alpha — all translucent, never a solid fill.
+// Evenly-spaced shells (~0.09 apart): F (outer) at the short-path hop peak
+// so the hops bounce right off it, E and D stacked below at equal gaps. Each
+// band fades from transparent (globe surface) to its peak at its own outer
+// edge, and the bands overlap so the colours blend like a prism. intensity =
+// each band's PEAK alpha — all translucent, never a solid fill. The colours
+// here are only fallbacks; at runtime they're recoloured from the active
+// theme's accents via setColors().
 export const DEFAULT_IONO_LAYERS: IonoLayer[] = [
-  { radiusFactor: 1.13, color: [0.35, 0.90, 0.40], intensity: 0.28 },  // D — inner, green
-  { radiusFactor: 1.205, color: [1.0, 0.55, 0.12], intensity: 0.28 },  // E — mid, orange
-  { radiusFactor: 1.28, color: [1.0, 0.88, 0.22], intensity: 0.3 },    // F — outer, yellow (hop peak)
+  { radiusFactor: 1.09, color: [0.35, 0.90, 0.40], intensity: 0.28 }, // D — inner
+  { radiusFactor: 1.18, color: [0.30, 0.80, 0.75], intensity: 0.28 }, // E — mid
+  { radiusFactor: 1.27, color: [0.0, 0.9, 1.0], intensity: 0.3 },     // F — outer (hop peak)
 ];
 
 const VERTEX_SHADER = `
@@ -97,7 +99,7 @@ export function createIonosphereShells(
   layers: IonoLayer[] = DEFAULT_IONO_LAYERS,
 ): IonosphereShells {
   const geometries: { dispose(): void }[] = [];
-  const materials: { dispose(): void }[] = [];
+  const materials: { uniforms: Record<string, { value: unknown }>; dispose(): void }[] = [];
   const meshes: SceneObject[] = [];
 
   layers.forEach((layer, i) => {
@@ -137,6 +139,13 @@ export function createIonosphereShells(
     meshes,
     setVisible(visible: boolean) {
       for (const mesh of meshes) mesh.visible = visible;
+    },
+    setColors(colors: [number, number, number][]) {
+      materials.forEach((mat, i) => {
+        const c = colors[i] ?? colors[colors.length - 1];
+        if (!c) return;
+        (mat.uniforms.uColor.value as { setRGB(r: number, g: number, b: number): unknown }).setRGB(c[0], c[1], c[2]);
+      });
     },
     dispose() {
       for (const g of geometries) g.dispose();

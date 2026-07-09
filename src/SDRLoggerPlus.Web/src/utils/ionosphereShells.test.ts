@@ -13,7 +13,10 @@ function stubThree() {
       constructor(params: { uniforms: Record<string, { value: unknown }> }) { this.uniforms = params.uniforms; }
       dispose() { calls.matDisposed++; }
     },
-    Color: class { constructor(public r: number, public g: number, public b: number) {} },
+    Color: class {
+      constructor(public r: number, public g: number, public b: number) {}
+      setRGB(r: number, g: number, b: number) { this.r = r; this.g = g; this.b = b; return this; }
+    },
     Mesh: class {
       visible = true;
       renderOrder = 0;
@@ -39,16 +42,14 @@ describe('createIonosphereShells', () => {
     }
   });
 
-  it('bands are translucent prism hues (green inner, orange mid, yellow outer)', () => {
-    const [d, e, f] = DEFAULT_IONO_LAYERS;
+  it('bands are translucent and evenly spaced (~0.09 apart)', () => {
     for (const l of DEFAULT_IONO_LAYERS) {
       expect(l.intensity).toBeGreaterThan(0);
       expect(l.intensity).toBeLessThan(1); // peak alpha — always transparent
     }
-    expect(d.color[1]).toBeGreaterThan(d.color[0]); // D green: G > R
-    expect(e.color[0]).toBeGreaterThan(e.color[2]); // E orange: R > B
-    expect(f.color[0]).toBeGreaterThan(0.9);        // F yellow: high R
-    expect(f.color[1]).toBeGreaterThan(0.7);        //          high G
+    const [d, e, f] = DEFAULT_IONO_LAYERS.map((l) => l.radiusFactor);
+    expect(e - d).toBeCloseTo(f - e, 2); // equal gaps between D→E and E→F
+    expect(f - e).toBeGreaterThan(0.05);
   });
 
   it('every band fades from the globe surface (overlapping, blended)', () => {
@@ -71,6 +72,18 @@ describe('createIonosphereShells', () => {
     expect(orders[0]).toBeGreaterThan(orders[1]);
     expect(orders[1]).toBeGreaterThan(orders[2]);
     expect(Math.min(...orders)).toBeGreaterThanOrEqual(2);
+  });
+
+  it('setColors recolours every shell (theme tracking)', () => {
+    const { three } = stubThree();
+    const shells = createIonosphereShells(three, 100);
+    shells.setColors([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]]);
+    shells.meshes.forEach((m, i) => {
+      const col = (m as unknown as { material: { uniforms: { uColor: { value: { r: number; g: number; b: number } } } } }).material.uniforms.uColor.value;
+      expect(col.r).toBeCloseTo(0.1 + i * 0.3, 6);
+      expect(col.g).toBeCloseTo(0.2 + i * 0.3, 6);
+      expect(col.b).toBeCloseTo(0.3 + i * 0.3, 6);
+    });
   });
 
   it('setVisible toggles every shell', () => {

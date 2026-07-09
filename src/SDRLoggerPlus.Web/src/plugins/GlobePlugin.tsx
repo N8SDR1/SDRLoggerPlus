@@ -316,6 +316,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const strikeStoreRef = useRef(new StrikeStore());
   const dayNightShellRef = useRef<DayNightShell | null>(null);
   const ionoShellsRef = useRef<IonosphereShells | null>(null);
+  // Current D/E/F layer colours (0..1 RGB), tracked from the active theme.
+  const ionoLayerColorsRef = useRef<[number, number, number][]>(
+    DEFAULT_IONO_LAYERS.map((l) => [...l.color] as [number, number, number]),
+  );
   // Throttle timestamp for the texture-anisotropy sweep (see the label tick).
   const lastAnisoSweepRef = useRef(0);
 
@@ -577,14 +581,14 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
           : Math.sin(Math.PI * t) * 0.12;
         targetPath.push([point.lat, point.lng, alt]);
       }
-      // With hops on, the line takes the colour of the band it bounces off
-      // (E orange / F yellow), lightly brightened so it reads against space,
-      // so path + layer match; hops off keeps the classic red-orange short
-      // path. Same breathing alpha either way.
-      const layerDef = DEFAULT_IONO_LAYERS[layer === 'E' ? 1 : 2];
+      // With hops on, the line takes the (theme) colour of the band it bounces
+      // off (E / F), lightly brightened so it reads against space, so path +
+      // layer match; hops off keeps the classic red-orange short path. Same
+      // breathing alpha either way.
+      const layerColor = ionoLayerColorsRef.current[layer === 'E' ? 1 : 2];
       const tint = (c: number) => Math.round((c + (1 - c) * 0.25) * 255);
-      const spPathColor = ionoHops && layerDef
-        ? `rgba(${tint(layerDef.color[0])}, ${tint(layerDef.color[1])}, ${tint(layerDef.color[2])}, ${spAlpha})`
+      const spPathColor = ionoHops && layerColor
+        ? `rgba(${tint(layerColor[0])}, ${tint(layerColor[1])}, ${tint(layerColor[2])}, ${spAlpha})`
         : SP_COLOR;
       // Steady (gently breathing) base line showing the whole hop zigzag.
       pathsData.push({ path: targetPath, color: spPathColor, stroke: 3, dashLength: 0, dashGap: 0 });
@@ -1493,11 +1497,36 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   }, [globeReady, settings.map.showDayNightOverlay, settings.map.dayNightOpacity]);
 
   // Ionosphere glow — show the D/E/F layer shells while the ionospheric-hops
-  // layer is on (warm→cool, brighter at the outer edge); hidden otherwise.
+  // layer is on; hidden otherwise.
   useEffect(() => {
     if (!globeReady) return;
     ionoShellsRef.current?.setVisible(!!settings.map.showIonosphereHops);
   }, [globeReady, settings.map.showIonosphereHops]);
+
+  // Colour the ionosphere layers from the active theme: F (outer) = primary
+  // accent, D (inner) = secondary accent, E = the blend between them. Re-reads
+  // the CSS accent vars whenever the theme (or custom colours) change.
+  useEffect(() => {
+    if (!globeReady) return;
+    const readAccent = (name: string, fallback: [number, number, number]): [number, number, number] => {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      const parts = raw.split(/[\s,]+/).map(Number);
+      if (parts.length >= 3 && parts.slice(0, 3).every((n) => !Number.isNaN(n))) {
+        return [parts[0] / 255, parts[1] / 255, parts[2] / 255];
+      }
+      return fallback;
+    };
+    const primary = readAccent('--accent-primary', [0, 0.9, 1]);     // F outer
+    const secondary = readAccent('--accent-secondary', [0.35, 0.9, 0.4]); // D inner
+    const mid: [number, number, number] = [
+      (primary[0] + secondary[0]) / 2,
+      (primary[1] + secondary[1]) / 2,
+      (primary[2] + secondary[2]) / 2,
+    ];
+    const colors: [number, number, number][] = [secondary, mid, primary]; // D, E, F
+    ionoLayerColorsRef.current = colors;
+    ionoShellsRef.current?.setColors(colors);
+  }, [globeReady, settings.appearance.theme, settings.appearance.customColors]);
 
   // Fly to target when focused callsign changes
   useEffect(() => {
