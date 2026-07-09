@@ -418,20 +418,27 @@ function SineWavePath({ segment }: { segment: [number, number][] }) {
       return [phi2 * toDeg, lam2 * toDeg];
     };
 
-    const poly = L.polyline([], { weight: 2, className: 'dx-target-path' }).addTo(map);
-    let raf = 0;
-    let phase = 0;
-    const frame = () => {
-      phase += 0.12; // travel speed (rad/frame)
-      const pts = dense.map((p, i) => {
+    // Wave points for a given phase.
+    const waveAt = (phase: number): [number, number][] =>
+      dense.map((p, i) => {
         const envelope = Math.sin(Math.PI * p.d / total); // 0 at ends, 1 mid
         const off = amplitudeKm * envelope * Math.sin(2 * Math.PI * p.d / wavelengthKm - phase);
         return offset(p.lat, p.lon, perp[i], off);
       });
-      poly.setLatLngs(pts);
+
+    // Draw the first frame synchronously so the smooth wave shows immediately
+    // (independent of the rAF loop, which only drives the travel animation).
+    // smoothFactor: 0 disables Leaflet's Douglas-Peucker simplification —
+    // otherwise it decimates our dense wave points back into jagged segments.
+    const poly = L.polyline(waveAt(0), { weight: 2, smoothFactor: 0, className: 'dx-target-path' }).addTo(map);
+    let raf = 0;
+    let phase = 0;
+    const frame = () => {
+      phase += 0.12; // travel speed (rad/frame)
+      poly.setLatLngs(waveAt(phase));
       raf = requestAnimationFrame(frame);
     };
-    frame();
+    raf = requestAnimationFrame(frame);
 
     return () => {
       cancelAnimationFrame(raf);
