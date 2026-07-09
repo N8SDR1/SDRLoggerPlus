@@ -518,7 +518,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       // as the signal bouncing its way to the DX rather than a single bulge.
       // Hop count scales with distance (~one hop per 3000 km, like real HF).
       // A bright pulse then travels the hops from the station toward the DX.
-      const SP_HOP_ALT = 0.10;   // ionosphere reflection height per hop
+      const SP_PEAK_ALT = 0.28;  // tall, dramatic hop height (fraction of radius)
       const R_KM = 6371;
       const toRadHop = Math.PI / 180;
       const dLat = (targetCoords.lat - stationLat) * toRadHop;
@@ -526,19 +526,21 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       const hav = Math.sin(dLat / 2) ** 2 +
         Math.cos(stationLat * toRadHop) * Math.cos(targetCoords.lat * toRadHop) * Math.sin(dLon / 2) ** 2;
       const distKm = 2 * R_KM * Math.asin(Math.min(1, Math.sqrt(hav)));
-      // ~1 hop per 1400 km, min 2 so even a nearby DX visibly bounces.
-      const hops = Math.max(2, Math.min(14, Math.round(distKm / 1400)));
-      const SP_SEGMENTS = Math.max(80, hops * 24); // smooth arcs per hop
+      // ~1 F-hop per 3300 km (5 hops ≈ 16 500 km, like the reference), min 2.
+      const hops = Math.max(2, Math.min(9, Math.round(distKm / 3300)));
+      const SP_SEGMENTS = hops * 40; // enough points to keep the peaks sharp
 
       const targetPath: [number, number, number][] = [];
       for (let i = 0; i <= SP_SEGMENTS; i++) {
         const t = i / SP_SEGMENTS;
         const point = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
-        const alt = Math.abs(Math.sin(hops * Math.PI * t)) * SP_HOP_ALT;
-        targetPath.push([point.lat, point.lng, alt]);
+        // Sharp triangle wave: ground → ionosphere → ground per hop.
+        const phase = (hops * t) % 1;
+        const tri = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
+        targetPath.push([point.lat, point.lng, tri * SP_PEAK_ALT]);
       }
-      // Steady (gently breathing) base line showing the whole hop path.
-      pathsData.push({ path: targetPath, color: SP_COLOR, stroke: 2.5, dashLength: 0, dashGap: 0 });
+      // Steady (gently breathing) base line showing the whole hop zigzag.
+      pathsData.push({ path: targetPath, color: SP_COLOR, stroke: 3, dashLength: 0, dashGap: 0 });
 
       // Bright pulse travelling station → DX along the hops (~2.2 s per pass).
       const PULSE_TRAVEL_MS = 2200;
