@@ -249,15 +249,15 @@ export function HeaderPlugin() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 borderRadius: 3,
-                padding: '1px 5px',
-                minWidth: 24,
+                padding: '2px 6px',
+                minWidth: 27,
                 lineHeight: 1.25,
                 transition: 'background .3s',
               }}
               className="font-mono"
             >
-              <span style={{ fontSize: 11, fontWeight: 700 }}>{n > 0 ? n : '·'}</span>
-              <span style={{ fontSize: 8, opacity: 0.85 }}>{band.replace('m', '')}</span>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>{n > 0 ? n : '·'}</span>
+              <span style={{ fontSize: 9, opacity: 0.85 }}>{band.replace('m', '')}</span>
             </div>
           );
         })}
