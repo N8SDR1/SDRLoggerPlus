@@ -506,30 +506,50 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       const SP_COLOR = `rgba(255, 68, 102, ${spAlpha})`;   // red-orange
       const LP_COLOR = `rgba(163, 230, 53, ${lpAlpha})`;   // lime green
 
-      // Peak altitude of the arc bulge above the surface. LP is much longer
-      // and gets a higher bulge — reinforces visually that it's the "long
-      // way around" while keeping both curves clearly separated in 3D so
-      // they never overlap or merge as the operator rotates the globe.
-      const SP_PEAK_ALT = 0.10;
+      // Peak altitude of the LP arc bulge above the surface. LP is much
+      // longer and gets a higher bulge — reinforces visually that it's the
+      // "long way around" while keeping both curves clearly separated in 3D
+      // so they never overlap or merge as the operator rotates the globe.
       const LP_PEAK_ALT = 0.22;
 
-      // ── Short path (red-orange, low bulge) ──────────────────────────
+      // ── Short path — ionospheric skip ───────────────────────────────
+      // The great-circle line dips to the ground and arcs up to the
+      // ionosphere `hops` times (altitude = |sin(hops·π·t)|), so it reads
+      // as the signal bouncing its way to the DX rather than a single bulge.
+      // Hop count scales with distance (~one hop per 3000 km, like real HF).
+      // A bright pulse then travels the hops from the station toward the DX.
+      const SP_HOP_ALT = 0.06;   // ionosphere reflection height per hop
+      const R_KM = 6371;
+      const toRadHop = Math.PI / 180;
+      const dLat = (targetCoords.lat - stationLat) * toRadHop;
+      const dLon = (targetCoords.lng - stationLon) * toRadHop;
+      const hav = Math.sin(dLat / 2) ** 2 +
+        Math.cos(stationLat * toRadHop) * Math.cos(targetCoords.lat * toRadHop) * Math.sin(dLon / 2) ** 2;
+      const distKm = 2 * R_KM * Math.asin(Math.min(1, Math.sqrt(hav)));
+      const hops = Math.max(1, Math.min(8, Math.round(distKm / 3000)));
+      const SP_SEGMENTS = Math.max(60, hops * 26); // ~26 pts/hop → smooth arcs
+
       const targetPath: [number, number, number][] = [];
-      for (let i = 0; i <= numSegments; i++) {
-        const t = i / numSegments;
+      for (let i = 0; i <= SP_SEGMENTS; i++) {
+        const t = i / SP_SEGMENTS;
         const point = interpolateGreatCircle(stationLat, stationLon, targetCoords.lat, targetCoords.lng, t);
-        const alt = Math.sin(Math.PI * t) * SP_PEAK_ALT;
+        const alt = Math.abs(Math.sin(hops * Math.PI * t)) * SP_HOP_ALT;
         targetPath.push([point.lat, point.lng, alt]);
       }
-      pathsData.push({
-        path: targetPath,
-        color: SP_COLOR,
-        stroke: 2.5,
-        // dashLength/dashGap 0 → solid line; the pulse comes from the
-        // alpha modulation above, not from dashes flowing along the path.
-        dashLength: 0,
-        dashGap: 0,
+      // Steady (gently breathing) base line showing the whole hop path.
+      pathsData.push({ path: targetPath, color: SP_COLOR, stroke: 2, dashLength: 0, dashGap: 0 });
+
+      // Bright pulse travelling station → DX along the hops (~2.2 s per pass).
+      const PULSE_TRAVEL_MS = 2200;
+      const pulsePos = (performance.now() % PULSE_TRAVEL_MS) / PULSE_TRAVEL_MS;
+      const pulseHalf = 0.05; // pulse covers ~10% of the path
+      const pulsePath = targetPath.filter((_, i) => {
+        const t = i / SP_SEGMENTS;
+        return t >= pulsePos - pulseHalf && t <= pulsePos + pulseHalf;
       });
+      if (pulsePath.length >= 2) {
+        pathsData.push({ path: pulsePath, color: 'rgba(255, 226, 214, 0.98)', stroke: 4, dashLength: 0, dashGap: 0 });
+      }
 
       // ── Long path (lime green, higher bulge) ────────────────────────
       // The reflex-angle arc going the other way around the globe. Same
