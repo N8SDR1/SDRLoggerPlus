@@ -1460,7 +1460,14 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     lastTargetCoordsRef.current = { lat: targetLat, lng: targetLon };
 
     const startPov = globeRef.current.pointOfView();
-    const targetPov = { lat: targetLat, lng: targetLon, altitude: 1.7 };
+    // Center on the SHORT-PATH MIDPOINT (not the DX) and pull back enough to
+    // frame the whole path, so the ionospheric hop zigzag faces the camera
+    // instead of curving onto the far side of the globe. Farther DX → higher
+    // altitude to fit the longer arc.
+    const spMid = interpolateGreatCircle(stationLat, stationLon, targetLat, targetLon, 0.5);
+    const spDistKm = calculateDistance(stationLat, stationLon, targetLat, targetLon);
+    const framedAlt = Math.max(1.6, Math.min(3.2, 1.2 + spDistKm / 7000));
+    const targetPov = { lat: spMid.lat, lng: spMid.lng, altitude: framedAlt };
 
     const startTime = performance.now();
     const durationMs = duration * 1000;
