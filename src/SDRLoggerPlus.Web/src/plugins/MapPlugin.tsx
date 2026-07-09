@@ -12,6 +12,7 @@ import { GrayLineOverlay } from '../components/GrayLineOverlay';
 import { AuroraOverlay } from '../components/AuroraOverlay';
 import { PskReporterOverlay } from '../components/PskReporterOverlay';
 import { gridToLatLon, calculateDistance, calculateBearing, getAnimationDuration } from '../utils/maidenhead';
+import { formatDistance } from '../utils/units';
 import { fetchTLEData, calculateSatellitePosition, calculateOrbitTrack, type SatellitePosition, type SatelliteTLE } from '../utils/satellite';
 import { api, type RbnSpot } from '../api/client';
 import { GlobeCore } from './GlobePlugin';
@@ -888,7 +889,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                     )}
                     {focusedCallsignInfo?.bearing != null && (
                       <div style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", color: '#00ddff', marginTop: 2 }}>
-                        {focusedCallsignInfo.bearing.toFixed(0)}° / {Math.round(focusedCallsignInfo.distance ?? 0).toLocaleString()} km
+                        {focusedCallsignInfo.bearing.toFixed(0)}° / {formatDistance(focusedCallsignInfo.distance, settings.appearance.distanceUnit)}
                       </div>
                     )}
                     <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
@@ -924,7 +925,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                     )}
                     {focusedCallsignInfo?.bearing != null && (
                       <div style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", color: '#00ddff', marginTop: 2 }}>
-                        {focusedCallsignInfo.bearing.toFixed(0)}° / {Math.round(focusedCallsignInfo.distance ?? 0).toLocaleString()} km
+                        {focusedCallsignInfo.bearing.toFixed(0)}° / {formatDistance(focusedCallsignInfo.distance, settings.appearance.distanceUnit)}
                       </div>
                     )}
                     <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
@@ -1052,7 +1053,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                       <div style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", color: '#a5b4c8', marginTop: 1 }}>{spot.grid6}</div>
                     )}
                     <div style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", color: '#00ddff', marginTop: 3 }}>
-                      {spBearing.toFixed(0)}&deg; / {Math.round(dist).toLocaleString()} km
+                      {spBearing.toFixed(0)}&deg; / {formatDistance(dist, settings.appearance.distanceUnit)}
                     </div>
                     {/* Rotator buttons: SP and LP */}
                     {rotatorEnabled && (
@@ -1879,7 +1880,7 @@ export function MapPlugin() {
                 {focusedCallsignInfo.bearing != null && (
                   <p className="text-xs font-mono text-accent-secondary">
                     {focusedCallsignInfo.bearing.toFixed(0)}°
-                    {focusedCallsignInfo.distance != null && ` / ${Math.round(focusedCallsignInfo.distance)} km`}
+                    {focusedCallsignInfo.distance != null && ` / ${formatDistance(focusedCallsignInfo.distance, settings.appearance.distanceUnit)}`}
                   </p>
                 )}
               </div>
