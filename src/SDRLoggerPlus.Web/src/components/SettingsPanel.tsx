@@ -1511,6 +1511,28 @@ function AdifMonitorSettingsSection() {
   const monitor = settings.adifMonitor;
   const udp = settings.adifUdp;
 
+  // The native file picker is only available under Electron (via the preload
+  // bridge); in the browser dev server the user types/pastes the path.
+  const hasElectronFilePicker = typeof window !== 'undefined'
+    && (window as unknown as { electronAPI?: { selectFile?: unknown } }).electronAPI?.selectFile !== undefined;
+
+  const browseForAdif = async (which: 'file1' | 'file2') => {
+    const api = (window as unknown as { electronAPI: { selectFile: (opts: {
+      title?: string;
+      defaultPath?: string;
+      filters?: { name: string; extensions: string[] }[];
+    }) => Promise<string | null> } }).electronAPI;
+    const picked = await api.selectFile({
+      title: 'Select an ADIF log file',
+      defaultPath: (which === 'file1' ? monitor.file1 : monitor.file2) || undefined,
+      filters: [
+        { name: 'ADIF logs', extensions: ['adi', 'adif'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (picked) updateAdifMonitorSettings(which === 'file1' ? { file1: picked } : { file2: picked });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -1538,23 +1560,33 @@ function AdifMonitorSettingsSection() {
       <div className={`space-y-4 ${!monitor.enabled ? 'opacity-50' : ''}`}>
         <div className="space-y-2">
           <label className="text-sm font-medium font-ui text-dark-200">Watched File 1</label>
-          <input
-            type="text"
-            value={monitor.file1}
-            onChange={(e) => updateAdifMonitorSettings({ file1: e.target.value })}
-            placeholder="C:\\VarAC\\VarAC_qsos.adi"
-            className="glass-input w-full font-mono"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={monitor.file1}
+              onChange={(e) => updateAdifMonitorSettings({ file1: e.target.value })}
+              placeholder="C:\\VarAC\\VarAC_qsos.adi"
+              className="glass-input w-full font-mono"
+            />
+            {hasElectronFilePicker && (
+              <button onClick={() => browseForAdif('file1')} className="glass-button px-3 py-2 whitespace-nowrap" title="Browse for an ADIF file">Browse…</button>
+            )}
+          </div>
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium font-ui text-dark-200">Watched File 2</label>
-          <input
-            type="text"
-            value={monitor.file2}
-            onChange={(e) => updateAdifMonitorSettings({ file2: e.target.value })}
-            placeholder="C:\\MSHV\\log.adi (optional)"
-            className="glass-input w-full font-mono"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={monitor.file2}
+              onChange={(e) => updateAdifMonitorSettings({ file2: e.target.value })}
+              placeholder="C:\\MSHV\\log.adi (optional)"
+              className="glass-input w-full font-mono"
+            />
+            {hasElectronFilePicker && (
+              <button onClick={() => browseForAdif('file2')} className="glass-button px-3 py-2 whitespace-nowrap" title="Browse for an ADIF file">Browse…</button>
+            )}
+          </div>
         </div>
         <p className="text-xs text-dark-300">
           Full paths to .adi files. QSOs already in the file when monitoring starts are not imported —
