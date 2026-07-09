@@ -4,6 +4,7 @@ import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, Loc
 import { api, CreateQsoRequest, SatState } from '../api/client';
 import { signalRService, setTciMetersCallback, clearTciMetersCallback, type TciMetersEvent } from '../api/signalr';
 import { S9_DBM, DB_PER_S_UNIT } from '../utils/smeter';
+import { spotKhzToMhzString, spotKhzToHz } from '../utils/frequency';
 import { useSignalR } from '../hooks/useSignalR';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -318,11 +319,12 @@ export function LogEntryPlugin() {
   }, [nameLocked, focusedCallsignInfo?.name]);
 
   // Auto-populate from DX cluster spot selection. selectedSpot.frequency
-  // arrives in Hz; we display MHz throughout the form (v1.x parity).
+  // arrives in kHz (the app-wide spot unit — see utils/frequency.ts); we
+  // display MHz throughout the form (v1.x parity) and band-match in Hz.
   useEffect(() => {
     if (selectedSpot) {
-      const frequencyMhz = (selectedSpot.frequency / 1_000_000).toFixed(6);
-      const band = getBandFromFrequency(selectedSpot.frequency);
+      const frequencyMhz = spotKhzToMhzString(selectedSpot.frequency);
+      const band = getBandFromFrequency(spotKhzToHz(selectedSpot.frequency));
       const mode = selectedSpot.mode ? normalizeMode(selectedSpot.mode) : formData.mode;
 
       setFormData(prev => ({
