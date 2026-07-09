@@ -190,6 +190,10 @@ export interface MapSettings {
   showCallsignImages: boolean;
   maxCallsignImages: number;
   showDxNewsTicker: boolean; // scrolling DX-World news bar at the bottom of the 2D Map
+  // 2D-map DX signal path: animated sine wave or a plain dashed line, in a
+  // user-picked colour (hex).
+  dxPathStyle: 'sine' | 'dash';
+  dxPathColor: string;
   showPskOverlay: boolean;
   pskCallsign: string; // callsign to look up on PSK Reporter; empty = use station callsign
   showAuroraOverlay: boolean;
@@ -557,6 +561,8 @@ const defaultSettings: Settings = {
     showCallsignImages: true,
     maxCallsignImages: 50,
     showDxNewsTicker: true,
+    dxPathStyle: 'sine', // 'sine' | 'dash'
+    dxPathColor: '#39ff14', // matches accent-secondary green in the default theme
     showPskOverlay: false,
     pskCallsign: '',
     showAuroraOverlay: false,

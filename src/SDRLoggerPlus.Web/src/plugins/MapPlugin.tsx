@@ -338,7 +338,7 @@ function generateGreatCirclePoints(
  * layer (updated in a rAF loop, no React re-render per frame); colour + the
  * gentle opacity breath come from the shared .dx-target-path CSS class.
  */
-function SineWavePath({ segment }: { segment: [number, number][] }) {
+function SineWavePath({ segment, color }: { segment: [number, number][]; color: string }) {
   const map = useMap();
   useEffect(() => {
     if (!segment || segment.length < 3) return;
@@ -405,7 +405,7 @@ function SineWavePath({ segment }: { segment: [number, number][] }) {
     // (independent of the rAF loop, which only drives the travel animation).
     // smoothFactor: 0 disables Leaflet's Douglas-Peucker simplification —
     // otherwise it decimates our dense wave points back into jagged segments.
-    const poly = L.polyline(waveAt(0), { weight: 2, smoothFactor: 0, className: 'dx-target-path' }).addTo(map);
+    const poly = L.polyline(waveAt(0), { weight: 2, smoothFactor: 0, color, className: 'dx-target-path' }).addTo(map);
     let raf = 0;
     let phase = 0;
     const frame = () => {
@@ -419,7 +419,7 @@ function SineWavePath({ segment }: { segment: [number, number][] }) {
       cancelAnimationFrame(raf);
       map.removeLayer(poly);
     };
-  }, [segment, map]);
+  }, [segment, map, color]);
   return null;
 }
 
@@ -845,18 +845,27 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
             }}
           />
 
-          {/* Great circle path to focused callsign — an animated traveling
-              sine wave in the pin green (accent-secondary), so pin + line read
-              as one. Short segments (< 3 pts, e.g. antimeridian slivers) fall
-              back to a plain line. */}
+          {/* Great circle path to focused callsign — animated sine wave or a
+              plain dashed line, in the user-picked colour (Settings → Map →
+              Signal Path). Short segments (< 3 pts, antimeridian slivers)
+              always fall back to a plain line. */}
           {targetPathSegments.map((segment, segmentIndex) => (
-            segment.length >= 3 ? (
-              <SineWavePath key={`target-wave-${segmentIndex}`} segment={segment} />
+            segment.length >= 3 && (settings.map.dxPathStyle ?? 'sine') === 'sine' ? (
+              <SineWavePath
+                key={`target-wave-${segmentIndex}`}
+                segment={segment}
+                color={settings.map.dxPathColor || '#39ff14'}
+              />
             ) : (
               <Polyline
                 key={`target-path-${segmentIndex}`}
                 positions={segment}
-                pathOptions={{ weight: 2, className: 'dx-target-path' }}
+                pathOptions={{
+                  weight: 2,
+                  color: settings.map.dxPathColor || '#39ff14',
+                  dashArray: '5, 10',
+                  className: 'dx-target-path',
+                }}
               />
             )
           ))}

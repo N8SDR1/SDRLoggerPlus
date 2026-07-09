@@ -1007,11 +1007,10 @@ html:not(.dark) .header-plugin {
   overflow: visible !important;
 }
 
-/* DX-target great-circle path — steady pin-green (the travel animation is
-   the motion; no opacity pulse). Colour set here so the theme var resolves;
-   also overrides Leaflet's stroke-opacity presentation attribute. */
+/* DX-target great-circle path — steady opacity (the travel animation is the
+   motion; no pulse). Colour comes from Settings → Map → Signal Path via the
+   Leaflet color option, NOT from CSS (a CSS stroke would override it). */
 .dx-target-path {
-  stroke: rgb(var(--accent-secondary));
   stroke-opacity: 0.9;
 }
 
