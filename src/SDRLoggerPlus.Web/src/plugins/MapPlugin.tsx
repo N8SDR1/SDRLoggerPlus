@@ -378,15 +378,15 @@ function SineWavePath({ segment }: { segment: [number, number][] }) {
 
     // Wave geometry proportional to path length so density/height read the
     // same for a 500 km hop or a 15 000 km path.
-    const waves = Math.max(4, Math.min(22, Math.round(total / 900)));
+    const waves = Math.max(6, Math.min(40, Math.round(total / 450)));
     const wavelengthKm = total / waves;
-    const amplitudeKm = Math.max(25, Math.min(450, wavelengthKm * 0.28));
+    const amplitudeKm = Math.max(20, Math.min(280, wavelengthKm * 0.32));
 
     // Resample the coarse great-circle path to many evenly-spaced points —
     // ~28 per wave — so each oscillation is a smooth curve, not a few straight
     // segments. Linear interpolation between adjacent base points is fine at
     // this spacing (they're only tens of km apart).
-    const N = Math.max(160, Math.min(900, waves * 28));
+    const N = Math.max(200, Math.min(1100, waves * 28));
     const dense: { lat: number; lon: number; d: number }[] = [];
     let j = 0;
     for (let k = 0; k <= N; k++) {
