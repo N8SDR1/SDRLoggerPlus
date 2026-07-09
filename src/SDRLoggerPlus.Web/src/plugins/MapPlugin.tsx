@@ -103,7 +103,8 @@ const satelliteIcon = new L.DivIcon({
 function createCallsignImageIcon(imageUrl: string | undefined | null, callsign: string, scale: '1x' | '2x') {
   const pinW = scale === '2x' ? 52 : 42;   // pin width in px
   const pinH = Math.round(pinW * 1.32);    // teardrop taller than wide
-  const bodyColor = scale === '2x' ? '#ffb432' : '#00ddff';
+  // Panel-name green (accent-secondary), via the CSS var so it tracks themes.
+  const bodyColor = 'rgb(var(--accent-secondary))';
   const fontSize = scale === '2x' ? 12 : 10;
   const emojiPx = Math.round(pinW * 0.42);
   // Escape HTML special chars in callsign to prevent XSS
@@ -123,7 +124,7 @@ function createCallsignImageIcon(imageUrl: string | undefined | null, callsign: 
     <svg width="${pinW}" height="${pinH}" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg"
          style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.55));">
       <path d="M20 50 C 9 33, 2 27, 2 18 A 18 18 0 1 1 38 18 C 38 27, 31 33, 20 50 Z"
-            fill="${bodyColor}" stroke="#0a0e14" stroke-width="2.5" stroke-linejoin="round" />
+            style="fill:${bodyColor}" stroke="#0a0e14" stroke-width="2.5" stroke-linejoin="round" />
       <foreignObject x="8" y="6" width="24" height="24">
         <div xmlns="http://www.w3.org/1999/xhtml"
              style="width:24px;height:24px;border-radius:50%;overflow:hidden;background:#1a1e26;">
