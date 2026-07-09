@@ -434,7 +434,7 @@ function SineWavePath({ segment }: { segment: [number, number][] }) {
     let raf = 0;
     let phase = 0;
     const frame = () => {
-      phase += 0.12; // travel speed (rad/frame)
+      phase += 0.30; // travel speed (rad/frame)
       poly.setLatLngs(waveAt(phase));
       raf = requestAnimationFrame(frame);
     };

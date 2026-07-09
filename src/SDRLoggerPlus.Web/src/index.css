@@ -1007,16 +1007,12 @@ html:not(.dark) .header-plugin {
   overflow: visible !important;
 }
 
-/* DX-target great-circle path — breathes like the globe's short path
-   (~3.5s sinusoidal alpha, 0.33..0.95). CSS overrides Leaflet's static
-   stroke-opacity presentation attribute. */
-@keyframes dxTargetPathPulse {
-  0%, 100% { stroke-opacity: 0.33; }
-  50% { stroke-opacity: 0.95; }
-}
+/* DX-target great-circle path — steady pin-green (the travel animation is
+   the motion; no opacity pulse). Colour set here so the theme var resolves;
+   also overrides Leaflet's stroke-opacity presentation attribute. */
 .dx-target-path {
   stroke: rgb(var(--accent-secondary));
-  animation: dxTargetPathPulse 3.5s ease-in-out infinite;
+  stroke-opacity: 0.9;
 }
 
 /* ============================================================
