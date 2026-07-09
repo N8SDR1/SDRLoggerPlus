@@ -13,6 +13,7 @@ import { StrikeStore, type Strike } from '../utils/lightningStrikes';
 import { setLightningStrikesCallback, clearLightningStrikesCallback } from '../api/signalr';
 import { createDayNightShell, type DayNightShell } from '../utils/dayNightShell';
 import { getSunPosition } from '../utils/solarCalculations';
+import { formatDistance } from '../utils/units';
 // Globe is dynamically imported to catch WebGL errors at load time
 
 // Default station location (can be overridden by store)
@@ -405,6 +406,9 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   // Track focused callsign info for label callback
   const focusedCallsignInfoRef = useRef<CallsignLookedUpEvent | null>(null);
   focusedCallsignInfoRef.current = focusedCallsignInfo;
+  // Distance display unit for the (init-time) marker-label HTML builder.
+  const distanceUnitRef = useRef(settings.appearance.distanceUnit);
+  distanceUnitRef.current = settings.appearance.distanceUnit;
 
   // Render the beam visualization (rotator beam + DE→DX line)
   // Long-path visibility — read once per render outside the animation loop.
@@ -741,7 +745,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
               <div style="font-weight: bold; color: #ff4466;">${data.label}</div>
               ${info?.grid ? `<div style="font-size: 0.8em; color: #8899aa;">${info.grid}</div>` : ''}
               ${info?.bearing != null ? `<div style="font-size: 0.8em; color: #00ddff;">
-                ${info.bearing.toFixed(0)}° / ${Math.round(info.distance ?? 0)} km
+                ${info.bearing.toFixed(0)}° / ${formatDistance(info.distance ?? 0, distanceUnitRef.current)}
               </div>` : ''}
             </div>`;
           }
@@ -1675,7 +1679,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                       <p className="text-[10px] font-mono text-accent-info">
                         <span className="text-accent-danger" title="Short path">SP</span>{' '}
                         {focusedCallsignInfo.bearing.toFixed(0)}°
-                        {focusedCallsignInfo.distance != null && ` / ${Math.round(focusedCallsignInfo.distance)}km`}
+                        {focusedCallsignInfo.distance != null && ` / ${formatDistance(focusedCallsignInfo.distance, settings.appearance.distanceUnit)}`}
                       </p>
                     )}
                     {focusedCallsignInfo.bearing != null && settings.map.showLongPath !== false && (
@@ -1687,7 +1691,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
                       <p className="text-[10px] font-mono" style={{ color: 'rgba(163, 230, 53, 0.95)' }}>
                         <span title="Long path">LP</span>{' '}
                         {((focusedCallsignInfo.bearing + 180) % 360).toFixed(0)}°
-                        {focusedCallsignInfo.distance != null && ` / ${Math.round(40030 - focusedCallsignInfo.distance)}km`}
+                        {focusedCallsignInfo.distance != null && ` / ${formatDistance(40030 - focusedCallsignInfo.distance, settings.appearance.distanceUnit)}`}
                       </p>
                     )}
                   </div>

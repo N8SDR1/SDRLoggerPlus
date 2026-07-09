@@ -364,6 +364,9 @@ public class AppearanceSettings
     // Hex colors for theme == "custom": accent, background, panel, text
     [BsonElement("customColors")]
     public Dictionary<string, string>? CustomColors { get; set; }
+
+    [BsonElement("distanceUnit")]
+    public string? DistanceUnit { get; set; } = "km"; // km | mi
 }
 
 [BsonIgnoreExtraElements]

@@ -2157,6 +2157,29 @@ function AppearanceSettingsSection() {
         </button>
       </div>
 
+      {/* Distance units (metric / imperial) */}
+      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+        <div>
+          <p className="font-medium font-ui text-dark-200">Distance Units</p>
+          <p className="text-sm text-dark-300">How distances are shown app-wide</p>
+        </div>
+        <div className="flex rounded-lg overflow-hidden border border-glass-100">
+          {(['km', 'mi'] as const).map((u) => (
+            <button
+              key={u}
+              onClick={() => updateAppearanceSettings({ distanceUnit: u })}
+              className={`px-3 py-1.5 text-sm font-ui transition-colors ${
+                (appearance.distanceUnit ?? 'km') === u
+                  ? 'bg-accent-success text-dark-900 font-semibold'
+                  : 'bg-dark-800 text-dark-300 hover:text-dark-200'
+              }`}
+            >
+              {u === 'km' ? 'km (metric)' : 'mi (imperial)'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <LayoutPresetsSubsection />
     </div>
   );

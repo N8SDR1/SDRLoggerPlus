@@ -96,6 +96,8 @@ export interface AppearanceSettings {
   compactMode: boolean;
   /** Used when theme === 'custom'; seeded from the previously active theme. */
   customColors: CustomColors;
+  /** Distance display units app-wide: km (metric) or mi (imperial). */
+  distanceUnit: 'km' | 'mi';
 }
 
 export interface RotatorPreset {
@@ -492,6 +494,7 @@ const defaultSettings: Settings = {
     theme: 'dark',
     compactMode: false,
     customColors: getSeedColors('dark'),
+    distanceUnit: 'km',
   },
   rotator: {
     enabled: false,

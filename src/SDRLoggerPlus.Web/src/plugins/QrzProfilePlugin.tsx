@@ -1,10 +1,13 @@
 import { User, ContactRound, MapPin, Navigation, Globe, ExternalLink } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
+import { formatDistance } from '../utils/units';
 
 export function QrzProfilePlugin() {
   const { focusedCallsignInfo, isLookingUpCallsign } = useAppStore();
+  const distanceUnit = useSettingsStore((s) => s.settings.appearance.distanceUnit);
 
   const callsign = focusedCallsignInfo?.callsign;
   // For a compound call ("F/HB9GUX") link to the base call's QRZ page — the
@@ -135,7 +138,7 @@ export function QrzProfilePlugin() {
                     </span>
                     {focusedCallsignInfo.distance != null && (
                       <span className="text-accent-secondary font-mono">
-                        {Math.round(focusedCallsignInfo.distance).toLocaleString()} km
+                        {formatDistance(focusedCallsignInfo.distance, distanceUnit)}
                       </span>
                     )}
                   </div>
