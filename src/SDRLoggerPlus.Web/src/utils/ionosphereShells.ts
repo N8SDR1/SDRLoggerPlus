@@ -41,10 +41,13 @@ export interface IonoLayer {
   intensity: number;
 }
 
+// The F (outer) shell sits at the short-path hop peak (globe radius + 0.28,
+// = GlobePlugin's SP_PEAK_ALT) so the hops bounce right off it; D and E stack
+// below. Keep the 1.28 in sync with SP_PEAK_ALT if that hop height changes.
 export const DEFAULT_IONO_LAYERS: IonoLayer[] = [
-  { radiusFactor: 1.03, color: [1.0, 0.42, 0.28], intensity: 0.35 }, // D — red/amber
-  { radiusFactor: 1.06, color: [0.38, 1.0, 0.48], intensity: 0.5 },  // E — green
-  { radiusFactor: 1.10, color: [0.36, 0.76, 1.0], intensity: 0.78 }, // F — cyan (brightest)
+  { radiusFactor: 1.13, color: [1.0, 0.42, 0.28], intensity: 0.35 }, // D — red/amber (low)
+  { radiusFactor: 1.205, color: [0.38, 1.0, 0.48], intensity: 0.5 }, // E — green (mid)
+  { radiusFactor: 1.28, color: [0.36, 0.76, 1.0], intensity: 0.78 }, // F — cyan (hop peak, brightest)
 ];
 
 const VERTEX_SHADER = `
