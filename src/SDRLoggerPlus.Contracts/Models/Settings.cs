@@ -327,6 +327,13 @@ public class PotaSettings
 
     [BsonElement("password")]
     public string? Password { get; set; } = string.Empty;
+
+    // POTA Activators panel: follow the rig's band / mode (persisted, like the cluster).
+    [BsonElement("followRigBand")]
+    public bool FollowRigBand { get; set; }
+
+    [BsonElement("followRigMode")]
+    public bool FollowRigMode { get; set; }
 }
 
 /// <summary>

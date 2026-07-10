@@ -74,7 +74,7 @@ export function POTAPlugin() {
   const { onGridReady, onColumnChanged, onSortChanged } = useAgGridState('pota');
   const { selectSpot } = useSignalR();
   const { setPotaSpots } = useAppStore();
-  const { settings, updateMapSettings, saveSettings } = useSettingsStore();
+  const { settings, updateMapSettings, updatePotaSettings, saveSettings } = useSettingsStore();
 
   const { data: spots, isLoading } = useQuery({
     queryKey: ['pota-spots'],
@@ -92,8 +92,12 @@ export function POTAPlugin() {
   const rigMode = rigState?.mode;
 
   // Filter state (local to this panel).
-  const [followBand, setFollowBand] = useState(false);
-  const [followMode, setFollowMode] = useState(false);
+  // Follow-rig persists in settings (like the DX Cluster) so it survives a
+  // restart or panel re-dock.
+  const followBand = settings.pota.followRigBand;
+  const followMode = settings.pota.followRigMode;
+  const toggleFollowBand = () => { updatePotaSettings({ followRigBand: !followBand }); saveSettings(); };
+  const toggleFollowMode = () => { updatePotaSettings({ followRigMode: !followMode }); saveSettings(); };
   const [selectedBands, setSelectedBands] = useState<string[]>([]);
   const [selectedModes, setSelectedModes] = useState<string[]>([]);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
@@ -291,8 +295,8 @@ export function POTAPlugin() {
           <div className="flex items-center gap-1.5 whitespace-nowrap">
             <span className="text-xs text-dark-300 font-ui flex items-center gap-1"><Crosshair className="w-4 h-4" /> Follow rig:</span>
             {([
-              { key: 'band', label: 'Band', on: followBand, active: bandTracking, onClick: () => setFollowBand(v => !v) },
-              { key: 'mode', label: 'Mode', on: followMode, active: modeTracking, onClick: () => setFollowMode(v => !v) },
+              { key: 'band', label: 'Band', on: followBand, active: bandTracking, onClick: toggleFollowBand },
+              { key: 'mode', label: 'Mode', on: followMode, active: modeTracking, onClick: toggleFollowMode },
             ] as const).map((p) => (
               <button
                 key={p.key}

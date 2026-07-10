@@ -89,6 +89,9 @@ export interface EqslSettings {
 export interface PotaSettings {
   username: string;  // POTA.app account username
   password: string;  // POTA.app account password (basic-auth on /spot)
+  /** POTA Activators panel: follow the rig's band / mode (persisted, like the cluster). */
+  followRigBand: boolean;
+  followRigMode: boolean;
 }
 
 export interface AppearanceSettings {
@@ -500,6 +503,8 @@ const defaultSettings: Settings = {
   pota: {
     username: '',
     password: '',
+    followRigBand: false,
+    followRigMode: false,
   },
   adifMonitor: {
     enabled: false,
