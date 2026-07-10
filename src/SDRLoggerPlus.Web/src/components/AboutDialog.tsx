@@ -284,6 +284,7 @@ function HelpTab() {
             <li><B>Hamlib</B> — universal (Icom / Yaesu / Kenwood / …) via rigctld. Tunes + reads the rig; no panadapter.</li>
             <li><B>flrig</B> — XML-RPC bridge to flrig's rig database (auto-detects data-mode names). Tunes + reads the rig; no panadapter.</li>
           </ul>
+          <p className="text-xs text-dark-300">Adding a TCI rig runs a quick <B>connection check</B> first — a wrong port tells you right away instead of leaving a rig that never connects. Use <B>Test</B> to probe it, or <B>Add anyway</B> to skip the check. Saved rigs have an <B>Edit</B> button to change the name, host, or port.</p>
         </Section>
 
         <Section id="combo" title="The Lyra Combo Link">
@@ -320,6 +321,7 @@ function HelpTab() {
             <li><B>RBN band openings</B> — separate VHF/UHF opening alerts (10/6/2m, 70cm) with distance + optional voice announce: <P>Settings → Band Openings</P>.</li>
           </ul>
           <p><B>Filters</B> (Cluster panel + <P>Settings</P>): max age (1–60 min), capacity (50–300), band/mode multi-select, <B>Track Rig</B> (show only the rig's current band+mode), and status colors — new DXCC (orange), new band (green), worked (gray, dimmable).</p>
+          <p><B>POTA Activators</B> panel — live park activations, now with the same filter toolbar as the Cluster: <B>Follow rig</B> (Band/Mode), Band, Mode, a <B>Region</B> filter (by park location), and search.</p>
           <p><B>Click a spot</B> to tune the radio and prefill the Log Entry. Spots can also be <B>pushed to a TCI radio's panadapter</B> (Lyra / Thetis) as click-to-tune markers.</p>
           <p><B>DXpeditions & Hot List (auto hot spots).</B> The <B>DXpeditions</B> panel lists current and upcoming operations (NG3K feed). Click any callsign to drop it on your <B>Hot List</B> — a watchlist that makes matching DX spots light up as <B>hot spots</B> the instant they appear, and, with the announce mode on, calls them out by <B>voice</B>. Cycle the pill Off → Visual → Visual + Voice; the counter shows how many you're watching, and Clear All empties the list. Manage watched calls + text-to-speech under <P>Settings → Alerts → Hot List</P>.</p>
           <p><B>The 3D globe</B> shows spots + spotter→DX arcs, lightning strikes, POTA parks, your station, satellite tracks + footprints, the day/night terminator, gray line, aurora, PSK-Reporter coverage, and cached QRZ profile photos. Click a point to focus that call. Overlays are all in <P>Settings → Map</P>.</p>
@@ -343,7 +345,7 @@ function HelpTab() {
         <Section id="callbook" title="Callbook, Uploads & Import">
           <p><B>Callbook lookups</B>: QRZ then HamQTH (<P>Settings → Web Logbooks</P>), falling back to the bundled AD1C <B>cty.dat</B> for country + approximate coords. Keep cty.dat current with the update button under <P>Settings → Web Logbooks → Country Files</P>.</p>
           <p><B>Upload logbooks</B> (per-QSO or on demand), each in <P>Settings → Web Logbooks</P>: <B>LoTW</B> (signs via TQSL), <B>eQSL</B>, <B>Club Log</B>, <B>HRDLog</B>, and <B>QRZ Logbook</B>.</p>
-          <p><B>Import</B> — <P>Settings → ADIF Monitor</P> watches external <span className="font-mono text-[11px] text-dark-100">.adi</span> files (VarAC, MSHV, …) and listens for ADIF-over-UDP from N1MM / Logger32 / DXKeeper; <B>WSJT-X / JTDX</B> auto-log has its own section — <P>Settings → WSJT-X / JTDX</P> — with two independent UDP sources so you can run two decoders (say WSJT-X and JTDX) on separate ports at once.</p>
+          <p><B>Import</B> — <P>Settings → ADIF Monitor</P> watches external <span className="font-mono text-[11px] text-dark-100">.adi</span> files (VarAC, MSHV, … — <B>Browse</B> to each file or paste its path) and listens for ADIF-over-UDP from N1MM / Logger32 / DXKeeper; <B>WSJT-X / JTDX</B> auto-log has its own section — <P>Settings → WSJT-X / JTDX</P> — with two independent UDP sources so you can run two decoders (say WSJT-X and JTDX) on separate ports at once.</p>
           <p><B>Backup &amp; Restore</B> (<P>Settings → Backup &amp; Restore</P>) — turn on <B>Scheduled Backups</B> to save your logbook automatically (daily, weekly, or on exit) to a folder you choose, keeping the last N copies. You can also <B>Export / Import all app settings</B> to a single file — ideal for moving your whole setup to another PC or keeping a safe copy off-machine.</p>
         </Section>
 
