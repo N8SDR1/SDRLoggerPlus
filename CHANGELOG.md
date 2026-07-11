@@ -3,6 +3,41 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-10 — v2.1.0 "Vega" 🌟
+
+Feature release on the 2.0 "Vega" line.
+
+### New
+- **Units — Imperial / Metric master toggle** (Settings → Appearance). One
+  switch drives distance, satellite range/altitude, wind, temperature, and
+  lightning proximity. The Weather wind switch can still override it (defaults
+  to follow the master).
+- **WSJT-X / JTDX** now has its own Settings section, with a **second
+  independent UDP source** — auto-log from two decoders at once (e.g. WSJT-X
+  and JTDX on separate ports).
+- **AI talk points — bring your own provider.** Chat AI works with any
+  OpenAI-compatible endpoint via a Base-URL field: OpenAI, Anthropic, **Groq**,
+  **OpenRouter**, and **Ollama** (local, no key), plus Custom. Provider errors
+  now show the real reason. The Help Guide includes an Ollama setup walkthrough.
+- **POTA Activators filters** — the DX-cluster toolbar on the POTA panel:
+  Follow-rig (Band/Mode), Band, Mode, a Region filter (park location), and
+  search. Follow-rig persists across restarts.
+- **TCI rig setup — connection check + edit.** Adding a TCI rig probes the
+  host:port first, so a wrong port tells you immediately instead of leaving a
+  rig that never connects. Saved rigs now have an Edit button (name/host/port).
+- **Panadapter** — spectrum height (SPC) and spectrum line-colour controls; the
+  palette and line colour live behind a colour gear.
+- **ADIF Monitor** — Browse buttons to pick the watched `.adi` files.
+
+### Improvements
+- Larger, more legible band-activity tiles in the header bar.
+- About page shows the real version number.
+- New landscape splash screen.
+
+### Fixes
+- **Lightning proximity alert** now reads the freshest strikes (last ~0–10 min)
+  instead of data up to an hour old — storm warnings reflect current conditions.
+
 ## 2026-07-08 — v2.0.1
 
 ### Fixes
