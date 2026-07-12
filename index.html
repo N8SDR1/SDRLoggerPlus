@@ -93,6 +93,19 @@
   .credits p { font-size: 14.5px; margin: 6px 0; }
   .credits .name { color: var(--head); font-weight: 600; }
 
+  /* Companion app (Lyra) callout */
+  .companion {
+    display: flex; align-items: center; gap: 26px;
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid rgba(0,229,255,0.22); border-radius: 16px; padding: 26px 28px;
+    box-shadow: 0 0 50px rgba(0,229,255,0.06);
+  }
+  .companion > img { width: 84px; height: 84px; border-radius: 18px; flex-shrink: 0; box-shadow: 0 8px 30px rgba(0,229,255,0.25); }
+  .companion h3 { color: var(--head); font-size: 18px; margin-bottom: 8px; }
+  .companion p { font-size: 14.5px; color: var(--text); }
+  .companion-cta { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+  @media (max-width: 560px) { .companion { flex-direction: column; text-align: center; } }
+
   footer { text-align: center; padding: 34px 0 56px; color: var(--muted); font-size: 13px; }
   footer a { color: var(--muted); }
   footer a:hover { color: var(--accent); }
@@ -136,6 +149,21 @@
         <div class="card"><h3><span class="ico">🔌</span> Digital & online</h3><p>WSJT-X / JTDX auto-logging over UDP (two sources at once), plus LoTW, Club Log, HRDLog and PSK Reporter uploads.</p></div>
         <div class="card"><h3><span class="ico">🛰️</span> Satellite & propagation</h3><p>CSN S.A.T. controller integration and satellite tracking, with propagation, solar, aurora and space-weather panels.</p></div>
         <div class="card"><h3><span class="ico">⛈️</span> Station weather</h3><p>Severe-weather alerts from NWS plus your own Ambient Weather or Ecowitt station — pull the antenna before the storm.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Companion app</h2>
+      <div class="companion">
+        <img src="https://n8sdr1.github.io/Lyra-SDR-cpp/logo.png" alt="Lyra logo">
+        <div>
+          <h3>🔗 Lyra — the SDR that speaks SDRLogger+</h3>
+          <p>Running a <strong style="color:var(--head)">Hermes Lite 2 / 2+</strong>? <strong style="color:var(--head)">Lyra</strong> is SDRLogger+'s sister application — a native SDR transceiver by the same team. Link the two over <strong>TCI</strong> and switch on <strong>Combo</strong>: grab a call in Lyra's CW console and it lands here with a callbook lookup, the operator's name flows back to your macros, RST auto-fills from Lyra's calibrated S-meter, and one macro logs the QSO as you send 73.</p>
+          <div class="companion-cta">
+            <a class="btn btn-primary" href="https://n8sdr1.github.io/Lyra-SDR-cpp/">Visit Lyra</a>
+            <a class="btn btn-ghost" href="https://github.com/N8SDR1/Lyra-SDR-cpp">★ GitHub</a>
+          </div>
+        </div>
       </div>
     </section>
 
