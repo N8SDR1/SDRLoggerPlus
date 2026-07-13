@@ -554,6 +554,7 @@ function LotwSettingsSection() {
   const { settings, updateLotwSettings } = useSettingsStore();
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
+  const [showLotwPassword, setShowLotwPassword] = useState(false);
 
   const lotw = settings.lotw;
 
@@ -716,6 +717,49 @@ function LotwSettingsSection() {
             Passed to TQSL as <code className="font-mono">-l &lt;name&gt;</code>.
             Useful if your TQSL has multiple station locations configured.
           </p>
+        </div>
+
+        <div className="pt-2 border-t border-glass-100 space-y-3">
+          <div>
+            <p className="text-sm font-medium font-ui text-dark-200">Download confirmations (LoTW website login)</p>
+            <p className="text-xs text-dark-300">
+              Separate from the TQSL certificate — this is your{' '}
+              <a href="https://lotw.arrl.org" target="_blank" rel="noreferrer" className="text-accent-primary hover:underline">lotw.arrl.org</a>{' '}
+              website username &amp; password, used to download your confirmation report for the
+              Log History → <span className="font-medium">Confirmations</span> button.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium font-ui text-dark-200">LoTW Username</label>
+              <input
+                type="text"
+                value={lotw.username}
+                onChange={(e) => updateLotwSettings({ username: e.target.value })}
+                placeholder="Your LoTW login (callsign)"
+                className="glass-input w-full font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium font-ui text-dark-200">LoTW Password</label>
+              <div className="relative">
+                <input
+                  type={showLotwPassword ? 'text' : 'password'}
+                  value={lotw.password}
+                  onChange={(e) => updateLotwSettings({ password: e.target.value })}
+                  placeholder="LoTW website password"
+                  className="glass-input w-full font-mono pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLotwPassword((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200 text-xs"
+                >
+                  {showLotwPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>

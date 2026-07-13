@@ -38,6 +38,10 @@ export interface LotwSettings {
   tqslPath: string;
   // Optional TQSL station location name (passed as `-l <name>`); empty = TQSL default.
   stationCallsign: string;
+  // LoTW website login (separate from the TQSL cert) — used to download the
+  // confirmation report from lotw.arrl.org.
+  username: string;
+  password: string;
 }
 
 export interface RbnAlertSettings {
@@ -521,6 +525,8 @@ const defaultSettings: Settings = {
     enabled: false,
     tqslPath: '',
     stationCallsign: '',
+    username: '',
+    password: '',
   },
   clubLog: {
     enabled: false,

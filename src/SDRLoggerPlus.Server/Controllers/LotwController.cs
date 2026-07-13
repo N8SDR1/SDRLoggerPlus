@@ -48,6 +48,26 @@ public class LotwController : ControllerBase
     }
 
     /// <summary>
+    /// Download the LoTW confirmation report and merge it into the log
+    /// (marks matching QSOs Confirmed). One-click "sync from LoTW".
+    /// </summary>
+    [HttpPost("download-confirmations")]
+    [ProducesResponseType(typeof(ConfirmationMergeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ConfirmationMergeResponse>> DownloadConfirmations(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _lotwService.DownloadConfirmationsAsync(cancellationToken);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Verify a TQSL binary by running `--version`. Used by the Settings panel's Test button.
     /// </summary>
     [HttpPost("test-tqsl")]

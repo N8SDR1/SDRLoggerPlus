@@ -34,6 +34,14 @@ public interface IAdifService
     /// Export QSOs from database to ADIF format
     /// </summary>
     Task<string> ExportQsosAsync(AdifExportRequest? request = null);
+
+    /// <summary>
+    /// Merge a confirmation report (LoTW / eQSL / card ADIF) into the existing
+    /// log: match each record to a logged QSO (call + date + band + mode, with a
+    /// loose time match) and stamp the given confirmation channel — never
+    /// creating duplicates. Powers "show Confirmed" the Log4OM way.
+    /// </summary>
+    Task<ConfirmationMergeResponse> MergeConfirmationsAsync(Stream stream, ConfirmationSource source, CancellationToken cancellationToken = default);
 }
 
 public record AdifImportResult(

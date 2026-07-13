@@ -222,6 +222,10 @@ public class QsoService : IQsoService
             qso.Station?.Longitude
         ),
         qso.Comment,
-        qso.CreatedAt
+        qso.CreatedAt,
+        string.Equals(qso.Qsl?.Lotw?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
+        string.Equals(qso.Qsl?.Eqsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
+        string.Equals(qso.Qsl?.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
+        string.Equals(qso.Qsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase)
     );
 }

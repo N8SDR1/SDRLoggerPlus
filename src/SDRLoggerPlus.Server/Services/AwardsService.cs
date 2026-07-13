@@ -433,6 +433,10 @@ public partial class AwardsService : IAwardsService
         if (string.Equals(qso.Qsl?.Eqsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase))
             return true;
 
+        // Check QRZ Logbook confirmation
+        if (string.Equals(qso.Qsl?.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase))
+            return true;
+
         // Check paper QSL
         if (string.Equals(qso.Qsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase))
             return true;

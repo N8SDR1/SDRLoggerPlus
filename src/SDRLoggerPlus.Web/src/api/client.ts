@@ -20,6 +20,10 @@ export interface QsoResponse {
   station?: StationInfo;
   comment?: string;
   createdAt: string;
+  confirmedLotw?: boolean;
+  confirmedEqsl?: boolean;
+  confirmedQrz?: boolean;
+  confirmedCard?: boolean;
 }
 
 export interface StationInfo {
@@ -645,6 +649,39 @@ class ApiClient {
     });
   }
 
+  /**
+   * Merge a confirmation report (LoTW / eQSL / card ADIF) into the log — marks
+   * matching QSOs Confirmed without creating duplicates.
+   */
+  async mergeConfirmations(file: File, source: ConfirmationSource): Promise<ConfirmationMergeResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    // Enum binds by name on the server: Lotw / Eqsl / Card.
+    const srcName =
+      source === 'lotw' ? 'Lotw' : source === 'eqsl' ? 'Eqsl' : source === 'qrz' ? 'Qrz' : 'Card';
+    const response = await fetch(`${API_BASE}/adif/merge-confirmations?source=${srcName}`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Download the LoTW confirmation report (using the stored LoTW website login)
+   * and merge it into the log. One-click "sync from LoTW".
+   */
+  async downloadLotwConfirmations(): Promise<ConfirmationMergeResponse> {
+    const response = await fetch(`${API_BASE}/lotw/download-confirmations`, { method: 'POST' });
+    if (!response.ok) {
+      const msg = await response.text();
+      throw new Error(msg || `API error: ${response.status}`);
+    }
+    return response.json();
+  }
+
   async exportAdif(request?: AdifExportRequest): Promise<Blob> {
     const params = new URLSearchParams();
     if (request?.callsign) params.append('callsign', request.callsign);
@@ -860,6 +897,16 @@ export interface AdifImportResponse {
   skippedDuplicates: number;
   errorCount: number;
   errors: string[];
+}
+
+export type ConfirmationSource = 'lotw' | 'eqsl' | 'qrz' | 'card';
+
+export interface ConfirmationMergeResponse {
+  totalRecords: number;
+  matched: number;
+  updated: number;
+  alreadyConfirmed: number;
+  unmatched: number;
 }
 
 export interface AdifExportRequest {

@@ -167,6 +167,9 @@ public class QslStatus
 
     [BsonElement("eqsl")]
     public EqslStatus? Eqsl { get; set; }
+
+    [BsonElement("qrz")]
+    public QrzStatus? Qrz { get; set; }
 }
 
 public class LotwStatus
@@ -189,6 +192,16 @@ public class EqslStatus
     [BsonElement("sent")]
     public string? Sent { get; set; }
 
+    [BsonElement("rcvd")]
+    public string? Rcvd { get; set; }
+}
+
+public class QrzStatus
+{
+    [BsonElement("sent")]
+    public string? Sent { get; set; }
+
+    // "Y" once the QSO is confirmed in QRZ Logbook (app_qrzlog_status = C).
     [BsonElement("rcvd")]
     public string? Rcvd { get; set; }
 }

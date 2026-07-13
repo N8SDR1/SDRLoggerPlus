@@ -65,7 +65,12 @@ public record QsoResponse(
     string? RstRcvd,
     StationInfoDto? Station,
     string? Comment,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    // Per-QSO confirmation status for the Log History "QSL" column.
+    bool ConfirmedLotw = false,
+    bool ConfirmedEqsl = false,
+    bool ConfirmedQrz = false,
+    bool ConfirmedCard = false
 );
 
 public record StationInfoDto(

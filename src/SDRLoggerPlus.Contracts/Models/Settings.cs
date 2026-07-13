@@ -210,8 +210,20 @@ public class LotwSettings
     [BsonElement("enabled")]
     public bool Enabled { get; set; }
 
+    // LoTW *website* login (separate from the TQSL certificate) — used to
+    // download the confirmation report. Same credentials you use at lotw.arrl.org.
+    [BsonElement("username")]
+    public string? Username { get; set; } = string.Empty;
+
+    [BsonElement("password")]
+    public string? Password { get; set; } = string.Empty;
+
     [BsonElement("lastUploadAt")]
     public DateTime? LastUploadAt { get; set; }
+
+    // Last time confirmations were downloaded — drives the incremental qslsince pull.
+    [BsonElement("lastConfirmationSync")]
+    public DateTime? LastConfirmationSync { get; set; }
 }
 
 [BsonIgnoreExtraElements]

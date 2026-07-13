@@ -85,6 +85,39 @@ public class AdifController : ControllerBase
     }
 
     /// <summary>
+    /// Merge a confirmation report (LoTW / eQSL / card ADIF) into the log —
+    /// marks matching QSOs Confirmed without creating duplicates.
+    /// </summary>
+    /// <param name="file">Confirmation ADIF downloaded from LoTW / eQSL / QRZ</param>
+    /// <param name="source">Which channel to stamp: lotw | eqsl | card</param>
+    [HttpPost("merge-confirmations")]
+    [ProducesResponseType(typeof(ConfirmationMergeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [RequestSizeLimit(50 * 1024 * 1024)]
+    public async Task<ActionResult<ConfirmationMergeResponse>> MergeConfirmations(
+        IFormFile file,
+        [FromQuery] ConfirmationSource source = ConfirmationSource.Lotw)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest("No file provided");
+        }
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (extension != ".adi" && extension != ".adif")
+        {
+            return BadRequest("Invalid file type. Expected .adi or .adif");
+        }
+
+        _logger.LogInformation("Merging {Source} confirmations from {FileName} ({Size} bytes)",
+            source, file.FileName, file.Length);
+
+        await using var stream = file.OpenReadStream();
+        var result = await _adifService.MergeConfirmationsAsync(stream, source);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Cancel an ongoing ADIF import operation
     /// </summary>
     [HttpPost("import/cancel")]
