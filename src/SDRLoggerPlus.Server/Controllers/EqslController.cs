@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SDRLoggerPlus.Contracts.Api;
 using SDRLoggerPlus.Server.Services;
 
 namespace SDRLoggerPlus.Server.Controllers;
@@ -9,10 +10,42 @@ namespace SDRLoggerPlus.Server.Controllers;
 public class EqslController : ControllerBase
 {
     private readonly EqslService _eqsl;
+    private readonly IAdifService _adif;
+    private readonly ISettingsService _settings;
 
-    public EqslController(EqslService eqsl)
+    public EqslController(EqslService eqsl, IAdifService adif, ISettingsService settings)
     {
         _eqsl = eqsl;
+        _adif = adif;
+        _settings = settings;
+    }
+
+    /// <summary>
+    /// Download the eQSL inbox (received QSLs) and merge it into the log —
+    /// marks matching QSOs Confirmed. One-click "sync from eQSL".
+    /// </summary>
+    [HttpPost("download-confirmations")]
+    [ProducesResponseType(typeof(ConfirmationMergeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ConfirmationMergeResponse>> DownloadConfirmations(CancellationToken ct)
+    {
+        try
+        {
+            var adifText = await _eqsl.DownloadInboxAdifAsync(ct);
+            using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(adifText));
+            var result = await _adif.MergeConfirmationsAsync(stream, ConfirmationSource.Eqsl, ct);
+
+            // Stamp the sync time so the next pull is incremental.
+            var settings = await _settings.GetSettingsAsync();
+            settings.Eqsl.LastConfirmationSync = DateTime.UtcNow;
+            await _settings.SaveSettingsAsync(settings);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     /// <summary>

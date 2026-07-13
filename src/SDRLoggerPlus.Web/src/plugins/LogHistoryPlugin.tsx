@@ -289,18 +289,21 @@ export function LogHistoryPlugin() {
     }
   }, [mergeSource, queryClient]);
 
-  const handleDownloadLotw = useCallback(async () => {
+  const handleDownloadSync = useCallback(async (kind: 'lotw' | 'eqsl') => {
     setIsMerging(true);
     setMergeResult(null);
     setMergeError(null);
     try {
-      const result = await api.downloadLotwConfirmations();
+      const result =
+        kind === 'lotw'
+          ? await api.downloadLotwConfirmations()
+          : await api.downloadEqslConfirmations();
       setMergeResult(result);
       queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
     } catch (error) {
-      console.error('Failed to download LoTW confirmations:', error);
-      setMergeError(error instanceof Error ? error.message : 'LoTW download failed');
+      console.error(`Failed to download ${kind} confirmations:`, error);
+      setMergeError(error instanceof Error ? error.message : `${kind} download failed`);
     } finally {
       setIsMerging(false);
     }
@@ -1280,22 +1283,24 @@ export function LogHistoryPlugin() {
                     </button>
                   ))}
                 </div>
-                {mergeSource === 'lotw' && (
+                {(mergeSource === 'lotw' || mergeSource === 'eqsl') && (
                   <div className="mb-4">
                     <button
-                      onClick={handleDownloadLotw}
+                      onClick={() => handleDownloadSync(mergeSource === 'lotw' ? 'lotw' : 'eqsl')}
                       disabled={isMerging}
                       className="w-full bg-accent-primary/15 hover:bg-accent-primary/25 text-accent-primary border border-accent-primary/40 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-50"
                     >
                       {isMerging ? (
-                        <><Loader2 className="w-4 h-4 animate-spin" />Downloading from LoTW…</>
+                        <><Loader2 className="w-4 h-4 animate-spin" />Downloading from {mergeSource === 'lotw' ? 'LoTW' : 'eQSL'}…</>
                       ) : (
-                        <><CloudUpload className="w-4 h-4 rotate-180" />Download from LoTW (one-click)</>
+                        <><CloudUpload className="w-4 h-4 rotate-180" />Download from {mergeSource === 'lotw' ? 'LoTW' : 'eQSL'} (one-click)</>
                       )}
                     </button>
                     <p className="text-[11px] text-dark-400 mt-1.5">
-                      Uses your LoTW website login from <span className="font-medium text-dark-300">Settings → LoTW</span>.
-                      Pulls only new confirmations since the last sync.
+                      Uses your {mergeSource === 'lotw' ? 'LoTW website login' : 'eQSL login'} from{' '}
+                      <span className="font-medium text-dark-300">Settings → {mergeSource === 'lotw' ? 'LoTW' : 'eQSL'}</span>.
+                      {mergeSource === 'eqsl' && ' Requires an Authenticity-Guaranteed account.'} Pulls only new
+                      confirmations since the last sync.
                     </p>
                     <div className="flex items-center gap-2 my-3">
                       <div className="flex-1 h-px bg-glass-100" />

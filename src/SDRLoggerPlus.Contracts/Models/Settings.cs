@@ -439,6 +439,10 @@ public class EqslSettings
     // Empty = eQSL uses the account's default QTH.
     [BsonElement("qthNickname")]
     public string? QthNickname { get; set; } = string.Empty;
+
+    // Last time the eQSL inbox was downloaded — drives the incremental RcvdSince pull.
+    [BsonElement("lastConfirmationSync")]
+    public DateTime? LastConfirmationSync { get; set; }
 }
 
 public class AppearanceSettings
