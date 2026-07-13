@@ -52,6 +52,8 @@ export interface RbnAlertSettings {
   distanceUnit: 'mi' | 'km';
   cooldownMinutes: number;
   voice: boolean;
+  /** Voice-announcement volume, 0..1 (default 0.8). */
+  voiceVolume: number;
 }
 
 export interface AdifUdpSettings {
@@ -527,6 +529,7 @@ const defaultSettings: Settings = {
     distanceUnit: 'mi',
     cooldownMinutes: 15,
     voice: true,
+    voiceVolume: 0.8,
   },
   appearance: {
     theme: 'dark',

@@ -1500,6 +1500,41 @@ function RbnAlertsSettingsSection() {
             <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${rbn.voice ? 'translate-x-5' : ''}`} />
           </button>
         </div>
+
+        {rbn.voice && (
+          <div className="p-3 bg-dark-700/50 rounded-lg border border-glass-100 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-dark-200">Announcement volume</label>
+              <span className="text-xs text-dark-300 font-mono">{Math.round((rbn.voiceVolume ?? 0.8) * 100)}%</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={rbn.voiceVolume ?? 0.8}
+                onChange={(e) => updateRbnAlertSettings({ voiceVolume: parseFloat(e.target.value) })}
+                className="flex-1 accent-[rgb(var(--accent-primary))] cursor-pointer"
+              />
+              <button
+                onClick={() => {
+                  if (typeof speechSynthesis !== 'undefined') {
+                    const u = new SpeechSynthesisUtterance('Band opening! 10 meters. Test.');
+                    u.rate = 0.9;
+                    u.volume = rbn.voiceVolume ?? 0.8;
+                    speechSynthesis.cancel();
+                    speechSynthesis.speak(u);
+                  }
+                }}
+                className="glass-button px-3 py-1.5 text-sm whitespace-nowrap"
+              >
+                Test
+              </button>
+            </div>
+            <p className="text-xs text-dark-400">Turn it down so a band opening won't blast over a weak signal you're working.</p>
+          </div>
+        )}
       </div>
     </div>
   );

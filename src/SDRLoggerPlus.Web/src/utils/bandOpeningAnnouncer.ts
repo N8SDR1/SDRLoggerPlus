@@ -10,7 +10,8 @@ export function announceBandOpening(
   mode: string,
   distance: number,
   unit: string,
-  snr: number
+  snr: number,
+  volume: number = 1
 ): void {
   if (typeof speechSynthesis === 'undefined') return;
   const bandSpoken = band.replace('cm', ' centimeters').replace('m', ' meters');
@@ -19,6 +20,7 @@ export function announceBandOpening(
     `Band opening! ${bandSpoken}. ${spellCallsign(dxCall)}. ${mode}. ${Math.round(distance)} ${unitSpoken} away. ${snr} dB.`
   );
   utterance.rate = 0.9;
+  utterance.volume = Math.max(0, Math.min(1, volume));
   // Chromium requires cancel() before speak() or it silently drops the request
   speechSynthesis.cancel();
   speechSynthesis.speak(utterance);

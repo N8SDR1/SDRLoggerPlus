@@ -940,8 +940,9 @@ class SignalRService {
         'success',
         15000
       );
-      if (useSettingsStore.getState().settings.rbnAlerts.voice) {
-        announceBandOpening(evt.band, evt.dxCall, evt.mode, evt.distance, evt.unit, evt.snr);
+      const rbn = useSettingsStore.getState().settings.rbnAlerts;
+      if (rbn.voice) {
+        announceBandOpening(evt.band, evt.dxCall, evt.mode, evt.distance, evt.unit, evt.snr, rbn.voiceVolume ?? 0.8);
       }
     });
 

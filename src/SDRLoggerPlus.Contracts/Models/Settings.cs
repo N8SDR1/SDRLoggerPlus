@@ -247,6 +247,10 @@ public class RbnAlertSettings
 
     [BsonElement("voice")]
     public bool Voice { get; set; } = true;
+
+    // Voice-announcement volume, 0..1
+    [BsonElement("voiceVolume")]
+    public double VoiceVolume { get; set; } = 0.8;
 }
 
 public class AdifMonitorSettings
