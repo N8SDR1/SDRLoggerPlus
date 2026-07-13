@@ -171,6 +171,8 @@ export function useSignalRConnection() {
               timestamp: evt.timestamp,
               country: evt.country,
               status: evt.spotStatus,
+              cqZone: evt.cqZone,
+              zoneStatus: evt.zoneStatus,
               isHot: evt.isHot,
               dxStation: (evt.country || evt.dxcc || evt.grid || evt.dxLat != null) ? {
                 country: evt.country,

@@ -133,6 +133,60 @@ public class SpotStatusServiceTests
 
     #endregion
 
+    #region GetZoneStatus — WAZ
+
+    [Fact]
+    public void GetZoneStatus_BeforeCacheBuilt_ReturnsNull()
+    {
+        var (zone, status) = _service.GetZoneStatus("DL1ABC", 14000.0);
+        zone.Should().BeNull();
+        status.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetZoneStatus_NeverWorkedZone_ReturnsNewZone()
+    {
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // Empty log — Germany's CQ zone 14 has never been worked.
+        var (zone, status) = _service.GetZoneStatus("DL1ABC", 14000.0);
+        zone.Should().Be(14);
+        status.Should().Be("newZone");
+    }
+
+    [Fact]
+    public async Task GetZoneStatus_WorkedZoneSameBand_ReturnsNull()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("DL1ABC", country: "Germany", band: "20m", mode: "SSB"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // Another zone-14 station on the same band — already worked.
+        var (_, status) = _service.GetZoneStatus("DL2XYZ", 14000.0);
+        status.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetZoneStatus_WorkedZoneDifferentBand_ReturnsNewZoneBand()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("DL1ABC", country: "Germany", band: "40m", mode: "SSB"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // Zone 14 worked, but on 40m — 20m is a new band-slot for the zone.
+        var (_, status) = _service.GetZoneStatus("DL2XYZ", 14000.0);
+        status.Should().Be("newZoneBand");
+    }
+
+    #endregion
+
     #region GetSpotStatus — worked
 
     [Fact]

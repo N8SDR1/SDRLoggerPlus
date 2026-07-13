@@ -72,6 +72,9 @@ export interface SpotReceivedEvent {
   /** Approximate DX location (cty.dat country centroid) for the DX Coach prop gate. */
   dxLat?: number;
   dxLon?: number;
+  /** CQ zone (WAZ) of the DX station + whether it's new vs the log. */
+  cqZone?: number;
+  zoneStatus?: 'newZone' | 'newZoneBand';
 }
 
 export interface SatPassQso {

@@ -11,22 +11,31 @@ import { assessPropagation, PropAssessment, BandOpenState } from '../utils/propa
 import { api } from '../api/client';
 
 /**
- * DX Coach — Phase 1 (deterministic award engine) + Phase 2 (propagation gate).
+ * DX Coach — Phase 1 (award engine) + Phase 2 (propagation gate).
  *
- * Phase 1: scan live DX-cluster spots, keep the ones that fill an award gap
- * (per-spot newDxcc / newBand status the backend already computes), rank them.
- *
- * Phase 2: annotate each opportunity with a *soft* propagation read — a coarse
- * open / marginal / closed band score plus imminent gray-line timing — computed
- * client-side from SFI/K (backend space weather) + the operator QTH + the DX
- * centroid the backend now stamps on every spot. The prop read nudges ranking
- * within an award tier but never outranks the award itself, and every claim is
- * timed/geometric — no forecasting. See docs/design/ai-dx-coach.md.
+ * The engine scans live DX-cluster spots and surfaces the ones that fill an
+ * award gap, using the per-spot needs the backend already computes:
+ *   • DXCC  — newDxcc (whole new entity) / newBand (worked entity, new band)
+ *   • WAZ   — newZone (whole new CQ zone) / newZoneBand (worked zone, new band)
+ * A single spot can satisfy more than one (a new country that's also a new
+ * zone), so each opportunity carries a list of reasons. Phase 2 annotates each
+ * with a soft propagation read (coarse open/marginal/closed + gray-line timing)
+ * that nudges ranking within an award tier but never outranks the award itself.
+ * WAS (US states) is deliberately not here — a state isn't resolvable per-spot
+ * offline. See docs/design/ai-dx-coach.md.
  */
+type ReasonKind = 'newDxcc' | 'newZone' | 'newBand' | 'newZoneBand';
+
+interface AwardReason {
+  kind: ReasonKind;
+  chip: string;
+  detail: string;
+}
+
 interface Opportunity {
   spot: Spot;
   band: string;
-  kind: 'newDxcc' | 'newBand';
+  reasons: AwardReason[];
   onRigBand: boolean;
   prop: PropAssessment;
   score: number;
@@ -34,11 +43,46 @@ interface Opportunity {
   count: number;
 }
 
+// Ranking weight per reason — DXCC entity is the crown jewel, a new CQ zone is
+// next (rare + hard), then band-fills. An opportunity scores by its best reason.
+const REASON_SCORE: Record<ReasonKind, number> = {
+  newDxcc: 100,
+  newZone: 85,
+  newBand: 50,
+  newZoneBand: 45,
+};
+
+const REASON_CLASS: Record<ReasonKind, string> = {
+  newDxcc: 'bg-accent-primary/20 text-accent-primary',
+  newZone: 'bg-violet-500/25 text-violet-200',
+  newBand: 'bg-accent-secondary/20 text-accent-secondary',
+  newZoneBand: 'bg-violet-500/15 text-violet-200/90',
+};
+
 const OPEN_META: Record<Exclude<BandOpenState, 'unknown'>, { dot: string; label: string; text: string }> = {
   open: { dot: 'bg-accent-success', label: 'Open', text: 'text-accent-success' },
   marginal: { dot: 'bg-accent-warning', label: 'Marginal', text: 'text-accent-warning' },
   closed: { dot: 'bg-dark-400', label: 'Closed', text: 'text-dark-400' },
 };
+
+/** Build the ordered reason list for a spot from its DXCC + WAZ status. */
+function reasonsFor(spot: Spot, band: string): AwardReason[] {
+  const out: AwardReason[] = [];
+  if (spot.status === 'newDxcc') {
+    out.push({ kind: 'newDxcc', chip: '🌍 New DXCC', detail: 'New country for DXCC' });
+  } else if (spot.status === 'newBand') {
+    out.push({ kind: 'newBand', chip: '📻 New band', detail: `New band-slot on ${band}` });
+  }
+  const zone = spot.cqZone;
+  if (spot.zoneStatus === 'newZone') {
+    out.push({ kind: 'newZone', chip: `🧭 New zone ${zone ?? ''}`.trim(), detail: `New CQ zone ${zone ?? ''}`.trim() });
+  } else if (spot.zoneStatus === 'newZoneBand') {
+    out.push({ kind: 'newZoneBand', chip: `📶 Zone ${zone ?? ''} · band`.trim(), detail: `Zone ${zone ?? ''} — new on ${band}`.trim() });
+  }
+  // Highest-value reason first.
+  out.sort((a, b) => REASON_SCORE[b.kind] - REASON_SCORE[a.kind]);
+  return out;
+}
 
 export function DxCoachPlugin() {
   const spots = useAppStore((s) => s.dxClusterSpots);
@@ -83,8 +127,14 @@ export function DxCoachPlugin() {
     // spotters / repeats) into one opportunity, tracking how many landed.
     const byKey = new Map<string, Opportunity>();
     for (const s of spots) {
-      // Only spots that fill a gap — a worked/unknown spot isn't an opportunity.
-      if (s.status !== 'newDxcc' && s.status !== 'newBand') continue;
+      const band = getBandFromFrequency(s.frequency);
+
+      // What award gaps does this spot fill? DXCC and/or WAZ — filtered by the
+      // operator's chosen award types. No reasons → skip.
+      const reasons = reasonsFor(s, band).filter((r) =>
+        r.kind === 'newDxcc' || r.kind === 'newBand' ? coach.showDxcc : coach.showWaz,
+      );
+      if (reasons.length === 0) continue;
 
       // Band-class filter — an HF-only op has no use for 2m/70cm opportunities.
       const cls = bandClassForFrequency(s.frequency);
@@ -94,7 +144,6 @@ export function DxCoachPlugin() {
       if (cls === 'VHF' && !coach.showVhf) continue;
       if (cls === 'UHF' && !coach.showUhf) continue;
 
-      const band = getBandFromFrequency(s.frequency);
       const key = `${s.dxCall.toUpperCase()}|${band}`;
       const existing = byKey.get(key);
       if (existing) {
@@ -122,23 +171,22 @@ export function DxCoachPlugin() {
       // data (no QTH, or no DX centroid) is always kept.
       if (prop.reliability != null && prop.reliability < coach.minReliability) continue;
 
-      // Award tier dominates (100 vs 50 — a whole entity beats a band-slot).
-      // Everything below is a *soft* re-order within a tier.
-      let score = s.status === 'newDxcc' ? 100 : 50;
+      // Score by the best reason; soft prop/rig nudges re-order within a tier.
+      let score = REASON_SCORE[reasons[0].kind];
       if (onRigBand) score += 15;
       if (prop.open === 'open') score += 12;
       else if (prop.open === 'marginal') score += 4;
       else if (prop.open === 'closed') score -= 8;
       if (prop.grayLine) score += prop.grayLine.active ? 10 : 6;
 
-      byKey.set(key, { spot: s, band, kind: s.status, onRigBand, prop, score, count: 1 });
+      byKey.set(key, { spot: s, band, reasons, onRigBand, prop, score, count: 1 });
     }
     const out = [...byKey.values()];
     out.sort((a, b) => b.score - a.score || (b.spot.timestamp > a.spot.timestamp ? 1 : -1));
     return out;
   }, [spots, rigBand, qth, space, coach]);
 
-  const anyStatus = spots.some((s) => s.status);
+  const anyStatus = spots.some((s) => s.status || s.zoneStatus);
   const propReady = qth != null && space != null;
 
   return (
@@ -153,8 +201,9 @@ export function DxCoachPlugin() {
     >
       <div className="flex flex-col h-full">
         <div className="px-4 pt-3 pb-2 text-xs text-dark-400 border-b border-glass-100">
-          Live spots that would fill an award gap — <span className="text-accent-primary">new DXCC</span> or a{' '}
-          <span className="text-accent-secondary">new band-slot</span> — with a coarse propagation read. Click one to tune.{' '}
+          Live spots that fill an award gap — <span className="text-accent-primary">new DXCC</span>,{' '}
+          <span className="text-violet-300">new CQ zone</span>, or a new band-slot — with a coarse propagation read.
+          Click one to tune.{' '}
           {!propReady && (
             <span className="opacity-70">
               (Set your QTH grid in Settings → Station for the propagation gate.)
@@ -165,7 +214,7 @@ export function DxCoachPlugin() {
           {opportunities.length === 0 ? (
             <div className="text-center py-10 text-dark-300 text-sm px-4">
               {anyStatus
-                ? 'No award opportunities in the current spots — as spots arrive that fill a DXCC or band gap, they show up here, ranked.'
+                ? 'No award opportunities in the current spots — as spots arrive that fill a DXCC, zone, or band gap, they show up here, ranked.'
                 : 'Waiting for spots. Connect a DX cluster (and make sure DX-cluster spot status is enabled) so the Coach can see what you still need.'}
             </div>
           ) : (
@@ -187,16 +236,15 @@ export function DxCoachPlugin() {
                   className="w-full text-left rounded-lg border border-glass-100 bg-dark-700/50 hover:bg-dark-700 hover:border-accent-primary/40 transition-colors p-3"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className={`text-xs font-ui px-2 py-0.5 rounded-full whitespace-nowrap ${
-                          o.kind === 'newDxcc'
-                            ? 'bg-accent-primary/20 text-accent-primary'
-                            : 'bg-accent-secondary/20 text-accent-secondary'
-                        }`}
-                      >
-                        {o.kind === 'newDxcc' ? '🌍 New DXCC' : '📻 New band'}
-                      </span>
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                      {o.reasons.map((r) => (
+                        <span
+                          key={r.kind}
+                          className={`text-xs font-ui px-2 py-0.5 rounded-full whitespace-nowrap ${REASON_CLASS[r.kind]}`}
+                        >
+                          {r.chip}
+                        </span>
+                      ))}
                       <span className="font-mono font-bold text-dark-100 truncate">{o.spot.dxCall}</span>
                       {o.count > 1 && (
                         <span
@@ -222,6 +270,12 @@ export function DxCoachPlugin() {
                   </div>
                   <div className="mt-1.5 text-xs text-dark-300 flex items-center gap-2 flex-wrap">
                     <span className="text-dark-200">{o.spot.dxStation?.country || o.spot.country || 'Unknown entity'}</span>
+                    {o.spot.cqZone != null && (
+                      <>
+                        <span className="opacity-50">·</span>
+                        <span>Zone {o.spot.cqZone}</span>
+                      </>
+                    )}
                     <span className="opacity-50">·</span>
                     <span>{o.band}</span>
                     {o.spot.mode && (
@@ -231,9 +285,7 @@ export function DxCoachPlugin() {
                       </>
                     )}
                     <span className="opacity-50">·</span>
-                    <span className="text-dark-400">
-                      {o.kind === 'newDxcc' ? 'New country for DXCC' : `New band-slot on ${o.band}`}
-                    </span>
+                    <span className="text-dark-400">{o.reasons.map((r) => r.detail).join(' + ')}</span>
                   </div>
                   {(openMeta || o.prop.grayLine) && (
                     <div className="mt-2 flex items-center gap-2 flex-wrap">

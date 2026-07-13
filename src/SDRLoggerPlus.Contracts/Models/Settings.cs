@@ -356,6 +356,14 @@ public class DxCoachSettings
     [BsonElement("minReliability")]
     public int MinReliability { get; set; } = 30;
 
+    /// <summary>Coach DXCC opportunities (new entity / new band-slot).</summary>
+    [BsonElement("showDxcc")]
+    public bool ShowDxcc { get; set; } = true;
+
+    /// <summary>Coach WAZ opportunities (new CQ zone / new zone-band).</summary>
+    [BsonElement("showWaz")]
+    public bool ShowWaz { get; set; } = true;
+
     /// <summary>Show MF/LF low-band opportunities (2200m, 630m).</summary>
     [BsonElement("showLowBand")]
     public bool ShowLowBand { get; set; } = true;

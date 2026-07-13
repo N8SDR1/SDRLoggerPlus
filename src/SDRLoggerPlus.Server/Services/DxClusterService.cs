@@ -500,10 +500,14 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
 
         // Determine spot status (new DXCC, new band, worked, etc.)
         string? spotStatus = null;
+        int? cqZone = null;
+        string? zoneStatus = null;
         try
         {
             spotStatus = _spotStatusService.GetSpotStatus(
                 parsedSpot.DxCall, parsedSpot.Country, parsedSpot.Frequency, parsedSpot.Mode);
+            (cqZone, zoneStatus) = _spotStatusService.GetZoneStatus(
+                parsedSpot.DxCall, parsedSpot.Frequency);
         }
         catch (Exception ex)
         {
@@ -535,7 +539,9 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
             spotStatus,
             _hotListService.IsHot(parsedSpot.DxCall),
             dxCentroid?.Lat,
-            dxCentroid?.Lon
+            dxCentroid?.Lon,
+            cqZone,
+            zoneStatus
         );
 
         // Keep a short replay buffer: spots are ephemeral broadcasts, and any

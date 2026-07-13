@@ -104,6 +104,10 @@ export interface DxCoachSettings {
    * 0 = show every opportunity.
    */
   minReliability: number;
+  /** Coach DXCC opportunities (new entity / new band-slot). */
+  showDxcc: boolean;
+  /** Coach WAZ opportunities (new CQ zone / new zone-band). */
+  showWaz: boolean;
   /** Show MF/LF low-band opportunities (2200m, 630m). */
   showLowBand: boolean;
   /** Show HF opportunities (160m–10m). */
@@ -532,6 +536,8 @@ const defaultSettings: Settings = {
   },
   dxCoach: {
     minReliability: 30,
+    showDxcc: true,
+    showWaz: true,
     showLowBand: true,
     showHf: true,
     show6m: true,

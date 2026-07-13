@@ -1991,9 +1991,50 @@ function DxCoachSettingsSection() {
       <div>
         <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">DX Coach</h3>
         <p className="text-sm text-dark-300">
-          The DX Coach panel surfaces live spots that would fill an award gap (a new DXCC entity or
-          a new band-slot), ranked, with a coarse propagation read. These preferences tune what it shows.
+          The DX Coach panel surfaces live spots that would fill an award gap, ranked, with a coarse
+          propagation read. These preferences tune what it shows.
         </p>
+      </div>
+
+      <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
+        <label className="text-sm font-medium text-dark-200">Award types to coach</label>
+        <p className="text-xs text-dark-300">
+          Which award chases the Coach hunts for. A single spot can fill more than one at once.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            ['showDxcc', 'DXCC', 'New entity / band-slot'],
+            ['showWaz', 'CQ Zones (WAZ)', 'New zone / zone-band'],
+          ] as const).map(([key, label, sub]) => {
+            const on = coach[key];
+            return (
+              <button
+                key={key}
+                onClick={() => updateDxCoachSettings({ [key]: !on })}
+                title={`${label} — ${on ? 'on' : 'off'}`}
+                className={`relative rounded-lg border px-3 py-2 text-left transition-colors ${
+                  on
+                    ? 'border-accent-primary/50 bg-accent-primary/15 text-accent-primary'
+                    : 'border-glass-100 bg-dark-800/40 text-dark-400 hover:text-dark-200'
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ${
+                    on ? 'bg-accent-success' : 'bg-transparent ring-1 ring-dark-400'
+                  }`}
+                />
+                <div className="text-sm font-semibold font-ui">{label}</div>
+                <div className="text-[10px] font-mono opacity-70">{sub}</div>
+              </button>
+            );
+          })}
+        </div>
+        {!coach.showDxcc && !coach.showWaz && (
+          <p className="text-xs text-accent-warning">
+            Both award types are off — the DX Coach will be empty. Turn at least one back on.
+          </p>
+        )}
       </div>
 
       <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">

@@ -92,7 +92,11 @@ public record SpotReceivedEvent(
     // enough for the DX Coach propagation gate (great-circle path + gray-line
     // timing), never presented as a precise QTH.
     double? DxLat = null,
-    double? DxLon = null
+    double? DxLon = null,
+    // CQ zone (WAZ) for the DX station, and whether it's a new zone / new
+    // zone-on-band vs the operator's log ("newZone" | "newZoneBand" | null).
+    int? CqZone = null,
+    string? ZoneStatus = null
 );
 
 /// <summary>

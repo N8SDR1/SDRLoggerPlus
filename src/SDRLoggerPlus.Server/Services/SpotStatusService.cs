@@ -5,6 +5,13 @@ namespace SDRLoggerPlus.Server.Services;
 public interface ISpotStatusService
 {
     string? GetSpotStatus(string dxCall, string? country, double frequencyKhz, string? mode);
+    /// <summary>
+    /// CQ-zone (WAZ) status for a spot: the resolved CQ zone plus whether it's a
+    /// new zone entirely ("newZone") or a worked zone on a new band ("newZoneBand"),
+    /// or null if already worked on this band / unresolvable. Independent of the
+    /// DXCC status — a worked country+band can still be a new zone (5BWAZ).
+    /// </summary>
+    (int? Zone, string? Status) GetZoneStatus(string dxCall, double frequencyKhz);
     void OnQsoLogged(string callsign, string? country, string band, string mode);
     Task InvalidateCacheAsync();
 }
@@ -18,6 +25,9 @@ public class SpotStatusService : ISpotStatusService, IHostedService
     private HashSet<string> _workedCountries = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _workedCountryBands = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _workedCountryBandModes = new(StringComparer.OrdinalIgnoreCase);
+    // CQ-zone (WAZ) worked sets: zones ever worked, and zone+band for 5BWAZ.
+    private HashSet<int> _workedZones = new();
+    private HashSet<string> _workedZoneBands = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _cacheLock = new();
 
     public SpotStatusService(
@@ -126,6 +136,35 @@ public class SpotStatusService : ISpotStatusService, IHostedService
         return null;
     }
 
+    public (int? Zone, string? Status) GetZoneStatus(string dxCall, double frequencyKhz)
+    {
+        // Same warm-up guard as GetSpotStatus — no verdict until the cache is ready.
+        if (!_cacheReady.Task.IsCompleted)
+            return (null, null);
+
+        // CQ zone comes straight from cty.dat (per-call/prefix, exceptions included).
+        var (_, _, cqZone) = CtyService.GetEntityFromCallsign(dxCall);
+        if (cqZone is null)
+            return (null, null);
+
+        var band = BandHelper.GetBand((long)(frequencyKhz * 1000));
+        if (band == "Unknown")
+            return (cqZone, null);
+
+        lock (_cacheLock)
+        {
+            // New zone — never worked this CQ zone at all (basic WAZ).
+            if (!_workedZones.Contains(cqZone.Value))
+                return (cqZone, "newZone");
+
+            // Worked zone, but not on this band (5-band WAZ fill).
+            if (!_workedZoneBands.Contains($"{cqZone.Value}:{band}"))
+                return (cqZone, "newZoneBand");
+        }
+
+        return (cqZone, null);
+    }
+
     public void OnQsoLogged(string callsign, string? country, string band, string mode)
     {
         lock (_cacheLock)
@@ -157,6 +196,15 @@ public class SpotStatusService : ISpotStatusService, IHostedService
                     _workedCountryBandModes.Add($"{normalizedCtyCountry}:{band}:{normalizedMode}");
                 }
             }
+
+            // CQ zone (WAZ) — resolve from the callsign via cty.dat so it's
+            // present even when the QSO didn't store a zone.
+            var (_, _, cqZone) = CtyService.GetEntityFromCallsign(callsign);
+            if (cqZone is not null && !string.IsNullOrEmpty(band))
+            {
+                _workedZones.Add(cqZone.Value);
+                _workedZoneBands.Add($"{cqZone.Value}:{band}");
+            }
         }
 
         _logger.LogDebug("SpotStatusService cache updated for {Callsign} on {Band} {Mode}", callsign, band, mode);
@@ -179,6 +227,8 @@ public class SpotStatusService : ISpotStatusService, IHostedService
             var newCountries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var newCountryBands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var newCountryBandModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var newZones = new HashSet<int>();
+            var newZoneBands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var qso in allQsos)
             {
@@ -189,6 +239,15 @@ public class SpotStatusService : ISpotStatusService, IHostedService
 
                 if (string.IsNullOrEmpty(band) || string.IsNullOrEmpty(callsign))
                     continue;
+
+                // CQ zone (WAZ): prefer the logged zone, else resolve from the
+                // callsign via cty.dat so older QSOs without a stored zone count.
+                var cqZone = qso.Station?.CqZone ?? CtyService.GetEntityFromCallsign(callsign).CqZone;
+                if (cqZone is not null)
+                {
+                    newZones.Add(cqZone.Value);
+                    newZoneBands.Add($"{cqZone.Value}:{band}");
+                }
 
                 if (!string.IsNullOrEmpty(country))
                 {
@@ -223,11 +282,13 @@ public class SpotStatusService : ISpotStatusService, IHostedService
                 _workedCountries = newCountries;
                 _workedCountryBands = newCountryBands;
                 _workedCountryBandModes = newCountryBandModes;
+                _workedZones = newZones;
+                _workedZoneBands = newZoneBands;
             }
 
             _logger.LogInformation(
-                "SpotStatusService cache built: {CountryCount} countries, {BandCount} country+band combos, {ModeCount} country+band+mode entries",
-                newCountries.Count, newCountryBands.Count, newCountryBandModes.Count);
+                "SpotStatusService cache built: {CountryCount} countries, {BandCount} country+band combos, {ModeCount} country+band+mode entries, {ZoneCount} CQ zones",
+                newCountries.Count, newCountryBands.Count, newCountryBandModes.Count, newZones.Count);
 
             return true;
         }
