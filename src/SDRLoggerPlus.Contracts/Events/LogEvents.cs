@@ -87,7 +87,12 @@ public record SpotReceivedEvent(
     string? SpotterGrid = null,
     string? SpotterContinent = null,
     string? SpotStatus = null,
-    bool IsHot = false
+    bool IsHot = false,
+    // Approximate DX-station location (cty.dat country centroid). Coarse — good
+    // enough for the DX Coach propagation gate (great-circle path + gray-line
+    // timing), never presented as a precise QTH.
+    double? DxLat = null,
+    double? DxLon = null
 );
 
 /// <summary>

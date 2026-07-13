@@ -57,6 +57,8 @@ public class UserSettings
     [BsonElement("pota")]
     public PotaSettings Pota { get; set; } = new();
 
+    public DxCoachSettings DxCoach { get; set; } = new();
+
     [BsonElement("adifMonitor")]
     public AdifMonitorSettings AdifMonitor { get; set; } = new();
 
@@ -338,6 +340,21 @@ public class PotaSettings
 
     [BsonElement("followRigMode")]
     public bool FollowRigMode { get; set; }
+}
+
+/// <summary>
+/// DX Coach panel preferences. The Coach is a frontend feature; this only
+/// persists the operator's tuning of it.
+/// </summary>
+public class DxCoachSettings
+{
+    /// <summary>
+    /// Minimum predicted path reliability (0–99%) an opportunity must clear to
+    /// appear in the DX Coach. Opportunities with no propagation data (no QTH,
+    /// or unresolved DX location) are always shown. 0 = show every opportunity.
+    /// </summary>
+    [BsonElement("minReliability")]
+    public int MinReliability { get; set; } = 30;
 }
 
 /// <summary>

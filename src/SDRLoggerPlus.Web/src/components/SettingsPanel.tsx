@@ -47,6 +47,7 @@ import {
   MessageSquare,
   Newspaper,
   Activity,
+  Target,
 } from 'lucide-react';
 import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type AiProvider } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
@@ -137,6 +138,12 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     name: 'Chat AI',
     icon: <Bot className="w-5 h-5" />,
     description: 'LLM API settings for talk points',
+  },
+  {
+    id: 'dxcoach',
+    name: 'DX Coach',
+    icon: <Target className="w-5 h-5" />,
+    description: 'Award-opportunity coach + propagation gate',
   },
   {
     id: 'about',
@@ -1972,6 +1979,56 @@ function EqslSettingsSection() {
 // the operator's activation. POTA's /spot endpoint uses HTTP basic auth;
 // the "Spot Myself" button in the LogEntry POTA banner is disabled until
 // both fields are populated.
+function DxCoachSettingsSection() {
+  const { settings, updateDxCoachSettings } = useSettingsStore();
+  const coach = settings.dxCoach;
+  const station = settings.station;
+  const hasQth =
+    (station.latitude != null && station.longitude != null) || !!station.gridSquare;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">DX Coach</h3>
+        <p className="text-sm text-dark-300">
+          The DX Coach panel surfaces live spots that would fill an award gap (a new DXCC entity or
+          a new band-slot), ranked, with a coarse propagation read. These preferences tune what it shows.
+        </p>
+      </div>
+
+      <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-dark-200">Minimum path reliability</label>
+          <span className="text-xs text-dark-300 font-mono">
+            {coach.minReliability === 0 ? 'Off (show all)' : `${coach.minReliability}%`}
+          </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={90}
+          step={5}
+          value={coach.minReliability}
+          onChange={(e) => updateDxCoachSettings({ minReliability: parseInt(e.target.value) || 0 })}
+          className="w-full accent-[rgb(var(--accent-primary))] cursor-pointer"
+        />
+        <p className="text-xs text-dark-300">
+          Hide opportunities whose predicted contact reliability falls below this, so the panel keeps
+          only realistic chances instead of listing dead paths. Set to <span className="font-mono">0</span> to show every
+          opportunity. Spots with no propagation data are always shown — they can't be fairly judged.
+        </p>
+        {!hasQth && (
+          <p className="text-xs text-accent-warning">
+            The propagation gate needs your station location. Set your grid square (or lat/lon) in{' '}
+            <span className="font-medium">Settings → Station</span>, otherwise this threshold has nothing to
+            filter and every opportunity is shown.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PotaSettingsSection() {
   const { settings, updatePotaSettings } = useSettingsStore();
   const pota = settings.pota;
@@ -4104,6 +4161,8 @@ export function SettingsPanel() {
         return <AlertsSection />;
       case 'sat':
         return <SatSettingsSection />;
+      case 'dxcoach':
+        return <DxCoachSettingsSection />;
       case 'about':
         return <AboutSection />;
       default:

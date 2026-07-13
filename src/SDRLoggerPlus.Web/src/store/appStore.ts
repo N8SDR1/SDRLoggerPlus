@@ -166,6 +166,9 @@ export interface Spot {
     dxcc?: number;
     grid?: string;
     continent?: string;
+    /** Approximate lat/lon (cty.dat country centroid) — coarse, for the prop gate. */
+    lat?: number;
+    lon?: number;
   };
   spotterStation?: {
     country?: string;

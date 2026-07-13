@@ -172,10 +172,12 @@ export function useSignalRConnection() {
               country: evt.country,
               status: evt.spotStatus,
               isHot: evt.isHot,
-              dxStation: (evt.country || evt.dxcc || evt.grid) ? {
+              dxStation: (evt.country || evt.dxcc || evt.grid || evt.dxLat != null) ? {
                 country: evt.country,
                 dxcc: evt.dxcc,
                 grid: evt.grid,
+                lat: evt.dxLat,
+                lon: evt.dxLon,
               } : undefined,
               spotterStation: (evt.spotterCountry || evt.spotterDxcc || evt.spotterGrid) ? {
                 country: evt.spotterCountry,

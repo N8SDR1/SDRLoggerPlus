@@ -69,6 +69,9 @@ export interface SpotReceivedEvent {
   spotterContinent?: string;
   spotStatus?: 'newDxcc' | 'newBand' | 'worked';
   isHot?: boolean;
+  /** Approximate DX location (cty.dat country centroid) for the DX Coach prop gate. */
+  dxLat?: number;
+  dxLon?: number;
 }
 
 export interface SatPassQso {

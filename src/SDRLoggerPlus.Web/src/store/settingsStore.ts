@@ -96,6 +96,16 @@ export interface PotaSettings {
   followRigMode: boolean;
 }
 
+export interface DxCoachSettings {
+  /**
+   * Minimum predicted path reliability (0–99%) an opportunity must clear to
+   * appear in the DX Coach. Spots with no propagation data (no QTH set, or no
+   * DX location resolved) are always shown — they can't be fairly judged.
+   * 0 = show every opportunity.
+   */
+  minReliability: number;
+}
+
 export interface AppearanceSettings {
   theme: ThemeId;
   compactMode: boolean;
@@ -379,6 +389,7 @@ export interface Settings {
   hrdLog: HrdLogSettings;
   eqsl: EqslSettings;
   pota: PotaSettings;
+  dxCoach: DxCoachSettings;
   adifMonitor: AdifMonitorSettings;
   adifUdp: AdifUdpSettings;
   rbnAlerts: RbnAlertSettings;
@@ -398,7 +409,7 @@ export interface Settings {
   gridStates: Record<string, string>;
 }
 
-export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'about';
+export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'dxcoach' | 'about';
 
 interface SettingsState {
   // Settings data
@@ -427,6 +438,7 @@ interface SettingsState {
   updateHrdLogSettings: (hrdLog: Partial<HrdLogSettings>) => void;
   updateEqslSettings: (eqsl: Partial<EqslSettings>) => void;
   updatePotaSettings: (pota: Partial<PotaSettings>) => void;
+  updateDxCoachSettings: (dxCoach: Partial<DxCoachSettings>) => void;
   updateAdifMonitorSettings: (adifMonitor: Partial<AdifMonitorSettings>) => void;
   updateAdifUdpSettings: (adifUdp: Partial<AdifUdpSettings>) => void;
   updateRbnAlertSettings: (rbnAlerts: Partial<RbnAlertSettings>) => void;
@@ -507,6 +519,9 @@ const defaultSettings: Settings = {
     password: '',
     followRigBand: false,
     followRigMode: false,
+  },
+  dxCoach: {
+    minReliability: 30,
   },
   adifMonitor: {
     enabled: false,
@@ -788,6 +803,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       settings: {
         ...state.settings,
         pota: { ...state.settings.pota, ...pota },
+      },
+      isDirty: true,
+    })),
+
+  updateDxCoachSettings: (dxCoach) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        dxCoach: { ...state.settings.dxCoach, ...dxCoach },
       },
       isDirty: true,
     })),
@@ -1111,6 +1135,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           hrdLog: { ...defaultSettings.hrdLog, ...settings.hrdLog },
           eqsl: { ...defaultSettings.eqsl, ...settings.eqsl },
           pota: { ...defaultSettings.pota, ...settings.pota },
+          dxCoach: { ...defaultSettings.dxCoach, ...settings.dxCoach },
           adifMonitor: { ...defaultSettings.adifMonitor, ...settings.adifMonitor },
           adifUdp: { ...defaultSettings.adifUdp, ...settings.adifUdp },
           rbnAlerts: { ...defaultSettings.rbnAlerts, ...settings.rbnAlerts },
