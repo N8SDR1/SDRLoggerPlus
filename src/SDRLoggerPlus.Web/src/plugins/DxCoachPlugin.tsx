@@ -5,7 +5,7 @@ import { GlassPanel } from '../components/GlassPanel';
 import { useAppStore, Spot } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSignalR } from '../hooks/useSignalR';
-import { getBandFromFrequency } from '../utils/spotBands';
+import { getBandFromFrequency, bandClassForFrequency } from '../utils/spotBands';
 import { gridToLatLon } from '../utils/maidenhead';
 import { assessPropagation, PropAssessment, BandOpenState } from '../utils/propagationGate';
 import { api } from '../api/client';
@@ -30,6 +30,8 @@ interface Opportunity {
   onRigBand: boolean;
   prop: PropAssessment;
   score: number;
+  /** How many live spots collapsed into this one opportunity (call+band). */
+  count: number;
 }
 
 const OPEN_META: Record<Exclude<BandOpenState, 'unknown'>, { dot: string; label: string; text: string }> = {
@@ -43,7 +45,7 @@ export function DxCoachPlugin() {
   const selectedRadioId = useAppStore((s) => s.selectedRadioId);
   const radioStates = useAppStore((s) => s.radioStates);
   const station = useSettingsStore((s) => s.settings.station);
-  const minReliability = useSettingsStore((s) => s.settings.dxCoach.minReliability);
+  const coach = useSettingsStore((s) => s.settings.dxCoach);
   const { selectSpot } = useSignalR();
 
   // Space weather (SFI/K) drives the coarse band-open score. Cheap, shared,
@@ -77,11 +79,32 @@ export function DxCoachPlugin() {
   const opportunities = useMemo<Opportunity[]>(() => {
     const sfi = space?.solarFluxIndex ?? null;
     const kIndex = space?.kIndex ?? null;
-    const out: Opportunity[] = [];
+    // Collapse duplicate spots of the same station on the same band (multiple
+    // spotters / repeats) into one opportunity, tracking how many landed.
+    const byKey = new Map<string, Opportunity>();
     for (const s of spots) {
       // Only spots that fill a gap — a worked/unknown spot isn't an opportunity.
       if (s.status !== 'newDxcc' && s.status !== 'newBand') continue;
+
+      // Band-class filter — an HF-only op has no use for 2m/70cm opportunities.
+      const cls = bandClassForFrequency(s.frequency);
+      if (cls === 'MF' && !coach.showLowBand) continue;
+      if (cls === 'HF' && !coach.showHf) continue;
+      if (cls === '6M' && !coach.show6m) continue;
+      if (cls === 'VHF' && !coach.showVhf) continue;
+      if (cls === 'UHF' && !coach.showUhf) continue;
+
       const band = getBandFromFrequency(s.frequency);
+      const key = `${s.dxCall.toUpperCase()}|${band}`;
+      const existing = byKey.get(key);
+      if (existing) {
+        // Same call+band already surfaced — merge: bump the count and keep the
+        // most recent spot as the representative row.
+        existing.count += 1;
+        if (s.timestamp > existing.spot.timestamp) existing.spot = s;
+        continue;
+      }
+
       const onRigBand = rigBand != null && rigBand !== '?' && band === rigBand;
 
       const prop = assessPropagation({
@@ -97,7 +120,7 @@ export function DxCoachPlugin() {
       // Threshold filter: hide low-odds paths so the panel stays "right and
       // rare". Only judges spots we can actually score — a spot with no prop
       // data (no QTH, or no DX centroid) is always kept.
-      if (prop.reliability != null && prop.reliability < minReliability) continue;
+      if (prop.reliability != null && prop.reliability < coach.minReliability) continue;
 
       // Award tier dominates (100 vs 50 — a whole entity beats a band-slot).
       // Everything below is a *soft* re-order within a tier.
@@ -108,11 +131,12 @@ export function DxCoachPlugin() {
       else if (prop.open === 'closed') score -= 8;
       if (prop.grayLine) score += prop.grayLine.active ? 10 : 6;
 
-      out.push({ spot: s, band, kind: s.status, onRigBand, prop, score });
+      byKey.set(key, { spot: s, band, kind: s.status, onRigBand, prop, score, count: 1 });
     }
+    const out = [...byKey.values()];
     out.sort((a, b) => b.score - a.score || (b.spot.timestamp > a.spot.timestamp ? 1 : -1));
     return out;
-  }, [spots, rigBand, qth, space, minReliability]);
+  }, [spots, rigBand, qth, space, coach]);
 
   const anyStatus = spots.some((s) => s.status);
   const propReady = qth != null && space != null;
@@ -147,6 +171,14 @@ export function DxCoachPlugin() {
           ) : (
             opportunities.map((o) => {
               const openMeta = o.prop.open !== 'unknown' ? OPEN_META[o.prop.open] : null;
+              // Activity tier for the spot-count chip: neutral (2), amber (3–5),
+              // red (>5 — a pileup worth noticing).
+              const countClass =
+                o.count > 5
+                  ? 'bg-red-500/20 text-red-300 border-red-500/50'
+                  : o.count >= 3
+                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/50'
+                  : 'bg-dark-600 text-dark-100 border-dark-400';
               return (
                 <button
                   key={o.spot.id}
@@ -166,6 +198,18 @@ export function DxCoachPlugin() {
                         {o.kind === 'newDxcc' ? '🌍 New DXCC' : '📻 New band'}
                       </span>
                       <span className="font-mono font-bold text-dark-100 truncate">{o.spot.dxCall}</span>
+                      {o.count > 1 && (
+                        <span
+                          title={
+                            o.count > 5
+                              ? `Very active — ${o.count} spots on this band`
+                              : `${o.count} spots on this band`
+                          }
+                          className={`inline-flex items-center justify-center text-xs font-ui font-bold px-2.5 py-0.5 min-w-[2.75rem] rounded-full border whitespace-nowrap ${countClass}`}
+                        >
+                          {o.count} ×
+                        </span>
+                      )}
                       {o.onRigBand && (
                         <span className="text-[10px] font-ui px-1.5 py-0.5 rounded bg-accent-success/20 text-accent-success whitespace-nowrap">
                           on your band

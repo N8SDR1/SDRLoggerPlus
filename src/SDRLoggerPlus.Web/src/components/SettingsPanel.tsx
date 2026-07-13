@@ -2025,6 +2025,52 @@ function DxCoachSettingsSection() {
           </p>
         )}
       </div>
+
+      <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
+        <label className="text-sm font-medium text-dark-200">Bands to coach</label>
+        <p className="text-xs text-dark-300">
+          Only surface opportunities on the bands you're actually running. 6m is its own toggle, so an
+          HF+6m rig can pick <span className="font-medium">HF + 6m</span> and leave 2m / 70cm out.
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            ['showLowBand', 'LF/MF', '2200m · 630m'],
+            ['showHf', 'HF', '160m–10m'],
+            ['show6m', '6m', '50 MHz'],
+            ['showVhf', 'VHF', '2m · 1.25m'],
+            ['showUhf', 'UHF', '70cm+'],
+          ] as const).map(([key, label, sub]) => {
+            const on = coach[key];
+            return (
+              <button
+                key={key}
+                onClick={() => updateDxCoachSettings({ [key]: !on })}
+                title={`${label} — ${on ? 'on (showing)' : 'off (hidden)'}`}
+                className={`relative rounded-lg border px-3 py-2 text-center transition-colors ${
+                  on
+                    ? 'border-accent-primary/50 bg-accent-primary/15 text-accent-primary'
+                    : 'border-glass-100 bg-dark-800/40 text-dark-400 hover:text-dark-200'
+                }`}
+              >
+                {/* On/off indicator — green = on, hollow gray = off */}
+                <span
+                  aria-hidden
+                  className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ${
+                    on ? 'bg-accent-success' : 'bg-transparent ring-1 ring-dark-400'
+                  }`}
+                />
+                <div className="text-sm font-semibold font-ui">{label}</div>
+                <div className="text-[10px] font-mono opacity-70">{sub}</div>
+              </button>
+            );
+          })}
+        </div>
+        {!coach.showLowBand && !coach.showHf && !coach.show6m && !coach.showVhf && !coach.showUhf && (
+          <p className="text-xs text-accent-warning">
+            All band classes are off — the DX Coach will be empty. Turn at least one back on.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

@@ -355,6 +355,26 @@ public class DxCoachSettings
     /// </summary>
     [BsonElement("minReliability")]
     public int MinReliability { get; set; } = 30;
+
+    /// <summary>Show MF/LF low-band opportunities (2200m, 630m).</summary>
+    [BsonElement("showLowBand")]
+    public bool ShowLowBand { get; set; } = true;
+
+    /// <summary>Show HF opportunities (160m–10m).</summary>
+    [BsonElement("showHf")]
+    public bool ShowHf { get; set; } = true;
+
+    /// <summary>Show 6m opportunities (its own toggle — HF+6m rigs are common).</summary>
+    [BsonElement("show6m")]
+    public bool Show6m { get; set; } = true;
+
+    /// <summary>Show VHF opportunities (2m, 1.25m).</summary>
+    [BsonElement("showVhf")]
+    public bool ShowVhf { get; set; } = true;
+
+    /// <summary>Show UHF opportunities (70cm, 33cm, 23cm and up).</summary>
+    [BsonElement("showUhf")]
+    public bool ShowUhf { get; set; } = true;
 }
 
 /// <summary>

@@ -104,6 +104,16 @@ export interface DxCoachSettings {
    * 0 = show every opportunity.
    */
   minReliability: number;
+  /** Show MF/LF low-band opportunities (2200m, 630m). */
+  showLowBand: boolean;
+  /** Show HF opportunities (160m–10m). */
+  showHf: boolean;
+  /** Show 6m opportunities (its own toggle — HF+6m rigs are common). */
+  show6m: boolean;
+  /** Show VHF opportunities (2m, 1.25m). */
+  showVhf: boolean;
+  /** Show UHF opportunities (70cm, 33cm, 23cm and up). */
+  showUhf: boolean;
 }
 
 export interface AppearanceSettings {
@@ -522,6 +532,11 @@ const defaultSettings: Settings = {
   },
   dxCoach: {
     minReliability: 30,
+    showLowBand: true,
+    showHf: true,
+    show6m: true,
+    showVhf: true,
+    showUhf: true,
   },
   adifMonitor: {
     enabled: false,
