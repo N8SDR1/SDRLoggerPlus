@@ -1,4 +1,5 @@
 import { spellCallsign } from './hotSpotAnnouncer';
+import { applyAnnouncementVoice } from './announcementVoice';
 
 /**
  * Voice announcement for RBN band-opening alerts (SDRLogger+ port):
@@ -10,8 +11,7 @@ export function announceBandOpening(
   mode: string,
   distance: number,
   unit: string,
-  snr: number,
-  volume: number = 1
+  snr: number
 ): void {
   if (typeof speechSynthesis === 'undefined') return;
   const bandSpoken = band.replace('cm', ' centimeters').replace('m', ' meters');
@@ -20,7 +20,7 @@ export function announceBandOpening(
     `Band opening! ${bandSpoken}. ${spellCallsign(dxCall)}. ${mode}. ${Math.round(distance)} ${unitSpoken} away. ${snr} dB.`
   );
   utterance.rate = 0.9;
-  utterance.volume = Math.max(0, Math.min(1, volume));
+  applyAnnouncementVoice(utterance); // operator's chosen voice/accent + rate + volume
   // Chromium requires cancel() before speak() or it silently drops the request
   speechSynthesis.cancel();
   speechSynthesis.speak(utterance);

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Target } from 'lucide-react';
 import { GlassPanel } from '../components/GlassPanel';
@@ -8,6 +8,8 @@ import { useSignalR } from '../hooks/useSignalR';
 import { getBandFromFrequency, bandClassForFrequency } from '../utils/spotBands';
 import { gridToLatLon } from '../utils/maidenhead';
 import { assessPropagation, PropAssessment, BandOpenState } from '../utils/propagationGate';
+import { spellCallsign } from '../utils/hotSpotAnnouncer';
+import { applyAnnouncementVoice } from '../utils/announcementVoice';
 import { api } from '../api/client';
 
 /**
@@ -64,6 +66,26 @@ const OPEN_META: Record<Exclude<BandOpenState, 'unknown'>, { dot: string; label:
   marginal: { dot: 'bg-accent-warning', label: 'Marginal', text: 'text-accent-warning' },
   closed: { dot: 'bg-dark-400', label: 'Closed', text: 'text-dark-400' },
 };
+
+/** Speak a high-value opportunity aloud, using the shared announcement voice. */
+function speakOpportunity(
+  dxCall: string,
+  band: string,
+  kind: ReasonKind,
+  zone: number | undefined,
+  country: string | undefined,
+): void {
+  if (typeof speechSynthesis === 'undefined') return;
+  const bandSpoken = band.replace('cm', ' centimeters').replace('m', ' meters');
+  const lead =
+    kind === 'newDxcc'
+      ? `New D X C C. ${spellCallsign(dxCall)}.${country ? ` ${country}.` : ''}`
+      : `New zone ${zone ?? ''}. ${spellCallsign(dxCall)}.`;
+  const u = new SpeechSynthesisUtterance(`${lead} ${bandSpoken}.`);
+  applyAnnouncementVoice(u); // shared voice / accent / rate / volume
+  // No cancel() — queue so several fresh opportunities don't cut each other off.
+  speechSynthesis.speak(u);
+}
 
 /** Build the ordered reason list for a spot from its DXCC + WAZ status. */
 function reasonsFor(spot: Spot, band: string): AwardReason[] {
@@ -185,6 +207,38 @@ export function DxCoachPlugin() {
     out.sort((a, b) => b.score - a.score || (b.spot.timestamp > a.spot.timestamp ? 1 : -1));
     return out;
   }, [spots, rigBand, qth, space, coach]);
+
+  // Voice: announce newly-arriving high-value opportunities (new DXCC / new
+  // zone) aloud, throttled. Enabling only speaks opportunities that appear
+  // *after* it's turned on (existing ones are seeded silently), and a per-key
+  // cooldown + freshness gate keep a pileup from spamming.
+  const announcedRef = useRef<Map<string, number>>(new Map());
+  const voiceWasOn = useRef(false);
+  useEffect(() => {
+    if (!coach.voice) {
+      voiceWasOn.current = false;
+      return;
+    }
+    const now = Date.now();
+    const seedOnly = !voiceWasOn.current;
+    voiceWasOn.current = true;
+    const COOLDOWN = 10 * 60 * 1000;
+    const FRESH = 3 * 60 * 1000;
+    let spoken = 0;
+    for (const o of opportunities) {
+      const top = o.reasons[0];
+      if (top.kind !== 'newDxcc' && top.kind !== 'newZone') continue; // rare/valuable only
+      const key = `${o.spot.dxCall.toUpperCase()}|${o.band}|${top.kind}`;
+      if (now - (announcedRef.current.get(key) ?? 0) < COOLDOWN) continue;
+      announcedRef.current.set(key, now);
+      if (seedOnly) continue; // silently seed what's already on screen
+      const age = now - Date.parse(o.spot.timestamp);
+      if (isNaN(age) || age > FRESH) continue; // don't replay stale spots
+      if (spoken >= 3) continue; // cap a burst
+      spoken++;
+      speakOpportunity(o.spot.dxCall, o.band, top.kind, o.spot.cqZone, o.spot.dxStation?.country || o.spot.country);
+    }
+  }, [opportunities, coach.voice]);
 
   const anyStatus = spots.some((s) => s.status || s.zoneStatus);
   const propReady = qth != null && space != null;

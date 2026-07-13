@@ -59,6 +59,8 @@ public class UserSettings
 
     public DxCoachSettings DxCoach { get; set; } = new();
 
+    public VoiceSettings Voice { get; set; } = new();
+
     [BsonElement("adifMonitor")]
     public AdifMonitorSettings AdifMonitor { get; set; } = new();
 
@@ -249,10 +251,6 @@ public class RbnAlertSettings
 
     [BsonElement("voice")]
     public bool Voice { get; set; } = true;
-
-    // Voice-announcement volume, 0..1
-    [BsonElement("voiceVolume")]
-    public double VoiceVolume { get; set; } = 0.8;
 }
 
 public class AdifMonitorSettings
@@ -356,6 +354,10 @@ public class DxCoachSettings
     [BsonElement("minReliability")]
     public int MinReliability { get; set; } = 30;
 
+    /// <summary>Speak newly-arriving high-value opportunities (new DXCC / new zone) aloud.</summary>
+    [BsonElement("voice")]
+    public bool Voice { get; set; } = false;
+
     /// <summary>Coach DXCC opportunities (new entity / new band-slot).</summary>
     [BsonElement("showDxcc")]
     public bool ShowDxcc { get; set; } = true;
@@ -383,6 +385,24 @@ public class DxCoachSettings
     /// <summary>Show UHF opportunities (70cm, 33cm, 23cm and up).</summary>
     [BsonElement("showUhf")]
     public bool ShowUhf { get; set; } = true;
+}
+
+/// <summary>
+/// Shared voice used for every spoken announcement (band-opening, Hot List, RBN…).
+/// </summary>
+public class VoiceSettings
+{
+    /// <summary>SpeechSynthesisVoice.voiceURI to speak with. Empty = browser default.</summary>
+    [BsonElement("voiceUri")]
+    public string VoiceUri { get; set; } = string.Empty;
+
+    /// <summary>Speaking rate, 0.5 (slow) – 1.5 (fast).</summary>
+    [BsonElement("rate")]
+    public double Rate { get; set; } = 0.95;
+
+    /// <summary>Announcement volume, 0–1. Shared by every spoken alert.</summary>
+    [BsonElement("volume")]
+    public double Volume { get; set; } = 0.8;
 }
 
 /// <summary>

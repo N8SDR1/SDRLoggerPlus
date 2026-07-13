@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  loadAnnouncementVoices,
+  applyAnnouncementVoice,
+  guessVoiceGender,
+  formatAccent,
+} from '../utils/announcementVoice';
 import {
   X,
   Settings,
@@ -48,6 +54,7 @@ import {
   Newspaper,
   Activity,
   Target,
+  Volume2,
 } from 'lucide-react';
 import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type AiProvider } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
@@ -144,6 +151,12 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     name: 'DX Coach',
     icon: <Target className="w-5 h-5" />,
     description: 'Award-opportunity coach + propagation gate',
+  },
+  {
+    id: 'voice',
+    name: 'Voice',
+    icon: <Volume2 className="w-5 h-5" />,
+    description: 'Voice for spoken announcements (accent, male/female)',
   },
   {
     id: 'about',
@@ -1509,37 +1522,25 @@ function RbnAlertsSettingsSection() {
         </div>
 
         {rbn.voice && (
-          <div className="p-3 bg-dark-700/50 rounded-lg border border-glass-100 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-dark-200">Announcement volume</label>
-              <span className="text-xs text-dark-300 font-mono">{Math.round((rbn.voiceVolume ?? 0.8) * 100)}%</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={rbn.voiceVolume ?? 0.8}
-                onChange={(e) => updateRbnAlertSettings({ voiceVolume: parseFloat(e.target.value) })}
-                className="flex-1 accent-[rgb(var(--accent-primary))] cursor-pointer"
-              />
-              <button
-                onClick={() => {
-                  if (typeof speechSynthesis !== 'undefined') {
-                    const u = new SpeechSynthesisUtterance('Band opening! 10 meters. Test.');
-                    u.rate = 0.9;
-                    u.volume = rbn.voiceVolume ?? 0.8;
-                    speechSynthesis.cancel();
-                    speechSynthesis.speak(u);
-                  }
-                }}
-                className="glass-button px-3 py-1.5 text-sm whitespace-nowrap"
-              >
-                Test
-              </button>
-            </div>
-            <p className="text-xs text-dark-400">Turn it down so a band opening won't blast over a weak signal you're working.</p>
+          <div className="p-3 bg-dark-700/50 rounded-lg border border-glass-100 flex items-center justify-between gap-3">
+            <p className="text-xs text-dark-300">
+              🔊 The announcement <span className="font-medium text-dark-200">voice, accent and volume</span> are shared
+              across every spoken alert — set them in <span className="font-medium text-dark-200">Settings → Voice</span>.
+              Turn the volume down there so a band opening won't blast over a weak signal you're working.
+            </p>
+            <button
+              onClick={() => {
+                if (typeof speechSynthesis !== 'undefined') {
+                  const u = new SpeechSynthesisUtterance('Band opening! 10 meters. Test.');
+                  applyAnnouncementVoice(u);
+                  speechSynthesis.cancel();
+                  speechSynthesis.speak(u);
+                }
+              }}
+              className="glass-button px-3 py-1.5 text-sm whitespace-nowrap"
+            >
+              Test
+            </button>
           </div>
         )}
       </div>
@@ -1979,6 +1980,178 @@ function EqslSettingsSection() {
 // the operator's activation. POTA's /spot endpoint uses HTTP basic auth;
 // the "Spot Myself" button in the LogEntry POTA banner is disabled until
 // both fields are populated.
+function VoiceSettingsSection() {
+  const { settings, updateVoiceSettings } = useSettingsStore();
+  const voice = settings.voice;
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => loadAnnouncementVoices());
+  const [gender, setGender] = useState<'all' | 'male' | 'female'>('all');
+
+  const selected = voices.find((v) => v.voiceURI === voice.voiceUri) ?? null;
+  const [accent, setAccent] = useState<string>(selected?.lang ?? '');
+
+  // Voices load asynchronously — refresh the list (and seed the accent from the
+  // saved voice) when they arrive.
+  useEffect(() => {
+    const refresh = () => setVoices(loadAnnouncementVoices().slice());
+    refresh();
+    if (typeof speechSynthesis !== 'undefined' && speechSynthesis.addEventListener) {
+      speechSynthesis.addEventListener('voiceschanged', refresh);
+      return () => speechSynthesis.removeEventListener('voiceschanged', refresh);
+    }
+  }, []);
+  useEffect(() => {
+    if (selected && !accent) setAccent(selected.lang);
+  }, [selected, accent]);
+
+  const accents = useMemo(
+    () => Array.from(new Set(voices.map((v) => v.lang))).sort(),
+    [voices],
+  );
+
+  const voiceOptions = useMemo(() => {
+    const list = voices
+      .filter((v) => !accent || v.lang === accent)
+      .filter((v) => gender === 'all' || guessVoiceGender(v.name) === gender)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    // Always keep the currently-saved voice visible even if filtered out.
+    if (selected && !list.some((v) => v.voiceURI === selected.voiceURI)) list.unshift(selected);
+    return list;
+  }, [voices, accent, gender, selected]);
+
+  const testVoice = () => {
+    if (typeof speechSynthesis === 'undefined') return;
+    const u = new SpeechSynthesisUtterance('DX Coach. New D X C C. Bravo Juliet. Benin. 17 meters.');
+    applyAnnouncementVoice(u);
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">Voice</h3>
+        <p className="text-sm text-dark-300">
+          The voice used for every spoken announcement — band openings, Hot List, and RBN alerts.
+          Choose an accent and a specific voice from those installed on this computer.
+          {' '}Windows &amp; Edge ship extra natural voices under Settings → Time &amp; Language → Speech.
+        </p>
+      </div>
+
+      {voices.length === 0 ? (
+        <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 text-sm text-accent-warning">
+          No speech voices were detected in this browser, so announcements will use the system default.
+        </div>
+      ) : (
+        <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-dark-200">Accent</label>
+              <select
+                value={accent}
+                onChange={(e) => setAccent(e.target.value)}
+                className="glass-input w-full"
+              >
+                <option value="">All accents</option>
+                {accents.map((lang) => (
+                  <option key={lang} value={lang}>
+                    {formatAccent(lang)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-dark-200">Voice type</label>
+              <select
+                value={gender}
+                onChange={(e) => setGender(e.target.value as 'all' | 'male' | 'female')}
+                className="glass-input w-full"
+              >
+                <option value="all">Male &amp; female</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-dark-200">Voice</label>
+            <select
+              value={voice.voiceUri}
+              onChange={(e) => updateVoiceSettings({ voiceUri: e.target.value })}
+              className="glass-input w-full"
+            >
+              <option value="">System default</option>
+              {voiceOptions.map((v) => {
+                const g = guessVoiceGender(v.name);
+                return (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {v.name}
+                    {g ? ` — ${g}` : ''}
+                  </option>
+                );
+              })}
+            </select>
+            <p className="text-xs text-dark-300">
+              Male/female detection is a best guess from the voice name — trust your ears and the Test button.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-dark-200">Volume</label>
+                <span className="text-xs text-dark-300 font-mono">{Math.round(voice.volume * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={voice.volume}
+                onChange={(e) => updateVoiceSettings({ volume: parseFloat(e.target.value) })}
+                className="w-full accent-[rgb(var(--accent-primary))] cursor-pointer"
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-dark-200">Speaking rate</label>
+                <span className="text-xs text-dark-300 font-mono">{voice.rate.toFixed(2)}×</span>
+              </div>
+              <input
+                type="range"
+                min={0.5}
+                max={1.5}
+                step={0.05}
+                value={voice.rate}
+                onChange={(e) => updateVoiceSettings({ rate: parseFloat(e.target.value) })}
+                className="w-full accent-[rgb(var(--accent-primary))] cursor-pointer"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-dark-400">
+            Turn the volume down so a band opening won't blast over a weak signal you're working.
+          </p>
+
+          <button
+            onClick={testVoice}
+            className="px-4 py-2 rounded-lg bg-accent-primary/20 text-accent-primary border border-accent-primary/40 hover:bg-accent-primary/30 transition-colors text-sm font-medium"
+          >
+            🔊 Test voice
+          </button>
+
+          <p className="text-xs text-dark-400 border-t border-glass-100 pt-3 leading-relaxed">
+            <span className="text-accent-warning font-medium">Heads up:</span> this list comes from
+            Windows, and not every voice actually speaks in the browser — some Microsoft voices
+            (especially the “Online (Natural)” ones) are listed but stay silent. Hit{' '}
+            <span className="font-medium">Test voice</span> after choosing; if you hear nothing, pick a
+            different one. Anything that fails just falls back to the system default.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DxCoachSettingsSection() {
   const { settings, updateDxCoachSettings } = useSettingsStore();
   const coach = settings.dxCoach;
@@ -1994,6 +2167,22 @@ function DxCoachSettingsSection() {
           The DX Coach panel surfaces live spots that would fill an award gap, ranked, with a coarse
           propagation read. These preferences tune what it shows.
         </p>
+      </div>
+
+      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+        <div className="pr-3">
+          <label className="text-sm font-medium text-dark-200">Speak new opportunities</label>
+          <p className="text-xs text-dark-400 mt-0.5">
+            Announce a fresh new DXCC or new CQ zone aloud as it's spotted (throttled, so a pileup won't
+            spam). Uses the shared voice in <span className="font-medium text-dark-200">Settings → Voice</span>.
+          </p>
+        </div>
+        <button
+          onClick={() => updateDxCoachSettings({ voice: !coach.voice })}
+          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${coach.voice ? 'bg-accent-primary' : 'bg-dark-500'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${coach.voice ? 'translate-x-5' : ''}`} />
+        </button>
       </div>
 
       <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
@@ -2916,6 +3105,9 @@ function AiSettingsSection() {
       <div>
         <h3 className="text-lg font-semibold text-gray-100 mb-1">AI Provider Settings</h3>
         <p className="text-sm text-gray-500">Pick an LLM provider for AI talk points. Free options: <b>Ollama</b> (local, no key), <b>Groq</b>, <b>OpenRouter</b>.</p>
+        <p className="text-xs text-dark-400 mt-1">
+          🔊 This chooses the AI <span className="font-medium text-dark-200">source</span>. Any spoken output uses the shared voice in <span className="font-medium text-dark-200">Settings → Voice</span>.
+        </p>
       </div>
       <div className="space-y-2">
         <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
@@ -3279,7 +3471,10 @@ function HotListSettingsSection() {
       <div className="flex items-center justify-between p-3 bg-dark-700 rounded-lg">
         <div>
           <label className="text-sm font-medium text-dark-200">Voice Announcements</label>
-          <p className="text-xs text-dark-400 mt-0.5">Speak hot spots aloud (per-call cooldown below)</p>
+          <p className="text-xs text-dark-400 mt-0.5">
+            Speak hot spots aloud (per-call cooldown below). Voice &amp; volume in{' '}
+            <span className="font-medium text-dark-200">Settings → Voice</span>.
+          </p>
         </div>
         <button
           onClick={() => updateHotListSettings({ ttsEnabled: !hotList.ttsEnabled })}
@@ -4250,6 +4445,8 @@ export function SettingsPanel() {
         return <SatSettingsSection />;
       case 'dxcoach':
         return <DxCoachSettingsSection />;
+      case 'voice':
+        return <VoiceSettingsSection />;
       case 'about':
         return <AboutSection />;
       default:

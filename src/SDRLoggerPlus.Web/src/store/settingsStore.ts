@@ -52,8 +52,6 @@ export interface RbnAlertSettings {
   distanceUnit: 'mi' | 'km';
   cooldownMinutes: number;
   voice: boolean;
-  /** Voice-announcement volume, 0..1 (default 0.8). */
-  voiceVolume: number;
 }
 
 export interface AdifUdpSettings {
@@ -96,6 +94,16 @@ export interface PotaSettings {
   followRigMode: boolean;
 }
 
+/** Shared voice used for every spoken announcement (band-opening, Hot List, RBN…). */
+export interface VoiceSettings {
+  /** SpeechSynthesisVoice.voiceURI to speak with. '' = the browser default voice. */
+  voiceUri: string;
+  /** Speaking rate, 0.5 (slow) – 1.5 (fast). */
+  rate: number;
+  /** Announcement volume, 0–1. Shared by every spoken alert. */
+  volume: number;
+}
+
 export interface DxCoachSettings {
   /**
    * Minimum predicted path reliability (0–99%) an opportunity must clear to
@@ -104,6 +112,8 @@ export interface DxCoachSettings {
    * 0 = show every opportunity.
    */
   minReliability: number;
+  /** Speak newly-arriving high-value opportunities (new DXCC / new zone) aloud. */
+  voice: boolean;
   /** Coach DXCC opportunities (new entity / new band-slot). */
   showDxcc: boolean;
   /** Coach WAZ opportunities (new CQ zone / new zone-band). */
@@ -404,6 +414,7 @@ export interface Settings {
   eqsl: EqslSettings;
   pota: PotaSettings;
   dxCoach: DxCoachSettings;
+  voice: VoiceSettings;
   adifMonitor: AdifMonitorSettings;
   adifUdp: AdifUdpSettings;
   rbnAlerts: RbnAlertSettings;
@@ -423,7 +434,7 @@ export interface Settings {
   gridStates: Record<string, string>;
 }
 
-export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'dxcoach' | 'about';
+export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'dxcoach' | 'voice' | 'about';
 
 interface SettingsState {
   // Settings data
@@ -453,6 +464,7 @@ interface SettingsState {
   updateEqslSettings: (eqsl: Partial<EqslSettings>) => void;
   updatePotaSettings: (pota: Partial<PotaSettings>) => void;
   updateDxCoachSettings: (dxCoach: Partial<DxCoachSettings>) => void;
+  updateVoiceSettings: (voice: Partial<VoiceSettings>) => void;
   updateAdifMonitorSettings: (adifMonitor: Partial<AdifMonitorSettings>) => void;
   updateAdifUdpSettings: (adifUdp: Partial<AdifUdpSettings>) => void;
   updateRbnAlertSettings: (rbnAlerts: Partial<RbnAlertSettings>) => void;
@@ -536,6 +548,7 @@ const defaultSettings: Settings = {
   },
   dxCoach: {
     minReliability: 30,
+    voice: false,
     showDxcc: true,
     showWaz: true,
     showLowBand: true,
@@ -543,6 +556,11 @@ const defaultSettings: Settings = {
     show6m: true,
     showVhf: true,
     showUhf: true,
+  },
+  voice: {
+    voiceUri: '',
+    rate: 0.95,
+    volume: 0.8,
   },
   adifMonitor: {
     enabled: false,
@@ -565,7 +583,6 @@ const defaultSettings: Settings = {
     distanceUnit: 'mi',
     cooldownMinutes: 15,
     voice: true,
-    voiceVolume: 0.8,
   },
   appearance: {
     theme: 'dark',
@@ -833,6 +850,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       settings: {
         ...state.settings,
         dxCoach: { ...state.settings.dxCoach, ...dxCoach },
+      },
+      isDirty: true,
+    })),
+
+  updateVoiceSettings: (voice) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        voice: { ...state.settings.voice, ...voice },
       },
       isDirty: true,
     })),
@@ -1157,6 +1183,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           eqsl: { ...defaultSettings.eqsl, ...settings.eqsl },
           pota: { ...defaultSettings.pota, ...settings.pota },
           dxCoach: { ...defaultSettings.dxCoach, ...settings.dxCoach },
+          voice: {
+            ...defaultSettings.voice,
+            ...settings.voice,
+            // Carry a customized volume over from the old RBN-only slider.
+            volume:
+              settings.voice?.volume ??
+              (settings.rbnAlerts as { voiceVolume?: number } | undefined)?.voiceVolume ??
+              defaultSettings.voice.volume,
+          },
           adifMonitor: { ...defaultSettings.adifMonitor, ...settings.adifMonitor },
           adifUdp: { ...defaultSettings.adifUdp, ...settings.adifUdp },
           rbnAlerts: { ...defaultSettings.rbnAlerts, ...settings.rbnAlerts },
