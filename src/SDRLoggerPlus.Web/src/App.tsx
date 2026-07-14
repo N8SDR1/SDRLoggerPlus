@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Layout, Model, TabNode, TabSetNode, BorderNode, ITabSetRenderValues, Actions, DockLocation } from 'flexlayout-react';
-import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, AudioWaveform, Activity, TrendingUp, Gauge, Map, Target } from 'lucide-react';
+import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, Activity, TrendingUp, Gauge, Map, Target } from 'lucide-react';
 import { StatusBar } from './components/StatusBar';
 import { WeatherAlertBanner } from './components/WeatherAlertBanner';
 import { Toasts } from './components/Toasts';
@@ -9,9 +9,9 @@ import { ConnectionOverlay } from './components/ConnectionOverlay';
 import { SetupWizard } from './components/SetupWizard';
 import { PluginErrorBoundary } from './components/PluginErrorBoundary';
 import { useSignalRConnection } from './hooks/useSignalR';
-import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, CwKeyerPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin } from './plugins';
+import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin } from './plugins';
 import { useLayoutStore, defaultLayout } from './store/layoutStore';
-import { useSettingsStore } from './store/settingsStore';
+import { useSettingsStore, type SettingsSection } from './store/settingsStore';
 import { useSetupStore } from './store/setupStore';
 import { useAppStore } from './store/appStore';
 import { useTheme } from './hooks/useTheme';
@@ -135,13 +135,6 @@ const PLUGINS: Record<string, PluginDef> = {
     category: 'Information',
     tags: ['bands', 'muf', 'hf'],
   },
-  'cw-keyer': {
-    name: 'CW Keyer',
-    icon: <AudioWaveform className="w-4 h-4" />,
-    component: CwKeyerPlugin,
-    category: 'Radio & Equipment',
-    tags: ['morse', 'cw'],
-  },
   'meters': {
     name: 'Meters',
     icon: <Gauge className="w-4 h-4" />,
@@ -172,6 +165,20 @@ const PLUGINS: Record<string, PluginDef> = {
   },
 };
 
+// Panels whose settings live in a dedicated Settings section get a "?" on their
+// tab that jumps straight to that section. Only panels with a real section.
+const PANEL_SETTINGS_SECTION: Partial<Record<string, SettingsSection>> = {
+  'rotator': 'rotator',
+  'map': 'map',
+  'globe-3d': 'map',
+  'header-bar': 'header',
+  'sat-controller': 'sat',
+  'chat-ai': 'ai',
+  'dx-coach': 'dxcoach',
+  'pota': 'weblogbooks',
+  'qrz-profile': 'weblogbooks',
+};
+
 
 /**
  * Drops layout tabs whose component no longer exists in PLUGINS (panels removed
@@ -195,7 +202,7 @@ function sanitizeLayout(json: any): any {
 
 export function App() {
   const layoutRef = useRef<Layout>(null);
-  const { layout, setLayout, resetLayout: resetLayoutStore, loadFromBackend: loadLayout, syncToBackendSync } = useLayoutStore();
+  const { layout, setLayout, loadFromBackend: loadLayout, syncToBackendSync } = useLayoutStore();
   const { loadSettings, openSettings, settings } = useSettingsStore();
   const { fetchStatus, status: setupStatus, isLoading: setupLoading } = useSetupStore();
   const { setStationInfo, setDatabaseConnected } = useAppStore();
@@ -403,6 +410,31 @@ export function App() {
         <span className="mr-2 text-accent-secondary">{plugin.icon}</span>
       );
     }
+
+    // "?" shortcut → open this panel's Settings section directly.
+    const section = PANEL_SETTINGS_SECTION[component || ''];
+    if (section) {
+      renderValues.content = (
+        <span className="flex items-center gap-1.5">
+          {renderValues.content}
+          <span
+            role="button"
+            tabIndex={0}
+            title="Open this panel's settings"
+            onPointerDown={(e) => {
+              // Fire before FlexLayout's tab drag/select handling.
+              e.stopPropagation();
+              e.preventDefault();
+              useSettingsStore.getState().setActiveSection(section);
+              useSettingsStore.getState().openSettings();
+            }}
+            className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-glass-200 text-[10px] font-bold text-dark-300 hover:text-accent-primary hover:border-accent-primary/50 cursor-pointer transition-colors"
+          >
+            ?
+          </span>
+        </span>
+      );
+    }
   }, []);
 
   // Custom tabset rendering - add + button to each tabset
@@ -424,11 +456,13 @@ export function App() {
     }
   }, []);
 
-  // Reset layout to default
-  const handleResetLayout = useCallback(() => {
-    setModel(Model.fromJson(defaultLayout));
-    resetLayoutStore();
-  }, [resetLayoutStore]);
+  // Re-apply the default FlexLayout model whenever a reset is requested from
+  // anywhere (the store's resetLayout() bumps resetToken). This is what the
+  // "Reset to default layout" button in Settings → Appearance triggers.
+  const resetToken = useLayoutStore((s) => s.resetToken);
+  useEffect(() => {
+    if (resetToken > 0) setModel(Model.fromJson(defaultLayout));
+  }, [resetToken]);
 
   const showSetupWizard = !setupLoading && setupStatus !== null && !setupStatus.isConfigured;
 
@@ -546,14 +580,6 @@ export function App() {
                 })()}
               </div>
 
-              <div className="px-4 py-3 border-t border-glass-100">
-                <button
-                  onClick={handleResetLayout}
-                  className="text-sm text-dark-300 hover:text-accent-danger transition-colors font-ui"
-                >
-                  Reset to default layout
-                </button>
-              </div>
             </div>
           </div>
         )}

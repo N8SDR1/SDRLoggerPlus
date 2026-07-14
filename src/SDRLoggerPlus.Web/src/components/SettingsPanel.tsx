@@ -2647,7 +2647,7 @@ function AppearanceSettingsSection() {
 // layoutStore's setLayout to persist swaps (which flows through the
 // normal hasEverLoaded-gated auto-save path).
 function LayoutPresetsSubsection() {
-  const { layout, setLayout } = useLayoutStore();
+  const { layout, setLayout, resetLayout } = useLayoutStore();
   const [savedLayouts, setSavedLayouts] = useState<SavedLayoutSlot[]>([]);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -2732,6 +2732,22 @@ function LayoutPresetsSubsection() {
           title="Save the current panel arrangement as a named preset"
         >
           <Save className="w-3.5 h-3.5" /> Save Current
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 px-3 py-2 rounded bg-dark-700/40 border border-glass-100 mb-1">
+        <p className="text-xs text-dark-300">Restore the original panel arrangement.</p>
+        <button
+          onClick={() => {
+            if (window.confirm('Reset all panels to the default layout? Your saved presets are kept.')) {
+              resetLayout();
+              flash('ok', 'Layout reset to default');
+            }
+          }}
+          className="px-3 py-1.5 rounded text-xs font-ui border border-accent-danger/40 text-accent-danger hover:bg-accent-danger/10 transition-colors whitespace-nowrap"
+          title="Reset all panels to the default arrangement"
+        >
+          Reset to default layout
         </button>
       </div>
 

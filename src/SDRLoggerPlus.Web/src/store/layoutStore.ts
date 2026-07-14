@@ -97,6 +97,9 @@ interface LayoutState {
   // Layout data
   layout: IJsonModel;
   isLoaded: boolean;
+  // Bumped by resetLayout() so App.tsx can re-apply the default FlexLayout model
+  // — lets "Reset to default layout" be triggered from anywhere (e.g. Settings).
+  resetToken: number;
   // True once loadFromBackend has finished (whether it found a saved
   // layout or not). We refuse to persist any user-driven layout changes
   // before this flips — otherwise a stray FlexLayout initial onModelChange
@@ -119,6 +122,7 @@ export const useLayoutStore = create<LayoutState>()((set, get) => ({
   layout: defaultLayout,
   isLoaded: false,
   hasEverLoaded: false,
+  resetToken: 0,
 
   setLayout: (layout) => {
     // Guard: if a save fires before the initial load has completed, the
@@ -135,7 +139,7 @@ export const useLayoutStore = create<LayoutState>()((set, get) => ({
   },
 
   resetLayout: () => {
-    set({ layout: defaultLayout, isLoaded: true });
+    set((s) => ({ layout: defaultLayout, isLoaded: true, resetToken: s.resetToken + 1 }));
     get().syncToBackend(defaultLayout);
   },
 

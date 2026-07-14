@@ -18,7 +18,6 @@ export { ChatAiPlugin } from './ChatAiPlugin';
 export { POTAPlugin } from './POTAPlugin';
 export { DxCoachPlugin } from './DxCoachPlugin';
 export { PropagationPanelPlugin } from './PropagationPanelPlugin';
-export { CwKeyerPlugin } from './CwKeyerPlugin';
 export { PanadapterPlugin } from './PanadapterPlugin';
 export { StatisticsPlugin } from './StatisticsPlugin';
 export { SatPlugin } from './SatPlugin';
