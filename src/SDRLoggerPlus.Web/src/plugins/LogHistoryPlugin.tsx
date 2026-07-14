@@ -831,7 +831,7 @@ export function LogHistoryPlugin() {
           <div className="bg-dark-700/50 rounded-lg overflow-hidden">
             <button
               onClick={() => setShowSummary(!showSummary)}
-              className="w-full flex items-center justify-between p-3 hover:bg-dark-600/50 transition-colors"
+              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-dark-600/50 transition-colors"
             >
               <div className="flex items-center gap-2 text-sm text-dark-200 font-ui">
                 <span className="font-medium">Summary</span>
@@ -849,22 +849,22 @@ export function LogHistoryPlugin() {
               )}
             </button>
             {showSummary && (
-              <div className="grid grid-cols-4 gap-4 p-4 pt-2 border-t border-glass-100">
-                <div className="text-center">
-                  <p className="text-2xl font-display font-bold text-accent-primary">{stats.totalQsos.toLocaleString()}</p>
-                  <p className="text-xs text-dark-300 font-ui">Total QSOs</p>
+              <div className="grid grid-cols-4 gap-3 px-4 py-2 border-t border-glass-100">
+                <div className="text-center leading-tight">
+                  <p className="text-lg font-display font-bold text-accent-primary">{stats.totalQsos.toLocaleString()}</p>
+                  <p className="text-[11px] text-dark-300 font-ui">Total QSOs</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-2xl font-display font-bold text-accent-success">{stats.uniqueCountries}</p>
-                  <p className="text-xs text-dark-300 font-ui">Countries</p>
+                <div className="text-center leading-tight">
+                  <p className="text-lg font-display font-bold text-accent-success">{stats.uniqueCountries}</p>
+                  <p className="text-[11px] text-dark-300 font-ui">Countries</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-2xl font-display font-bold text-accent-info">{stats.uniqueGrids}</p>
-                  <p className="text-xs text-dark-300 font-ui">Grids</p>
+                <div className="text-center leading-tight">
+                  <p className="text-lg font-display font-bold text-accent-info">{stats.uniqueGrids}</p>
+                  <p className="text-[11px] text-dark-300 font-ui">Grids</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-2xl font-display font-bold text-accent-warning">{stats.qsosToday}</p>
-                  <p className="text-xs text-dark-300 font-ui">Today</p>
+                <div className="text-center leading-tight">
+                  <p className="text-lg font-display font-bold text-accent-warning">{stats.qsosToday}</p>
+                  <p className="text-[11px] text-dark-300 font-ui">Today</p>
                 </div>
               </div>
             )}
