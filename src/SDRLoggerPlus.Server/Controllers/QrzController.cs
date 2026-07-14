@@ -15,6 +15,7 @@ namespace SDRLoggerPlus.Server.Controllers;
 public class QrzController : ControllerBase
 {
     private readonly IQrzService _qrzService;
+    private readonly IConfirmationSyncService _sync;
     private readonly IQsoRepository _qsoRepository;
     private readonly ISettingsRepository _settingsRepository;
     private readonly IHubContext<LogHub, ILogHubClient> _hubContext;
@@ -26,16 +27,37 @@ public class QrzController : ControllerBase
 
     public QrzController(
         IQrzService qrzService,
+        IConfirmationSyncService sync,
         IQsoRepository qsoRepository,
         ISettingsRepository settingsRepository,
         IHubContext<LogHub, ILogHubClient> hubContext,
         ILogger<QrzController> logger)
     {
         _qrzService = qrzService;
+        _sync = sync;
         _qsoRepository = qsoRepository;
         _settingsRepository = settingsRepository;
         _hubContext = hubContext;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Fetch the QRZ logbook and merge its confirmations into the log —
+    /// marks matching QSOs Confirmed. One-click "sync from QRZ".
+    /// </summary>
+    [HttpPost("download-confirmations")]
+    [ProducesResponseType(typeof(ConfirmationMergeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ConfirmationMergeResponse>> DownloadConfirmations(CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _sync.SyncQrzAsync(ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     /// <summary>

@@ -4135,7 +4135,102 @@ function AboutSection() {
 }
 
 // Web Logbooks — groups QRZ, LOTW, Club Log, HRDLog, eQSL and POTA under one category with sub-tabs.
-type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'eqsl' | 'pota' | 'countryfiles';
+type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'eqsl' | 'sync' | 'pota' | 'countryfiles';
+
+function ConfirmationSyncSettingsSection() {
+  const { settings, updateConfirmationSyncSettings } = useSettingsStore();
+  const cs = settings.confirmationSync;
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">Auto-Sync Confirmations</h3>
+        <p className="text-sm text-dark-300">
+          Periodically download your LoTW / eQSL / QRZ confirmations and mark matching QSOs Confirmed in the
+          background — no clicking. Uses the logins from the LoTW, eQSL, and QRZ tabs; you'll get a toast when
+          new confirmations land.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+        <div className="pr-3">
+          <label className="text-sm font-medium text-dark-200">Enable background sync</label>
+          <p className="text-xs text-dark-400 mt-0.5">Off by default.</p>
+        </div>
+        <button
+          onClick={() => updateConfirmationSyncSettings({ autoSync: !cs.autoSync })}
+          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${cs.autoSync ? 'bg-accent-primary' : 'bg-dark-500'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${cs.autoSync ? 'translate-x-5' : ''}`} />
+        </button>
+      </div>
+
+      <div
+        className={`p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-4 transition-opacity ${
+          cs.autoSync ? '' : 'opacity-50'
+        }`}
+      >
+        {!cs.autoSync && (
+          <p className="text-xs text-dark-400 italic">Enable background sync above to change these.</p>
+        )}
+
+        <div className="space-y-2 pt-1">
+          <p className="text-sm font-medium text-dark-200">Sources</p>
+          {([['lotw', 'LoTW'], ['eqsl', 'eQSL'], ['qrz', 'QRZ']] as const).map(([key, label]) => (
+            <label
+              key={key}
+              className={`flex items-center justify-between ${cs.autoSync ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+            >
+              <span className="text-sm text-dark-200">{label}</span>
+              <input
+                type="checkbox"
+                disabled={!cs.autoSync}
+                checked={cs[key]}
+                onChange={(e) => updateConfirmationSyncSettings({ [key]: e.target.checked })}
+                className="w-4 h-4 accent-[rgb(var(--accent-primary))]"
+              />
+            </label>
+          ))}
+          <p className="text-xs text-dark-400">
+            Each source needs its login filled in on the matching tab — LoTW website login, eQSL login, or
+            your QRZ Logbook API key. Leave any you don't use unchecked (e.g. LoTW off, eQSL / QRZ on).
+          </p>
+        </div>
+
+        <div className="space-y-2 pt-1 border-t border-glass-100">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-dark-200">Sync every</label>
+            <span className="text-xs text-dark-300 font-mono">
+              {cs.intervalHours} hour{cs.intervalHours === 1 ? '' : 's'}
+            </span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={24}
+            step={1}
+            disabled={!cs.autoSync}
+            value={cs.intervalHours}
+            onChange={(e) => updateConfirmationSyncSettings({ intervalHours: parseInt(e.target.value) || 6 })}
+            className="w-full accent-[rgb(var(--accent-primary))] cursor-pointer disabled:cursor-not-allowed"
+          />
+        </div>
+
+        <label
+          className={`flex items-center justify-between ${cs.autoSync ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+        >
+          <span className="text-sm text-dark-200">Sync shortly after startup</span>
+          <input
+            type="checkbox"
+            disabled={!cs.autoSync}
+            checked={cs.syncOnStartup}
+            onChange={(e) => updateConfirmationSyncSettings({ syncOnStartup: e.target.checked })}
+            className="w-4 h-4 accent-[rgb(var(--accent-primary))]"
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
 
 function WebLogbooksSection() {
   const [tab, setTab] = useState<WebLogbookTab>('qrz');
@@ -4146,6 +4241,7 @@ function WebLogbooksSection() {
     { id: 'clublog', label: 'Club Log' },
     { id: 'hrdlog', label: 'HRDLog' },
     { id: 'eqsl', label: 'eQSL' },
+    { id: 'sync', label: 'Auto-Sync' },
     { id: 'pota', label: 'POTA' },
     { id: 'countryfiles', label: 'Country Files' },
   ];
@@ -4174,6 +4270,7 @@ function WebLogbooksSection() {
       {tab === 'clublog' && <ClubLogSettingsSection />}
       {tab === 'hrdlog' && <HrdLogSettingsSection />}
       {tab === 'eqsl' && <EqslSettingsSection />}
+      {tab === 'sync' && <ConfirmationSyncSettingsSection />}
       {tab === 'pota' && <PotaSettingsSection />}
       {tab === 'countryfiles' && <CountryFilesSection />}
     </div>

@@ -4,6 +4,7 @@ import { signalRService, type HamlibRigConfigDto, type SignalRConnectionState } 
 import { useAppStore, type ConnectionState } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLayoutStore } from '../store/layoutStore';
+import { useToastStore } from '../store/toastStore';
 import { announceHotSpot, shouldAnnounce } from '../utils/hotSpotAnnouncer';
 
 /**
@@ -157,6 +158,17 @@ export function useSignalRConnection() {
             // Invalidate QSO queries to refetch
             queryClient.invalidateQueries({ queryKey: ['qsos'] });
             queryClient.invalidateQueries({ queryKey: ['statistics'] });
+          },
+          onConfirmationSyncCompleted: (evt) => {
+            if (evt.error) {
+              useToastStore.getState().push(`${evt.source} auto-sync failed: ${evt.error}`, 'error');
+              return;
+            }
+            queryClient.invalidateQueries({ queryKey: ['qsos'] });
+            queryClient.invalidateQueries({ queryKey: ['statistics'] });
+            useToastStore
+              .getState()
+              .push(`${evt.source}: ${evt.updated} QSO${evt.updated === 1 ? '' : 's'} newly confirmed`, 'success');
           },
           onSpotReceived: (evt) => {
             // Add spot to ephemeral in-memory store

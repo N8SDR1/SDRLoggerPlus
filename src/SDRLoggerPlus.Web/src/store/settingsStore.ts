@@ -90,6 +90,16 @@ export interface EqslSettings {
   qthNickname: string; // optional: pick a QTH when your eQSL account has multiple
 }
 
+/** Hands-off background confirmation sync (LoTW / eQSL). */
+export interface ConfirmationSyncSettings {
+  autoSync: boolean;
+  intervalHours: number;
+  syncOnStartup: boolean;
+  lotw: boolean;
+  eqsl: boolean;
+  qrz: boolean;
+}
+
 export interface PotaSettings {
   username: string;  // POTA.app account username
   password: string;  // POTA.app account password (basic-auth on /spot)
@@ -416,6 +426,7 @@ export interface Settings {
   clubLog: ClubLogSettings;
   hrdLog: HrdLogSettings;
   eqsl: EqslSettings;
+  confirmationSync: ConfirmationSyncSettings;
   pota: PotaSettings;
   dxCoach: DxCoachSettings;
   voice: VoiceSettings;
@@ -466,6 +477,7 @@ interface SettingsState {
   updateClubLogSettings: (clubLog: Partial<ClubLogSettings>) => void;
   updateHrdLogSettings: (hrdLog: Partial<HrdLogSettings>) => void;
   updateEqslSettings: (eqsl: Partial<EqslSettings>) => void;
+  updateConfirmationSyncSettings: (confirmationSync: Partial<ConfirmationSyncSettings>) => void;
   updatePotaSettings: (pota: Partial<PotaSettings>) => void;
   updateDxCoachSettings: (dxCoach: Partial<DxCoachSettings>) => void;
   updateVoiceSettings: (voice: Partial<VoiceSettings>) => void;
@@ -545,6 +557,14 @@ const defaultSettings: Settings = {
     username: '',
     password: '',
     qthNickname: '',
+  },
+  confirmationSync: {
+    autoSync: false,
+    intervalHours: 6,
+    syncOnStartup: true,
+    lotw: true,
+    eqsl: true,
+    qrz: true,
   },
   pota: {
     username: '',
@@ -838,6 +858,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       settings: {
         ...state.settings,
         eqsl: { ...state.settings.eqsl, ...eqsl },
+      },
+      isDirty: true,
+    })),
+
+  updateConfirmationSyncSettings: (confirmationSync) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        confirmationSync: { ...state.settings.confirmationSync, ...confirmationSync },
       },
       isDirty: true,
     })),
@@ -1187,6 +1216,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           clubLog: { ...defaultSettings.clubLog, ...settings.clubLog },
           hrdLog: { ...defaultSettings.hrdLog, ...settings.hrdLog },
           eqsl: { ...defaultSettings.eqsl, ...settings.eqsl },
+          confirmationSync: { ...defaultSettings.confirmationSync, ...settings.confirmationSync },
           pota: { ...defaultSettings.pota, ...settings.pota },
           dxCoach: { ...defaultSettings.dxCoach, ...settings.dxCoach },
           voice: {

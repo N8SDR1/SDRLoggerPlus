@@ -13,6 +13,7 @@ public interface ILogHubClient
     Task OnCallsignLookedUp(CallsignLookedUpEvent evt);
     Task OnQsoLogged(QsoLoggedEvent evt);
     Task OnSpotReceived(SpotReceivedEvent evt);
+    Task OnConfirmationSyncCompleted(ConfirmationSyncCompletedEvent evt);
     Task OnHotListChanged(HotListChangedEvent evt);
     Task OnLightningStatus(SDRLoggerPlus.Server.Services.Weather.LightningStatus status);
     Task OnLightningStrikes(LightningStrikesEvent evt);

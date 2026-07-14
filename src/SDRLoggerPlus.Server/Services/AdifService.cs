@@ -269,14 +269,15 @@ public partial class AdifService : IAdifService
     }
 
     /// <summary>
-    /// Loose match key for confirmation merge — call + date + band + normalized
-    /// mode, deliberately WITHOUT the exact time (LoTW/eQSL report times often
-    /// differ by a minute or two from the logged time). Same approach Log4OM /
-    /// HRD / ACLog use so a downloaded confirmation report matches the log.
+    /// Loose match key for confirmation merge — call + band + normalized mode,
+    /// deliberately WITHOUT the date/time. The date is matched separately with a
+    /// ±1-day tolerance (see PickNearestByDate) because ADIF dates are UTC while
+    /// the log stores local wall-clock, so an evening QSO can land on a different
+    /// calendar day. Standard confirmation-matching behaviour.
     /// </summary>
-    private static string MergeKey(string callsign, DateTime qsoDate, string band, string mode)
+    private static string MergeKey(string callsign, string band, string mode)
     {
-        return $"{callsign.ToUpperInvariant()}|{qsoDate.Date:yyyyMMdd}|{band.ToUpperInvariant()}|{NormalizeModeForMatch(mode)}";
+        return $"{callsign.ToUpperInvariant()}|{band.ToUpperInvariant()}|{NormalizeModeForMatch(mode)}";
     }
 
     /// <summary>Collapse sideband/sub-mode variants so a report matches the log.</summary>
@@ -301,14 +302,14 @@ public partial class AdifService : IAdifService
         _logger.LogInformation("Merging {Count} {Source} confirmation records against {Existing} logged QSOs",
             records.Count, source, existing.Count);
 
-        // Index the log by the loose match key; a key can hold more than one QSO
-        // (same call/band/mode/day), so we keep a list and pick the nearest time.
+        // Index the log by call+band+mode; a key can hold many QSOs (worked the
+        // same station repeatedly), so we keep a list and pick the nearest date.
         var index = new Dictionary<string, List<Qso>>(StringComparer.OrdinalIgnoreCase);
         foreach (var q in existing)
         {
             if (string.IsNullOrEmpty(q.Callsign) || string.IsNullOrEmpty(q.Band) || string.IsNullOrEmpty(q.Mode))
                 continue;
-            var key = MergeKey(q.Callsign, q.QsoDate, q.Band, q.Mode);
+            var key = MergeKey(q.Callsign, q.Band, q.Mode);
             if (!index.TryGetValue(key, out var list))
             {
                 list = new List<Qso>();
@@ -339,16 +340,17 @@ public partial class AdifService : IAdifService
                 continue;
             }
 
-            var key = MergeKey(rec.Callsign, rec.QsoDate, rec.Band, rec.Mode);
-            if (!index.TryGetValue(key, out var candidates) || candidates.Count == 0)
+            var key = MergeKey(rec.Callsign, rec.Band, rec.Mode);
+            var target = index.TryGetValue(key, out var candidates)
+                ? PickNearestByDate(candidates, rec.QsoDate)
+                : null;
+            if (target is null)
             {
                 unmatched++;
                 continue;
             }
 
             matched++;
-            var target = PickNearestByTime(candidates, rec.TimeOn);
-
             if (ApplyConfirmation(target, source, rec))
             {
                 toUpdate.Add(target);
@@ -375,23 +377,26 @@ public partial class AdifService : IAdifService
         return new ConfirmationMergeResponse(records.Count, matched, updated, alreadyConfirmed, unmatched);
     }
 
-    /// <summary>Pick the candidate whose TimeOn is nearest the report's TimeOn.</summary>
-    private static Qso PickNearestByTime(List<Qso> candidates, string? reportTimeOn)
+    /// <summary>
+    /// Pick the logged QSO closest in time to the report record, within ~1 day.
+    /// The window absorbs the UTC-vs-local calendar-day rollover (ADIF dates are
+    /// UTC; the log stores local wall-clock), which otherwise drops evening QSOs.
+    /// Returns null when no candidate is close enough — a genuinely different QSO.
+    /// </summary>
+    private static Qso? PickNearestByDate(List<Qso> candidates, DateTime reportDate)
     {
-        if (candidates.Count == 1) return candidates[0];
-        var target = ParseHhmm(reportTimeOn);
-        if (target is null) return candidates[0];
-        return candidates
-            .OrderBy(c => Math.Abs((ParseHhmm(c.TimeOn) ?? 0) - target.Value))
-            .First();
-    }
-
-    private static int? ParseHhmm(string? hhmm)
-    {
-        if (string.IsNullOrEmpty(hhmm) || hhmm.Length < 4) return null;
-        return int.TryParse(hhmm.AsSpan(0, 2), out var h) && int.TryParse(hhmm.AsSpan(2, 2), out var m)
-            ? h * 60 + m
-            : null;
+        Qso? best = null;
+        var bestHours = double.MaxValue;
+        foreach (var c in candidates)
+        {
+            var hours = Math.Abs((c.QsoDate - reportDate).TotalHours);
+            if (hours < bestHours)
+            {
+                bestHours = hours;
+                best = c;
+            }
+        }
+        return bestHours <= 26 ? best : null;
     }
 
     /// <summary>

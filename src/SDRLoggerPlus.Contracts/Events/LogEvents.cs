@@ -100,6 +100,18 @@ public record SpotReceivedEvent(
 );
 
 /// <summary>
+/// A background confirmation sync (LoTW / eQSL) finished — the UI refreshes the
+/// log + statistics and shows a toast.
+/// </summary>
+public record ConfirmationSyncCompletedEvent(
+    string Source,
+    int Matched,
+    int Updated,
+    int Unmatched,
+    string? Error = null
+);
+
+/// <summary>
 /// Hot List membership or flags changed
 /// </summary>
 public record HotListChangedEvent(

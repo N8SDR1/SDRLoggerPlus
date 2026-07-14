@@ -10,14 +10,12 @@ namespace SDRLoggerPlus.Server.Controllers;
 public class EqslController : ControllerBase
 {
     private readonly EqslService _eqsl;
-    private readonly IAdifService _adif;
-    private readonly ISettingsService _settings;
+    private readonly IConfirmationSyncService _sync;
 
-    public EqslController(EqslService eqsl, IAdifService adif, ISettingsService settings)
+    public EqslController(EqslService eqsl, IConfirmationSyncService sync)
     {
         _eqsl = eqsl;
-        _adif = adif;
-        _settings = settings;
+        _sync = sync;
     }
 
     /// <summary>
@@ -31,16 +29,7 @@ public class EqslController : ControllerBase
     {
         try
         {
-            var adifText = await _eqsl.DownloadInboxAdifAsync(ct);
-            using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(adifText));
-            var result = await _adif.MergeConfirmationsAsync(stream, ConfirmationSource.Eqsl, ct);
-
-            // Stamp the sync time so the next pull is incremental.
-            var settings = await _settings.GetSettingsAsync();
-            settings.Eqsl.LastConfirmationSync = DateTime.UtcNow;
-            await _settings.SaveSettingsAsync(settings);
-
-            return Ok(result);
+            return Ok(await _sync.SyncEqslAsync(ct));
         }
         catch (InvalidOperationException ex)
         {

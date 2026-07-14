@@ -692,6 +692,16 @@ class ApiClient {
     return response.json();
   }
 
+  /** Fetch the QRZ logbook and merge its confirmations into the log. */
+  async downloadQrzConfirmations(): Promise<ConfirmationMergeResponse> {
+    const response = await fetch(`${API_BASE}/qrz/download-confirmations`, { method: 'POST' });
+    if (!response.ok) {
+      const msg = await response.text();
+      throw new Error(msg || `API error: ${response.status}`);
+    }
+    return response.json();
+  }
+
   async exportAdif(request?: AdifExportRequest): Promise<Blob> {
     const params = new URLSearchParams();
     if (request?.callsign) params.append('callsign', request.callsign);

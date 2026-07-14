@@ -81,6 +81,8 @@ builder.Services.AddScoped<IQrzService, QrzService>();
 builder.Services.AddSingleton<IHamQthService, HamQthService>();
 builder.Services.AddSingleton<ITqslRunner, TqslRunner>();
 builder.Services.AddScoped<ILotwService, LotwService>();
+builder.Services.AddScoped<IConfirmationSyncService, ConfirmationSyncService>();
+builder.Services.AddHostedService<ConfirmationSyncBackgroundService>();
 builder.Services.AddScoped<IAdifService, AdifService>();
 builder.Services.AddScoped<IAiService, AiService>();
 

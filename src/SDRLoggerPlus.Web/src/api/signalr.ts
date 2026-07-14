@@ -687,10 +687,19 @@ export type SignalRConnectionState = 'disconnected' | 'connecting' | 'connected'
 
 type ConnectionStateCallback = (state: SignalRConnectionState, attempt: number) => void;
 
+export interface ConfirmationSyncCompletedEvent {
+  source: string;
+  matched: number;
+  updated: number;
+  unmatched: number;
+  error?: string;
+}
+
 type EventHandlers = {
   onCallsignFocused?: (evt: CallsignFocusedEvent) => void;
   onCallsignLookedUp?: (evt: CallsignLookedUpEvent) => void;
   onQsoLogged?: (evt: QsoLoggedEvent) => void;
+  onConfirmationSyncCompleted?: (evt: ConfirmationSyncCompletedEvent) => void;
   onSpotReceived?: (evt: SpotReceivedEvent) => void;
   onHotListChanged?: (evt: HotListChangedEvent) => void;
   onSatState?: (state: SatState) => void;
@@ -963,6 +972,10 @@ class SignalRService {
 
     this.connection.on('OnHotListChanged', (evt: HotListChangedEvent) => {
       this.handlers.onHotListChanged?.(evt);
+    });
+
+    this.connection.on('OnConfirmationSyncCompleted', (evt: ConfirmationSyncCompletedEvent) => {
+      this.handlers.onConfirmationSyncCompleted?.(evt);
     });
 
     this.connection.on('OnSatState', (state: SatState) => {

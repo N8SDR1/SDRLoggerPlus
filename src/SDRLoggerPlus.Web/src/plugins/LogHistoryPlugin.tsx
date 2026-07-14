@@ -289,7 +289,7 @@ export function LogHistoryPlugin() {
     }
   }, [mergeSource, queryClient]);
 
-  const handleDownloadSync = useCallback(async (kind: 'lotw' | 'eqsl') => {
+  const handleDownloadSync = useCallback(async (kind: 'lotw' | 'eqsl' | 'qrz') => {
     setIsMerging(true);
     setMergeResult(null);
     setMergeError(null);
@@ -297,7 +297,9 @@ export function LogHistoryPlugin() {
       const result =
         kind === 'lotw'
           ? await api.downloadLotwConfirmations()
-          : await api.downloadEqslConfirmations();
+          : kind === 'eqsl'
+          ? await api.downloadEqslConfirmations()
+          : await api.downloadQrzConfirmations();
       setMergeResult(result);
       queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
@@ -1283,25 +1285,33 @@ export function LogHistoryPlugin() {
                     </button>
                   ))}
                 </div>
-                {(mergeSource === 'lotw' || mergeSource === 'eqsl') && (
+                {(mergeSource === 'lotw' || mergeSource === 'eqsl' || mergeSource === 'qrz') && (
                   <div className="mb-4">
-                    <button
-                      onClick={() => handleDownloadSync(mergeSource === 'lotw' ? 'lotw' : 'eqsl')}
-                      disabled={isMerging}
-                      className="w-full bg-accent-primary/15 hover:bg-accent-primary/25 text-accent-primary border border-accent-primary/40 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-50"
-                    >
-                      {isMerging ? (
-                        <><Loader2 className="w-4 h-4 animate-spin" />Downloading from {mergeSource === 'lotw' ? 'LoTW' : 'eQSL'}…</>
-                      ) : (
-                        <><CloudUpload className="w-4 h-4 rotate-180" />Download from {mergeSource === 'lotw' ? 'LoTW' : 'eQSL'} (one-click)</>
-                      )}
-                    </button>
-                    <p className="text-[11px] text-dark-400 mt-1.5">
-                      Uses your {mergeSource === 'lotw' ? 'LoTW website login' : 'eQSL login'} from{' '}
-                      <span className="font-medium text-dark-300">Settings → {mergeSource === 'lotw' ? 'LoTW' : 'eQSL'}</span>.
-                      {mergeSource === 'eqsl' && ' Requires an Authenticity-Guaranteed account.'} Pulls only new
-                      confirmations since the last sync.
-                    </p>
+                    {(() => {
+                      const label = mergeSource === 'lotw' ? 'LoTW' : mergeSource === 'eqsl' ? 'eQSL' : 'QRZ';
+                      const note =
+                        mergeSource === 'lotw'
+                          ? 'Uses your LoTW website login from Settings → LoTW. Pulls only new confirmations since the last sync.'
+                          : mergeSource === 'eqsl'
+                          ? 'Uses your eQSL login from Settings → eQSL. Requires an Authenticity-Guaranteed account. Pulls only new confirmations since the last sync.'
+                          : 'Uses your QRZ Logbook API key from Settings → QRZ. Fetches your logbook and confirms matching QSOs.';
+                      return (
+                        <>
+                          <button
+                            onClick={() => handleDownloadSync(mergeSource as 'lotw' | 'eqsl' | 'qrz')}
+                            disabled={isMerging}
+                            className="w-full bg-accent-primary/15 hover:bg-accent-primary/25 text-accent-primary border border-accent-primary/40 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-50"
+                          >
+                            {isMerging ? (
+                              <><Loader2 className="w-4 h-4 animate-spin" />Downloading from {label}…</>
+                            ) : (
+                              <><CloudUpload className="w-4 h-4 rotate-180" />Download from {label} (one-click)</>
+                            )}
+                          </button>
+                          <p className="text-[11px] text-dark-400 mt-1.5">{note}</p>
+                        </>
+                      );
+                    })()}
                     <div className="flex items-center gap-2 my-3">
                       <div className="flex-1 h-px bg-glass-100" />
                       <span className="text-[10px] text-dark-500 uppercase tracking-wide">or import a file</span>

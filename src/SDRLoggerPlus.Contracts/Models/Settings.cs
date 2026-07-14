@@ -54,6 +54,8 @@ public class UserSettings
     [BsonElement("eqsl")]
     public EqslSettings Eqsl { get; set; } = new();
 
+    public ConfirmationSyncSettings ConfirmationSync { get; set; } = new();
+
     [BsonElement("pota")]
     public PotaSettings Pota { get; set; } = new();
 
@@ -443,6 +445,33 @@ public class EqslSettings
     // Last time the eQSL inbox was downloaded — drives the incremental RcvdSince pull.
     [BsonElement("lastConfirmationSync")]
     public DateTime? LastConfirmationSync { get; set; }
+}
+
+/// <summary>
+/// Hands-off background confirmation sync (Log4OM style) — periodically pull
+/// LoTW / eQSL confirmations and merge them into the log.
+/// </summary>
+public class ConfirmationSyncSettings
+{
+    [BsonElement("autoSync")]
+    public bool AutoSync { get; set; }
+
+    // How often to run, in hours.
+    [BsonElement("intervalHours")]
+    public int IntervalHours { get; set; } = 6;
+
+    // Run a sync shortly after the app starts.
+    [BsonElement("syncOnStartup")]
+    public bool SyncOnStartup { get; set; } = true;
+
+    [BsonElement("lotw")]
+    public bool Lotw { get; set; } = true;
+
+    [BsonElement("eqsl")]
+    public bool Eqsl { get; set; } = true;
+
+    [BsonElement("qrz")]
+    public bool Qrz { get; set; } = true;
 }
 
 public class AppearanceSettings
