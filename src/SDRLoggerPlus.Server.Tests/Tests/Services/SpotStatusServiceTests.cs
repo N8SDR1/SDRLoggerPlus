@@ -484,6 +484,26 @@ public class SpotStatusServiceTests
     }
 
     [Fact]
+    public async Task GetGridStatus_GridInStationInfo_IsCounted()
+    {
+        // The log stores grids in Station.Grid (not the top-level Grid), so the
+        // cache must read that field — a station in FN42 must count as worked.
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            new()
+            {
+                Callsign = "W1ABC", Country = "United States", Band = "20m", Mode = "FT8",
+                Station = new StationInfo { Grid = "FN42" },
+            },
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        _service.GetGridStatus("FN42", 14000.0).Should().BeNull();      // worked, same band
+        _service.GetGridStatus("EM79", 14000.0).Should().Be("newGrid"); // never worked
+    }
+
+    [Fact]
     public async Task GetGridStatus_SixCharAndLowercase_NormalizedToField()
     {
         _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>

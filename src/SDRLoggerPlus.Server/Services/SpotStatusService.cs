@@ -286,7 +286,10 @@ public class SpotStatusService : ISpotStatusService, IHostedService
                 if (string.IsNullOrEmpty(band) || string.IsNullOrEmpty(callsign))
                     continue;
 
-                var grid = NormalizeGrid(qso.Grid);
+                // Grids live in Station.Grid (populated by QRZ/callbook lookups &
+                // the QRZ import), with the top-level Grid as fallback — matching
+                // GridOf() in LiteQsoRepository, the source of the log's grid stat.
+                var grid = NormalizeGrid(qso.Station?.Grid ?? qso.Grid);
                 if (grid is not null)
                 {
                     newGrids.Add(grid);
