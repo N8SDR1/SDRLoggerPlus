@@ -9,6 +9,18 @@ namespace SDRLoggerPlus.Server.Services.Wsjtx;
 
 public record WsjtxClientInfo(string Id, string? Version, DateTime LastHeardUtc);
 
+/// <summary>Fields the frontend echoes back to answer a decoded CQ (Reply, type 4).</summary>
+public record WsjtxReplyRequest(
+    int Source,
+    string ClientId,
+    uint Time,
+    int Snr,
+    double DeltaTime,
+    uint DeltaFreq,
+    string? Mode,
+    string? Message,
+    bool LowConfidence);
+
 public record WsjtxStatus(
     int Source,
     bool Listening,
@@ -66,6 +78,33 @@ public class WsjtxService : BackgroundService
         lock (_decodesLock) return _recentDecodes.ToList();
     }
 
+    /// <summary>
+    /// Send a Reply ("call this station") back to the decoder that produced a
+    /// decode, telling it to answer that CQ. Works with WSJT-X/JTDX; MSHV honours
+    /// it only if it implements inbound Reply. Returns false if that source isn't
+    /// bound or we haven't seen where its datagrams come from yet.
+    /// </summary>
+    public async Task<bool> SendReplyAsync(WsjtxReplyRequest req)
+    {
+        var l = req.Source == 2 ? _secondary : _primary;
+        IPEndPoint? ep;
+        lock (l.StateLock) ep = l.LastRemoteEndpoint;
+        var udp = l.Udp;
+        if (udp == null || ep == null)
+        {
+            _logger.LogWarning("WSJT-X source {N}: cannot send Reply — {Reason}",
+                l.Source, udp == null ? "not listening" : "no decoder endpoint seen yet");
+            return false;
+        }
+
+        var bytes = WsjtxMessageWriter.BuildReply(
+            req.ClientId, req.Time, req.Snr, req.DeltaTime, req.DeltaFreq,
+            req.Mode, req.Message, req.LowConfidence);
+        await udp.SendAsync(bytes, bytes.Length, ep);
+        _logger.LogInformation("WSJT-X source {N}: sent Reply \"{Msg}\" to {Ep}", l.Source, req.Message, ep);
+        return true;
+    }
+
     /// <summary>One UDP source: its own socket, client table and last-QSO state.</summary>
     private sealed class Listener(int source)
     {
@@ -81,6 +120,9 @@ public class WsjtxService : BackgroundService
         // Latest dial frequency reported by a Status message; decodes carry only
         // the audio offset, so we add this to reconstruct the real RF frequency.
         public ulong LastDialFreqHz;
+        // Where this decoder's datagrams came from — the target for outbound
+        // Reply ("call this station") messages.
+        public IPEndPoint? LastRemoteEndpoint;
         public readonly object StateLock = new();
 
         public WsjtxStatus Snapshot()
@@ -243,6 +285,11 @@ public class WsjtxService : BackgroundService
                 return;
             }
 
+            if (result.RemoteEndPoint is IPEndPoint ep)
+            {
+                lock (l.StateLock) l.LastRemoteEndpoint = ep;
+            }
+
             try
             {
                 await HandleDatagramAsync(l, result.Buffer);
@@ -362,7 +409,10 @@ public class WsjtxService : BackgroundService
             SpotStatus: spotStatus,
             ZoneStatus: zoneStatus,
             GridStatus: gridStatus,
-            DecodedAtUtc: DateTime.UtcNow);
+            DecodedAtUtc: DateTime.UtcNow,
+            TimeMsSinceMidnight: decode.TimeMsSinceMidnight,
+            RawMessage: decode.Message,
+            LowConfidence: decode.LowConfidence);
 
         lock (_decodesLock)
         {

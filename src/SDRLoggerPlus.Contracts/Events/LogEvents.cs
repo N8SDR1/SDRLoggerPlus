@@ -126,7 +126,12 @@ public record WsjtxDecodeEvent(
     string? SpotStatus,
     string? ZoneStatus,
     string? GridStatus,
-    DateTime DecodedAtUtc
+    DateTime DecodedAtUtc,
+    // Raw decode fields echoed back in a Reply ("call this station"): the
+    // decoder needs Time/message/low-confidence to identify the transmission.
+    uint TimeMsSinceMidnight = 0,
+    string? RawMessage = null,
+    bool LowConfidence = false
 );
 
 /// <summary>

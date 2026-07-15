@@ -99,6 +99,10 @@ export interface WsjtxDecodeEvent {
   zoneStatus?: 'newZone' | 'newZoneBand';
   gridStatus?: 'newGrid' | 'newGridBand';
   decodedAtUtc: string;
+  // Raw decode fields echoed back to answer this CQ (Reply / "call this station").
+  timeMsSinceMidnight?: number;
+  rawMessage?: string;
+  lowConfidence?: boolean;
 }
 
 export interface SatPassQso {

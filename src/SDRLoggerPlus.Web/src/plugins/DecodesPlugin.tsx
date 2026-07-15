@@ -5,6 +5,7 @@ import type { WsjtxDecodeEvent } from '../api/signalr';
 import { GlassPanel } from '../components/GlassPanel';
 import { useWsjtxDecodeStore } from '../store/wsjtxDecodeStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useToastStore } from '../store/toastStore';
 
 /**
  * Live WSJT-X / JTDX / MSHV decode list (Phase 1 of the decode-alerts feature).
@@ -44,6 +45,18 @@ export function DecodesPlugin() {
   }, [decodes, cqOnly, neededOnly]);
 
   const neededCount = useMemo(() => decodes.filter(isNeeded).length, [decodes]);
+
+  // Double-click a decode → tell the decoder (WSJT-X/JTDX/MSHV) to answer that CQ.
+  const callStation = async (d: WsjtxDecodeEvent) => {
+    const toast = useToastStore.getState();
+    try {
+      const r = await api.sendWsjtxReply(d);
+      if (r.sent) toast.push(`📞 Calling ${d.callsign} — answer set up in your decoder`, 'success');
+      else toast.push(`Couldn't reach the decoder to call ${d.callsign}`, 'error');
+    } catch {
+      toast.push(`Call request failed for ${d.callsign}`, 'error');
+    }
+  };
 
   return (
     <GlassPanel
@@ -102,7 +115,7 @@ export function DecodesPlugin() {
             </thead>
             <tbody>
               {filtered.map((d, i) => (
-                <DecodeRow key={`${d.decodedAtUtc}-${d.callsign}-${i}`} d={d} colors={colors} />
+                <DecodeRow key={`${d.decodedAtUtc}-${d.callsign}-${i}`} d={d} colors={colors} onCall={callStation} />
               ))}
             </tbody>
           </table>
@@ -112,11 +125,17 @@ export function DecodesPlugin() {
   );
 }
 
-function DecodeRow({ d, colors }: { d: WsjtxDecodeEvent; colors: { newDxcc: string; newBand: string; worked: string } }) {
+function DecodeRow({ d, colors, onCall }: {
+  d: WsjtxDecodeEvent;
+  colors: { newDxcc: string; newBand: string; worked: string };
+  onCall: (d: WsjtxDecodeEvent) => void;
+}) {
   const status = decodeStatus(d, colors);
   return (
     <tr
-      className="border-b border-glass-100/40 hover:bg-white/[0.03]"
+      className="border-b border-glass-100/40 hover:bg-white/[0.03] cursor-pointer"
+      title={`Double-click to call ${d.callsign} (answer this CQ in your decoder)`}
+      onDoubleClick={() => onCall(d)}
       style={status.needed ? { borderLeft: `3px solid ${status.color}`, background: `${status.color}12` } : undefined}
     >
       <td className="px-2 py-1 font-mono text-[11px] text-dark-400 whitespace-nowrap">{fmtTime(d.decodedAtUtc)}</td>

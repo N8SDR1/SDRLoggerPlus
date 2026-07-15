@@ -559,6 +559,24 @@ class ApiClient {
     return this.fetch('/wsjtx/decodes');
   }
 
+  /** Answer a decoded CQ ("call this station") via a WSJT-X Reply message. */
+  async sendWsjtxReply(d: WsjtxDecodeEvent): Promise<{ sent: boolean }> {
+    return this.fetch('/wsjtx/reply', {
+      method: 'POST',
+      body: JSON.stringify({
+        source: d.source,
+        clientId: d.clientId,
+        time: d.timeMsSinceMidnight ?? 0,
+        snr: d.snr,
+        deltaTime: d.deltaTimeSeconds,
+        deltaFreq: d.audioOffsetHz,
+        mode: d.mode,
+        message: d.rawMessage,
+        lowConfidence: d.lowConfidence ?? false,
+      }),
+    });
+  }
+
   // S.A.T. controller
   async getSatStatus(): Promise<SatState> {
     return this.fetch('/sat/status');

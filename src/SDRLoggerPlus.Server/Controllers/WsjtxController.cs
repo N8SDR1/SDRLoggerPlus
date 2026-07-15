@@ -18,4 +18,14 @@ public class WsjtxController : ControllerBase
     /// <summary>Recent decodes for the Decodes panel to backfill on open.</summary>
     [HttpGet("decodes")]
     public ActionResult<IReadOnlyList<WsjtxDecodeEvent>> GetDecodes() => Ok(_wsjtxService.GetRecentDecodes());
+
+    /// <summary>Answer a decoded CQ ("call this station") via a WSJT-X Reply message.</summary>
+    [HttpPost("reply")]
+    public async Task<ActionResult> Reply([FromBody] WsjtxReplyRequest req)
+    {
+        var sent = await _wsjtxService.SendReplyAsync(req);
+        return sent
+            ? Ok(new { sent = true })
+            : StatusCode(StatusCodes.Status409Conflict, new { sent = false, error = "The decoder isn't reachable yet (no datagrams seen, or the source is off)." });
+    }
 }
