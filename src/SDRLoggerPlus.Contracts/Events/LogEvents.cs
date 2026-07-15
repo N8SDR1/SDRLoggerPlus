@@ -100,6 +100,35 @@ public record SpotReceivedEvent(
 );
 
 /// <summary>
+/// One decoded FT8/FT4 transmission from WSJT-X/JTDX/MSHV, enriched with the
+/// operator's needed-status so the Decodes panel can colour it. FrequencyHz is
+/// the reconstructed RF frequency (dial + audio offset); it is 0 until a Status
+/// message has supplied the dial frequency, in which case Band/SpotStatus are
+/// best-effort. SpotStatus / ZoneStatus reuse the DX-cluster verdict strings
+/// ("newDxcc" | "newBand" | "worked" | null / "newZone" | "newZoneBand" | null).
+/// </summary>
+public record WsjtxDecodeEvent(
+    int Source,
+    string ClientId,
+    string Callsign,
+    string? DxCall,
+    string? Grid,
+    string? Mode,
+    int Snr,
+    double DeltaTimeSeconds,
+    uint AudioOffsetHz,
+    ulong FrequencyHz,
+    string? Band,
+    string? Country,
+    string? Continent,
+    int? CqZone,
+    bool IsCq,
+    string? SpotStatus,
+    string? ZoneStatus,
+    DateTime DecodedAtUtc
+);
+
+/// <summary>
 /// A background confirmation sync (LoTW / eQSL) finished — the UI refreshes the
 /// log + statistics and shows a toast.
 /// </summary>

@@ -77,6 +77,29 @@ export interface SpotReceivedEvent {
   zoneStatus?: 'newZone' | 'newZoneBand';
 }
 
+/** One decoded FT8/FT4 transmission from WSJT-X/JTDX/MSHV, needed-status stamped. */
+export interface WsjtxDecodeEvent {
+  source: number;
+  clientId: string;
+  callsign: string;
+  dxCall?: string;
+  grid?: string;
+  mode?: string;
+  snr: number;
+  deltaTimeSeconds: number;
+  audioOffsetHz: number;
+  /** Reconstructed RF frequency (dial + audio offset); 0 until a Status message arrives. */
+  frequencyHz: number;
+  band?: string;
+  country?: string;
+  continent?: string;
+  cqZone?: number;
+  isCq: boolean;
+  spotStatus?: 'newDxcc' | 'newBand' | 'worked';
+  zoneStatus?: 'newZone' | 'newZoneBand';
+  decodedAtUtc: string;
+}
+
 export interface SatPassQso {
   satName: string;
   callsign: string;
@@ -701,6 +724,7 @@ type EventHandlers = {
   onQsoLogged?: (evt: QsoLoggedEvent) => void;
   onConfirmationSyncCompleted?: (evt: ConfirmationSyncCompletedEvent) => void;
   onSpotReceived?: (evt: SpotReceivedEvent) => void;
+  onWsjtxDecode?: (evt: WsjtxDecodeEvent) => void;
   onHotListChanged?: (evt: HotListChangedEvent) => void;
   onSatState?: (state: SatState) => void;
   onSpotSelected?: (evt: SpotSelectedEvent) => void;
@@ -984,6 +1008,10 @@ class SignalRService {
 
     this.connection.on('OnSpotReceived', (evt: SpotReceivedEvent) => {
       this.handlers.onSpotReceived?.(evt);
+    });
+
+    this.connection.on('OnWsjtxDecode', (evt: WsjtxDecodeEvent) => {
+      this.handlers.onWsjtxDecode?.(evt);
     });
 
     this.connection.on('OnSpotSelected', (evt: SpotSelectedEvent) => {

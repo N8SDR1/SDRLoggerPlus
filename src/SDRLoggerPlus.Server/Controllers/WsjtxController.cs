@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SDRLoggerPlus.Contracts.Events;
 using SDRLoggerPlus.Server.Services.Wsjtx;
 
 namespace SDRLoggerPlus.Server.Controllers;
@@ -13,4 +14,8 @@ public class WsjtxController : ControllerBase
 
     [HttpGet("status")]
     public ActionResult<IReadOnlyList<WsjtxStatus>> GetStatus() => Ok(_wsjtxService.GetStatuses());
+
+    /// <summary>Recent decodes for the Decodes panel to backfill on open.</summary>
+    [HttpGet("decodes")]
+    public ActionResult<IReadOnlyList<WsjtxDecodeEvent>> GetDecodes() => Ok(_wsjtxService.GetRecentDecodes());
 }

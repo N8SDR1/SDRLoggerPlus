@@ -27,9 +27,35 @@ public record WsjtxQsoLogged(
     string? ExchangeReceived,
     string? AdifPropagationMode) : WsjtxMessage(Id);
 
+/// <summary>
+/// Status (type 1) — carries the current dial frequency. Decode messages only
+/// give the audio offset, so we track the dial from Status to reconstruct each
+/// decode's real RF frequency (and therefore its band). Only the leading fields
+/// we need are read; the rest of the (long) Status payload is ignored.
+/// </summary>
+public record WsjtxStatusMessage(string Id, ulong DialFrequencyHz, string? Mode) : WsjtxMessage(Id);
+
 public record WsjtxClose(string Id) : WsjtxMessage(Id);
 
 public record WsjtxLoggedAdif(string Id, string? Adif) : WsjtxMessage(Id);
+
+/// <summary>
+/// A single decode line from WSJT-X/JTDX/MSHV (message type 2) — one decoded
+/// transmission per FT8/FT4 cycle. <see cref="Message"/> holds the raw decoded
+/// text (e.g. "CQ K1ABC FN42"); parse it with WsjtxDecodeParser for the caller
+/// and grid.
+/// </summary>
+public record WsjtxDecode(
+    string Id,
+    bool New,
+    uint TimeMsSinceMidnight,
+    int Snr,
+    double DeltaTimeSeconds,
+    uint DeltaFrequencyHz,
+    string? Mode,
+    string? Message,
+    bool LowConfidence,
+    bool OffAir) : WsjtxMessage(Id);
 
 /// <summary>
 /// Parser for the WSJT-X UDP protocol (NetworkMessage.hpp). All integers are
@@ -56,6 +82,8 @@ public static class WsjtxMessageReader
             return type switch
             {
                 0 => new WsjtxHeartbeat(id, r.ReadU32(), r.ReadUtf8(), r.ReadUtf8()),
+                1 => new WsjtxStatusMessage(id, r.ReadU64(), r.ReadUtf8()),
+                2 => ReadDecode(ref r, id),
                 5 => ReadQsoLogged(ref r, id, schema),
                 6 => new WsjtxClose(id),
                 12 => new WsjtxLoggedAdif(id, r.ReadUtf8()),
@@ -66,6 +94,28 @@ public static class WsjtxMessageReader
         {
             return null;
         }
+    }
+
+    // Decode (type 2), after the common id:
+    //   New (bool) · Time (u32 ms-since-midnight) · snr (i32) ·
+    //   Delta time (f64 — QDataStream defaults to DoublePrecision, so WSJT-X's
+    //   `float` delta_time goes on the wire as an 8-byte double) ·
+    //   Delta frequency (u32 Hz) · Mode (utf8) · Message (utf8) ·
+    //   Low confidence (bool) · Off air (bool).
+    // The two trailing booleans are read defensively so a sender that omits
+    // them still yields a usable decode (Message is already parsed by then).
+    private static WsjtxDecode ReadDecode(ref Reader r, string id)
+    {
+        var isNew = r.ReadBool();
+        var time = r.ReadU32();
+        var snr = r.ReadI32();
+        var deltaTime = r.ReadDouble();
+        var deltaFreq = r.ReadU32();
+        var mode = r.ReadUtf8();
+        var message = r.ReadUtf8();
+        var lowConfidence = r.Remaining >= 1 && r.ReadBool();
+        var offAir = r.Remaining >= 1 && r.ReadBool();
+        return new WsjtxDecode(id, isNew, time, snr, deltaTime, deltaFreq, mode, message, lowConfidence, offAir);
     }
 
     private static WsjtxQsoLogged ReadQsoLogged(ref Reader r, string id, uint schema)
@@ -107,9 +157,14 @@ public static class WsjtxMessageReader
             return slice;
         }
 
+        public int Remaining => _data.Length;
+
         public byte ReadU8() => Take(1)[0];
+        public bool ReadBool() => Take(1)[0] != 0;
+        public int ReadI32() => BinaryPrimitives.ReadInt32BigEndian(Take(4));
         public uint ReadU32() => BinaryPrimitives.ReadUInt32BigEndian(Take(4));
         public ulong ReadU64() => BinaryPrimitives.ReadUInt64BigEndian(Take(8));
+        public double ReadDouble() => BinaryPrimitives.ReadDoubleBigEndian(Take(8));
 
         public string? ReadUtf8()
         {

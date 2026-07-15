@@ -9,7 +9,7 @@ import { ConnectionOverlay } from './components/ConnectionOverlay';
 import { SetupWizard } from './components/SetupWizard';
 import { PluginErrorBoundary } from './components/PluginErrorBoundary';
 import { useSignalRConnection } from './hooks/useSignalR';
-import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin } from './plugins';
+import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin, DecodesPlugin } from './plugins';
 import { useLayoutStore, defaultLayout } from './store/layoutStore';
 import { useSettingsStore, type SettingsSection } from './store/settingsStore';
 import { useSetupStore } from './store/setupStore';
@@ -51,6 +51,13 @@ const PLUGINS: Record<string, PluginDef> = {
     component: ClusterPlugin,
     category: 'Information',
     tags: ['spots', 'dx'],
+  },
+  'wsjtx-decodes': {
+    name: 'WSJT-X Decodes',
+    icon: <Signal className="w-4 h-4" />,
+    component: DecodesPlugin,
+    category: 'Information',
+    tags: ['ft8', 'ft4', 'wsjtx', 'jtdx', 'mshv', 'decodes', 'digital'],
   },
   'rotator': {
     name: 'Rotator',
@@ -175,6 +182,7 @@ const PANEL_SETTINGS_SECTION: Partial<Record<string, SettingsSection>> = {
   'sat-controller': 'sat',
   'chat-ai': 'ai',
   'dx-coach': 'dxcoach',
+  'wsjtx-decodes': 'wsjtx',
   'pota': 'weblogbooks',
   'qrz-profile': 'weblogbooks',
 };

@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Sockets;
+using Microsoft.AspNetCore.SignalR;
+using SDRLoggerPlus.Contracts.Events;
 using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Hubs;
 
 namespace SDRLoggerPlus.Server.Services.Wsjtx;
 
@@ -29,17 +32,38 @@ public record WsjtxStatus(
 /// </summary>
 public class WsjtxService : BackgroundService
 {
+    private const int DecodeBufferSize = 200;
+
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<WsjtxService> _logger;
+    private readonly IHubContext<LogHub, ILogHubClient> _hubContext;
+    private readonly ISpotStatusService _spotStatus;
     private readonly WsjtxDedupe _dedupe = new();
 
     private readonly Listener _primary = new(1);
     private readonly Listener _secondary = new(2);
 
-    public WsjtxService(IServiceProvider serviceProvider, ILogger<WsjtxService> logger)
+    // Most-recent decodes so a freshly-opened Decodes panel can backfill via
+    // GET /api/wsjtx/decodes instead of waiting a cycle. Newest last.
+    private readonly LinkedList<WsjtxDecodeEvent> _recentDecodes = new();
+    private readonly object _decodesLock = new();
+
+    public WsjtxService(
+        IServiceProvider serviceProvider,
+        ILogger<WsjtxService> logger,
+        IHubContext<LogHub, ILogHubClient> hubContext,
+        ISpotStatusService spotStatus)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _hubContext = hubContext;
+        _spotStatus = spotStatus;
+    }
+
+    /// <summary>Most-recent decodes (oldest first) for panel backfill.</summary>
+    public IReadOnlyList<WsjtxDecodeEvent> GetRecentDecodes()
+    {
+        lock (_decodesLock) return _recentDecodes.ToList();
     }
 
     /// <summary>One UDP source: its own socket, client table and last-QSO state.</summary>
@@ -54,6 +78,9 @@ public class WsjtxService : BackgroundService
         public readonly Dictionary<string, WsjtxClientInfo> Clients = new();
         public string? LastQsoCall;
         public DateTime? LastQsoAtUtc;
+        // Latest dial frequency reported by a Status message; decodes carry only
+        // the audio offset, so we add this to reconstruct the real RF frequency.
+        public ulong LastDialFreqHz;
         public readonly object StateLock = new();
 
         public WsjtxStatus Snapshot()
@@ -249,10 +276,93 @@ public class WsjtxService : BackgroundService
                 }
                 break;
 
+            case WsjtxStatusMessage status:
+                if (status.DialFrequencyHz > 0)
+                {
+                    lock (l.StateLock) l.LastDialFreqHz = status.DialFrequencyHz;
+                }
+                break;
+
+            case WsjtxDecode decode:
+                await HandleDecodeAsync(l, decode);
+                break;
+
             case WsjtxQsoLogged qso:
                 await LogQsoAsync(l, qso);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Turn a raw decode into an enriched, needed-status-stamped event and push
+    /// it to the Decodes panel. Only genuinely new, on-air decodes that resolve
+    /// to a callsign are surfaced. Enrichment (cty.dat) and needed-status
+    /// (SpotStatusService) are the same engines the DX-cluster pipeline uses.
+    /// </summary>
+    private async Task HandleDecodeAsync(Listener l, WsjtxDecode decode)
+    {
+        if (!decode.New || decode.OffAir) return;
+
+        var parsed = WsjtxDecodeParser.Parse(decode.Message);
+        if (parsed?.Callsign is not { Length: > 0 } call) return;
+
+        ulong dialHz;
+        lock (l.StateLock) dialHz = l.LastDialFreqHz;
+        // Decode carries the audio offset only; add the tracked dial frequency.
+        var freqHz = dialHz > 0 ? dialHz + decode.DeltaFrequencyHz : 0UL;
+        var freqKhz = freqHz > 0 ? freqHz / 1000.0 : 0.0;
+        var band = freqHz > 0 ? BandHelper.GetBand((long)freqHz) : null;
+
+        // cty.dat entity resolution — synchronous, offline, no rate limit
+        // (FT8 produces many decodes per cycle).
+        string? country = null, continent = null;
+        int? cqZone = null;
+        try
+        {
+            (country, continent, cqZone) = CtyService.GetEntityFromCallsign(call);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "cty.dat lookup failed for decode {Call}", call);
+        }
+
+        // Needed-status vs the operator's log (band-aware when we have the freq).
+        string? spotStatus = null, zoneStatus = null;
+        if (freqKhz > 0)
+        {
+            try { spotStatus = _spotStatus.GetSpotStatus(call, country, freqKhz, decode.Mode); }
+            catch (Exception ex) { _logger.LogDebug(ex, "GetSpotStatus failed for {Call}", call); }
+            try { (_, zoneStatus) = _spotStatus.GetZoneStatus(call, freqKhz); }
+            catch (Exception ex) { _logger.LogDebug(ex, "GetZoneStatus failed for {Call}", call); }
+        }
+
+        var evt = new WsjtxDecodeEvent(
+            Source: l.Source,
+            ClientId: decode.Id,
+            Callsign: call,
+            DxCall: parsed.DxCall,
+            Grid: parsed.Grid,
+            Mode: decode.Mode,
+            Snr: decode.Snr,
+            DeltaTimeSeconds: decode.DeltaTimeSeconds,
+            AudioOffsetHz: decode.DeltaFrequencyHz,
+            FrequencyHz: freqHz,
+            Band: band,
+            Country: country,
+            Continent: continent,
+            CqZone: cqZone,
+            IsCq: parsed.IsCq,
+            SpotStatus: spotStatus,
+            ZoneStatus: zoneStatus,
+            DecodedAtUtc: DateTime.UtcNow);
+
+        lock (_decodesLock)
+        {
+            _recentDecodes.AddLast(evt);
+            while (_recentDecodes.Count > DecodeBufferSize) _recentDecodes.RemoveFirst();
+        }
+
+        await _hubContext.Clients.All.OnWsjtxDecode(evt);
     }
 
     private async Task LogQsoAsync(Listener l, WsjtxQsoLogged qso)

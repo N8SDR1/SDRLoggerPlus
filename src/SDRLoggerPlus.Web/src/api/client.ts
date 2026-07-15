@@ -1,4 +1,4 @@
-import type { SatState } from './signalr';
+import type { SatState, WsjtxDecodeEvent } from './signalr';
 export type { SatState } from './signalr';
 
 const API_BASE = '/api';
@@ -553,6 +553,10 @@ class ApiClient {
   // WSJT-X
   async getWsjtxStatus(): Promise<WsjtxStatus[]> {
     return this.fetch('/wsjtx/status');
+  }
+
+  async getWsjtxDecodes(): Promise<WsjtxDecodeEvent[]> {
+    return this.fetch('/wsjtx/decodes');
   }
 
   // S.A.T. controller
