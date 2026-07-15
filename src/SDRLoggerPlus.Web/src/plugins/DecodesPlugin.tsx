@@ -47,7 +47,7 @@ export function DecodesPlugin() {
 
   return (
     <GlassPanel
-      title="WSJT-X Decodes"
+      title="Digital Decodes"
       icon={<Radio className="w-5 h-5" />}
       actions={
         <span className="text-xs text-dark-300 font-mono">

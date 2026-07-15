@@ -53,7 +53,7 @@ const PLUGINS: Record<string, PluginDef> = {
     tags: ['spots', 'dx'],
   },
   'wsjtx-decodes': {
-    name: 'WSJT-X Decodes',
+    name: 'Digital Decodes',
     icon: <Signal className="w-4 h-4" />,
     component: DecodesPlugin,
     category: 'Information',
