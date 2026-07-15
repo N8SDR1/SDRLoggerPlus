@@ -81,6 +81,9 @@ public class UserSettings
     [BsonElement("wsjtx")]
     public WsjtxSettings Wsjtx { get; set; } = new();
 
+    [BsonElement("decodeAlerts")]
+    public DecodeAlertsSettings DecodeAlerts { get; set; } = new();
+
     [BsonElement("weather")]
     public WeatherSettings Weather { get; set; } = new();
 
@@ -1053,6 +1056,58 @@ public class WsjtxSettings
     /// <summary>Source 2 (secondary) — a second decoder on its own port. Disabled by default.</summary>
     [BsonElement("source2")]
     public WsjtxSource Source2 { get; set; } = new();
+}
+
+/// <summary>
+/// One geo-scoped needed-status alert rule evaluated against the WSJT-X/JTDX/MSHV
+/// decode stream. A decode fires the rule when it matches any enabled award-need
+/// AND every non-empty scope + band/mode filter. Empty lists mean "no constraint".
+/// Evaluation and the alert actions (sound/voice/popup) live in the frontend; this
+/// is just the persisted rule.
+/// </summary>
+public class DecodeAlertRule
+{
+    [BsonElement("id")]
+    public string Id { get; set; } = "";
+
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; } = true;
+
+    [BsonElement("name")]
+    public string Name { get; set; } = "";
+
+    // Award needs — alert when the decode is any of the enabled kinds.
+    [BsonElement("newDxcc")] public bool NewDxcc { get; set; }
+    [BsonElement("newBand")] public bool NewBand { get; set; }
+    [BsonElement("newZone")] public bool NewZone { get; set; }
+    [BsonElement("newGrid")] public bool NewGrid { get; set; }
+
+    // Scope filters — each, if non-empty, must match the decode.
+    [BsonElement("continents")] public List<string> Continents { get; set; } = new();
+    [BsonElement("dxccEntities")] public List<string> DxccEntities { get; set; } = new();
+    [BsonElement("callAreas")] public List<int> CallAreas { get; set; } = new();     // US districts 0-9
+    [BsonElement("prefixes")] public List<string> Prefixes { get; set; } = new();    // e.g. W, K, VE3
+    [BsonElement("gridFields")] public List<string> GridFields { get; set; } = new(); // 2-char fields, e.g. EM
+    [BsonElement("bands")] public List<string> Bands { get; set; } = new();
+    [BsonElement("modes")] public List<string> Modes { get; set; } = new();
+
+    // Actions.
+    [BsonElement("sound")] public bool Sound { get; set; } = true;
+    [BsonElement("voice")] public bool Voice { get; set; }
+    [BsonElement("popup")] public bool Popup { get; set; } = true;
+
+    /// <summary>Per-call+rule cooldown so a station decoded every cycle only alerts once in a while.</summary>
+    [BsonElement("cooldownMinutes")] public int CooldownMinutes { get; set; } = 10;
+}
+
+public class DecodeAlertsSettings
+{
+    /// <summary>Master switch for all decode alerts.</summary>
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; }
+
+    [BsonElement("rules")]
+    public List<DecodeAlertRule> Rules { get; set; } = new();
 }
 
 public class HotListSettings

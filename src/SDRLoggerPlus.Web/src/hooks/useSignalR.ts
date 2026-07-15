@@ -6,6 +6,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { useToastStore } from '../store/toastStore';
 import { useWsjtxDecodeStore } from '../store/wsjtxDecodeStore';
+import { runDecodeAlerts } from '../utils/decodeAlertEngine';
 import { announceHotSpot, shouldAnnounce } from '../utils/hotSpotAnnouncer';
 
 /**
@@ -215,6 +216,7 @@ export function useSignalRConnection() {
           },
           onWsjtxDecode: (evt) => {
             useWsjtxDecodeStore.getState().addDecode(evt);
+            runDecodeAlerts(evt);
           },
           onSpotSelected: (evt) => {
             console.log('Spot selected:', evt.dxCall, evt.frequency, evt.mode);

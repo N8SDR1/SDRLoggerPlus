@@ -182,7 +182,7 @@ const PANEL_SETTINGS_SECTION: Partial<Record<string, SettingsSection>> = {
   'sat-controller': 'sat',
   'chat-ai': 'ai',
   'dx-coach': 'dxcoach',
-  'wsjtx-decodes': 'wsjtx',
+  'wsjtx-decodes': 'decodealerts',
   'pota': 'weblogbooks',
   'qrz-profile': 'weblogbooks',
 };

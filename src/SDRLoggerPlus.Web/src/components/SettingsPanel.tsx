@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DecodeAlertsSection } from './settings/DecodeAlertsSection';
 import {
   loadAnnouncementVoices,
   applyAnnouncementVoice,
@@ -97,6 +98,12 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     name: 'WSJT-X / JTDX',
     icon: <RadioTower className="w-5 h-5" />,
     description: 'Auto-log FT8/FT4 QSOs over UDP (WSJT-X, JTDX, MSHV)',
+  },
+  {
+    id: 'decodealerts',
+    name: 'Decode Alerts',
+    icon: <Bell className="w-5 h-5" />,
+    description: 'Geo-scoped needed-status alerts on the digital decode stream',
   },
   {
     id: 'rbnalerts',
@@ -4580,6 +4587,8 @@ export function SettingsPanel() {
         return <WebLogbooksSection />;
       case 'wsjtx':
         return <WsjtxSettingsSection />;
+      case 'decodealerts':
+        return <DecodeAlertsSection />;
       case 'rotator':
         return <RotatorSettingsSection />;
       case 'appearance':

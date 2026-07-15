@@ -390,6 +390,36 @@ export interface WsjtxSettings {
   source2: WsjtxSource;
 }
 
+/** One geo-scoped needed-status alert rule over the decode stream. */
+export interface DecodeAlertRule {
+  id: string;
+  enabled: boolean;
+  name: string;
+  // Award needs — alert when the decode is any enabled kind.
+  newDxcc: boolean;
+  newBand: boolean;
+  newZone: boolean;
+  newGrid: boolean;
+  // Scope filters — each, if non-empty, must match.
+  continents: string[];
+  dxccEntities: string[];
+  callAreas: number[];   // US call districts 0-9
+  prefixes: string[];    // e.g. W, K, VE3
+  gridFields: string[];  // 2-char grid fields, e.g. EM
+  bands: string[];
+  modes: string[];
+  // Actions.
+  sound: boolean;
+  voice: boolean;
+  popup: boolean;
+  cooldownMinutes: number;
+}
+
+export interface DecodeAlertsSettings {
+  enabled: boolean;
+  rules: DecodeAlertRule[];
+}
+
 export interface HotListSettings {
   enabled: boolean;
   ttsEnabled: boolean;
@@ -444,12 +474,13 @@ export interface Settings {
   backup: BackupSettings;
   hotList: HotListSettings;
   wsjtx: WsjtxSettings;
+  decodeAlerts: DecodeAlertsSettings;
   weather: WeatherSettings;
   sat: SatControllerSettings;
   gridStates: Record<string, string>;
 }
 
-export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'dxcoach' | 'voice' | 'about';
+export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'decodealerts' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'dxcoach' | 'voice' | 'about';
 
 interface SettingsState {
   // Settings data
@@ -497,6 +528,7 @@ interface SettingsState {
   updateBackupSettings: (backup: Partial<BackupSettings>) => void;
   updateHotListSettings: (hotList: Partial<HotListSettings>) => void;
   updateWsjtxSettings: (wsjtx: Partial<WsjtxSettings>) => void;
+  updateDecodeAlertsSettings: (decodeAlerts: Partial<DecodeAlertsSettings>) => void;
   updateWeatherSettings: (weather: Partial<WeatherSettings>) => void;
   updateSatSettings: (sat: Partial<SatControllerSettings>) => void;
   updateSpotStatusSettings: (spotStatus: Partial<SpotStatusSettings>) => void;
@@ -746,6 +778,10 @@ const defaultSettings: Settings = {
     port: 2237,
     multicastAddress: '',
     source2: { enabled: false, port: 2333, multicastAddress: '' },
+  },
+  decodeAlerts: {
+    enabled: false,
+    rules: [],
   },
   weather: {
     lightning: {
@@ -1050,6 +1086,16 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       isDirty: true,
     })),
 
+  // Decode-alert rules
+  updateDecodeAlertsSettings: (decodeAlerts) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        decodeAlerts: { ...state.settings.decodeAlerts, ...decodeAlerts },
+      },
+      isDirty: true,
+    })),
+
   // Weather settings (deep-merges the three subsections)
   updateWeatherSettings: (weather) =>
     set((state) => ({
@@ -1275,6 +1321,11 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
             ...defaultSettings.wsjtx,
             ...settings.wsjtx,
             source2: { ...defaultSettings.wsjtx.source2, ...settings.wsjtx?.source2 },
+          },
+          decodeAlerts: {
+            ...defaultSettings.decodeAlerts,
+            ...settings.decodeAlerts,
+            rules: settings.decodeAlerts?.rules ?? defaultSettings.decodeAlerts.rules,
           },
           weather: {
             lightning: { ...defaultSettings.weather.lightning, ...settings.weather?.lightning },
