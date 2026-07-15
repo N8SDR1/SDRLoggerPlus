@@ -97,6 +97,7 @@ export interface WsjtxDecodeEvent {
   isCq: boolean;
   spotStatus?: 'newDxcc' | 'newBand' | 'worked';
   zoneStatus?: 'newZone' | 'newZoneBand';
+  gridStatus?: 'newGrid' | 'newGridBand';
   decodedAtUtc: string;
 }
 

@@ -327,13 +327,20 @@ public class WsjtxService : BackgroundService
         }
 
         // Needed-status vs the operator's log (band-aware when we have the freq).
-        string? spotStatus = null, zoneStatus = null;
+        string? spotStatus = null, zoneStatus = null, gridStatus = null;
         if (freqKhz > 0)
         {
             try { spotStatus = _spotStatus.GetSpotStatus(call, country, freqKhz, decode.Mode); }
             catch (Exception ex) { _logger.LogDebug(ex, "GetSpotStatus failed for {Call}", call); }
             try { (_, zoneStatus) = _spotStatus.GetZoneStatus(call, freqKhz); }
             catch (Exception ex) { _logger.LogDebug(ex, "GetZoneStatus failed for {Call}", call); }
+        }
+        // Grid status works even without a dial frequency — a never-worked grid
+        // is "newGrid" regardless of band.
+        if (parsed.Grid is { Length: > 0 })
+        {
+            try { gridStatus = _spotStatus.GetGridStatus(parsed.Grid, freqKhz); }
+            catch (Exception ex) { _logger.LogDebug(ex, "GetGridStatus failed for {Call}", call); }
         }
 
         var evt = new WsjtxDecodeEvent(
@@ -354,6 +361,7 @@ public class WsjtxService : BackgroundService
             IsCq: parsed.IsCq,
             SpotStatus: spotStatus,
             ZoneStatus: zoneStatus,
+            GridStatus: gridStatus,
             DecodedAtUtc: DateTime.UtcNow);
 
         lock (_decodesLock)

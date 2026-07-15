@@ -165,17 +165,22 @@ function FilterPill({ active, onClick, title, children }: { active: boolean; onC
 /** Whether a decode fills an award need (drives the "Needed only" filter + highlight). */
 function isNeeded(d: WsjtxDecodeEvent): boolean {
   return d.spotStatus === 'newDxcc' || d.spotStatus === 'newBand'
-    || d.zoneStatus === 'newZone' || d.zoneStatus === 'newZoneBand';
+    || d.zoneStatus === 'newZone' || d.zoneStatus === 'newZoneBand'
+    || d.gridStatus === 'newGrid' || d.gridStatus === 'newGridBand';
 }
 
 const ZONE_COLOR = '#00e5ff';
+const GRID_COLOR = '#ff8c3b';
 
 function decodeStatus(d: WsjtxDecodeEvent, colors: { newDxcc: string; newBand: string; worked: string }):
   { label: string; color?: string; needed: boolean } {
+  // Most-valuable award wins the badge: DXCC → band → zone → grid.
   if (d.spotStatus === 'newDxcc') return { label: 'New DXCC', color: colors.newDxcc, needed: true };
   if (d.spotStatus === 'newBand') return { label: 'New Band', color: colors.newBand, needed: true };
   if (d.zoneStatus === 'newZone') return { label: 'New Zone', color: ZONE_COLOR, needed: true };
   if (d.zoneStatus === 'newZoneBand') return { label: 'Zone+Band', color: ZONE_COLOR, needed: true };
+  if (d.gridStatus === 'newGrid') return { label: 'New Grid', color: GRID_COLOR, needed: true };
+  if (d.gridStatus === 'newGridBand') return { label: 'Grid+Band', color: GRID_COLOR, needed: true };
   if (d.spotStatus === 'worked') return { label: 'Worked', color: colors.worked, needed: false };
   return { label: '', needed: false };
 }

@@ -427,6 +427,78 @@ public class SpotStatusServiceTests
 
     #endregion
 
+    #region GetGridStatus — VUCC / grid chasing
+
+    [Fact]
+    public void GetGridStatus_BeforeCacheBuilt_ReturnsNull()
+        => _service.GetGridStatus("FN42", 14000.0).Should().BeNull();
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("FN")]      // too short
+    [InlineData("4242")]    // not a valid locator
+    public async Task GetGridStatus_MissingOrInvalidGrid_ReturnsNull(string? grid)
+    {
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        _service.GetGridStatus(grid, 14000.0).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetGridStatus_NeverWorkedGrid_ReturnsNewGrid()
+    {
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // Empty log — FN42 has never been worked.
+        _service.GetGridStatus("FN42", 14000.0).Should().Be("newGrid");
+    }
+
+    [Fact]
+    public async Task GetGridStatus_WorkedGridSameBand_ReturnsNull()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("W1ABC", country: "United States", band: "20m", mode: "FT8", grid: "FN42"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        _service.GetGridStatus("FN42", 14000.0).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetGridStatus_WorkedGridDifferentBand_ReturnsNewGridBand()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("W1ABC", country: "United States", band: "40m", mode: "FT8", grid: "FN42"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // FN42 worked on 40m, seen now on 20m → new band-slot for the grid.
+        _service.GetGridStatus("FN42", 14000.0).Should().Be("newGridBand");
+    }
+
+    [Fact]
+    public async Task GetGridStatus_SixCharAndLowercase_NormalizedToField()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("W1ABC", country: "United States", band: "20m", mode: "FT8", grid: "FN42dx"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // Stored as 6-char "FN42dx"; a lowercase 4-char "fn42" on the same band is worked.
+        _service.GetGridStatus("fn42", 14000.0).Should().BeNull();
+    }
+
+    #endregion
+
     #region Frequency to band mapping
 
     [Theory]
@@ -451,7 +523,7 @@ public class SpotStatusServiceTests
 
     #region Helpers
 
-    private static Qso MakeQso(string callsign, string? country, string band, string mode)
+    private static Qso MakeQso(string callsign, string? country, string band, string mode, string? grid = null)
     {
         return new Qso
         {
@@ -459,6 +531,7 @@ public class SpotStatusServiceTests
             Country = country,
             Band = band,
             Mode = mode,
+            Grid = grid,
         };
     }
 

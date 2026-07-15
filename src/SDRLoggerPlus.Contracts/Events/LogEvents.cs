@@ -125,6 +125,7 @@ public record WsjtxDecodeEvent(
     bool IsCq,
     string? SpotStatus,
     string? ZoneStatus,
+    string? GridStatus,
     DateTime DecodedAtUtc
 );
 
