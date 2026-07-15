@@ -27,7 +27,16 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // Add controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    // The settings DTO (and other bulk models) are round-tripped whole by the
+    // frontend, so a non-nullable string that is legitimately empty/absent —
+    // e.g. VoiceSettings.VoiceUri "" meaning "system default voice" — must not
+    // fail model validation. Without this, .NET's implicit [Required] for
+    // non-nullable reference types 400s the ENTIRE POST the moment any such
+    // field is null in storage, blocking all settings saves.
+    options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+});
 builder.Services.AddMemoryCache();
 
 // Add API Explorer and Swagger
