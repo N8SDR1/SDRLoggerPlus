@@ -195,6 +195,7 @@ const HELP_SECTIONS = [
   { id: 'combo',    title: 'The Lyra Combo Link' },
   { id: 'logging',  title: 'Logging QSOs' },
   { id: 'spots',    title: 'DX Spots & the Map' },
+  { id: 'decodes',  title: 'Digital Decodes & Grid' },
   { id: 'weather',  title: 'Weather & Alerts' },
   { id: 'meters',   title: 'Meters & Panadapter' },
   { id: 'callbook', title: 'Callbook, Uploads & Import' },
@@ -325,6 +326,16 @@ function HelpTab() {
           <p><B>Click a spot</B> to tune the radio and prefill the Log Entry. Spots can also be <B>pushed to a TCI radio's panadapter</B> (Lyra / Thetis) as click-to-tune markers.</p>
           <p><B>DXpeditions & Hot List (auto hot spots).</B> The <B>DXpeditions</B> panel lists current and upcoming operations (NG3K feed). Click any callsign to drop it on your <B>Hot List</B> — a watchlist that makes matching DX spots light up as <B>hot spots</B> the instant they appear, and, with the announce mode on, calls them out by <B>voice</B>. Cycle the pill Off → Visual → Visual + Voice; the counter shows how many you're watching, and Clear All empties the list. Manage watched calls + text-to-speech under <P>Settings → Alerts → Hot List</P>.</p>
           <p><B>The 3D globe</B> shows spots + spotter→DX arcs, lightning strikes, POTA parks, your station, satellite tracks + footprints, the day/night terminator, gray line, aurora, PSK-Reporter coverage, and cached QRZ profile photos. Click a point to focus that call. Overlays are all in <P>Settings → Map</P>.</p>
+        </Section>
+
+        <Section id="decodes" title="Digital Decodes & Grid Tracker">
+          <p>Native FT8/FT4 tools that read your decoder's UDP stream — no JTAlert or GridTracker needed. Point <B>WSJT-X</B>, <B>JTDX</B>, or <B>MSHV</B> at SDRLoggerPlus: set its <B>UDP Server</B> to <span className="font-mono text-[11px] text-dark-100">127.0.0.1 : 2237</span>, turn on <B>decoded-text</B> output, then enable the source in <P>Settings → WSJT-X / JTDX</P>.</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>Digital Decodes</B> panel — every decode live, coloured by what it would give you: <B>new DXCC</B>, <B>new band</B>, <B>new zone</B>, <B>new grid</B> (already worked = dim). Filter to <B>Needed only</B> or <B>CQ only</B>. <B>Double-click</B> a decode and your decoder answers that CQ — WSJT-X / JTDX only, and they need <B>"Accept UDP requests"</B> turned on (MSHV doesn't accept it).</li>
+            <li><B>Decode Alerts</B> (<P>Settings → Decode Alerts</P>) — rules that beep / speak / pop only for what you care about: an <B>award need</B> (DXCC / band / zone / grid) <em>and</em> a <B>region</B> (continent, DXCC entity, US call area, prefix, or grid field) <em>and</em> band/mode. So "needed grids, North America only, 20m" is one rule. Quick-add presets get you started in a click; voice uses your shared <P>Settings → Voice</P>.</li>
+            <li><B>Grid Tracker</B> panel — a Maidenhead grid map: <span className="text-accent-success">green</span> = worked (brighter = confirmed), and with the <B>Needed</B> toggle on, un-worked land tints <span className="text-red-400">red</span>. A <B>cyan ring</B> marks a grid active <em>right now</em> from the decode stream; a needed grid that's live pulses — "chase it this cycle". Drag to pan, scroll to zoom, hover for the grid + status. <B>FDD (Follow Digital Decodes)</B> locks the map's band to what you're decoding and mirrors the Digital Decodes filters.</li>
+          </ul>
+          <p>It all ties together: work a station and your decoder's <B>DX Call</B> flows into the <B>Log Entry</B> and fires the callbook lookup (<B>QRZ Profile</B> + the map); the finished FT8 QSO <B>auto-logs to Log History</B>; and the grid turns green on the tracker.</p>
         </Section>
 
         <Section id="weather" title="Weather & Alerts">
