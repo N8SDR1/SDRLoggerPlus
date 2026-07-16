@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import { GlassPanel } from '../components/GlassPanel';
 import { useSettingsStore } from '../store/settingsStore';
 import { useWsjtxDecodeStore } from '../store/wsjtxDecodeStore';
+import { isDecodeNeeded } from '../utils/decodeNeeds';
 import worldRaw from '../geo/world-outline.json';
 
 /**
@@ -70,13 +71,22 @@ function lonLatToGrid(lon: number, lat: number): string | null {
 export function GridTrackerPlugin() {
   const myGrid = useSettingsStore((s) => s.settings.station.gridSquare) || 'EM79';
   const decodes = useWsjtxDecodeStore((s) => s.decodes);
+  const neededOnly = useWsjtxDecodeStore((s) => s.neededOnly);
+  const cqOnly = useWsjtxDecodeStore((s) => s.cqOnly);
   const [band, setBand] = useState('All');
   const [mode, setMode] = useState('All');
   const [showNeeded, setShowNeeded] = useState(false);
+  const [fdd, setFdd] = useState(false);
+
+  // Follow Digital Decodes: band comes from the live decode stream and the map
+  // mirrors the Digital Decodes panel's Needed-only / CQ-only filters.
+  const liveBand = decodes.find((d) => d.band)?.band;
+  const effectiveBand = fdd && liveBand ? liveBand : band;
+  const effectiveMode = fdd ? 'All' : mode;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['gridmap', band, mode],
-    queryFn: () => api.getGridMap(band === 'All' ? undefined : band, mode === 'All' ? undefined : mode),
+    queryKey: ['gridmap', effectiveBand, effectiveMode],
+    queryFn: () => api.getGridMap(effectiveBand === 'All' ? undefined : effectiveBand, effectiveMode === 'All' ? undefined : effectiveMode),
     refetchInterval: 5 * 60 * 1000,
   });
 
@@ -91,6 +101,13 @@ export function GridTrackerPlugin() {
     const m = new Map<string, boolean>();
     for (const d of decodes) {
       if (!d.grid) continue;
+      // Follow-Digital-Decodes: restrict the live layer to the followed band and
+      // the panel's Needed-only / CQ-only switches, so the map mirrors the list.
+      if (fdd) {
+        if (liveBand && d.band !== liveBand) continue;
+        if (cqOnly && !d.isCq) continue;
+        if (neededOnly && !isDecodeNeeded(d)) continue;
+      }
       const g = d.grid.slice(0, 4).toUpperCase();
       // "needed" for the live overlay = not worked for the CURRENT filter — the
       // same test that colours the map. This keeps red strictly = "you don't
@@ -99,7 +116,7 @@ export function GridTrackerPlugin() {
       m.set(g, m.get(g) || needed);
     }
     return m;
-  }, [decodes, worked]);
+  }, [decodes, worked, fdd, liveBand, cqOnly, neededOnly]);
 
   // Default view centered on the operator's grid.
   const home = gridCorner(myGrid.slice(0, 4)) ?? { lon: -86, lat: 39 };
@@ -181,7 +198,7 @@ export function GridTrackerPlugin() {
     return out;
   }, []);
 
-  const threshold = VUCC_THRESHOLD[band];
+  const threshold = VUCC_THRESHOLD[effectiveBand];
   const total = data?.totalGrids ?? 0;
   const confirmed = data?.confirmedGrids ?? 0;
 
@@ -191,16 +208,25 @@ export function GridTrackerPlugin() {
       <div className="h-full flex flex-col">
         <style>{`@keyframes gtpulse{0%,100%{opacity:.4}50%{opacity:1}}.gt-pulse{animation:gtpulse 1.1s ease-in-out infinite}`}</style>
         <div className="px-3 py-2 border-b border-glass-100 flex items-center gap-2 flex-wrap text-xs">
-          <select value={band} onChange={(e) => setBand(e.target.value)} className="glass-input py-1 px-2 text-xs">
-            {BANDS.map((b) => <option key={b} value={b}>{b === 'All' ? 'All bands' : b}</option>)}
-          </select>
-          <select value={mode} onChange={(e) => setMode(e.target.value)} className="glass-input py-1 px-2 text-xs">
-            {MODES.map((m) => <option key={m} value={m}>{m === 'All' ? 'All modes' : m}</option>)}
-          </select>
+          <button onClick={() => setFdd((v) => !v)} title="Follow Digital Decodes — set the band from the live decode stream and mirror its Needed-only / CQ-only filters"
+            className={`px-2 py-1 rounded border text-xs font-medium ${fdd ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300' : 'bg-dark-700 border-dark-500 text-dark-300 hover:bg-dark-600'}`}>
+            FDD
+          </button>
+          {!fdd && (
+            <select value={band} onChange={(e) => setBand(e.target.value)} className="glass-input py-1 px-2 text-xs">
+              {BANDS.map((b) => <option key={b} value={b}>{b === 'All' ? 'All bands' : b}</option>)}
+            </select>
+          )}
+          {!fdd && (
+            <select value={mode} onChange={(e) => setMode(e.target.value)} className="glass-input py-1 px-2 text-xs">
+              {MODES.map((m) => <option key={m} value={m}>{m === 'All' ? 'All modes' : m}</option>)}
+            </select>
+          )}
           <button onClick={() => setShowNeeded((v) => !v)} title="Tint un-worked land red (VUCC needed view)"
             className={`px-2 py-1 rounded border text-xs font-medium ${showNeeded ? 'bg-red-500/20 border-red-400 text-red-300' : 'bg-dark-700 border-dark-500 text-dark-300 hover:bg-dark-600'}`}>
             Needed
           </button>
+          {fdd && <span className="text-[11px] text-cyan-300/80 whitespace-nowrap">following {liveBand ?? '—'}{cqOnly ? ' · CQ' : ''}{neededOnly ? ' · needed' : ''}</span>}
           <span className="flex-1" />
           <span className="flex items-center gap-2 text-[11px] text-dark-300">
             <span><span style={{ background: GREEN }} className="inline-block w-2.5 h-2.5 rounded-sm align-middle" /> worked/conf</span>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Radio, X } from 'lucide-react';
 import { api } from '../api/client';
 import type { WsjtxDecodeEvent } from '../api/signalr';
@@ -6,6 +6,7 @@ import { GlassPanel } from '../components/GlassPanel';
 import { useWsjtxDecodeStore } from '../store/wsjtxDecodeStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useToastStore } from '../store/toastStore';
+import { isDecodeNeeded } from '../utils/decodeNeeds';
 
 /**
  * Live WSJT-X / JTDX / MSHV decode list (Phase 1 of the decode-alerts feature).
@@ -24,8 +25,10 @@ export function DecodesPlugin() {
   const clear = useWsjtxDecodeStore((s) => s.clear);
   const colors = useSettingsStore((s) => s.settings.spotStatus.colors);
 
-  const [neededOnly, setNeededOnly] = useState(false);
-  const [cqOnly, setCqOnly] = useState(false);
+  const neededOnly = useWsjtxDecodeStore((s) => s.neededOnly);
+  const cqOnly = useWsjtxDecodeStore((s) => s.cqOnly);
+  const setNeededOnly = useWsjtxDecodeStore((s) => s.setNeededOnly);
+  const setCqOnly = useWsjtxDecodeStore((s) => s.setCqOnly);
 
   // Backfill recent decodes when the panel mounts.
   useEffect(() => {
@@ -39,12 +42,12 @@ export function DecodesPlugin() {
   const filtered = useMemo(() => {
     return decodes.filter((d) => {
       if (cqOnly && !d.isCq) return false;
-      if (neededOnly && !isNeeded(d)) return false;
+      if (neededOnly && !isDecodeNeeded(d)) return false;
       return true;
     });
   }, [decodes, cqOnly, neededOnly]);
 
-  const neededCount = useMemo(() => decodes.filter(isNeeded).length, [decodes]);
+  const neededCount = useMemo(() => decodes.filter(isDecodeNeeded).length, [decodes]);
 
   // Double-click a decode → tell the decoder (WSJT-X/JTDX/MSHV) to answer that CQ.
   const callStation = async (d: WsjtxDecodeEvent) => {
@@ -70,10 +73,10 @@ export function DecodesPlugin() {
     >
       {/* Filter strip */}
       <div className="px-3 py-2 border-b border-glass-100 flex items-center gap-2 flex-wrap text-xs">
-        <FilterPill active={neededOnly} onClick={() => setNeededOnly((v) => !v)} title="Show only decodes that fill an award need (new DXCC / band / zone)">
+        <FilterPill active={neededOnly} onClick={() => setNeededOnly(!neededOnly)} title="Show only decodes that fill an award need (new DXCC / band / zone)">
           Needed only
         </FilterPill>
-        <FilterPill active={cqOnly} onClick={() => setCqOnly((v) => !v)} title="Show only stations calling CQ (available to work)">
+        <FilterPill active={cqOnly} onClick={() => setCqOnly(!cqOnly)} title="Show only stations calling CQ (available to work)">
           CQ only
         </FilterPill>
         <span className="flex-1" />
@@ -179,13 +182,6 @@ function FilterPill({ active, onClick, title, children }: { active: boolean; onC
       {children}
     </button>
   );
-}
-
-/** Whether a decode fills an award need (drives the "Needed only" filter + highlight). */
-function isNeeded(d: WsjtxDecodeEvent): boolean {
-  return d.spotStatus === 'newDxcc' || d.spotStatus === 'newBand'
-    || d.zoneStatus === 'newZone' || d.zoneStatus === 'newZoneBand'
-    || d.gridStatus === 'newGrid' || d.gridStatus === 'newGridBand';
 }
 
 const ZONE_COLOR = '#00e5ff';

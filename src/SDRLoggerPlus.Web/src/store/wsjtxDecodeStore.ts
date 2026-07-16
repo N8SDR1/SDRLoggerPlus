@@ -15,6 +15,12 @@ interface WsjtxDecodeState {
   /** Seed from the backend backfill (oldest-first) — becomes newest-first. */
   seed: (list: WsjtxDecodeEvent[]) => void;
   clear: () => void;
+  // View filters — shared so the Grid Tracker's Follow-Digital-Decodes mode
+  // mirrors the exact filter state of the Digital Decodes panel.
+  neededOnly: boolean;
+  cqOnly: boolean;
+  setNeededOnly: (v: boolean) => void;
+  setCqOnly: (v: boolean) => void;
 }
 
 export const useWsjtxDecodeStore = create<WsjtxDecodeState>((set) => ({
@@ -22,4 +28,8 @@ export const useWsjtxDecodeStore = create<WsjtxDecodeState>((set) => ({
   addDecode: (d) => set((s) => ({ decodes: [d, ...s.decodes].slice(0, MAX_DECODES) })),
   seed: (list) => set(() => ({ decodes: [...list].reverse().slice(0, MAX_DECODES) })),
   clear: () => set({ decodes: [] }),
+  neededOnly: false,
+  cqOnly: false,
+  setNeededOnly: (v) => set({ neededOnly: v }),
+  setCqOnly: (v) => set({ cqOnly: v }),
 }));
