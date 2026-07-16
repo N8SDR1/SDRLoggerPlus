@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ScrollText, Search, Calendar, Radio, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown, X, CloudUpload, Loader2, Pencil, Trash2, Upload, Download, FileText, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { ScrollText, Search, Calendar, Radio, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, CloudUpload, Loader2, Pencil, Trash2, Upload, Download, FileText, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, ICellRendererParams } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -132,7 +132,6 @@ export function LogHistoryPlugin() {
   const [toDate, setToDate] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
-  const [showSummary, setShowSummary] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [editingQso, setEditingQso] = useState<QsoResponse | null>(null);
   const [deletingQso, setDeletingQso] = useState<QsoResponse | null>(null);
@@ -507,14 +506,6 @@ export function LogHistoryPlugin() {
       icon={<ScrollText className="w-5 h-5" />}
       actions={
         <div className="flex items-center gap-3 text-sm text-dark-300 font-ui">
-          <span>
-            {stats?.totalQsos.toLocaleString() || 0}
-            {hasActiveFilters && totalCount !== stats?.totalQsos && (
-              <span className="text-accent-primary ml-1">({totalCount.toLocaleString()})</span>
-            )}
-            {' '}QSOs
-          </span>
-          <span className="text-glass-100">|</span>
           <span>{stats?.uniqueCountries || 0} DXCC</span>
           <div className="flex items-center gap-1">
             <CompactToggle compact={compact} onToggle={toggleCompact} />
@@ -826,48 +817,29 @@ export function LogHistoryPlugin() {
           </div>
         )}
 
-        {/* Collapsible Summary Section */}
+        {/* Summary — single line, counts spread across the panel to save vertical space */}
         {stats && (
-          <div className="bg-dark-700/50 rounded-lg overflow-hidden">
-            <button
-              onClick={() => setShowSummary(!showSummary)}
-              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-dark-600/50 transition-colors"
-            >
-              <div className="flex items-center gap-2 text-sm text-dark-200 font-ui">
-                <span className="font-medium">Summary</span>
-                <span className="text-dark-300">|</span>
-                <span className="text-accent-primary font-display font-bold">{stats.totalQsos.toLocaleString()}</span>
-                {hasActiveFilters && totalCount !== stats.totalQsos && (
-                  <span className="text-accent-info font-display font-bold">({totalCount.toLocaleString()})</span>
-                )}
-                <span className="text-dark-300">QSOs</span>
-              </div>
-              {showSummary ? (
-                <ChevronUp className="w-4 h-4 text-dark-300" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-dark-300" />
+          <div className="bg-dark-700/50 rounded-lg px-5 py-1.5 flex items-center justify-between flex-nowrap gap-x-6 overflow-x-auto whitespace-nowrap font-ui leading-none">
+            <span className="font-medium text-dark-200 text-sm">Summary</span>
+            <span className="flex items-baseline gap-2">
+              <span className="font-display font-bold text-accent-primary text-xl leading-none">{stats.totalQsos.toLocaleString()}</span>
+              {hasActiveFilters && totalCount !== stats.totalQsos && (
+                <span className="font-display font-bold text-accent-info text-xl leading-none">({totalCount.toLocaleString()})</span>
               )}
-            </button>
-            {showSummary && (
-              <div className="grid grid-cols-4 gap-3 px-4 py-2 border-t border-glass-100">
-                <div className="text-center leading-tight">
-                  <p className="text-lg font-display font-bold text-accent-primary">{stats.totalQsos.toLocaleString()}</p>
-                  <p className="text-[11px] text-dark-300 font-ui">Total QSOs</p>
-                </div>
-                <div className="text-center leading-tight">
-                  <p className="text-lg font-display font-bold text-accent-success">{stats.uniqueCountries}</p>
-                  <p className="text-[11px] text-dark-300 font-ui">Countries</p>
-                </div>
-                <div className="text-center leading-tight">
-                  <p className="text-lg font-display font-bold text-accent-info">{stats.uniqueGrids}</p>
-                  <p className="text-[11px] text-dark-300 font-ui">Grids</p>
-                </div>
-                <div className="text-center leading-tight">
-                  <p className="text-lg font-display font-bold text-accent-warning">{stats.qsosToday}</p>
-                  <p className="text-[11px] text-dark-300 font-ui">Today</p>
-                </div>
-              </div>
-            )}
+              <span className="text-[13px] text-dark-300">QSOs</span>
+            </span>
+            <span className="flex items-baseline gap-2">
+              <span className="font-display font-bold text-accent-success text-xl leading-none">{stats.uniqueCountries}</span>
+              <span className="text-[13px] text-dark-300">Countries</span>
+            </span>
+            <span className="flex items-baseline gap-2">
+              <span className="font-display font-bold text-accent-info text-xl leading-none">{stats.uniqueGrids}</span>
+              <span className="text-[13px] text-dark-300">Grids</span>
+            </span>
+            <span className="flex items-baseline gap-2">
+              <span className="font-display font-bold text-accent-warning text-xl leading-none">{stats.qsosToday}</span>
+              <span className="text-[13px] text-dark-300">Today</span>
+            </span>
           </div>
         )}
 
