@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Layout, Model, TabNode, TabSetNode, BorderNode, ITabSetRenderValues, Actions, DockLocation } from 'flexlayout-react';
-import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, Activity, TrendingUp, Gauge, Map, Target } from 'lucide-react';
+import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, Activity, TrendingUp, Gauge, Map, Target, Grid3x3 } from 'lucide-react';
 import { StatusBar } from './components/StatusBar';
 import { WeatherAlertBanner } from './components/WeatherAlertBanner';
 import { Toasts } from './components/Toasts';
@@ -9,7 +9,7 @@ import { ConnectionOverlay } from './components/ConnectionOverlay';
 import { SetupWizard } from './components/SetupWizard';
 import { PluginErrorBoundary } from './components/PluginErrorBoundary';
 import { useSignalRConnection } from './hooks/useSignalR';
-import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin, DecodesPlugin } from './plugins';
+import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin, DecodesPlugin, GridTrackerPlugin } from './plugins';
 import { useLayoutStore, defaultLayout } from './store/layoutStore';
 import { useSettingsStore, type SettingsSection } from './store/settingsStore';
 import { useSetupStore } from './store/setupStore';
@@ -58,6 +58,13 @@ const PLUGINS: Record<string, PluginDef> = {
     component: DecodesPlugin,
     category: 'Information',
     tags: ['ft8', 'ft4', 'wsjtx', 'jtdx', 'mshv', 'decodes', 'digital'],
+  },
+  'grid-tracker': {
+    name: 'Grid Tracker',
+    icon: <Grid3x3 className="w-4 h-4" />,
+    component: GridTrackerPlugin,
+    category: 'Maps & Navigation',
+    tags: ['grid', 'maidenhead', 'vucc', 'grids', 'map'],
   },
   'rotator': {
     name: 'Rotator',

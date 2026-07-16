@@ -559,6 +559,15 @@ class ApiClient {
     return this.fetch('/wsjtx/decodes');
   }
 
+  /** Worked grids (all bands, or a band/mode) for the Grid Tracker panel. */
+  async getGridMap(band?: string, mode?: string): Promise<GridMapStatistics> {
+    const p = new URLSearchParams();
+    if (band) p.set('band', band);
+    if (mode) p.set('mode', mode);
+    const q = p.toString();
+    return this.fetch(`/statistics/gridmap${q ? `?${q}` : ''}`);
+  }
+
   /** Answer a decoded CQ ("call this station") via a WSJT-X Reply message. */
   async sendWsjtxReply(d: WsjtxDecodeEvent): Promise<{ sent: boolean }> {
     return this.fetch('/wsjtx/reply', {
@@ -1262,6 +1271,18 @@ export interface FiveBandStatistics {
   achieved: boolean;
   unionCount: number;
   bands: FiveBandBandStatus[];
+}
+
+export interface WorkedGrid {
+  grid: string;
+  confirmed: boolean;
+  qsoCount: number;
+}
+
+export interface GridMapStatistics {
+  totalGrids: number;
+  confirmedGrids: number;
+  grids: WorkedGrid[];
 }
 
 export interface WsjtxClientInfo {

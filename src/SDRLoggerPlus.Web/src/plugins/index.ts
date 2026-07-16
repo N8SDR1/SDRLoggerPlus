@@ -15,6 +15,7 @@ export { AnalogClockPlugin } from './AnalogClockPlugin';
 export { HeaderPlugin } from './HeaderPlugin';
 export { DXpeditionsPlugin } from './DXpeditionsPlugin';
 export { DecodesPlugin } from './DecodesPlugin';
+export { GridTrackerPlugin } from './GridTrackerPlugin';
 export { ChatAiPlugin } from './ChatAiPlugin';
 export { POTAPlugin } from './POTAPlugin';
 export { DxCoachPlugin } from './DxCoachPlugin';

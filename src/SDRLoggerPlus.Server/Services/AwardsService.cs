@@ -8,6 +8,7 @@ public interface IAwardsService
 {
     Task<DxccStatistics> GetDxccStatisticsAsync(StatisticsFilters? filters = null);
     Task<VuccStatistics> GetVuccStatisticsAsync(StatisticsFilters? filters = null);
+    Task<GridMapStatistics> GetGridMapAsync(StatisticsFilters? filters = null);
     Task<PotaStatistics> GetPotaStatisticsAsync(PotaFilters? filters = null);
     Task<IotaStatistics> GetIotaStatisticsAsync(IotaFilters? filters = null);
     Task<WasStatistics> GetWasStatisticsAsync(StatisticsFilters? filters = null);
@@ -242,6 +243,54 @@ public partial class AwardsService : IAwardsService
             BandSummaries: bandSummaries,
             Grids: gridDetails
         );
+    }
+
+    public async Task<GridMapStatistics> GetGridMapAsync(StatisticsFilters? filters = null)
+    {
+        var allQsos = await _repository.GetAllAsync();
+
+        // Grids live in Station.Grid (top-level Grid as fallback) — same GridOf
+        // the log's grid stat uses. All bands unless the filter narrows it.
+        var rows = allQsos
+            .Select(q => (Qso: q, Grid: NormalizeGrid(q.Station?.Grid ?? q.Grid)))
+            .Where(x => x.Grid != null)
+            .ToList();
+
+        if (filters != null)
+        {
+            if (!string.IsNullOrEmpty(filters.Band))
+                rows = rows.Where(x => string.Equals(x.Qso.Band, filters.Band, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (!string.IsNullOrEmpty(filters.Mode))
+                rows = rows.Where(x => string.Equals(x.Qso.Mode, filters.Mode, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (filters.FromDate.HasValue)
+                rows = rows.Where(x => x.Qso.QsoDate >= filters.FromDate.Value).ToList();
+            if (filters.ToDate.HasValue)
+                rows = rows.Where(x => x.Qso.QsoDate <= filters.ToDate.Value.AddDays(1)).ToList();
+        }
+
+        var grids = rows
+            .GroupBy(x => x.Grid!)
+            .Select(g => new WorkedGrid(
+                Grid: g.Key,
+                Confirmed: g.Any(x => IsConfirmed(x.Qso)),
+                QsoCount: g.Count()))
+            .OrderBy(g => g.Grid)
+            .ToList();
+
+        return new GridMapStatistics(
+            TotalGrids: grids.Count,
+            ConfirmedGrids: grids.Count(g => g.Confirmed),
+            Grids: grids);
+    }
+
+    /// <summary>4-char Maidenhead field+square, uppercased; null if malformed.</summary>
+    private static string? NormalizeGrid(string? grid)
+    {
+        if (string.IsNullOrWhiteSpace(grid) || grid.Length < 4) return null;
+        var g = grid.Trim().ToUpperInvariant();
+        if (g[0] < 'A' || g[0] > 'R' || g[1] < 'A' || g[1] > 'R' ||
+            g[2] < '0' || g[2] > '9' || g[3] < '0' || g[3] > '9') return null;
+        return g[..4];
     }
 
     public async Task<PotaStatistics> GetPotaStatisticsAsync(PotaFilters? filters = null)
