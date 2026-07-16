@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SDRLoggerPlus — Modern amateur radio logging</title>
-<meta name="description" content="SDRLoggerPlus — a modern, cross-platform amateur radio logger for Windows, macOS and Linux. Logbook, DX cluster, maps, awards, rig & rotator control, all in real time.">
+<meta name="description" content="SDRLoggerPlus — a modern, cross-platform amateur radio logger for Windows, macOS and Linux. Logbook, DX cluster, FT8/FT4 decodes & alerts, grid tracking, maps, awards, rig & rotator control, all in real time.">
 <style>
   :root {
     --bg: #0a0e14;
@@ -146,7 +146,7 @@
         <div class="card"><h3><span class="ico">🏆</span> Awards & statistics</h3><p>Tracking for DXCC, WAS, WAZ, WPX, WAC, 5BWAS, 5BDXCC, VUCC, POTA and IOTA, with per-band / per-mode detail and filtering.</p></div>
         <div class="card"><h3><span class="ico">🎛️</span> Radio & station control</h3><p>CAT via bundled Hamlib, TCI (Lyra / Thetis / SunSDR) with live panadapter and meters.</p></div>
         <div class="card"><h3><span class="ico">🔗</span> Lyra Combo Link</h3><p>A two-way link with the <strong style="color:var(--head)">Lyra</strong> SDR console over TCI — band, mode and frequency stay in sync, DX spots push across for click-to-tune, and CW contacts log straight from Lyra's CW console with call and RST.</p></div>
-        <div class="card"><h3><span class="ico">🔌</span> Digital & online</h3><p>WSJT-X / JTDX auto-logging over UDP (two sources at once), plus LoTW, Club Log, HRDLog and PSK Reporter uploads.</p></div>
+        <div class="card"><h3><span class="ico">🔌</span> Digital & online</h3><p>FT8 / FT4 decode monitoring, smart alerts and grid tracking (below), WSJT-X / JTDX auto-logging over UDP (two sources at once), plus LoTW, Club Log, HRDLog and PSK Reporter uploads.</p></div>
         <div class="card"><h3><span class="ico">🛰️</span> Satellite & propagation</h3><p>CSN S.A.T. controller integration and satellite tracking, with propagation, solar, aurora and space-weather panels.</p></div>
         <div class="card"><h3><span class="ico">⛈️</span> Station weather</h3><p>Severe-weather alerts from NWS plus your own Ambient Weather or Ecowitt station — pull the antenna before the storm.</p></div>
       </div>
@@ -157,6 +157,15 @@
       <div class="grid">
         <div class="card"><h3><span class="ico">🎯</span> DX Coach</h3><p>Turns the DX cluster into a ranked to-do list: it surfaces only the spots that would <strong style="color:var(--head)">fill an award gap</strong> — a new DXCC entity, a new CQ zone, or a new band-slot — each with a coarse propagation read (open / marginal / closed plus gray-line timing) from your grid and the live solar numbers. Click one to tune. Optional spoken nudges when a fresh one lands, and band-class filters so an HF-only op never sees 2m.</p></div>
         <div class="card"><h3><span class="ico">🤖</span> AI Chat</h3><p>Point it at a callsign and get instant, <strong style="color:var(--head)">grounded</strong> talk points — your own past QSOs with them, their QRZ profile, and ready conversation starters — then ask follow-ups. Bring your own key for Anthropic, OpenAI, Groq or OpenRouter, or run it fully <strong>local and free with Ollama</strong>. Your key stays on your machine; calls go straight to the provider.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Digital modes — FT8 &amp; FT4</h2>
+      <div class="grid">
+        <div class="card"><h3><span class="ico">📶</span> Digital Decodes</h3><p>The live FT8 / FT4 decode stream from <strong style="color:var(--head)">WSJT-X, JTDX or MSHV</strong> over UDP, right inside SDRLogger+. Every decode is <strong>coloured by what it would give you</strong> — a new DXCC entity, band-slot, CQ zone or grid — with Needed-only and CQ-only filters. <strong>Double-click a decode</strong> and your decoder answers that CQ. No JTAlert needed.</p></div>
+        <div class="card"><h3><span class="ico">🔔</span> Digital Decode Alerts</h3><p>Geo-scoped rules that sound, speak or pop <strong>only for what you're chasing</strong>: an award need (DXCC / band / zone / grid) × a region (continent, DXCC entity, US call area, prefix, grid field) × band and mode. So <em>"needed grids, North America only, 20m"</em> is a single rule. Quick-add presets, and voice shares the app's announcement voice.</p></div>
+        <div class="card"><h3><span class="ico">🗺️</span> Grid Tracker</h3><p>A Maidenhead grid map that fills in as you work the world — <strong>worked grids in green</strong> (brighter once confirmed), <strong>needed in red</strong>, and stations decoding <strong>right now</strong> ringed in cyan (a needed-and-live grid pulses <em>chase it</em>). Country outlines, pan / zoom, VUCC progress, and <strong>Follow Digital Decodes</strong> to lock the map to your session. No GridTracker needed.</p></div>
       </div>
     </section>
 
