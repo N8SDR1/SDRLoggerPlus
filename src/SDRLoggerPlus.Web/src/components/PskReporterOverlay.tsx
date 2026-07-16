@@ -7,6 +7,10 @@ import { gridToLatLon } from '../utils/maidenhead';
 interface PskReporterOverlayProps {
   /** Callsign whose reception reports (who is hearing it) are drawn. */
   callsign: string;
+  /** Band to filter to (e.g. '20m'); null or 'all' = every band. */
+  band?: string | null;
+  /** Look-back window in minutes (passed to the PSK Reporter query). */
+  minutes?: number;
 }
 
 // Band coloring mirrors the DX-cluster scheme used elsewhere on the map.
@@ -28,17 +32,24 @@ function bandFromKHz(khz: number): string {
   return '?';
 }
 
+function ageLabel(flowStartSeconds: number): string {
+  const mins = Math.max(0, Math.round((Date.now() / 1000 - flowStartSeconds) / 60));
+  return mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h${mins % 60}m ago`;
+}
+
 /**
- * PSK Reporter overlay: draws a line from the looked-up callsign to every station that
- * recently heard it, colored by band. Data is fetched through the cached backend proxy and
- * refreshed every 5 minutes (PSK Reporter's polling etiquette).
+ * PSK Reporter "who heard me" overlay: draws a line from the looked-up callsign to every
+ * station that recently heard it, colored by band, optionally filtered to one band. Each
+ * receiving station gets a clickable dot showing the reception report. Data comes through
+ * the cached backend proxy and refreshes every 5 minutes (PSK Reporter's polling etiquette).
  */
-export function PskReporterOverlay({ callsign }: PskReporterOverlayProps) {
+export function PskReporterOverlay({ callsign, band = null, minutes = 60 }: PskReporterOverlayProps) {
   const map = useMap();
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
 
   useEffect(() => {
     const call = callsign.trim().toUpperCase();
+    const bandFilter = band && band !== 'all' ? band : null;
     const layerGroup = L.layerGroup().addTo(map);
     layerGroupRef.current = layerGroup;
     let cancelled = false;
@@ -47,23 +58,26 @@ export function PskReporterOverlay({ callsign }: PskReporterOverlayProps) {
 
     async function updateOverlay() {
       try {
-        const reports = await api.getPskReports(call);
+        const reports = await api.getPskReports(call, minutes);
         if (cancelled) return;
         layerGroup.clearLayers();
 
         for (const r of reports) {
+          const khz = r.frequencyHz / 1000;
+          const band = bandFromKHz(khz);
+          if (bandFilter && band !== bandFilter) continue;
+
           const from = gridToLatLon(r.senderLocator);
           const to = gridToLatLon(r.receiverLocator);
           if (!from || !to) continue;
 
-          const khz = r.frequencyHz / 1000;
-          const band = bandFromKHz(khz);
           const color = BAND_COLORS[band] || '#888888';
 
-          const tooltip =
+          // Click-to-open report shown on the receiving-station dot.
+          const popup =
             `<b>${r.receiverCallsign}</b> heard <b>${call}</b><br/>` +
             `${khz.toFixed(1)} kHz ${r.mode}${band !== '?' ? ` (${band})` : ''}<br/>` +
-            `SNR ${r.snr} dB`;
+            `SNR ${r.snr} dB · ${ageLabel(r.flowStartSeconds)}`;
 
           L.polyline(
             [
@@ -71,19 +85,18 @@ export function PskReporterOverlay({ callsign }: PskReporterOverlayProps) {
               [to.lat, to.lon],
             ],
             { color, weight: 1.5, opacity: 0.6 }
-          )
-            .bindTooltip(tooltip, { sticky: true })
-            .addTo(layerGroup);
+          ).addTo(layerGroup);
 
-          // Small marker at the receiving station.
+          // Small clickable marker at the receiving station.
           L.circleMarker([to.lat, to.lon], {
-            radius: 3,
+            radius: 4,
             color,
             fillColor: color,
             fillOpacity: 0.9,
             weight: 1,
           })
-            .bindTooltip(tooltip, { sticky: true })
+            .bindPopup(popup)
+            .bindTooltip(`${r.receiverCallsign} · ${r.snr} dB`, { direction: 'top' })
             .addTo(layerGroup);
         }
       } catch {
@@ -101,7 +114,7 @@ export function PskReporterOverlay({ callsign }: PskReporterOverlayProps) {
         map.removeLayer(layerGroupRef.current);
       }
     };
-  }, [map, callsign]);
+  }, [map, callsign, band, minutes]);
 
   return null;
 }

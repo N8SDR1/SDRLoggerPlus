@@ -28,19 +28,23 @@ public class PskReporterController : ControllerBase
         _cache = cache;
     }
 
+    /// <summary>Clamp the PSK look-back window to PSK Reporter's acceptable range.</summary>
+    public static int ClampWindowMinutes(int minutes) => Math.Clamp(minutes, 5, 60);
+
     /// <summary>
     /// Get reception reports for stations currently hearing <paramref name="callsign"/>
-    /// (i.e. <paramref name="callsign"/> as the transmitter) over the last hour.
+    /// (i.e. <paramref name="callsign"/> as the transmitter) over the specified window.
     /// </summary>
     [HttpGet("reports")]
     [ProducesResponseType(typeof(IEnumerable<PskReceptionReport>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<PskReceptionReport>>> GetReports([FromQuery] string callsign)
+    public async Task<ActionResult<IEnumerable<PskReceptionReport>>> GetReports([FromQuery] string callsign, [FromQuery] int minutes = 60)
     {
         if (string.IsNullOrWhiteSpace(callsign))
             return BadRequest("callsign is required");
 
         callsign = callsign.Trim().ToUpperInvariant();
-        var cacheKey = $"pskreporter_{callsign}";
+        minutes = ClampWindowMinutes(minutes);
+        var cacheKey = $"pskreporter_{callsign}_{minutes}";
 
         if (_cache.TryGetValue(cacheKey, out List<PskReceptionReport>? cached) && cached is not null)
             return Ok(cached);
@@ -53,9 +57,9 @@ public class PskReporterController : ControllerBase
             httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("SDRLoggerPlus/1.0");
 
             // senderCallsign => reports where this callsign was the transmitter (who heard it).
-            // flowStartSeconds=-3600 => last hour. rronly=1 / noactive=1 trim the payload.
+            // flowStartSeconds => look-back window in seconds. rronly=1 / noactive=1 trim the payload.
             var url = $"https://retrieve.pskreporter.info/query?senderCallsign={Uri.EscapeDataString(callsign)}" +
-                      "&flowStartSeconds=-3600&rronly=1&noactive=1";
+                      $"&flowStartSeconds=-{minutes * 60}&rronly=1&noactive=1";
 
             var response = await httpClient.GetAsync(url);
             response.EnsureSuccessStatusCode();

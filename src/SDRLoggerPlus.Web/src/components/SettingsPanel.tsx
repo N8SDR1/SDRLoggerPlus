@@ -2806,6 +2806,47 @@ function LayoutPresetsSubsection() {
   );
 }
 
+// Bands offered by the on-globe "Heard Me" manual band picker (used when no
+// rig is connected — mirrors the HF band lists used elsewhere in the app).
+const HEARD_ME_BANDS = ['all', '160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m'];
+
+// Collapsible "dropdown" group used to keep the Map settings from getting busy —
+// the header row toggles the body open/closed. Collapsed by default.
+function CollapsibleGroup({
+  title,
+  subtitle,
+  icon,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-dark-700/30 rounded-lg border border-glass-100">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between p-4 hover:bg-dark-700/50 transition-colors rounded-lg"
+      >
+        <div className="flex items-center gap-3 text-left">
+          {icon}
+          <div>
+            <div className="font-medium font-ui text-dark-200">{title}</div>
+            {subtitle && <div className="text-sm text-dark-300">{subtitle}</div>}
+          </div>
+        </div>
+        <ChevronDown className={`w-5 h-5 text-dark-300 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <div className="px-4 pb-4 space-y-4">{children}</div>}
+    </div>
+  );
+}
+
 // Map Settings Section
 function MapSettingsSection() {
   const { settings, updateMapSettings } = useSettingsStore();
@@ -3016,6 +3057,179 @@ function MapSettingsSection() {
             </div>
           </div>
         </div>
+
+        {/* Heard Me — PSK (globe) — "who heard me" arcs from PSK Reporter on the 3D Globe. */}
+        <label className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100 cursor-pointer hover:bg-dark-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <Radio className="w-5 h-5 text-accent-primary" />
+            <div>
+              <div className="font-medium font-ui text-dark-200">Heard Me — PSK (globe)</div>
+              <div className="text-sm text-dark-300">Draw arcs to stations that heard your PSK Reporter-tracked digital signal on the 3D Globe</div>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={map.showGlobeHeardMePsk}
+            onChange={(e) => updateMapSettings({ showGlobeHeardMePsk: e.target.checked })}
+            className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
+          />
+        </label>
+
+        {/* Heard Me — RBN (globe) — "who heard me" arcs from the Reverse Beacon Network (CW/RTTY skimmers). */}
+        <label className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100 cursor-pointer hover:bg-dark-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <Radio className="w-5 h-5 text-accent-primary" />
+            <div>
+              <div className="font-medium font-ui text-dark-200">Heard Me — RBN (globe)</div>
+              <div className="text-sm text-dark-300">Draw arcs to Reverse Beacon Network skimmers that heard your CW/RTTY signal on the 3D Globe</div>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={map.showGlobeHeardMeRbn}
+            onChange={(e) => updateMapSettings({ showGlobeHeardMeRbn: e.target.checked })}
+            className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
+          />
+        </label>
+
+        {/* Heard Me — manual band fallback + per-layer look-back windows */}
+        {(map.showGlobeHeardMePsk || map.showGlobeHeardMeRbn) && (
+          <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
+            <div className="flex items-center gap-3 mb-1">
+              <Radio className="w-5 h-5 text-accent-primary" />
+              <div>
+                <div className="font-medium font-ui text-dark-200">Heard Me — Band &amp; Windows</div>
+                <div className="text-sm text-dark-300">Manual band used when no rig is connected, and how far back each layer looks for reports</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-dark-300 w-28">Band (manual)</span>
+              <select
+                value={map.heardMeBand}
+                onChange={(e) => updateMapSettings({ heardMeBand: e.target.value })}
+                aria-label="Heard Me manual band"
+                className="flex-1 px-3 py-2 rounded-lg bg-dark-800 border border-glass-100 text-dark-200 text-sm font-mono"
+              >
+                {HEARD_ME_BANDS.map((b) => (
+                  <option key={b} value={b}>{b === 'all' ? 'All bands' : b}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-dark-300 w-28">PSK window</span>
+              <select
+                value={map.heardMePskWindowMinutes}
+                onChange={(e) => updateMapSettings({ heardMePskWindowMinutes: Number(e.target.value) })}
+                aria-label="Heard Me PSK look-back window"
+                className="flex-1 px-3 py-2 rounded-lg bg-dark-800 border border-glass-100 text-dark-200 text-sm font-mono"
+              >
+                {[15, 30, 60].map((m) => (
+                  <option key={m} value={m}>{m} min</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-dark-300 w-28">RBN window</span>
+              <select
+                value={map.heardMeRbnWindowMinutes}
+                onChange={(e) => updateMapSettings({ heardMeRbnWindowMinutes: Number(e.target.value) })}
+                aria-label="Heard Me RBN look-back window"
+                className="flex-1 px-3 py-2 rounded-lg bg-dark-800 border border-glass-100 text-dark-200 text-sm font-mono"
+              >
+                {[5, 10, 15].map((m) => (
+                  <option key={m} value={m}>{m} min</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* RBN Cluster Feed — the full Reverse Beacon Network spot overlay on the
+            2D Map. Relocated here from the map's Layers → Overlays fly-out so that
+            menu stays a simple set of toggles. Collapsed dropdown to reduce clutter. */}
+        <CollapsibleGroup
+          title="RBN Cluster Feed (2D Map)"
+          subtitle="Full Reverse Beacon Network spot overlay and its display filters"
+          icon={<Radio className="w-5 h-5 text-accent-primary" />}
+        >
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm font-ui text-dark-200">Show RBN cluster spots on the 2D Map</span>
+            <input
+              type="checkbox"
+              checked={map.rbn.enabled}
+              onChange={(e) => updateMapSettings({ rbn: { ...map.rbn, enabled: e.target.checked } })}
+              className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
+            />
+          </label>
+
+          <div className={`space-y-4 ${!map.rbn.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            {/* Opacity */}
+            <div>
+              <label className="block mb-1 text-sm text-dark-300">
+                Opacity: {Math.round(map.rbn.opacity * 100)}%
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.1}
+                value={map.rbn.opacity}
+                onChange={(e) => updateMapSettings({ rbn: { ...map.rbn, opacity: parseFloat(e.target.value) } })}
+                aria-label="RBN cluster opacity"
+                className="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-accent-primary"
+              />
+            </div>
+
+            {/* Show signal paths */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={map.rbn.showPaths}
+                onChange={(e) => updateMapSettings({ rbn: { ...map.rbn, showPaths: e.target.checked } })}
+                className="rounded bg-dark-700 border-glass-100 text-accent-primary"
+              />
+              <span className="text-sm text-dark-300">Show signal paths</span>
+            </label>
+
+            {/* Time window */}
+            <div>
+              <label className="block mb-1 text-sm text-dark-300">
+                Time Window: {map.rbn.timeWindowMinutes} min
+              </label>
+              <input
+                type="range"
+                min={1}
+                max={15}
+                step={1}
+                value={map.rbn.timeWindowMinutes}
+                onChange={(e) => updateMapSettings({ rbn: { ...map.rbn, timeWindowMinutes: parseInt(e.target.value) } })}
+                aria-label="RBN cluster time window"
+                className="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-accent-primary"
+              />
+            </div>
+
+            {/* Min SNR */}
+            <div>
+              <label className="block mb-1 text-sm text-dark-300">
+                Min SNR: {map.rbn.minSnr} dB
+              </label>
+              <input
+                type="range"
+                min={-30}
+                max={30}
+                step={5}
+                value={map.rbn.minSnr}
+                onChange={(e) => updateMapSettings({ rbn: { ...map.rbn, minSnr: parseInt(e.target.value) } })}
+                aria-label="RBN cluster minimum SNR"
+                className="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-accent-primary"
+              />
+            </div>
+
+            <div className="pt-2 border-t border-glass-100 text-xs text-dark-400">
+              Data from reversebeacon.net
+            </div>
+          </div>
+        </CollapsibleGroup>
       </div>
     </div>
   );

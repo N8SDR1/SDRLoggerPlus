@@ -245,6 +245,8 @@ export interface MapSettings {
   rbn: RbnSettings;
   showPotaOverlay: boolean;
   showLightning: boolean;
+  /** Slow auto-spin of the 2D Map's embedded globe circle. */
+  rotateGlobe: boolean;
   showDayNightOverlay: boolean;
   showGrayLine: boolean;
   showSunMarker: boolean;
@@ -269,6 +271,13 @@ export interface MapSettings {
   // ground and the ionosphere) on the 3D Globe, and tilt the view to an
   // oblique angle so the hops are visible. Off = a single smooth arc.
   showIonosphereHops: boolean;
+  // "Heard Me" globe layers — arcs from your station to stations that heard you.
+  showGlobeHeardMePsk: boolean;   // PSK Reporter (digital)
+  showGlobeHeardMeRbn: boolean;   // RBN (CW/RTTY skimmers)
+  heardMeBand: string;            // manual band fallback when no rig connected
+  heardMePskWindowMinutes: number; // PSK look-back, clamped [5,60]
+  heardMeRbnWindowMinutes: number; // RBN look-back, clamped [5,15] (RbnService buffer retains ~15 min)
+  show2dHeardMeRbn: boolean; // "Heard Me — RBN" overlay on the 2D map (distinct from the RBN cluster layer)
 }
 
 export interface HeaderSettings {
@@ -704,6 +713,7 @@ const defaultSettings: Settings = {
     },
     showPotaOverlay: false,
     showLightning: false,
+    rotateGlobe: false,
     showDayNightOverlay: false,
     showGrayLine: false,
     showSunMarker: true,
@@ -720,6 +730,12 @@ const defaultSettings: Settings = {
     showAuroraOverlay: false,
     showLongPath: false, // default OFF (user call) — opt-in via Settings > Map
     showIonosphereHops: false, // opt-in — tilts the globe when on
+    showGlobeHeardMePsk: false,
+    showGlobeHeardMeRbn: false,
+    heardMeBand: '20m',
+    heardMePskWindowMinutes: 60,
+    heardMeRbnWindowMinutes: 15,
+    show2dHeardMeRbn: false,
   },
   cluster: {
     connections: [],

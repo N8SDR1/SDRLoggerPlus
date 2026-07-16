@@ -243,6 +243,17 @@ export interface PskReceptionReport {
   flowStartSeconds: number;
 }
 
+export interface RbnHeardMeReport {
+  skimmer: string;
+  lat: number;
+  lon: number;
+  freqKhz: number;
+  band: string;
+  mode: string;
+  snr: number;
+  ageSeconds: number;
+}
+
 export interface AuroraPoint {
   lat: number;
   lon: number;
@@ -402,6 +413,12 @@ class ApiClient {
   // RBN
   async getRbnSpots(minutes: number = 5): Promise<{ count: number; spots: RbnSpot[] }> {
     return this.fetch(`/rbn/spots?minutes=${minutes}`);
+  }
+
+  async getRbnHeardMe(callsign: string, band: string | null, minutes = 30): Promise<RbnHeardMeReport[]> {
+    const bandParam = band ? `&band=${encodeURIComponent(band)}` : '';
+    return this.fetch<RbnHeardMeReport[]>(
+      `/rbn/heardme?callsign=${encodeURIComponent(callsign)}${bandParam}&minutes=${minutes}`);
   }
 
   async getRbnSkimmerLocation(callsign: string): Promise<{
@@ -621,8 +638,9 @@ class ApiClient {
   }
 
   // PSK Reporter — stations currently hearing the given callsign (last hour).
-  async getPskReports(callsign: string): Promise<PskReceptionReport[]> {
-    return this.fetch<PskReceptionReport[]>(`/pskreporter/reports?callsign=${encodeURIComponent(callsign)}`);
+  async getPskReports(callsign: string, minutes = 60): Promise<PskReceptionReport[]> {
+    return this.fetch<PskReceptionReport[]>(
+      `/pskreporter/reports?callsign=${encodeURIComponent(callsign)}&minutes=${minutes}`);
   }
 
   // Aurora — latest NOAA OVATION auroral-oval forecast (sparse grid).
