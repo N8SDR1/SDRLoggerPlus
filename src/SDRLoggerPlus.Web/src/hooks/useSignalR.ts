@@ -160,6 +160,9 @@ export function useSignalRConnection() {
             // Invalidate QSO queries to refetch
             queryClient.invalidateQueries({ queryKey: ['qsos'] });
             queryClient.invalidateQueries({ queryKey: ['statistics'] });
+            // Refresh the Grid Tracker's worked layer so a just-worked grid
+            // turns green immediately instead of on the next timed refetch.
+            queryClient.invalidateQueries({ queryKey: ['gridmap'] });
           },
           onConfirmationSyncCompleted: (evt) => {
             if (evt.error) {

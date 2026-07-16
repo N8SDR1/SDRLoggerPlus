@@ -313,6 +313,21 @@ public class SpotStatusServiceTests
             .Should().Be("worked");
     }
 
+    [Fact]
+    public async Task OnQsoLogged_WithGrid_GridStopsBeingNeeded()
+    {
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        _service.GetGridStatus("FN30", 14000.0).Should().Be("newGrid");
+
+        // Logging a QSO in FN30 must record the grid so the next decode from
+        // there isn't flagged needed again.
+        _service.OnQsoLogged("KA2DUT", "United States", "20m", "FT8", "FN30");
+
+        _service.GetGridStatus("FN30", 14000.0).Should().BeNull();
+    }
+
     #endregion
 
     #region InvalidateCacheAsync

@@ -142,12 +142,14 @@ public class QsoService : IQsoService
             _ = Task.Run(() => _eqsl.UploadQsoAsync(created));
         }
 
-        // Update spot status cache incrementally
+        // Update spot status cache incrementally — including the grid, so a grid
+        // you just worked stops showing as "needed" on the next decode.
         _spotStatusService?.OnQsoLogged(
             created.Callsign,
             created.Country,
             created.Band,
-            created.Mode);
+            created.Mode,
+            request.Grid);
 
         // Broadcast to all clients via SignalR
         await _hub.BroadcastQso(new QsoLoggedEvent(

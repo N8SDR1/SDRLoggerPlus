@@ -391,7 +391,7 @@ public class SatControllerService : BackgroundService
         var spotStatus = scopedProvider.GetService<ISpotStatusService>();
 
         var created = await repository.CreateAsync(qso);
-        spotStatus?.OnQsoLogged(created.Callsign, created.Country, created.Band, created.Mode);
+        spotStatus?.OnQsoLogged(created.Callsign, created.Country, created.Band, created.Mode, created.Station?.Grid);
         await _hubContext.BroadcastQso(new QsoLoggedEvent(
             created.Id, created.Callsign, created.QsoDate, created.TimeOn,
             created.Band, created.Mode, created.Frequency,

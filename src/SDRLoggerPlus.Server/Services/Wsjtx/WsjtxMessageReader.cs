@@ -28,12 +28,13 @@ public record WsjtxQsoLogged(
     string? AdifPropagationMode) : WsjtxMessage(Id);
 
 /// <summary>
-/// Status (type 1) — carries the current dial frequency. Decode messages only
-/// give the audio offset, so we track the dial from Status to reconstruct each
-/// decode's real RF frequency (and therefore its band). Only the leading fields
-/// we need are read; the rest of the (long) Status payload is ignored.
+/// Status (type 1) — carries the current dial frequency and the DX call (the
+/// station being worked in WSJT-X's DX Call box). We track the dial to
+/// reconstruct each decode's RF frequency, and the DX call to populate the log
+/// entry / QRZ / map when it changes. Only the leading fields we need are read;
+/// the rest of the (long) Status payload is ignored.
 /// </summary>
-public record WsjtxStatusMessage(string Id, ulong DialFrequencyHz, string? Mode) : WsjtxMessage(Id);
+public record WsjtxStatusMessage(string Id, ulong DialFrequencyHz, string? Mode, string? DxCall) : WsjtxMessage(Id);
 
 public record WsjtxClose(string Id) : WsjtxMessage(Id);
 
@@ -82,7 +83,7 @@ public static class WsjtxMessageReader
             return type switch
             {
                 0 => new WsjtxHeartbeat(id, r.ReadU32(), r.ReadUtf8(), r.ReadUtf8()),
-                1 => new WsjtxStatusMessage(id, r.ReadU64(), r.ReadUtf8()),
+                1 => ReadStatus(ref r, id),
                 2 => ReadDecode(ref r, id),
                 5 => ReadQsoLogged(ref r, id, schema),
                 6 => new WsjtxClose(id),
@@ -94,6 +95,16 @@ public static class WsjtxMessageReader
         {
             return null;
         }
+    }
+
+    // Status (type 1), after the common id: Dial (u64) · Mode (utf8) · DX call
+    // (utf8) · … (many more fields we ignore). The DX call is read defensively.
+    private static WsjtxStatusMessage ReadStatus(ref Reader r, string id)
+    {
+        var dial = r.ReadU64();
+        var mode = r.ReadUtf8();
+        var dxCall = r.Remaining >= 4 ? r.ReadUtf8() : null;
+        return new WsjtxStatusMessage(id, dial, mode, dxCall);
     }
 
     // Decode (type 2), after the common id:

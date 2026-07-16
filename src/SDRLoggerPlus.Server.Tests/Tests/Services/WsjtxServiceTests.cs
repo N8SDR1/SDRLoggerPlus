@@ -23,6 +23,7 @@ public class WsjtxServiceTests
     private readonly WsjtxService _service;
     private readonly List<CreateQsoRequest> _created = new();
     private readonly List<WsjtxDecodeEvent> _decodes = new();
+    private readonly List<SpotSelectedEvent> _spots = new();
 
     public WsjtxServiceTests()
     {
@@ -34,6 +35,9 @@ public class WsjtxServiceTests
 
         _hubClient.Setup(c => c.OnWsjtxDecode(It.IsAny<WsjtxDecodeEvent>()))
             .Callback<WsjtxDecodeEvent>(e => _decodes.Add(e))
+            .Returns(Task.CompletedTask);
+        _hubClient.Setup(c => c.OnSpotSelected(It.IsAny<SpotSelectedEvent>()))
+            .Callback<SpotSelectedEvent>(e => _spots.Add(e))
             .Returns(Task.CompletedTask);
         var clients = new Mock<IHubClients<ILogHubClient>>();
         clients.Setup(c => c.All).Returns(_hubClient.Object);
@@ -47,13 +51,14 @@ public class WsjtxServiceTests
             hub.Object, _spotStatus.Object);
     }
 
-    private static byte[] BuildStatusDatagram(ulong dialFreqHz, string mode = "FT8")
+    private static byte[] BuildStatusDatagram(ulong dialFreqHz, string mode = "FT8", string? dxCall = null)
     {
         var bytes = new List<byte>();
         void U32(uint v) { Span<byte> b = stackalloc byte[4]; BinaryPrimitives.WriteUInt32BigEndian(b, v); bytes.AddRange(b.ToArray()); }
         void U64(ulong v) { Span<byte> b = stackalloc byte[8]; BinaryPrimitives.WriteUInt64BigEndian(b, v); bytes.AddRange(b.ToArray()); }
         void Utf8(string s) { var d = Encoding.UTF8.GetBytes(s); U32((uint)d.Length); bytes.AddRange(d); }
         U32(0xadbccbda); U32(2); U32(1); Utf8("WSJT-X"); U64(dialFreqHz); Utf8(mode);
+        if (dxCall != null) Utf8(dxCall);
         return bytes.ToArray();
     }
 
@@ -162,6 +167,33 @@ public class WsjtxServiceTests
         await _service.HandleDatagramAsync(BuildDecodeDatagram("TNX 73 GL", audioOffsetHz: 1500));
 
         _decodes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StatusWithDxCall_PopulatesLogEntry()
+    {
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000, dxCall: "K1ABC"));
+
+        _spots.Should().ContainSingle();
+        _spots[0].DxCall.Should().Be("K1ABC");
+        _spots[0].Frequency.Should().Be(14_074.0); // kHz
+    }
+
+    [Fact]
+    public async Task Status_UnchangedDxCall_PopulatesOnce()
+    {
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000, dxCall: "K1ABC"));
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000, dxCall: "K1ABC"));
+
+        _spots.Should().ContainSingle(); // Status arrives constantly; only fire on change
+    }
+
+    [Fact]
+    public async Task Status_EmptyDxCall_DoesNotPopulate()
+    {
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000));
+
+        _spots.Should().BeEmpty();
     }
 
     [Fact]

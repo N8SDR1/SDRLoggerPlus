@@ -123,6 +123,9 @@ public class WsjtxService : BackgroundService
         // Where this decoder's datagrams came from — the target for outbound
         // Reply ("call this station") messages.
         public IPEndPoint? LastRemoteEndpoint;
+        // Last DX call seen in a Status message; we populate the log entry only
+        // when it changes (Status arrives many times per second).
+        public string? LastDxCall;
         public readonly object StateLock = new();
 
         public WsjtxStatus Snapshot()
@@ -328,6 +331,7 @@ public class WsjtxService : BackgroundService
                 {
                     lock (l.StateLock) l.LastDialFreqHz = status.DialFrequencyHz;
                 }
+                await HandleDxCallAsync(l, status);
                 break;
 
             case WsjtxDecode decode:
@@ -421,6 +425,41 @@ public class WsjtxService : BackgroundService
         }
 
         await _hubContext.Clients.All.OnWsjtxDecode(evt);
+    }
+
+    /// <summary>
+    /// When WSJT-X's DX Call changes (you double-clicked a CQ, or a station
+    /// answered your CQ), push it through the same spot-selected pipeline a
+    /// cluster click uses — populating the Log Entry callsign, firing the QRZ
+    /// lookup (→ QRZ Profile), and placing the station on the map. Does NOT
+    /// retune the rig (the decoder owns it) and doesn't log the QSO (WSJT-X
+    /// auto-logs that separately at 73).
+    /// </summary>
+    private async Task HandleDxCallAsync(Listener l, WsjtxStatusMessage status)
+    {
+        var dxCall = status.DxCall?.Trim();
+        if (string.IsNullOrEmpty(dxCall)) return;
+
+        ulong dialHz;
+        bool changed;
+        lock (l.StateLock)
+        {
+            changed = !string.Equals(dxCall, l.LastDxCall, StringComparison.OrdinalIgnoreCase);
+            if (changed) l.LastDxCall = dxCall;
+            dialHz = l.LastDialFreqHz;
+        }
+        if (!changed) return;
+
+        try
+        {
+            var freqKhz = dialHz > 0 ? dialHz / 1000.0 : 0.0;
+            await _hubContext.BroadcastSpotSelected(new SpotSelectedEvent(dxCall, freqKhz, status.Mode, null));
+            _logger.LogInformation("WSJT-X source {N} DX call → {Call}: populated log entry", l.Source, dxCall);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "WSJT-X DX-call populate failed for {Call}", dxCall);
+        }
     }
 
     private async Task LogQsoAsync(Listener l, WsjtxQsoLogged qso)
