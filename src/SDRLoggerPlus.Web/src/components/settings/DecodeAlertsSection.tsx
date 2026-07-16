@@ -42,7 +42,7 @@ export function DecodeAlertsSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">Decode Alerts</h3>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">Digital Decode Alerts</h3>
         <p className="text-sm text-dark-300">
           Alert on needed stations in the digital decode stream (FT8/FT4 from WSJT-X, JTDX, MSHV).
           Each rule matches an award need <span className="text-dark-200">and</span> every scope filter you set —

@@ -101,7 +101,7 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
   },
   {
     id: 'decodealerts',
-    name: 'Decode Alerts',
+    name: 'Digital Decode Alerts',
     icon: <Bell className="w-5 h-5" />,
     description: 'Geo-scoped needed-status alerts on the digital decode stream',
   },
@@ -3638,7 +3638,7 @@ function WsjtxSettingsSection() {
         <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">Decoder Link (UDP)</h3>
         <p className="text-sm text-dark-300">
           Listen for the WSJT-X UDP protocol to auto-log FT8/FT4 QSOs and feed the live decode
-          stream (Digital Decodes panel, Decode Alerts, Grid Tracker). Works with WSJT-X, JTDX,
+          stream (Digital Decodes panel, Digital Decode Alerts, Grid Tracker). Works with WSJT-X, JTDX,
           and MSHV. Enable a second source to run two decoders at once — each on its own port.
         </p>
       </div>
