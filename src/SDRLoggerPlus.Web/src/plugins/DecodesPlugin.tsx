@@ -98,8 +98,8 @@ export function DecodesPlugin() {
             <p>{decodes.length === 0 ? 'No decodes yet' : 'No decodes match the filters'}</p>
             {decodes.length === 0 && (
               <p className="text-xs mt-1 max-w-xs">
-                Enable <span className="font-mono">WSJT-X Source 1</span> in Settings and turn on
-                “Enable Decoded Text” in WSJT-X / JTDX / MSHV.
+                Enable <span className="font-mono">Source 1</span> in Settings → Decoder Link (UDP)
+                and turn on “Enable Decoded Text” in WSJT-X / JTDX / MSHV.
               </p>
             )}
           </div>

@@ -95,9 +95,9 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
   },
   {
     id: 'wsjtx',
-    name: 'WSJT-X / JTDX',
+    name: 'Decoder Link (UDP)',
     icon: <RadioTower className="w-5 h-5" />,
-    description: 'Auto-log FT8/FT4 QSOs over UDP (WSJT-X, JTDX, MSHV)',
+    description: 'UDP link to WSJT-X / JTDX / MSHV — auto-log + live decodes',
   },
   {
     id: 'decodealerts',
@@ -3635,11 +3635,11 @@ function WsjtxSettingsSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">WSJT-X / JTDX Auto-Logging</h3>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">Decoder Link (UDP)</h3>
         <p className="text-sm text-dark-300">
-          Listen for the WSJT-X UDP protocol and automatically log FT8/FT4 QSOs the moment they
-          complete. Works with WSJT-X, JTDX, and MSHV. Enable a second source to run two decoders
-          at once — each on its own port.
+          Listen for the WSJT-X UDP protocol to auto-log FT8/FT4 QSOs and feed the live decode
+          stream (Digital Decodes panel, Decode Alerts, Grid Tracker). Works with WSJT-X, JTDX,
+          and MSHV. Enable a second source to run two decoders at once — each on its own port.
         </p>
       </div>
 
