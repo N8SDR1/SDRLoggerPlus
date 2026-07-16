@@ -3,6 +3,59 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-16 — v2.3.0 "Vega+" 🌟
+
+Native FT8 / digital-mode tools — decode monitoring, smart alerting, and grid
+tracking, built right into SDRLoggerPlus. No JTAlert or GridTracker needed.
+
+### New
+- **Digital Decodes panel** — the live FT8/FT4 decode stream from WSJT-X / JTDX /
+  MSHV over UDP, each decode coloured by what it would give you (new DXCC / band /
+  zone / grid), with Needed-only and CQ-only filters. **Double-click a decode**
+  and your decoder answers that CQ (WSJT-X / JTDX, with "Accept UDP requests" on).
+- **Digital Decode Alerts** (Settings → Digital Decode Alerts) — geo-scoped rules
+  that sound / speak / pop only for what you want: an award need (DXCC / band /
+  zone / grid) × a region (continent, DXCC entity, US call area, prefix, grid
+  field) × band/mode. So "needed grids, North America only, 20m" is one rule.
+  Quick-add presets; voice uses the shared Voice section.
+- **Grid Tracker panel** — a Maidenhead grid map: worked (green, brighter =
+  confirmed), needed (red tint), and stations active right now from the decode
+  stream (cyan ring; a needed + live grid pulses "chase now"). Country outlines,
+  pan / zoom, hover, VUCC progress, and **Follow Digital Decodes (FDD)** to lock
+  the map to your decoding session.
+- **Live log-entry populate** — when your decoder's DX Call changes (you call CQ,
+  or a station answers you), it fills the Log Entry, fires the callbook lookup
+  (QRZ Profile), and drops the station on the map. The finished FT8 QSO auto-logs
+  to Log History.
+- **Compact Log History summary** — QSOs / Countries / Grids / Today on one line.
+
+### Changed
+- **Settings → WSJT-X / JTDX** is now **Decoder Link (UDP)** — it feeds both
+  auto-logging and the live decode stream.
+
+### Fixed
+- A grid you just worked no longer re-appears as "needed" on the next decode —
+  logging now records the grid in the needed-status cache.
+
+## 2026-07-15 — v2.2.1
+
+### Fixed
+- **Settings wouldn't save (HTTP 400).** A non-nullable field that shipped empty
+  in 2.2.0 tripped implicit validation and blocked every settings save, on every
+  tab. Fixed.
+
+## 2026-07-15 — v2.2.0 "Vega" 🌟
+
+### New
+- **DX Coach** — turns live spots + your award needs + solar / gray-line data
+  into proactive, factually-grounded operating suggestions, with a needs matrix
+  (DXCC / WAS / zones), band-class filters, and optional voice.
+- **Confirmations** — Log4OM-style confirmation ingest: LoTW / eQSL / QRZ merge
+  into your log with a QSL column (L / E / Q / C), one-click downloads, and
+  background auto-sync.
+- **Voice** — a shared announcement voice (accent + male / female) for band
+  openings, Hot List, RBN alerts, and the DX Coach, with a volume control.
+
 ## 2026-07-10 — v2.1.0 "Vega" 🌟
 
 Feature release on the 2.0 "Vega" line.
