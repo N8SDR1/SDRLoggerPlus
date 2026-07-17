@@ -7,6 +7,7 @@ import { useWsjtxDecodeStore } from '../store/wsjtxDecodeStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useToastStore } from '../store/toastStore';
 import { isDecodeNeeded } from '../utils/decodeNeeds';
+import { matchesAnyRule } from '../utils/decodeAlertEngine';
 
 /**
  * Live WSJT-X / JTDX / MSHV decode list (Phase 1 of the decode-alerts feature).
@@ -27,8 +28,19 @@ export function DecodesPlugin() {
 
   const neededOnly = useWsjtxDecodeStore((s) => s.neededOnly);
   const cqOnly = useWsjtxDecodeStore((s) => s.cqOnly);
+  const matchAlerts = useWsjtxDecodeStore((s) => s.matchAlerts);
   const setNeededOnly = useWsjtxDecodeStore((s) => s.setNeededOnly);
   const setCqOnly = useWsjtxDecodeStore((s) => s.setCqOnly);
+  const setMatchAlerts = useWsjtxDecodeStore((s) => s.setMatchAlerts);
+
+  // Enabled Digital Decode Alert rules (Settings → Digital Decode Alerts) — the
+  // geo/need/band scopes the "Match Alerts" filter narrows the list by.
+  const alertSettings = useSettingsStore((s) => s.settings.decodeAlerts);
+  const enabledRules = useMemo(
+    () => (alertSettings?.enabled ? alertSettings.rules.filter((r) => r.enabled) : []),
+    [alertSettings],
+  );
+  const hasRules = enabledRules.length > 0;
 
   // Backfill recent decodes when the panel mounts.
   useEffect(() => {
@@ -39,13 +51,17 @@ export function DecodesPlugin() {
     return () => { active = false; };
   }, [seed]);
 
+  // "Match Alerts" only bites when there are enabled rules to match against.
+  const matchAlertsActive = matchAlerts && hasRules;
+
   const filtered = useMemo(() => {
     return decodes.filter((d) => {
       if (cqOnly && !d.isCq) return false;
       if (neededOnly && !isDecodeNeeded(d)) return false;
+      if (matchAlertsActive && !matchesAnyRule(d, enabledRules)) return false;
       return true;
     });
-  }, [decodes, cqOnly, neededOnly]);
+  }, [decodes, cqOnly, neededOnly, matchAlertsActive, enabledRules]);
 
   const neededCount = useMemo(() => decodes.filter(isDecodeNeeded).length, [decodes]);
 
@@ -79,6 +95,16 @@ export function DecodesPlugin() {
         <FilterPill active={cqOnly} onClick={() => setCqOnly(!cqOnly)} title="Show only stations calling CQ (available to work)">
           CQ only
         </FilterPill>
+        <FilterPill
+          active={matchAlertsActive}
+          disabled={!hasRules}
+          onClick={() => setMatchAlerts(!matchAlerts)}
+          title={hasRules
+            ? 'Show only decodes that match your Digital Decode Alert rules (need × region × band/mode)'
+            : 'Add a rule in Settings → Digital Decode Alerts first'}
+        >
+          Match Alerts{hasRules ? ` (${enabledRules.length})` : ''}
+        </FilterPill>
         <span className="flex-1" />
         {decodes.length > 0 && (
           <button
@@ -95,7 +121,13 @@ export function DecodesPlugin() {
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-gray-500 text-center px-6">
             <Radio className="w-12 h-12 mb-3 opacity-40" />
-            <p>{decodes.length === 0 ? 'No decodes yet' : 'No decodes match the filters'}</p>
+            <p>
+              {decodes.length === 0
+                ? 'No decodes yet'
+                : matchAlertsActive
+                  ? 'No decodes match your alert rules'
+                  : 'No decodes match the filters'}
+            </p>
             {decodes.length === 0 && (
               <p className="text-xs mt-1 max-w-xs">
                 Enable <span className="font-mono">Source 1</span> in Settings → Decoder Link (UDP)
@@ -168,15 +200,24 @@ function DecodeRow({ d, colors, onCall }: {
   );
 }
 
-function FilterPill({ active, onClick, title, children }: { active: boolean; onClick: () => void; title: string; children: React.ReactNode }) {
+function FilterPill({ active, onClick, title, children, disabled = false }: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       title={title}
       className={`px-2 py-1 rounded border font-mono text-[10px] tracking-wider transition-colors ${
-        active
-          ? 'bg-accent-primary/20 border-accent-primary text-accent-primary'
-          : 'bg-dark-700 border-dark-500 text-dark-300 hover:bg-dark-600'
+        disabled
+          ? 'bg-dark-800 border-dark-600 text-dark-500 opacity-60 cursor-not-allowed'
+          : active
+            ? 'bg-accent-primary/20 border-accent-primary text-accent-primary'
+            : 'bg-dark-700 border-dark-500 text-dark-300 hover:bg-dark-600'
       }`}
     >
       {children}

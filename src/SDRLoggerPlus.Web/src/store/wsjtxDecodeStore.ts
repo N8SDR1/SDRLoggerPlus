@@ -19,8 +19,12 @@ interface WsjtxDecodeState {
   // mirrors the exact filter state of the Digital Decodes panel.
   neededOnly: boolean;
   cqOnly: boolean;
+  /** Show only decodes that match an enabled Digital Decode Alert rule
+   *  (need × region × band/mode) — ties the geo-scoped alert rules to the list. */
+  matchAlerts: boolean;
   setNeededOnly: (v: boolean) => void;
   setCqOnly: (v: boolean) => void;
+  setMatchAlerts: (v: boolean) => void;
 }
 
 export const useWsjtxDecodeStore = create<WsjtxDecodeState>((set) => ({
@@ -30,6 +34,8 @@ export const useWsjtxDecodeStore = create<WsjtxDecodeState>((set) => ({
   clear: () => set({ decodes: [] }),
   neededOnly: false,
   cqOnly: false,
+  matchAlerts: false,
   setNeededOnly: (v) => set({ neededOnly: v }),
   setCqOnly: (v) => set({ cqOnly: v }),
+  setMatchAlerts: (v) => set({ matchAlerts: v }),
 }));

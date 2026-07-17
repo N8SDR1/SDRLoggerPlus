@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchesRule, usCallArea, baseCall } from './decodeAlertEngine';
+import { matchesRule, matchesAnyRule, usCallArea, baseCall } from './decodeAlertEngine';
 import type { WsjtxDecodeEvent } from '../api/signalr';
 import type { DecodeAlertRule } from '../store/settingsStore';
 
@@ -81,5 +81,29 @@ describe('matchesRule — scope', () => {
     const r = rule({ newGrid: true, continents: ['NA'], bands: ['20m'] });
     expect(matchesRule(evt({ gridStatus: 'newGrid', continent: 'NA', band: '20m' }), r)).toBe(true);
     expect(matchesRule(evt({ gridStatus: 'newGrid', continent: 'NA', band: '40m' }), r)).toBe(false);
+  });
+});
+
+describe('matchesAnyRule — powers the "Match Alerts" list filter', () => {
+  const naGrids = rule({ id: 'na', newGrid: true, continents: ['NA'] });
+
+  it('a NA new-grid decode passes; an EU one is filtered out', () => {
+    expect(matchesAnyRule(evt({ gridStatus: 'newGrid', continent: 'NA' }), [naGrids])).toBe(true);
+    // The reported bug: Saudi/Kuwait/Brazil (non-NA) must NOT show under a NA-grids rule.
+    expect(matchesAnyRule(evt({ callsign: 'HZ1AB', gridStatus: 'newGrid', continent: 'AS' }), [naGrids])).toBe(false);
+    expect(matchesAnyRule(evt({ callsign: 'PY2XY', gridStatus: 'newGrid', continent: 'SA' }), [naGrids])).toBe(false);
+  });
+
+  it('disabled rules are ignored', () => {
+    expect(matchesAnyRule(evt({ gridStatus: 'newGrid', continent: 'NA' }), [{ ...naGrids, enabled: false }])).toBe(false);
+  });
+
+  it('passes if ANY enabled rule matches (OR across rules)', () => {
+    const euDxcc = rule({ id: 'eu', newDxcc: true, continents: ['EU'] });
+    expect(matchesAnyRule(evt({ spotStatus: 'newDxcc', continent: 'EU' }), [naGrids, euDxcc])).toBe(true);
+  });
+
+  it('no rules → nothing matches', () => {
+    expect(matchesAnyRule(evt({ gridStatus: 'newGrid', continent: 'NA' }), [])).toBe(false);
   });
 });

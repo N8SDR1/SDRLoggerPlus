@@ -77,6 +77,15 @@ export function matchesRule(evt: WsjtxDecodeEvent, rule: DecodeAlertRule): boole
   return true;
 }
 
+/**
+ * True if the decode satisfies at least one enabled rule in the list. Used by the
+ * Digital Decodes panel's "Match Alerts" filter so the geo-scoped alert rules
+ * (need × region × band/mode) also narrow the visible list, not just the alerts.
+ */
+export function matchesAnyRule(evt: WsjtxDecodeEvent, rules: DecodeAlertRule[]): boolean {
+  return rules.some((r) => r.enabled && matchesRule(evt, r));
+}
+
 /** Strip portable prefixes/suffixes to the base callsign (longest call-shaped part). */
 export function baseCall(call: string): string {
   const parts = call.toUpperCase().split('/').filter(Boolean);
