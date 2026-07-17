@@ -3,6 +3,7 @@ import { Radio, RadioReceiver, Wifi, WifiOff, Power, PowerOff, Plus, Pencil, Set
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { useSignalR } from "../hooks/useSignalR";
+import { useRigConnection } from "../hooks/useRigConnection";
 import { GlassPanel } from "../components/GlassPanel";
 import { CompactToggle } from "../components/CompactToggle";
 import { usePanelCompact } from "../hooks/usePanelCompact";
@@ -178,6 +179,8 @@ export function RigPlugin() {
     deleteTciConfig,
     saveFlrigConfig,
   } = useSignalR();
+  // Shared rig teardown (type-specific) — same logic the status-bar switcher uses.
+  const { disconnect: disconnectRig } = useRigConnection();
 
   const [compact, toggleCompact] = usePanelCompact('rig');
 
@@ -365,14 +368,7 @@ export function RigPlugin() {
 
   const handleDisconnect = async () => {
     if (selectedRadioId) {
-      const radio = discoveredRadios.get(selectedRadioId);
-      if (radio?.type === "Hamlib" || selectedRadioId.startsWith("hamlib-")) {
-        await disconnectHamlibRig();
-      } else if (radio?.type === "Tci" || selectedRadioId.startsWith("tci-")) {
-        await disconnectTci(selectedRadioId);
-      } else {
-        await disconnectRadio(selectedRadioId);
-      }
+      await disconnectRig(selectedRadioId);
       // Disable auto-reconnect when manually disconnecting
       updateRadioSettings({ autoReconnect: false });
       saveSettings();

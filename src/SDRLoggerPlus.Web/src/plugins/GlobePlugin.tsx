@@ -15,6 +15,8 @@ import { createDayNightShell, type DayNightShell } from '../utils/dayNightShell'
 import { createIonosphereShells, DEFAULT_IONO_LAYERS, type IonosphereShells } from '../utils/ionosphereShells';
 import { getSunPosition } from '../utils/solarCalculations';
 import { formatDistance } from '../utils/units';
+import { useHeardMeReports } from '../hooks/useHeardMeReports';
+import { buildHeardMeArcs, heardMeBandColor, type HeardMeArc } from '../utils/heardMe';
 // Globe is dynamically imported to catch WebGL errors at load time
 
 // Default station location (can be overridden by store)
@@ -149,13 +151,27 @@ function estimateHops(distKm: number, freqMHz: number, daytime: boolean): { hops
 }
 
 // Marker data structure for globe points
+/** Compact "who heard me" payload carried on heard-me arcs + receiver points,
+ * used by the hover tooltip and the clickable RX-report card. */
+interface HeardMePayload {
+  source: 'psk' | 'rbn';
+  receiverCall: string;
+  band: string;
+  freqKhz: number;
+  mode: string;
+  snr: number;
+  ageMinutes: number;
+}
+
 interface GlobeMarkerData {
   lat: number;
   lng: number;
   label: string;
   color: string;
   size: number;
-  type: 'station' | 'target' | 'pota' | 'dx';
+  type: 'station' | 'target' | 'pota' | 'dx' | 'heardme';
+  /** PSK/RBN reception payload for 'heardme' receiver points (tooltip + RX card). */
+  heardMe?: HeardMePayload;
   /** Extra tooltip lines for POTA markers (reference, park, freq/mode). */
   potaDetail?: string[];
   /** DX cluster spot callsign (clicked to add to the log entry panel). */
@@ -178,6 +194,8 @@ interface GlobeArcData {
   frequency: number;
   mode?: string;
   label: string;
+  /** PSK/RBN reception payload for heard-me arcs (distinguishes them from DX spots). */
+  heardMe?: HeardMePayload;
 }
 
 /** Always-visible callsign label at a spotter or DX endpoint. */
@@ -265,8 +283,8 @@ interface GlobeInstance {
   arcColor(accessor: (d: unknown) => string | string[]): GlobeInstance;
   arcStroke(accessor: number | ((d: unknown) => number)): GlobeInstance;
   arcAltitudeAutoScale(scale: number): GlobeInstance;
-  arcDashLength(len: number): GlobeInstance;
-  arcDashGap(gap: number): GlobeInstance;
+  arcDashLength(len: number | ((d: unknown) => number)): GlobeInstance;
+  arcDashGap(gap: number | ((d: unknown) => number)): GlobeInstance;
   arcDashInitialGap(accessor: number | ((d: unknown) => number)): GlobeInstance;
   arcDashAnimateTime(time: number): GlobeInstance;
   arcsTransitionDuration(duration: number): GlobeInstance;
@@ -294,7 +312,7 @@ interface GlobeInstance {
   globeMaterial(): { opacity: number };
 }
 
-export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
+export function GlobeCore({ hideOverlays, rotating }: { hideOverlays?: boolean; rotating?: boolean } = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const globeRef = useRef<GlobeInstance | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -305,14 +323,22 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
   const { stationGrid, rotatorPosition, focusedCallsignInfo, radioStates, selectedRadioId, potaSpots, dxClusterSpots: spots, dxClusterMapEnabled } = useAppStore();
   const { settings, updateMapSettings, saveSettings } = useSettingsStore();
   const { commandRotator, focusCallsign, selectSpot } = useSignalR();
+  // PSK/RBN "who heard me" reports for the optional Heard-Me globe layers.
+  const { psk: heardMePsk, rbn: heardMeRbn, activeBand: heardMeActiveBand } = useHeardMeReports();
 
   const [currentAzimuth, setCurrentAzimuth] = useState(0);
+  // Receiver whose RX-report card is open (set by clicking a heard-me point).
+  const [heardMeSelected, setHeardMeSelected] = useState<HeardMePayload | null>(null);
   const [webglError, setWebglError] = useState<string | null>(null);
   const [containerHeight, setContainerHeight] = useState(0);
   // Slow auto-rotation of the globe (on by default); pausable via the overlay button.
   const [isRotating, setIsRotating] = useState(false); // paused on startup; resume via the Play button
-  const isRotatingRef = useRef(isRotating);
-  isRotatingRef.current = isRotating;
+  // When the `rotating` prop is provided (embedded 2D-map globe, whose controls
+  // live outside the round clip mask), it drives the spin; otherwise the
+  // internal Play/Pause overlay button state does.
+  const effectiveRotating = rotating ?? isRotating;
+  const isRotatingRef = useRef(effectiveRotating);
+  isRotatingRef.current = effectiveRotating;
   // Flips true once the globe instance is created, so rotation/marker effects can run.
   const [globeReady, setGlobeReady] = useState(false);
   // Latest focusCallsign handler for the onPointClick closure (avoids stale refs).
@@ -823,6 +849,13 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
               ${detail}
               <div style="font-size: 0.7em; color: #667; margin-top: 2px;">click to add to log</div>
             </div>`;
+          } else if (data.type === 'heardme' && data.heardMe) {
+            const h = data.heardMe;
+            return `<div style="text-align: center; padding: 5px; background: rgba(10, 14, 20, 0.9); border-radius: 3px; color: #8899aa; border: 1px solid ${data.color}55;">
+              <div style="font-weight: bold; color: ${data.color};">${h.receiverCall} <span style="font-size:0.7em;color:#667;">${h.source.toUpperCase()}</span></div>
+              <div style="font-size: 0.8em;">${h.band} · ${h.freqKhz.toFixed(1)} kHz · ${h.mode}</div>
+              <div style="font-size: 0.8em;">SNR ${h.snr} dB · ${h.ageMinutes}m ago</div>
+            </div>`;
           } else {
             // Target marker - use ref to access latest focusedCallsignInfo
             const info = focusedCallsignInfoRef.current;
@@ -859,15 +892,34 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         .arcEndLat((d: unknown) => (d as GlobeArcData).endLat)
         .arcEndLng((d: unknown) => (d as GlobeArcData).endLng)
         .arcColor((d: unknown) => (d as GlobeArcData).color)
-        .arcStroke(0.5)
+        // Heard-me arcs render thinner than DX-spot arcs; DX spots keep 0.5.
+        .arcStroke((d: unknown) => ((d as GlobeArcData).heardMe ? 0.3 : 0.5))
         .arcAltitudeAutoScale(0.4)
-        .arcDashLength(0.4)
-        .arcDashGap(0.2)
+        // DX spots keep 0.4/0.2. Heard-me arcs distinguish source: PSK ~solid
+        // flowing dash, RBN a short dotted dash.
+        .arcDashLength((d: unknown) => {
+          const a = d as GlobeArcData;
+          if (a.heardMe) return a.heardMe.source === 'rbn' ? 0.1 : 0.5;
+          return 0.4;
+        })
+        .arcDashGap((d: unknown) => {
+          const a = d as GlobeArcData;
+          if (a.heardMe) return a.heardMe.source === 'rbn' ? 0.12 : 0.15;
+          return 0.2;
+        })
         .arcDashInitialGap(() => Math.random())
         .arcDashAnimateTime(1500)
         .arcsTransitionDuration(0)
         .arcLabel((d: unknown) => {
           const a = d as GlobeArcData;
+          if (a.heardMe) {
+            const h = a.heardMe;
+            return `<div style="text-align:center;padding:4px 6px;background:rgba(10,14,20,0.9);border-radius:3px;color:#8899aa;border:1px solid ${a.color}55;">
+              <div style="font-weight:bold;color:${a.color};">${h.receiverCall} <span style="font-size:0.7em;color:#667;">${h.source.toUpperCase()}</span></div>
+              <div style="font-size:0.8em;">${h.band} · ${h.freqKhz.toFixed(1)} kHz · ${h.mode}</div>
+              <div style="font-size:0.8em;">SNR ${h.snr} dB · ${h.ageMinutes}m ago</div>
+            </div>`;
+          }
           return `<div style="text-align:center;padding:4px 6px;background:rgba(10,14,20,0.9);border-radius:3px;color:#8899aa;border:1px solid ${a.color}55;">
             <div style="font-weight:bold;color:${a.color};">${a.label}</div>
             <div style="font-size:0.7em;color:#667;margin-top:2px;">click to add to log</div>
@@ -885,6 +937,10 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       // clicks fire here, not onGlobeClick, so they don't disturb the rotator beam).
       globe.onPointClick((point) => {
         const data = point as GlobeMarkerData;
+        if (data?.type === 'heardme' && data.heardMe) {
+          setHeardMeSelected(data.heardMe);
+          return;
+        }
         if (data?.type === 'dx' && data.dxCall) {
           selectSpotRef.current(data.dxCall, data.frequency ?? 0, data.mode);
         }
@@ -1095,6 +1151,18 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     }
   }, [focusedCallsignInfo]);
 
+  // Clear the open RX-report card if the heard-me layer that produced it gets toggled off,
+  // so the card doesn't linger showing data for a now-hidden layer.
+  useEffect(() => {
+    if (!heardMeSelected) return;
+    if (
+      (heardMeSelected.source === 'psk' && !settings.map.showGlobeHeardMePsk) ||
+      (heardMeSelected.source === 'rbn' && !settings.map.showGlobeHeardMeRbn)
+    ) {
+      setHeardMeSelected(null);
+    }
+  }, [settings.map.showGlobeHeardMePsk, settings.map.showGlobeHeardMeRbn, heardMeSelected]);
+
   // Update globe markers when focused callsign changes
   useEffect(() => {
     if (!globeRef.current) return;
@@ -1245,10 +1313,39 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
       }
     }
 
+    // Heard-Me layers (PSK/RBN "who heard me") — additive station→receiver arcs
+    // plus a clickable receiver point per report. Only the enabled source's array
+    // is passed; the arcs carry a `heardMe` payload the click/label handlers use.
+    const heardArcs: HeardMeArc[] = (settings.map.showGlobeHeardMePsk || settings.map.showGlobeHeardMeRbn)
+      ? buildHeardMeArcs(
+          { lat: stationLat, lon: stationLon },
+          settings.map.showGlobeHeardMePsk ? heardMePsk : [],
+          settings.map.showGlobeHeardMeRbn ? heardMeRbn : [],
+          { band: heardMeActiveBand, cap: 150 },
+        )
+      : [];
+    for (const a of heardArcs) {
+      const color = heardMeBandColor(a.band);
+      const payload: HeardMePayload = {
+        source: a.source, receiverCall: a.receiverCall, band: a.band,
+        freqKhz: a.freqKhz, mode: a.mode, snr: a.snr, ageMinutes: a.ageMinutes,
+      };
+      // dxCall '' / frequency 0 keep the arc out of the DX click-to-log path
+      // (onArcClick guards on a truthy dxCall); heardMe drives its own handlers.
+      arcData.push({
+        startLat: a.startLat, startLng: a.startLon, endLat: a.endLat, endLng: a.endLon,
+        color, dxCall: '', frequency: 0, mode: a.mode, label: a.receiverCall, heardMe: payload,
+      });
+      markerData.push({
+        lat: a.endLat, lng: a.endLon, label: a.receiverCall, color, size: 0.02,
+        type: 'heardme', heardMe: payload,
+      });
+    }
+
     globeRef.current.pointsData(markerData);
     globeRef.current.arcsData(arcData);
     setGlobeLabels(labelData);
-  }, [focusedCallsignInfo, stationLat, stationLon, stationGrid, potaSpots, settings.map.showPotaOverlay, spots, dxClusterMapEnabled, globeReady, gridTick, rigFreqHz, rigMode, hideOverlays]);
+  }, [focusedCallsignInfo, stationLat, stationLon, stationGrid, potaSpots, settings.map.showPotaOverlay, spots, dxClusterMapEnabled, globeReady, gridTick, rigFreqHz, rigMode, hideOverlays, settings.map.showGlobeHeardMePsk, settings.map.showGlobeHeardMeRbn, heardMePsk, heardMeRbn, heardMeActiveBand]);
 
   // Fill in missing spot locations via QRZ. For any spot whose DX or spotter
   // callsign has no grid from the cluster, look it up on QRZ (once, cached) so
@@ -1405,11 +1502,12 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
     return () => cancelAnimationFrame(raf);
   }, [globeReady]);
 
-  // Keep the auto-rotation in sync with the pause/play toggle.
+  // Keep the auto-rotation in sync with the pause/play toggle (or the
+  // `rotating` prop when this globe is embedded in the 2D Map).
   useEffect(() => {
     if (!globeReady || !globeRef.current) return;
-    globeRef.current.controls().autoRotate = isRotating;
-  }, [isRotating, globeReady]);
+    globeRef.current.controls().autoRotate = effectiveRotating;
+  }, [effectiveRotating, globeReady]);
 
   // Lightning strikes → globe.gl ringsData. Backfill via REST, then live via SignalR.
   useEffect(() => {
@@ -1760,7 +1858,7 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
         {/* Lightning strikes overlay toggle (Top Right, left of rotation button) */}
         {!hideOverlays && (
           <button
-            onClick={() => updateMapSettings({ showLightning: !settings.map.showLightning })}
+            onClick={() => { updateMapSettings({ showLightning: !settings.map.showLightning }); saveSettings(); }}
             className={`glass-button absolute top-4 right-16 p-2 z-10 ${settings.map.showLightning ? 'text-cyan-300' : ''}`}
             title={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
             aria-label={settings.map.showLightning ? 'Hide lightning strikes' : 'Show lightning strikes'}
@@ -1779,6 +1877,33 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
           >
             <SunMoon className="w-4 h-4" />
           </button>
+        )}
+
+        {/* Heard-Me band indicator/picker (Top Right, left of day/night toggle).
+            Follows the connected rig's band when available; otherwise offers a
+            manual picker so the PSK/RBN "who heard me" layers have a band to use. */}
+        {!hideOverlays && (settings.map.showGlobeHeardMePsk || settings.map.showGlobeHeardMeRbn) && (
+          rigState?.band ? (
+            <div
+              className="glass-button absolute top-4 right-40 px-2 py-2 z-10 text-xs font-mono text-accent-primary"
+              title={`Heard-Me layer follows rig band: ${rigState.band}`}
+              aria-label={`Heard-Me layer band: ${rigState.band}`}
+            >
+              {rigState.band}
+            </div>
+          ) : (
+            <select
+              value={settings.map.heardMeBand}
+              onChange={(e) => { updateMapSettings({ heardMeBand: e.target.value }); saveSettings(); }}
+              className="glass-button absolute top-4 right-40 px-1 py-2 z-10 text-xs font-mono bg-transparent"
+              title="Heard-Me layer band (no rig connected)"
+              aria-label="Heard-Me layer band"
+            >
+              {['all', ...Object.keys(GLOBE_BAND_RANGES)].map((b) => (
+                <option key={b} value={b}>{b === 'all' ? 'All bands' : b}</option>
+              ))}
+            </select>
+          )
         )}
 
         {/* Beam heading — under the play button (Top Right). */}
@@ -1867,6 +1992,50 @@ export function GlobeCore({ hideOverlays }: { hideOverlays?: boolean } = {}) {
               </div>
             )}
 
+          </div>
+        )}
+
+        {/* Heard-Me RX report card — opens when a PSK/RBN receiver point is
+            clicked (top center so it clears the station/DX cards top-left). */}
+        {heardMeSelected && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+            <div
+              className="glass-panel px-3 py-2 border-l-4 animate-fade-in"
+              style={{ borderLeftColor: heardMeBandColor(heardMeSelected.band) }}
+            >
+              <div className="flex items-start gap-2">
+                <RadioTower className="w-4 h-4 mt-0.5" style={{ color: heardMeBandColor(heardMeSelected.band) }} />
+                <div className="min-w-0">
+                  <p className="font-mono font-bold flex items-center gap-1.5" style={{ color: heardMeBandColor(heardMeSelected.band) }}>
+                    {heardMeSelected.receiverCall}
+                    <span
+                      className="px-1 py-[1px] rounded text-[8px] font-bold tracking-wider"
+                      style={{
+                        background: 'rgba(8, 11, 18, 0.85)',
+                        border: `1px solid ${heardMeBandColor(heardMeSelected.band)}`,
+                        color: heardMeBandColor(heardMeSelected.band),
+                      }}
+                    >
+                      {heardMeSelected.source.toUpperCase()}
+                    </span>
+                  </p>
+                  <p className="text-[10px] font-mono text-dark-300">
+                    {heardMeSelected.band} · {heardMeSelected.freqKhz.toFixed(1)} kHz · {heardMeSelected.mode}
+                  </p>
+                  <p className="text-[10px] font-mono text-accent-info">
+                    SNR {heardMeSelected.snr} dB · {heardMeSelected.ageMinutes}m ago
+                  </p>
+                </div>
+                <button
+                  onClick={() => setHeardMeSelected(null)}
+                  className="ml-1 -mt-0.5 text-dark-400 hover:text-dark-200 leading-none text-base"
+                  title="Close"
+                  aria-label="Close heard-me report"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

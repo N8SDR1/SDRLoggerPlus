@@ -59,4 +59,16 @@ public class PskReporterControllerTests
     {
         PskReporterController.ParseReports(xml).Should().BeEmpty();
     }
+
+    [Theory]
+    [InlineData(0, 5)]     // below min → 5
+    [InlineData(3, 5)]
+    [InlineData(5, 5)]
+    [InlineData(30, 30)]   // in range → unchanged
+    [InlineData(60, 60)]
+    [InlineData(120, 60)]  // above max → 60
+    public void ClampWindowMinutes_clamps_to_5_to_60(int input, int expected)
+    {
+        Assert.Equal(expected, PskReporterController.ClampWindowMinutes(input));
+    }
 }

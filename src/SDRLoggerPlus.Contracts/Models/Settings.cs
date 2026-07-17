@@ -651,6 +651,10 @@ public class MapSettings
     [BsonElement("showLightning")]
     public bool ShowLightning { get; set; }
 
+    // Slow auto-spin of the 2D Map's embedded globe circle.
+    [BsonElement("rotateGlobe")]
+    public bool RotateGlobe { get; set; }
+
     [BsonElement("showDayNightOverlay")]
     public bool ShowDayNightOverlay { get; set; }
 
@@ -689,6 +693,32 @@ public class MapSettings
 
     [BsonElement("showLongPath")]
     public bool ShowLongPath { get; set; }
+
+    [BsonElement("showGlobeHeardMePsk")]
+    public bool ShowGlobeHeardMePsk { get; set; }
+
+    [BsonElement("showGlobeHeardMeRbn")]
+    public bool ShowGlobeHeardMeRbn { get; set; }
+
+    [BsonElement("heardMeBand")]
+    public string HeardMeBand { get; set; } = "20m";
+
+    [BsonElement("heardMePskWindowMinutes")]
+    public int HeardMePskWindowMinutes { get; set; } = 60;
+
+    [BsonElement("heardMeRbnWindowMinutes")]
+    public int HeardMeRbnWindowMinutes { get; set; } = 15;
+
+    // 2D-map "who heard me" overlays. showPskOverlay/pskCallsign were previously
+    // frontend-only (silently dropped on save) — now backed here.
+    [BsonElement("showPskOverlay")]
+    public bool ShowPskOverlay { get; set; }
+
+    [BsonElement("pskCallsign")]
+    public string? PskCallsign { get; set; } = string.Empty;
+
+    [BsonElement("show2dHeardMeRbn")]
+    public bool Show2dHeardMeRbn { get; set; }
 }
 
 [BsonIgnoreExtraElements]
@@ -822,6 +852,13 @@ public class ClusterSettings
     // linger just because no new spot arrived to trigger a render.
     [BsonElement("spotAgeMinutes")]
     public int SpotAgeMinutes { get; set; } = 10;
+
+    // "Follow rig" — the spot list tracks the connected rig's band/mode
+    // instead of the manual Band/Mode dropdowns. The frontend always sent
+    // this; without a matching property here it was silently dropped on
+    // every save, so the toggle reset on every settings load.
+    [BsonElement("trackRig")]
+    public bool TrackRig { get; set; }
 }
 
 [BsonIgnoreExtraElements]
