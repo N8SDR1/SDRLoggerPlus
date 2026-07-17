@@ -482,9 +482,6 @@ public class AppearanceSettings
     [BsonElement("theme")]
     public string? Theme { get; set; } = "dark";  // light | dark | preset id | custom
 
-    [BsonElement("compactMode")]
-    public bool CompactMode { get; set; }
-
     // Hex colors for theme == "custom": accent, background, panel, text
     [BsonElement("customColors")]
     public Dictionary<string, string>? CustomColors { get; set; }

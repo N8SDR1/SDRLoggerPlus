@@ -146,7 +146,6 @@ export interface DxCoachSettings {
 
 export interface AppearanceSettings {
   theme: ThemeId;
-  compactMode: boolean;
   /** Used when theme === 'custom'; seeded from the previously active theme. */
   customColors: CustomColors;
   /**
@@ -653,7 +652,6 @@ const defaultSettings: Settings = {
   },
   appearance: {
     theme: 'dark',
-    compactMode: false,
     customColors: getSeedColors('dark'),
     unitSystem: 'metric',
     distanceUnit: 'km',
