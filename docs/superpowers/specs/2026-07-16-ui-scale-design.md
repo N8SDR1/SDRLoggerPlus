@@ -36,7 +36,7 @@ no new persistence or IPC.
   - Each computes the new level, clamps, calls
     `mainWindow.webContents.setZoomLevel(level)` and `saveZoomLevel(level)`.
 - **Step:** ±0.5 zoom-level per action (≈ ±9.5%).
-- **Clamp:** level −2.0 … +1.5 (≈ 69% … 131%). All entry points clamp
+- **Clamp:** level −2.0 … 0 (≈ 69% … 100% — scaling **down only**; the operator asked for no upscaling). All entry points clamp
   (menu, wheel, IPC `set-zoom-level`, restore-on-launch).
 - **Ctrl+wheel:** the existing `zoom-changed` listener currently only saves;
   change it to *apply* ±0.5 per event (`zoomDirection === 'in' ? +0.5 : −0.5`),
@@ -52,7 +52,7 @@ no new persistence or IPC.
 
 - New "UI Scale" row in the existing Appearance section:
   - Current percentage readout (e.g. **85%**)
-  - **−** / **+** buttons stepping 5 percentage points, clamped 70–130%
+  - **−** / **+** buttons stepping 5 percentage points, clamped 70–100%
   - **Reset** button → 100%
   - Hint text: "Ctrl + = / − / 0 or Ctrl + mouse wheel also work anywhere."
 - Reads initial value via `window.electron.getZoomLevel()`; writes via
@@ -68,7 +68,7 @@ Electron zoom level is log-scale: `factor = 1.2^level`.
 
 - `percentToZoomLevel(pct: number): number` → `Math.log(pct / 100) / Math.log(1.2)`
 - `zoomLevelToPercent(level: number): number` → `Math.round(Math.pow(1.2, level) * 100)`
-- Clamp constants exported: `MIN_PERCENT = 70`, `MAX_PERCENT = 130`,
+- Clamp constants exported: `MIN_PERCENT = 70`, `MAX_PERCENT = 100`,
   `STEP_PERCENT = 5`.
 - Pure functions — unit-tested.
 
@@ -81,7 +81,7 @@ import/export to another machine. No Contracts change, no migration.
 
 ## Error handling
 
-- All zoom paths clamp to [−2.0, +1.5]; a corrupt stored value is clamped on
+- All zoom paths clamp to [−2.0, 0]; a corrupt stored value is clamped on
   restore.
 - Settings control guards on `window.electron` — absent (browser) it renders
   nothing; IPC failures fall back to leaving the readout unchanged.
