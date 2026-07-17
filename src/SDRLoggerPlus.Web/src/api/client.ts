@@ -1154,6 +1154,9 @@ export interface ContestDefinition {
   multiplierRules: { source: string; perBand: boolean; perMode?: boolean }[];
   dupeRule: 'PerBand' | 'PerBandMode' | 'PerContest';
   serial: 'None' | 'PerBand' | 'AllBand';
+  // Present for role-split contests (QSO parties, ARRL DX). Drives the setup
+  // My-state/My-county inputs; kind 'None' or absent ⇒ no role split.
+  homeArea?: { kind: 'None' | 'StateCounty' | 'WVE'; states: string[] };
   scoringStrategyId?: string;
 }
 
@@ -1164,6 +1167,7 @@ export interface ContestMyExchange {
   cqZone?: number;
   ituZone?: number;
   state?: string;
+  county?: string;
   section?: string;
   grid?: string;
   category?: string;

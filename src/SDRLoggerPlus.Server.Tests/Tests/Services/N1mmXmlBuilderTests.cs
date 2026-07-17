@@ -51,7 +51,7 @@ public class N1mmXmlBuilderTests
     [Fact]
     public void DynamicResults_CarriesScore()
     {
-        var state = new ContestStateDto("s", "cq-ww-cw", "CQ WW DX CW", "L", false, 0,
+        var state = new ContestStateDto("s", "cq-ww-cw", "CQ WW DX CW", "L", ContestRole.All, false, 0,
             Qsos: 4, Dupes: 1, Points: 12, Multipliers: 7, Score: 84,
             RateLastHour: 40, RateLast10: 0, MultsBySource: new());
 

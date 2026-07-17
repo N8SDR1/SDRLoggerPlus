@@ -12,8 +12,11 @@ import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { ContestEditor } from '../components/ContestEditor';
 
-const BANDS = ['160m', '80m', '40m', '20m', '15m', '10m', '6m', '2m'];
-const MODES = ['CW', 'SSB', 'FT8', 'FT4', 'RTTY'];
+// Only used before the active definition has loaded; the live dropdowns come from
+// the contest definition's own bands/modes so we never offer a band or mode the
+// contest forbids (e.g. FT8 in a QSO party, or WARC bands anywhere).
+const FALLBACK_BANDS = ['160m', '80m', '40m', '20m', '15m', '10m', '6m', '2m'];
+const FALLBACK_MODES = ['CW', 'SSB', 'FT8', 'FT4', 'RTTY'];
 
 // Server enums serialize PascalCase ("Rst") — compare case-insensitively.
 const isType = (fieldType: string, t: string) => fieldType.toLowerCase() === t;
@@ -220,13 +223,24 @@ function SetupView() {
             placeholder={`${selected.name} ${new Date().getUTCFullYear()}`}
             className="glass-input w-full text-sm px-2 py-1.5"
           />
+          {/* Role-split (QSO party) contests: the operator declares where they're
+              operating from. State decides in-state vs out-of-state; county is the
+              in-area sent exchange. */}
+          {selected.homeArea?.kind === 'StateCounty' && (
+            <div className="grid grid-cols-2 gap-2">
+              <input type="text" placeholder="My state" className="glass-input text-sm px-2 py-1.5"
+                onChange={(e) => setMyEx((p) => ({ ...p, state: e.target.value.toUpperCase() || undefined }))} />
+              <input type="text" placeholder="My county" className="glass-input text-sm px-2 py-1.5"
+                onChange={(e) => setMyEx((p) => ({ ...p, county: e.target.value.toUpperCase() || undefined }))} />
+            </div>
+          )}
           {/* My-exchange fields relevant to the sent exchange */}
           <div className="grid grid-cols-2 gap-2">
             {selected.sentExchange.some((f) => f.type === 'zone') && (
               <input type="text" placeholder="My CQ zone" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, cqZone: parseInt(e.target.value) || undefined }))} />
             )}
-            {selected.sentExchange.some((f) => f.type === 'state') && (
+            {selected.sentExchange.some((f) => f.type === 'state') && selected.homeArea?.kind !== 'StateCounty' && (
               <input type="text" placeholder="My state" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, state: e.target.value.toUpperCase() || undefined }))} />
             )}
@@ -278,6 +292,18 @@ function EntryView() {
     (d) => d.id === contestState.definitionId
   );
 
+  // The bands/modes the operator may pick come from the contest itself — never a
+  // hardcoded list — so a contest that forbids FT8 or WARC bands simply won't
+  // offer them. Fall back to a generic set only until the definition loads.
+  const bands = useMemo(
+    () => (definition?.bands?.length ? definition.bands : FALLBACK_BANDS),
+    [definition]
+  );
+  const modes = useMemo(
+    () => (definition?.modes?.length ? definition.modes : FALLBACK_MODES),
+    [definition]
+  );
+
   // Super Check Partial: load the call set once, match locally as we type.
   const { data: scpCalls } = useQuery({
     queryKey: ['contest-scp'],
@@ -295,13 +321,25 @@ function EntryView() {
   const callRef = useRef<HTMLInputElement>(null);
   const followRig = useRef(true);
 
-  // Follow the rig band/mode while the operator hasn't overridden manually.
+  // Follow the rig band/mode while the operator hasn't overridden manually, but
+  // only when the rig's band/mode is actually valid for this contest (the rig may
+  // sit on a WARC band while tuning around during a non-WARC contest).
   useEffect(() => {
     if (!followRig.current || !rigStatus) return;
     const b = bandFromHz(rigStatus.frequency);
-    if (b) setBand(b);
-    setMode(contestModeFromRig(rigStatus.mode));
-  }, [rigStatus]);
+    if (b && bands.includes(b)) setBand(b);
+    const m = contestModeFromRig(rigStatus.mode);
+    if (modes.includes(m)) setMode(m);
+  }, [rigStatus, bands, modes]);
+
+  // Keep the selection inside the contest's allowed set — resets a stale band/mode
+  // carried over from a prior contest to the first the current contest allows.
+  useEffect(() => {
+    if (!bands.includes(band)) setBand(bands[0]);
+  }, [bands, band]);
+  useEffect(() => {
+    if (!modes.includes(mode)) setMode(modes[0]);
+  }, [modes, mode]);
 
   // A click on the contest bandmap fills the call here.
   const contestSpotCall = useAppStore((s) => s.contestSpotCall);
@@ -427,7 +465,10 @@ function EntryView() {
       <div className="flex items-center justify-between px-4 py-2 border-b border-glass-100">
         <div className="min-w-0">
           <div className="text-sm font-medium text-gray-200 truncate">{contestState.label}</div>
-          <div className="text-xs text-gray-500">{contestState.definitionName}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-gray-500 truncate">{contestState.definitionName}</span>
+            <RoleBadge role={contestState.role} />
+          </div>
         </div>
         <div className="flex items-center gap-1.5">
           <button
@@ -452,11 +493,11 @@ function EntryView() {
         <div className="flex gap-2">
           <select value={band} onChange={(e) => { followRig.current = false; setBand(e.target.value); }}
             className="glass-input text-sm px-2 py-1.5 w-20">
-            {BANDS.map((b) => <option key={b} value={b}>{b}</option>)}
+            {bands.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
           <select value={mode} onChange={(e) => { followRig.current = false; setMode(e.target.value); }}
             className="glass-input text-sm px-2 py-1.5 w-20">
-            {MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+            {modes.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
           {contestState.serialInUse && (
             <div className="flex items-center px-2 text-xs text-gray-400 whitespace-nowrap">
@@ -591,6 +632,23 @@ function InteropConfig() {
         </div>
       )}
     </div>
+  );
+}
+
+// Shows how the engine classified the operator for role-split contests (QSO
+// parties, ARRL DX). Hidden for 'All' (global contests with no location split).
+function RoleBadge({ role }: { role: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    InArea: { label: 'In-State', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' },
+    OutArea: { label: 'Out-of-State', cls: 'bg-sky-500/15 text-sky-300 border-sky-500/40' },
+    Dx: { label: 'DX', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/40' },
+  };
+  const m = map[role];
+  if (!m) return null;
+  return (
+    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide border ${m.cls}`}>
+      {m.label}
+    </span>
   );
 }
 

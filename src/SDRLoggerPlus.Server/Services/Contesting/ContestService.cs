@@ -317,6 +317,7 @@ public class ContestService
             DefinitionId: def.Id,
             DefinitionName: def.Name,
             Label: session.Label,
+            Role: session.Role,
             SerialInUse: def.Serial != SerialMode.None,
             NextSerial: ContestSerials.Peek(session, def.Serial, session.BandFilter ?? ""),
             Qsos: summary.Qsos,

@@ -708,6 +708,7 @@ export interface ContestStateEvent {
   definitionId: string;
   definitionName: string;
   label: string;
+  role: 'All' | 'InArea' | 'OutArea' | 'Dx';
   serialInUse: boolean;
   nextSerial: number;
   qsos: number;

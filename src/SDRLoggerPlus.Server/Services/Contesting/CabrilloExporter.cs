@@ -21,6 +21,13 @@ public static class CabrilloExporter
         var me = session.MyExchange;
         var summary = ContestScoringEngine.Recompute(def, me, qsos.ToList());
 
+        // Resolve the exchange fields for the operator's role: an in-state QSO-party
+        // op sends its county, an out-of-state op sends its state, etc. Falls back to
+        // the top-level fields for contests without a role split.
+        var role = def.Roles?.GetValueOrDefault(session.Role);
+        var sentFields = role?.SentExchange ?? def.SentExchange;
+        var rcvdFields = role?.RcvdExchange ?? def.RcvdExchange;
+
         var sb = new StringBuilder();
         sb.AppendLine("START-OF-LOG: 3.0");
         sb.AppendLine($"CONTEST: {def.CabrilloName}");
@@ -36,21 +43,23 @@ public static class CabrilloExporter
         sb.AppendLine("CREATED-BY: SDRLoggerPlus");
 
         foreach (var qso in qsos)
-            sb.AppendLine(QsoLine(def, me, qso, stationCallsign));
+            sb.AppendLine(QsoLine(sentFields, rcvdFields, me, qso, stationCallsign));
 
         sb.AppendLine("END-OF-LOG:");
         return sb.ToString();
     }
 
-    private static string QsoLine(ContestDefinition def, MyExchange me, Qso qso, string stationCallsign)
+    private static string QsoLine(
+        IReadOnlyList<ContestField> sentFields, IReadOnlyList<ContestField> rcvdFields,
+        MyExchange me, Qso qso, string stationCallsign)
     {
         var freq = FreqKhz(qso);
         var mode = CabrilloMode(qso.Mode);
         var date = qso.QsoDate.ToUniversalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var time = Hhmm(qso.TimeOn);
 
-        var sent = def.SentExchange.Select(f => SentValue(f, me, qso));
-        var rcvd = def.RcvdExchange.Select(f => RcvdValue(f, qso));
+        var sent = sentFields.Select(f => SentValue(f, me, qso));
+        var rcvd = rcvdFields.Select(f => RcvdValue(f, qso));
 
         var tokens = new List<string>
         {
@@ -64,18 +73,25 @@ public static class CabrilloExporter
         return string.Join(" ", tokens).TrimEnd();
     }
 
-    private static string SentValue(ContestField f, MyExchange me, Qso qso) => f.Type switch
+    private static string SentValue(ContestField f, MyExchange me, Qso qso)
     {
-        ContestFieldType.Rst => qso.RstSent ?? (IsCw(qso.Mode) ? "599" : "59"),
-        ContestFieldType.Serial => qso.Contest?.SerialSent ?? "",
-        ContestFieldType.Zone => me.CqZone?.ToString() ?? "",
-        ContestFieldType.State => me.State ?? "",
-        ContestFieldType.Section => me.Section ?? "",
-        ContestFieldType.Name => me.Name ?? "",
-        ContestFieldType.Grid => me.Grid ?? "",
-        ContestFieldType.Power => me.Power ?? "",
-        _ => "",
-    };
+        // County is a plain Text field (no dedicated field type); emit it by key so
+        // an in-area QSO-party operator sends its county rather than a blank token.
+        if (f.Type == ContestFieldType.Text && f.Key.Equals("county", StringComparison.OrdinalIgnoreCase))
+            return me.County ?? "";
+        return f.Type switch
+        {
+            ContestFieldType.Rst => qso.RstSent ?? (IsCw(qso.Mode) ? "599" : "59"),
+            ContestFieldType.Serial => qso.Contest?.SerialSent ?? "",
+            ContestFieldType.Zone => me.CqZone?.ToString() ?? "",
+            ContestFieldType.State => me.State ?? "",
+            ContestFieldType.Section => me.Section ?? "",
+            ContestFieldType.Name => me.Name ?? "",
+            ContestFieldType.Grid => me.Grid ?? "",
+            ContestFieldType.Power => me.Power ?? "",
+            _ => "",
+        };
+    }
 
     private static string RcvdValue(ContestField f, Qso qso)
     {

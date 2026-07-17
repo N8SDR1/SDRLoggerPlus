@@ -56,6 +56,7 @@ public record ContestStateDto(
     string DefinitionId,
     string DefinitionName,
     string Label,
+    ContestRole Role,
     bool SerialInUse,
     int NextSerial,
     int Qsos,
