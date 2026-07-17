@@ -415,6 +415,52 @@ export function App() {
     setPanelFilter('');
   }, [model, targetTabSetId]);
 
+  // Open (or focus) a panel by plugin id from anywhere in the app — e.g. the
+  // status-bar rig selector's right-click / "Manage radios" shortcut. If the
+  // panel is already docked we just select its tab; otherwise we add it to the
+  // active tabset (falling back to the first tabset in the layout).
+  const openPanelById = useCallback((pluginId: string) => {
+    const plugin = PLUGINS[pluginId];
+    if (!plugin) return;
+
+    let existingTabId: string | null = null;
+    let firstTabSetId: string | null = null;
+    model.visitNodes((node) => {
+      if (node instanceof TabSetNode && !firstTabSetId) firstTabSetId = node.getId();
+      if (node.getType() === 'tab' && (node as TabNode).getComponent() === pluginId) {
+        existingTabId = node.getId();
+      }
+    });
+
+    if (existingTabId) {
+      model.doAction(Actions.selectTab(existingTabId));
+      return;
+    }
+
+    const tabSetId = model.getActiveTabset()?.getId() ?? firstTabSetId;
+    if (!tabSetId) return;
+    model.doAction(
+      Actions.addNode(
+        { type: 'tab', name: plugin.name, component: pluginId },
+        tabSetId,
+        DockLocation.CENTER,
+        -1,
+        true,
+      ),
+    );
+  }, [model]);
+
+  // Let decoupled components (status bar, etc.) open a panel via a window event,
+  // mirroring the About dialog's `open-help-guide` pattern.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (typeof id === 'string' && id) openPanelById(id);
+    };
+    window.addEventListener('open-panel', handler);
+    return () => window.removeEventListener('open-panel', handler);
+  }, [openPanelById]);
+
   // Custom tab rendering
   const onRenderTab = useCallback((node: TabNode, renderValues: { leading: React.ReactNode; content: React.ReactNode }) => {
     const component = node.getComponent();
