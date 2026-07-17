@@ -435,7 +435,7 @@ public static class SeedContests
             new("West Virginia", new[]{"WV"}, b80_10, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
             new("Wisconsin", new[]{"WI"}, b160_2, cwSsbDig, QpEx.Rst, Pm(1, 2, 2), Power: Pow(2, 1.5, 1)),
             // Regionals (multi-state in-area side).
-            new("7th Call Area QSO Party (7QP)", new[]{"WA", "OR", "ID", "MT", "WY", "NV", "UT"},
+            new("7th Call Area QSO Party (7QP)", new[]{"AZ", "WA", "OR", "ID", "MT", "WY", "NV", "UT"},
                 b160_10, cwSsbDig, QpEx.Rst, Pm(2, 3, 4), MultScope.Once, "7QP", "qp-7qp"),
             new("New England QSO Party (NEQP)", new[]{"CT", "ME", "MA", "NH", "RI", "VT"},
                 b80_10, cwSsbDig, QpEx.Rst, Pm(1, 2, 2), MultScope.Once, "NEQP", "qp-neqp"),

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { isValidStateProv, isKnownCounty, matchCounties, countiesFor } from './locations';
+import {
+  isValidStateProv, isKnownCounty, matchCounties, countiesForContest, hasOfficialCounties,
+} from './locations';
 
 describe('contest location validators', () => {
   it('accepts US states, DC, Canadian provinces, and DX', () => {
@@ -15,26 +17,26 @@ describe('contest location validators', () => {
     expect(isValidStateProv('XY')).toBe(false);
   });
 
-  it('knows Wisconsin has Brown county coded BRO', () => {
-    expect(isKnownCounty('BRO', ['WI'])).toBe(true);
-    const wi = countiesFor(['WI']);
-    expect(wi.find((c) => c.name === 'Brown')?.code).toBe('BRO');
+  it('uses the official Wisconsin table (Brown = BRO, St Croix = STC)', () => {
+    expect(hasOfficialCounties('qp-wisconsin')).toBe(true);
+    const wi = countiesForContest('qp-wisconsin');
     expect(wi).toHaveLength(72);
-  });
-
-  it('flags an unknown county code', () => {
-    expect(isKnownCounty('ZZZ', ['WI'])).toBe(false);
+    expect(wi.find((c) => c.name === 'Brown')?.code).toBe('BRO');
+    expect(wi.find((c) => c.name === 'St Croix')?.code).toBe('STC');
+    expect(isKnownCounty('BRO', 'qp-wisconsin')).toBe(true);
+    expect(isKnownCounty('ZZZ', 'qp-wisconsin')).toBe(false);
   });
 
   it('autocompletes counties by code prefix and name', () => {
-    const byCode = matchCounties('BR', ['WI']);
+    const byCode = matchCounties('BR', 'qp-wisconsin');
     expect(byCode.some((c) => c.code === 'BRO' && c.name === 'Brown')).toBe(true);
-    const byName = matchCounties('Milwauk', ['WI']);
+    const byName = matchCounties('Milwauk', 'qp-wisconsin');
     expect(byName.some((c) => c.name === 'Milwaukee')).toBe(true);
   });
 
-  it('merges counties across multi-state home areas (regionals)', () => {
-    const ne = countiesFor(['CT', 'ME', 'MA', 'NH', 'RI', 'VT']);
-    expect(ne.length).toBeGreaterThan(60);
+  it('returns no counties for an unknown / non-QSO-party contest', () => {
+    expect(countiesForContest('cq-ww-cw')).toHaveLength(0);
+    expect(countiesForContest(undefined)).toHaveLength(0);
+    expect(hasOfficialCounties('cq-ww-cw')).toBe(false);
   });
 });

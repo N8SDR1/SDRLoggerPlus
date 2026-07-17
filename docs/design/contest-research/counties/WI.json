@@ -1,0 +1,32 @@
+{
+  "state": "WI",
+  "party": "Wisconsin QSO Party",
+  "source": "https://www.warac.org/wqp/wiqp_mults.htm",
+  "confidence": "verified",
+  "counties": [
+    {"name": "Adams", "code": "ADA"}, {"name": "Ashland", "code": "ASH"}, {"name": "Barron", "code": "BAR"},
+    {"name": "Bayfield", "code": "BAY"}, {"name": "Brown", "code": "BRO"}, {"name": "Buffalo", "code": "BUF"},
+    {"name": "Burnett", "code": "BUR"}, {"name": "Calumet", "code": "CAL"}, {"name": "Chippewa", "code": "CHI"},
+    {"name": "Clark", "code": "CLA"}, {"name": "Columbia", "code": "COL"}, {"name": "Crawford", "code": "CRA"},
+    {"name": "Dane", "code": "DAN"}, {"name": "Dodge", "code": "DOD"}, {"name": "Door", "code": "DOO"},
+    {"name": "Douglas", "code": "DOU"}, {"name": "Dunn", "code": "DUN"}, {"name": "Eau Claire", "code": "EAU"},
+    {"name": "Florence", "code": "FLO"}, {"name": "Fond du Lac", "code": "FON"}, {"name": "Forest", "code": "FOR"},
+    {"name": "Grant", "code": "GRA"}, {"name": "Green", "code": "GRE"}, {"name": "Green Lake", "code": "GRL"},
+    {"name": "Iowa", "code": "IOW"}, {"name": "Iron", "code": "IRO"}, {"name": "Jackson", "code": "JAC"},
+    {"name": "Jefferson", "code": "JEF"}, {"name": "Juneau", "code": "JUN"}, {"name": "Kenosha", "code": "KEN"},
+    {"name": "Kewaunee", "code": "KEW"}, {"name": "La Crosse", "code": "LAC"}, {"name": "Lafayette", "code": "LAF"},
+    {"name": "Langlade", "code": "LAN"}, {"name": "Lincoln", "code": "LIN"}, {"name": "Manitowoc", "code": "MAN"},
+    {"name": "Marathon", "code": "MAR"}, {"name": "Marinette", "code": "MRN"}, {"name": "Marquette", "code": "MRQ"},
+    {"name": "Menominee", "code": "MEN"}, {"name": "Milwaukee", "code": "MIL"}, {"name": "Monroe", "code": "MON"},
+    {"name": "Oconto", "code": "OCO"}, {"name": "Oneida", "code": "ONE"}, {"name": "Outagamie", "code": "OUT"},
+    {"name": "Ozaukee", "code": "OZA"}, {"name": "Pepin", "code": "PEP"}, {"name": "Pierce", "code": "PIE"},
+    {"name": "Polk", "code": "POL"}, {"name": "Portage", "code": "POR"}, {"name": "Price", "code": "PRI"},
+    {"name": "Racine", "code": "RAC"}, {"name": "Richland", "code": "RIC"}, {"name": "Rock", "code": "ROC"},
+    {"name": "Rusk", "code": "RUS"}, {"name": "Sauk", "code": "SAU"}, {"name": "Sawyer", "code": "SAW"},
+    {"name": "Shawano", "code": "SHA"}, {"name": "Sheboygan", "code": "SHE"}, {"name": "St Croix", "code": "STC"},
+    {"name": "Taylor", "code": "TAY"}, {"name": "Trempealeau", "code": "TRE"}, {"name": "Vernon", "code": "VER"},
+    {"name": "Vilas", "code": "VIL"}, {"name": "Walworth", "code": "WAL"}, {"name": "Washburn", "code": "WSB"},
+    {"name": "Washington", "code": "WAS"}, {"name": "Waukesha", "code": "WAU"}, {"name": "Waupaca", "code": "WAP"},
+    {"name": "Waushara", "code": "WSR"}, {"name": "Winnebago", "code": "WIN"}, {"name": "Wood", "code": "WOO"}
+  ]
+}

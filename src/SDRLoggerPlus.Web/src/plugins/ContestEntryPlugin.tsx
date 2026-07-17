@@ -12,7 +12,10 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { ContestEditor } from '../components/ContestEditor';
-import { isValidStateProv, isKnownCounty, matchCounties, type County } from '../contest/locations';
+import {
+  isValidStateProv, isKnownCounty, matchCounties, hasOfficialCounties,
+  countiesForContest, type County,
+} from '../contest/locations';
 
 // Only used before the active definition has loaded; the live dropdowns come from
 // the contest definition's own bands/modes so we never offer a band or mode the
@@ -327,8 +330,6 @@ function EntryView() {
     () => (definition?.modes?.length ? definition.modes : FALLBACK_MODES).map((m) => m.toUpperCase()),
     [definition]
   );
-  // Home state(s) of a role-split QSO party, for county autocomplete/validation.
-  const homeStates = useMemo(() => definition?.homeArea?.states ?? [], [definition]);
 
   // Super Check Partial: load the call set once, match locally as we type.
   const { data: scpCalls } = useQuery({
@@ -448,13 +449,19 @@ function EntryView() {
   const logQso = useCallback(async () => {
     if (!call.trim() || logging) return;
 
-    // Strict state/province check: a 2-char location must be a real S/P (or DX).
-    // A 3+ char county is only assisted (warned in the field), never blocked.
+    // Location check: a 2-char value must be a real state/province (or DX). A 3+
+    // char county is blocked only when the contest has an official county table
+    // (an unknown code is then genuinely wrong); with the generic fallback it's
+    // assisted, not blocked.
     const locField = definition?.rcvdExchange.find((f) => isType(f.type, 'state'));
-    if (locField) {
+    if (locField && !editingId) {
       const v = (exchange[locField.key] ?? '').trim().toUpperCase();
       if (v.length > 0 && v.length <= 2 && !isValidStateProv(v)) {
         setLastLog(`"${v}" isn't a valid state/province — fix before logging`);
+        return;
+      }
+      if (v.length >= 3 && hasOfficialCounties(definition?.id) && !isKnownCounty(v, definition?.id)) {
+        setLastLog(`"${v}" isn't a valid county code for this contest — fix before logging`);
         return;
       }
     }
@@ -616,7 +623,7 @@ function EntryView() {
                 key={f.key}
                 label={f.label}
                 width={f.width}
-                homeStates={homeStates}
+                defId={definition?.id}
                 value={exchange[f.key] ?? ''}
                 onChange={(v) => setExchange((p) => ({ ...p, [f.key]: v }))}
               />
@@ -746,22 +753,22 @@ function InteropConfig() {
 // bad input) or a home-state county code (autocompleted, amber when unknown but
 // still loggable). For non-QSO-party contests homeStates is empty → plain S/P box.
 function LocationField({
-  value, onChange, label, width, homeStates,
+  value, onChange, label, width, defId,
 }: {
   value: string;
   onChange: (v: string) => void;
   label: string;
   width: number;
-  homeStates: string[];
+  defId: string | undefined;
 }) {
   const [focused, setFocused] = useState(false);
   const v = value.trim().toUpperCase();
-  const matches = useMemo(
-    () => (homeStates.length ? matchCounties(v, homeStates) : []),
-    [v, homeStates]
-  );
+  const matches = useMemo(() => matchCounties(v, defId), [v, defId]);
+  const hasCounties = countiesForContest(defId).length > 0;
+  const official = hasOfficialCounties(defId);
   const badStateProv = v.length > 0 && v.length <= 2 && !isValidStateProv(v);
-  const unknownCounty = v.length >= 3 && homeStates.length > 0 && !isKnownCounty(v, homeStates);
+  // Unknown 3+ char code: an error for an official table, just a warning otherwise.
+  const unknownCounty = v.length >= 3 && hasCounties && !isKnownCounty(v, defId);
   const showMenu = focused && matches.length > 0 && v.length >= 1;
 
   const pick = (c: County) => { onChange(c.code); setFocused(false); };
@@ -778,11 +785,11 @@ function LocationField({
         spellCheck={false}
         title={
           badStateProv ? 'Not a valid state/province'
-            : unknownCounty ? 'Unknown county code for this contest — check it'
+            : unknownCounty ? (official ? 'Not a valid county code for this contest' : 'Unknown county code — check it')
             : undefined
         }
         className={`glass-input w-full font-mono text-lg px-2 py-2 uppercase ${
-          badStateProv ? 'border-red-500/70 text-red-400'
+          badStateProv || (unknownCounty && official) ? 'border-red-500/70 text-red-400'
             : unknownCounty ? 'border-amber-500/70 text-amber-300'
             : ''
         }`}

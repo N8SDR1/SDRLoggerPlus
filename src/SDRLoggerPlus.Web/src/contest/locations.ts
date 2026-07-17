@@ -1,20 +1,28 @@
 // Location reference data + validators for contest exchange fields.
 //
 // Received S/P/C fields accept one of: a US state / DC, a Canadian province, "DX",
-// or (for QSO parties) a county code of the contest's home state. States and
-// provinces are validated strictly against the authoritative 2-letter lists;
-// county codes come from countyData.json (generic 3-letter codes, e.g. Brown→BRO)
-// and are used for autocomplete + a soft "unknown code" warning, never to block.
+// or (for QSO parties) a county code of the contest's home area. States/provinces
+// are validated strictly against the authoritative 2-letter lists. County codes
+// come from countyData.json — the OFFICIAL per-party abbreviation tables gathered
+// from each sponsor's rules (built by scripts/build-county-data.mjs, keyed by
+// contest definition id), with a generic first-3-letter fallback for any party
+// whose official list wasn't reachable. When a party's table is official, unknown
+// county codes are treated as invalid; for a generic-fallback party they only warn.
 
 import countyDataRaw from './countyData.json';
 
 export interface County {
-  fips: string;
   name: string;
   code: string;
 }
 
-const countyData = countyDataRaw as Record<string, County[]>;
+interface PartyCounties {
+  official: boolean;
+  source: string;
+  counties: County[];
+}
+
+const countyData = countyDataRaw as Record<string, PartyCounties>;
 
 // 50 US states + DC.
 export const US_STATES = new Set([
@@ -35,30 +43,35 @@ export function isValidStateProv(value: string): boolean {
   return v === 'DX' || US_STATES.has(v) || CA_PROVINCES.has(v);
 }
 
-/** Merged county list for the given home state code(s) (QSO-party home area). */
-export function countiesFor(states: string[]): County[] {
-  const out: County[] = [];
-  for (const st of states) {
-    const list = countyData[st.toUpperCase()];
-    if (list) out.push(...list);
-  }
-  return out;
+/** The county table for a contest (by definition id), or null when it has none. */
+function partyCounties(defId: string | undefined): PartyCounties | null {
+  return (defId && countyData[defId]) || null;
 }
 
-/** Whether a code is a known county code for any of the home states. */
-export function isKnownCounty(code: string, states: string[]): boolean {
+/** County list for a contest's home area (empty for non-QSO-party contests). */
+export function countiesForContest(defId: string | undefined): County[] {
+  return partyCounties(defId)?.counties ?? [];
+}
+
+/** Whether this contest's county codes come from the official sponsor table. */
+export function hasOfficialCounties(defId: string | undefined): boolean {
+  return partyCounties(defId)?.official ?? false;
+}
+
+/** Whether a code is a known county code for the contest. */
+export function isKnownCounty(code: string, defId: string | undefined): boolean {
   const c = code.trim().toUpperCase();
-  return countiesFor(states).some((x) => x.code.toUpperCase() === c);
+  return countiesForContest(defId).some((x) => x.code.toUpperCase() === c);
 }
 
 /**
  * Autocomplete matches for a partial county entry, by code prefix or name
- * substring. Returns up to `limit` counties from the home state(s).
+ * substring, from the contest's county table.
  */
-export function matchCounties(prefix: string, states: string[], limit = 8): County[] {
+export function matchCounties(prefix: string, defId: string | undefined, limit = 8): County[] {
   const q = prefix.trim().toUpperCase();
   if (!q) return [];
-  const all = countiesFor(states);
+  const all = countiesForContest(defId);
   const byCode = all.filter((c) => c.code.toUpperCase().startsWith(q));
   const byName = all.filter(
     (c) => !c.code.toUpperCase().startsWith(q) && c.name.toUpperCase().includes(q)
