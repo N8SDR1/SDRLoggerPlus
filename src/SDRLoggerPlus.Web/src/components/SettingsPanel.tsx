@@ -2417,15 +2417,15 @@ function PotaSettingsSection() {
  * nothing in a plain browser — native browser zoom covers that case.
  */
 function UiScaleRow() {
-  const api = window.electronAPI;
-  const supported = !!api?.getZoomLevel && !!api?.setZoomLevel;
+  const electronApi = window.electronAPI;
+  const supported = !!electronApi?.getZoomLevel && !!electronApi?.setZoomLevel;
   const [percent, setPercent] = useState(100);
 
   useEffect(() => {
     if (!supported) return;
-    api!.getZoomLevel!().then((lvl) => setPercent(zoomLevelToPercent(lvl))).catch(() => {});
-    api!.onZoomLevelChanged?.((lvl) => setPercent(zoomLevelToPercent(lvl)));
-    return () => api!.removeZoomLevelChangedListener?.();
+    electronApi!.getZoomLevel!().then((lvl) => setPercent(zoomLevelToPercent(lvl))).catch(() => {});
+    electronApi!.onZoomLevelChanged?.((lvl) => setPercent(zoomLevelToPercent(lvl)));
+    return () => electronApi!.removeZoomLevelChangedListener?.();
   }, [supported]);
 
   if (!supported) return null;
@@ -2433,7 +2433,7 @@ function UiScaleRow() {
   const apply = (pct: number) => {
     const clamped = clampPercent(pct);
     setPercent(clamped);
-    void api!.setZoomLevel!(percentToZoomLevel(clamped));
+    void electronApi!.setZoomLevel!(percentToZoomLevel(clamped));
   };
 
   return (

@@ -505,7 +505,6 @@ export function LogHistoryPlugin() {
         <div className="flex items-center gap-3 text-sm text-dark-300 font-ui">
           <span>{stats?.uniqueCountries || 0} DXCC</span>
           <div className="flex items-center gap-1">
-            <span className="text-glass-100 mx-1">|</span>
             <button
               onClick={() => setShowImportModal(true)}
               className="glass-button p-1.5 flex items-center gap-1.5 text-accent-success hover:text-accent-primary"
