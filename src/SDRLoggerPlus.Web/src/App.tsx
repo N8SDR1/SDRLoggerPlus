@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Layout, Model, TabNode, TabSetNode, BorderNode, ITabSetRenderValues, Actions, DockLocation } from 'flexlayout-react';
-import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, Activity, TrendingUp, Gauge, Map, Target, Grid3x3 } from 'lucide-react';
+import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, Activity, TrendingUp, Gauge, Map, Target, Grid3x3, Settings } from 'lucide-react';
 import { StatusBar } from './components/StatusBar';
 import { WeatherAlertBanner } from './components/WeatherAlertBanner';
 import { Toasts } from './components/Toasts';
@@ -185,8 +185,8 @@ const PLUGINS: Record<string, PluginDef> = {
   },
 };
 
-// Panels whose settings live in a dedicated Settings section get a "?" on their
-// tab that jumps straight to that section. Only panels with a real section.
+// Panels whose settings live in a dedicated Settings section get a gear icon on
+// their tab that jumps straight to that section. Only panels with a real section.
 const PANEL_SETTINGS_SECTION: Partial<Record<string, SettingsSection>> = {
   'rotator': 'rotator',
   'map': 'map',
@@ -494,7 +494,7 @@ export function App() {
       );
     }
 
-    // "?" shortcut → open this panel's Settings section directly.
+    // Gear shortcut → open this panel's Settings section directly.
     const section = PANEL_SETTINGS_SECTION[component || ''];
     if (section) {
       renderValues.content = (
@@ -511,9 +511,9 @@ export function App() {
               useSettingsStore.getState().setActiveSection(section);
               useSettingsStore.getState().openSettings();
             }}
-            className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-glass-200 text-[10px] font-bold text-dark-300 hover:text-accent-primary hover:border-accent-primary/50 cursor-pointer transition-colors"
+            className="inline-flex items-center justify-center w-4 h-4 text-dark-300 hover:text-accent-primary cursor-pointer transition-colors"
           >
-            ?
+            <Settings className="w-3.5 h-3.5" />
           </span>
         </span>
       );
