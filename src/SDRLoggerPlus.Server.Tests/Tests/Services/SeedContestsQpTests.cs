@@ -1,4 +1,5 @@
 using FluentAssertions;
+using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Contracts.Models.Contesting;
 using SDRLoggerPlus.Server.Services.Contesting;
 using Xunit;
@@ -92,4 +93,52 @@ public class SeedContestsQpTests
         Def("qp-7qp").HomeArea!.States.Should().Contain(new[] { "WA", "OR", "ID", "MT", "WY", "NV", "UT" });
         Def("qp-neqp").HomeArea!.States.Should().Contain(new[] { "CT", "ME", "MA", "NH", "RI", "VT" });
     }
+
+    [Fact]
+    public void Wisconsin_HasQrpPowerMultiplier()
+    {
+        var pm = Def("qp-wisconsin").PowerMultipliers;
+        pm.Should().NotBeNull();
+        pm!["QRP"].Should().Be(2);
+        pm["LOW"].Should().Be(1.5);
+        pm["HIGH"].Should().Be(1);
+    }
+
+    [Fact]
+    public void PowerFactor_ScalesFinalScore_NotPoints()
+    {
+        var def = Def("qp-ohio"); // in-area OH op works everyone
+        var log = new[]
+        {
+            Qp("W1AW", "CT"), Qp("K5XX", "TX"),
+        };
+        var high = new MyExchange { State = "OH", County = "FRA", Power = "HIGH" };
+        var qrp = new MyExchange { State = "OH", County = "FRA", Power = "QRP" };
+        // Ohio has no power multiplier, so add one via a clone to isolate the engine.
+        var withPower = Clone(def);
+        withPower.PowerMultipliers = new() { ["QRP"] = 2, ["HIGH"] = 1 };
+
+        var baseScore = ContestScoringEngine.Recompute(withPower, high, log).Score;
+        var qrpSummary = ContestScoringEngine.Recompute(withPower, qrp, log);
+
+        qrpSummary.Score.Should().Be(baseScore * 2);
+        // Points and mult counts are unaffected by the power factor.
+        qrpSummary.Points.Should().Be(ContestScoringEngine.Recompute(withPower, high, log).Points);
+    }
+
+    private static Qso Qp(string call, string rcvdState) => new()
+    {
+        Callsign = call, Band = "20M", Mode = "CW",
+        Country = "United States", Continent = "NA",
+        Station = new StationInfo { State = rcvdState, Country = "United States" },
+        Contest = new ContestInfo { RcvdState = rcvdState },
+    };
+
+    private static ContestDefinition Clone(ContestDefinition d) => new()
+    {
+        Id = d.Id, Name = d.Name, Bands = d.Bands, Modes = d.Modes,
+        SentExchange = d.SentExchange, RcvdExchange = d.RcvdExchange,
+        QsoPoints = d.QsoPoints, MultiplierRules = d.MultiplierRules,
+        DupeRule = d.DupeRule, Serial = d.Serial, HomeArea = d.HomeArea, Roles = d.Roles,
+    };
 }

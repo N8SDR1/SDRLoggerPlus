@@ -1157,6 +1157,9 @@ export interface ContestDefinition {
   // Present for role-split contests (QSO parties, ARRL DX). Drives the setup
   // My-state/My-county inputs; kind 'None' or absent ⇒ no role split.
   homeArea?: { kind: 'None' | 'StateCounty' | 'WVE'; states: string[] };
+  // Final-score multiplier by power class (e.g. { QRP: 2, LOW: 1.5, HIGH: 1 }).
+  // Present ⇒ setup shows a power-class picker.
+  powerMultipliers?: Record<string, number>;
   scoringStrategyId?: string;
 }
 

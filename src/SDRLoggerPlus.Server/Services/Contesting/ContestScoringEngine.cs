@@ -98,6 +98,11 @@ public static class ContestScoringEngine
         // When this role has no multiplier rules, score is just points.
         if (eff.Mults.Count == 0)
             summary.Score = summary.Points;
+
+        // Power-class factor (QRP×2 etc.): scales the final score only.
+        var powerFactor = PowerFactor(def, me);
+        if (powerFactor != 1.0)
+            summary.Score = (int)Math.Round(summary.Score * powerFactor, MidpointRounding.AwayFromZero);
         summary.MultsBySource = multsBySource.ToDictionary(
             kv => kv.Key, kv => kv.Value.OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList());
         return summary;
@@ -210,6 +215,15 @@ public static class ContestScoringEngine
         if (loc.Length == 2) return StationClass.OutArea;   // a state/province code, or "DX"
         if (loc.Length >= 3) return StationClass.InArea;    // a county code (in-area station)
         return na ? StationClass.OutArea : StationClass.Dx; // no location -> classify by entity
+    }
+
+    // Final-score multiplier for the operator's power class, or 1 when the contest
+    // defines none / the class isn't listed.
+    private static double PowerFactor(ContestDefinition def, MyExchange me)
+    {
+        if (def.PowerMultipliers is null || string.IsNullOrWhiteSpace(me.Power))
+            return 1.0;
+        return def.PowerMultipliers.TryGetValue(me.Power.Trim().ToUpperInvariant(), out var f) ? f : 1.0;
     }
 
     private static bool IsUsOrCanada(string? country, string? continent)

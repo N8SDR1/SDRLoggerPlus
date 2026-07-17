@@ -239,6 +239,22 @@ function SetupView() {
                 onChange={(e) => setMyEx((p) => ({ ...p, county: e.target.value.toUpperCase() || undefined }))} />
             </div>
           )}
+          {/* Power class — drives the contest's final-score power multiplier. */}
+          {selected.powerMultipliers && (
+            <select
+              className="glass-input w-full text-sm px-2 py-1.5"
+              value={myEx.power ?? ''}
+              onChange={(e) => setMyEx((p) => ({ ...p, power: e.target.value || undefined }))}
+            >
+              <option value="">Power class…</option>
+              {Object.entries(selected.powerMultipliers).map(([cls, mult]) => (
+                <option key={cls} value={cls}>
+                  {cls === 'QRP' ? 'QRP' : cls === 'LOW' ? 'Low' : cls === 'HIGH' ? 'High' : cls}
+                  {mult !== 1 ? ` (×${mult})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
           {/* My-exchange fields relevant to the sent exchange */}
           <div className="grid grid-cols-2 gap-2">
             {selected.sentExchange.some((f) => f.type === 'zone') && (

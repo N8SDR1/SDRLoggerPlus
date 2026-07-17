@@ -377,9 +377,13 @@ public static class SeedContests
     private sealed record Qp(
         string Name, string[] Codes, List<string> Bands, string[] Modes,
         QpEx Ex, PointsRule Points, MultScope Scope = MultScope.Once,
-        string? Cab = null, string? Id = null);
+        string? Cab = null, string? Id = null, Dictionary<string, double>? Power = null);
 
     private static List<string> Bnd(params string[] b) => b.ToList();
+
+    // Final-score multiplier by power class (QRP / Low / High).
+    private static Dictionary<string, double> Pow(double qrp, double low, double high)
+        => new() { ["QRP"] = qrp, ["LOW"] = low, ["HIGH"] = high };
 
     private static IEnumerable<ContestDefinition> StateQsoParties()
     {
@@ -397,7 +401,7 @@ public static class SeedContests
             new("Alabama", new[]{"AL"}, b80_10, cwSsb, QpEx.Rst, Flat(2), MultScope.PerMode),
             new("Arkansas", new[]{"AR"}, b160_2, cwSsbDig, QpEx.Rst, Flat(1)),
             new("California", new[]{"CA"}, b160_10, cwSsb, QpEx.Serial, Pm(2, 3)),
-            new("Colorado", new[]{"CO"}, b160_2, cwSsbDig, QpEx.Name, Pm(1, 2, 2), MultScope.PerMode),
+            new("Colorado", new[]{"CO"}, b160_2, cwSsbDig, QpEx.Name, Pm(1, 2, 2), MultScope.PerMode, Power: Pow(3, 2, 1)),
             new("Delaware", new[]{"DE"}, b160_6, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
             new("Florida", new[]{"FL"}, Bnd("40M", "20M", "15M", "10M"), cwSsb, QpEx.Rst, Pm(1, 2)),
             new("Georgia", new[]{"GA"}, b160_6, cwSsb, QpEx.Rst, Pm(1, 2), MultScope.PerMode),
@@ -408,14 +412,14 @@ public static class SeedContests
             new("Kansas", new[]{"KS"}, Bnd("80M", "40M", "20M", "15M", "10M", "6M"), cwSsbDig, QpEx.Rst, Pm(2, 3, 3)),
             new("Kentucky", new[]{"KY"}, Bnd("80M", "40M", "20M", "15M", "10M", "6M", "2M"), cwSsb, QpEx.Rst, Pm(1, 2)),
             new("Louisiana", new[]{"LA"}, b160_2, cwSsbDig, QpEx.Rst, Pm(2, 4, 4), MultScope.PerBandMode),
-            new("Maryland-DC", new[]{"MD", "DC"}, b160_10, cwSsb, QpEx.Loc, Pm(1, 3), MultScope.Once, "MDC-QSO-PARTY"),
+            new("Maryland-DC", new[]{"MD", "DC"}, b160_10, cwSsb, QpEx.Loc, Pm(1, 3), MultScope.Once, "MDC-QSO-PARTY", Power: Pow(3, 2, 1)),
             new("Michigan", new[]{"MI"}, b80_10, cwSsb, QpEx.Rst, Pm(1, 2), MultScope.PerMode),
             new("Minnesota", new[]{"MN"}, b160_10, cwSsb, QpEx.Name, Pm(2, 3), MultScope.PerMode),
             new("Mississippi", new[]{"MS"}, b160_2, new[]{"CW", "SSB", "RTTY", "FT8", "FT4"}, QpEx.Rst, Pm(1, 2, 2)),
             new("Missouri", new[]{"MO"}, b160_uhf, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
-            new("Nebraska", new[]{"NE"}, b160_2, cwSsbDig, QpEx.Loc, Pm(2, 3, 1)),
-            new("New Jersey", new[]{"NJ"}, b80_10, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
-            new("New Mexico", new[]{"NM"}, b160_2, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
+            new("Nebraska", new[]{"NE"}, b160_2, cwSsbDig, QpEx.Loc, Pm(2, 3, 1), Power: Pow(5, 2, 1)),
+            new("New Jersey", new[]{"NJ"}, b80_10, cwSsbDig, QpEx.Rst, Pm(1, 2, 2), Power: Pow(4, 2, 1)),
+            new("New Mexico", new[]{"NM"}, b160_2, cwSsbDig, QpEx.Rst, Pm(1, 2, 2), Power: Pow(5, 2, 1)),
             new("New York", new[]{"NY"}, b160_2, cwSsbDig, QpEx.Rst, Pm(1, 2, 3)),
             new("North Carolina", new[]{"NC"}, Bnd("80M", "40M", "20M", "15M", "10M", "6M", "2M"), cwSsbDig, QpEx.Loc, Pm(2, 3, 5)),
             new("North Dakota", new[]{"ND"}, b160_2, cwSsbDig, QpEx.Rst, Flat(1)),
@@ -429,7 +433,7 @@ public static class SeedContests
             new("Virginia", new[]{"VA"}, b160_uhf, new[]{"CW", "SSB", "RTTY", "FT8"}, QpEx.Serial, Pm(1, 2, 2), MultScope.PerBandMode),
             new("Washington Salmon Run", new[]{"WA"}, b160_6, cwSsb, QpEx.Rst, Pm(2, 3), MultScope.Once, "WA-SALMON-RUN"),
             new("West Virginia", new[]{"WV"}, b80_10, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
-            new("Wisconsin", new[]{"WI"}, b160_2, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
+            new("Wisconsin", new[]{"WI"}, b160_2, cwSsbDig, QpEx.Rst, Pm(1, 2, 2), Power: Pow(2, 1.5, 1)),
             // Regionals (multi-state in-area side).
             new("7th Call Area QSO Party (7QP)", new[]{"WA", "OR", "ID", "MT", "WY", "NV", "UT"},
                 b160_10, cwSsbDig, QpEx.Rst, Pm(2, 3, 4), MultScope.Once, "7QP", "qp-7qp"),
@@ -463,6 +467,7 @@ public static class SeedContests
             sentOut, rcvd, p.Points, QpMults(p.Scope, withDxcc: false), serial: serial);
 
         def.HomeArea = new HomeArea { Kind = HomeAreaKind.StateCounty, States = p.Codes.ToList() };
+        def.PowerMultipliers = p.Power;
         def.Roles = new Dictionary<ContestRole, RoleRules>
         {
             [ContestRole.InArea] = new RoleRules

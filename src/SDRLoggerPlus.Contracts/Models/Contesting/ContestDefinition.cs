@@ -62,6 +62,15 @@ public class ContestDefinition
     /// <summary>Ordered mapping producing the Cabrillo QSO: line.</summary>
     public List<CabrilloColumn> CabrilloMap { get; set; } = new();
 
+    /// <summary>
+    /// Optional final-score multiplier keyed by the operator's power class
+    /// ("QRP" / "LOW" / "HIGH"), e.g. many QSO parties give QRP×2. The operator's
+    /// class comes from <see cref="MyExchange.Power"/>; the engine scales the final
+    /// score only (QSO points and multiplier counts are unaffected). Absent or an
+    /// unlisted class ⇒ ×1.
+    /// </summary>
+    public Dictionary<string, double>? PowerMultipliers { get; set; }
+
     /// <summary>Optional registered C# strategy id for exotic scoring.</summary>
     public string? ScoringStrategyId { get; set; }
 }
