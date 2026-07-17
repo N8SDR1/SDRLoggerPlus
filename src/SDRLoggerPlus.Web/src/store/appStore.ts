@@ -61,6 +61,16 @@ interface AppState {
   contestSpotCall: { call: string; at: number } | null;
   setContestSpotCall: (call: string) => void;
 
+  // Location (state/prov prefix) clicked on the QSO-Party map → fills the
+  // contest entry location field.
+  contestFillLocation: { value: string; at: number } | null;
+  setContestFillLocation: (value: string) => void;
+
+  // Location value currently being entered in the contest form → highlighted
+  // (as the "current" QSO) on the QSO-Party map.
+  contestCurrentLocation: string | null;
+  setContestCurrentLocation: (value: string | null) => void;
+
   // Station info
   stationCallsign: string;
   stationGrid: string;
@@ -287,6 +297,11 @@ export const useAppStore = create<AppState>((set) => ({
   contestSpotCall: null,
   // `at` timestamp makes repeated clicks of the same call still trigger the effect.
   setContestSpotCall: (call) => set({ contestSpotCall: { call, at: Date.now() } }),
+
+  contestFillLocation: null,
+  setContestFillLocation: (value) => set({ contestFillLocation: { value, at: Date.now() } }),
+  contestCurrentLocation: null,
+  setContestCurrentLocation: (value) => set({ contestCurrentLocation: value }),
 
   // Station
   stationCallsign: '',

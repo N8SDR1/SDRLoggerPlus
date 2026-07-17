@@ -312,6 +312,27 @@ function EntryView() {
     }
   }, [contestSpotCall]);
 
+  // The received-exchange location field (state/prov/county), if this contest
+  // has one. Used to bridge the QSO-Party map <-> entry form.
+  const locationKey = definition?.rcvdExchange.find((f) => isType(f.type, 'state'))?.key;
+
+  // A click on the QSO-Party map fills the location field here.
+  const contestFillLocation = useAppStore((s) => s.contestFillLocation);
+  useEffect(() => {
+    if (contestFillLocation?.value && locationKey) {
+      setExchange((p) => ({ ...p, [locationKey]: contestFillLocation.value.toUpperCase() }));
+    }
+  }, [contestFillLocation, locationKey]);
+
+  // Publish the location value currently entered so the map highlights it as
+  // the in-progress QSO; clear it on unmount / when the field empties.
+  const setContestCurrentLocation = useAppStore((s) => s.setContestCurrentLocation);
+  const currentLocation = locationKey ? exchange[locationKey] : undefined;
+  useEffect(() => {
+    setContestCurrentLocation(currentLocation ? currentLocation.toUpperCase() : null);
+    return () => setContestCurrentLocation(null);
+  }, [currentLocation, setContestCurrentLocation]);
+
   // Super Check Partial matches for the current partial call (local, instant).
   const scpMatches = useMemo(() => {
     const q = call.trim().toUpperCase();

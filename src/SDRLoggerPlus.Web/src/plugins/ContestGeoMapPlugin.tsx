@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, GeoJSON } from 'react-leaflet';
 import L from 'leaflet';
 import type { Feature, FeatureCollection, Geometry } from 'geojson';
-import { MapPinned, Tag, ZoomIn, ZoomOut, Locate } from 'lucide-react';
+import { MapPinned, Tag, ZoomIn, ZoomOut, Locate, Trophy } from 'lucide-react';
+import { useAppStore } from '../store/appStore';
+import { api } from '../api/client';
 import {
   COUNTRY_COLORS,
   COUNTRY_NAMES,
@@ -24,20 +26,21 @@ type EntityFeature = Feature<Geometry, EntityProps>;
 const NA_CENTER: [number, number] = [44, -96];
 const NA_ZOOM = 3;
 
-function baseStyle(country: CountryCode): L.PathOptions {
-  const color = COUNTRY_COLORS[country] ?? '#8aa';
-  return {
-    color,
-    weight: 1,
-    opacity: 0.75,
-    fillColor: color,
-    fillOpacity: 0.1,
-  };
-}
+const WORKED_COLOR = '#10b981'; // emerald
+const CURRENT_COLOR = '#ffb432'; // amber
 
-function hoverStyle(country: CountryCode): L.PathOptions {
+type StyleState = 'base' | 'worked' | 'current';
+
+function styleFor(state: StyleState, country: CountryCode): L.PathOptions {
   const color = COUNTRY_COLORS[country] ?? '#8aa';
-  return { color, weight: 2, opacity: 1, fillColor: color, fillOpacity: 0.3 };
+  switch (state) {
+    case 'current':
+      return { color: CURRENT_COLOR, weight: 3, opacity: 1, fillColor: CURRENT_COLOR, fillOpacity: 0.55 };
+    case 'worked':
+      return { color: WORKED_COLOR, weight: 1.5, opacity: 0.95, fillColor: WORKED_COLOR, fillOpacity: 0.45 };
+    default:
+      return { color, weight: 1, opacity: 0.75, fillColor: color, fillOpacity: 0.1 };
+  }
 }
 
 interface Selected {
@@ -49,19 +52,36 @@ interface Selected {
 function GeoLayers({
   data,
   showLabels,
+  workedRef,
+  currentRef,
+  registry,
   onSelect,
+  onPick,
 }: {
   data: FeatureCollection<Geometry, EntityProps>;
   showLabels: boolean;
+  workedRef: React.MutableRefObject<Set<string>>;
+  currentRef: React.MutableRefObject<string | null>;
+  registry: React.MutableRefObject<Map<string, { layer: L.Path; country: CountryCode }>>;
   onSelect: (s: Selected | null) => void;
+  onPick: (prefix: string) => void;
 }) {
-  // Re-key the GeoJSON layer when the label toggle flips so tooltips rebind.
-  const layerKey = showLabels ? 'labels-on' : 'labels-off';
+  // Re-key so the layer rebuilds (and re-styles) when labels or the worked set
+  // change. The `current` highlight is applied imperatively (see parent) so
+  // typing a location doesn't rebuild all 97 polygons.
+  const workedSig = [...workedRef.current].sort().join(',');
+  const layerKey = `${showLabels ? 'L' : 'l'}|${workedSig}`;
+
+  const styleState = (prefix: string): StyleState =>
+    prefix && prefix === currentRef.current ? 'current'
+      : prefix && workedRef.current.has(prefix) ? 'worked'
+        : 'base';
 
   const onEachFeature = (feature: EntityFeature, layer: L.Layer) => {
     const { name, country } = feature.properties;
     const prefix = getPrefix(name);
     const path = layer as L.Path;
+    if (prefix) registry.current.set(prefix, { layer: path, country });
 
     if (showLabels && prefix) {
       layer.bindTooltip(prefix, {
@@ -74,15 +94,16 @@ function GeoLayers({
 
     layer.on({
       mouseover: () => {
-        path.setStyle(hoverStyle(country));
+        path.setStyle({ weight: 2.5, opacity: 1, fillOpacity: 0.35 });
         (path as unknown as { bringToFront?: () => void }).bringToFront?.();
         onSelect({ name: getShortName(name), prefix, country });
       },
       mouseout: () => {
-        path.setStyle(baseStyle(country));
+        path.setStyle(styleFor(styleState(prefix), country));
       },
       click: () => {
         onSelect({ name: getShortName(name), prefix, country });
+        if (prefix) onPick(prefix);
       },
     });
   };
@@ -91,7 +112,10 @@ function GeoLayers({
     <GeoJSON
       key={layerKey}
       data={data}
-      style={(f) => baseStyle((f as EntityFeature).properties.country)}
+      style={(f) => {
+        const p = (f as EntityFeature).properties;
+        return styleFor(styleState(getPrefix(p.name)), p.country);
+      }}
       onEachFeature={onEachFeature as (f: Feature, l: L.Layer) => void}
     />
   );
@@ -103,6 +127,57 @@ export function ContestGeoMapPlugin() {
   const [showLabels, setShowLabels] = useState(true);
   const [selected, setSelected] = useState<Selected | null>(null);
   const mapRef = useRef<L.Map | null>(null);
+
+  const contestState = useAppStore((s) => s.contestState);
+  const setContestState = useAppStore((s) => s.setContestState);
+  const contestCurrentLocation = useAppStore((s) => s.contestCurrentLocation);
+  const setContestFillLocation = useAppStore((s) => s.setContestFillLocation);
+
+  // Seed contest state on mount so a live session lights up after a reload.
+  useEffect(() => {
+    if (!contestState) api.getContestState().then((s) => setContestState(s)).catch(() => {});
+  }, [contestState, setContestState]);
+
+  // Worked state/province prefixes from the active session's State multipliers.
+  // Entries are "VALUE" or "VALUE@BAND"; county codes simply won't match a
+  // state polygon (that's the per-state county map, a later piece).
+  const workedPrefixes = useMemo(() => {
+    const set = new Set<string>();
+    const entries = contestState?.multsBySource?.State;
+    if (entries) {
+      for (const e of entries) {
+        const at = e.indexOf('@');
+        const v = (at < 0 ? e : e.slice(0, at)).toUpperCase();
+        if (v) set.add(v);
+      }
+    }
+    return set;
+  }, [contestState]);
+
+  const currentPrefix = contestCurrentLocation ? contestCurrentLocation.toUpperCase() : null;
+
+  // Refs the layer styling reads so handlers always see fresh values.
+  const workedRef = useRef(workedPrefixes);
+  const currentRef = useRef(currentPrefix);
+  const registry = useRef<Map<string, { layer: L.Path; country: CountryCode }>>(new Map());
+  workedRef.current = workedPrefixes;
+
+  // Imperatively move the "current" highlight without rebuilding the layer.
+  useEffect(() => {
+    const prev = currentRef.current;
+    currentRef.current = currentPrefix;
+    const restyle = (prefix: string | null) => {
+      if (!prefix) return;
+      const hit = registry.current.get(prefix);
+      if (!hit) return;
+      const state: StyleState =
+        prefix === currentRef.current ? 'current'
+          : workedRef.current.has(prefix) ? 'worked' : 'base';
+      hit.layer.setStyle(styleFor(state, hit.country));
+    };
+    if (prev && prev !== currentPrefix) restyle(prev);
+    restyle(currentPrefix);
+  }, [currentPrefix]);
 
   // Lazy-load the (131 KB) boundary data so it stays out of the main bundle.
   useEffect(() => {
@@ -130,9 +205,20 @@ export function ContestGeoMapPlugin() {
     return c;
   }, [data]);
 
+  // How many worked prefixes actually correspond to a mapped state/province.
+  const workedOnMap = useMemo(() => {
+    if (!data) return 0;
+    let n = 0;
+    workedPrefixes.forEach((p) => {
+      if (data.features.some((f) => getPrefix(f.properties.name) === p)) n += 1;
+    });
+    return n;
+  }, [data, workedPrefixes]);
+
+  const sessionActive = !!contestState;
+
   return (
     <div className="relative w-full h-full" style={{ background: '#0a0e14' }}>
-      {/* Scoped styles for the permanent prefix labels. */}
       <style>{`
         .contest-geo-label {
           background: transparent !important;
@@ -173,7 +259,15 @@ export function ContestGeoMapPlugin() {
         whenReady={() => requestAnimationFrame(() => mapRef.current?.invalidateSize())}
       >
         {data && (
-          <GeoLayers data={data} showLabels={showLabels} onSelect={setSelected} />
+          <GeoLayers
+            data={data}
+            showLabels={showLabels}
+            workedRef={workedRef}
+            currentRef={currentRef}
+            registry={registry}
+            onSelect={setSelected}
+            onPick={setContestFillLocation}
+          />
         )}
       </MapContainer>
 
@@ -183,18 +277,26 @@ export function ContestGeoMapPlugin() {
           <MapPinned className="w-4 h-4 text-accent-primary" />
           QSO-Party Map
         </div>
-        <div className="mt-1.5 flex flex-col gap-0.5">
-          {(Object.keys(COUNTRY_COLORS) as CountryCode[]).map((cc) => (
-            <div key={cc} className="flex items-center gap-2 text-[11px] font-ui text-dark-300">
-              <span
-                className="inline-block w-3 h-3 rounded-sm"
-                style={{ background: COUNTRY_COLORS[cc], opacity: 0.6, border: `1px solid ${COUNTRY_COLORS[cc]}` }}
-              />
-              <span>{COUNTRY_NAMES[cc]}</span>
-              <span className="text-dark-400">({counts[cc]})</span>
-            </div>
-          ))}
-        </div>
+        {sessionActive ? (
+          <div className="mt-1.5 flex items-center gap-2 text-[11px] font-ui">
+            <Trophy className="w-3 h-3 text-emerald-400" />
+            <span className="text-emerald-300">{workedOnMap} worked</span>
+            <span className="text-dark-500 truncate max-w-[10rem]">{contestState!.definitionName}</span>
+          </div>
+        ) : (
+          <div className="mt-1.5 flex flex-col gap-0.5">
+            {(Object.keys(COUNTRY_COLORS) as CountryCode[]).map((cc) => (
+              <div key={cc} className="flex items-center gap-2 text-[11px] font-ui text-dark-300">
+                <span
+                  className="inline-block w-3 h-3 rounded-sm"
+                  style={{ background: COUNTRY_COLORS[cc], opacity: 0.6, border: `1px solid ${COUNTRY_COLORS[cc]}` }}
+                />
+                <span>{COUNTRY_NAMES[cc]}</span>
+                <span className="text-dark-400">({counts[cc]})</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Controls */}
@@ -241,7 +343,13 @@ export function ContestGeoMapPlugin() {
             </span>
             <span className="text-sm font-ui text-dark-100">{selected.name}</span>
             <span className="text-[11px] font-ui text-dark-400">{COUNTRY_NAMES[selected.country]}</span>
+            {selected.prefix && workedPrefixes.has(selected.prefix) && (
+              <span className="text-[11px] font-ui text-emerald-400">worked</span>
+            )}
           </div>
+          {sessionActive && selected.prefix && (
+            <div className="mt-1 text-[10px] font-ui text-dark-400">Click a state to fill the entry location.</div>
+          )}
         </div>
       )}
     </div>
