@@ -832,6 +832,11 @@ class ApiClient {
     return this.fetch<ContestCheckResponse>(`/contest/check?${params}`);
   }
 
+  // Super Check Partial call set (master.scp ∪ your logged calls); cache + match locally.
+  async getScpCalls(): Promise<string[]> {
+    return this.fetch<string[]>('/contest/scp');
+  }
+
   async logContestQso(req: LogContestQsoRequest): Promise<ContestLogResult> {
     return this.fetch<ContestLogResult>('/contest/qso', {
       method: 'POST',
@@ -1071,6 +1076,8 @@ export interface ContestCheckResponse {
   isDupe: boolean;
   workedCount: number;
   newMults: string[];
+  // Prefill for received-exchange fields (by field key), from call-history / prior QSO.
+  prefill?: Record<string, string> | null;
 }
 
 export interface ContestLogResult {

@@ -27,7 +27,10 @@ public record LogContestQsoRequest(
 public record ContestCheckResponse(
     bool IsDupe,
     int WorkedCount,
-    List<string> NewMults
+    List<string> NewMults,
+    // Prefill values for the received-exchange fields (by field key), from the
+    // call-history file or the most recent prior QSO with this call. Empty if unknown.
+    Dictionary<string, string>? Prefill = null
 );
 
 /// <summary>Result of logging a contest QSO: per-QSO evaluation + fresh state.</summary>

@@ -111,6 +111,8 @@ builder.Services.AddSingleton<ContestsService>();
 
 // Register Contest suite (definitions = singleton; sessions = scoped for the repo)
 builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Contesting.ContestDefinitionService>();
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Contesting.ScpService>();
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Contesting.CallHistoryService>();
 builder.Services.AddScoped<SDRLoggerPlus.Server.Services.Contesting.ContestSessionService>();
 builder.Services.AddScoped<SDRLoggerPlus.Server.Services.Contesting.ContestService>();
 

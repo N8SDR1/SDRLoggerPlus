@@ -159,6 +159,9 @@ public class ContestSuiteController : ControllerBase
         return state == null ? NoContent() : Ok(state);
     }
 
+    [HttpGet("scp")]
+    public async Task<ActionResult<List<string>>> GetScpCalls() => Ok(await _contest.GetScpCallsAsync());
+
     [HttpGet("check")]
     public async Task<ActionResult<ContestCheckResponse>> Check(
         [FromQuery] string callsign, [FromQuery] string band, [FromQuery] string mode)

@@ -21,6 +21,8 @@ public class ContestService
     private readonly IContestSessionRepository _sessions;
     private readonly ContestDefinitionService _definitions;
     private readonly ISettingsService _settings;
+    private readonly ScpService _scp;
+    private readonly CallHistoryService _callHistory;
     private readonly IHubContext<LogHub, ILogHubClient> _hub;
     private readonly ILogger<ContestService> _logger;
 
@@ -29,6 +31,8 @@ public class ContestService
         IContestSessionRepository sessions,
         ContestDefinitionService definitions,
         ISettingsService settings,
+        ScpService scp,
+        CallHistoryService callHistory,
         IHubContext<LogHub, ILogHubClient> hub,
         ILogger<ContestService> logger)
     {
@@ -36,8 +40,24 @@ public class ContestService
         _sessions = sessions;
         _definitions = definitions;
         _settings = settings;
+        _scp = scp;
+        _callHistory = callHistory;
         _hub = hub;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Super Check Partial call set: the master.scp file merged with the
+    /// operator's own logged callsigns, so suggestions work even without a file.
+    /// The client caches this and matches partial calls locally.
+    /// </summary>
+    public async Task<List<string>> GetScpCallsAsync()
+    {
+        var logged = await _qsos.GetDistinctCallsignsAsync();
+        return _scp.MasterCalls.Concat(logged)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c, StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>Current state for the active session, or null when none is active.</summary>
@@ -65,7 +85,52 @@ public class ContestService
 
         var call = callsign.Trim().ToUpperInvariant();
         var workedCount = log.Count(q => string.Equals(q.Callsign, call, StringComparison.OrdinalIgnoreCase));
-        return new ContestCheckResponse(eval.IsDupe, workedCount, eval.Mults);
+        var prefill = await BuildPrefillAsync(def, call);
+        return new ContestCheckResponse(eval.IsDupe, workedCount, eval.Mults, prefill);
+    }
+
+    /// <summary>
+    /// Exchange prefill for a call: the call-history file takes priority, then the
+    /// most recent prior QSO. Only fields the active definition actually receives
+    /// are returned, keyed by field key. Null when nothing is known.
+    /// </summary>
+    private async Task<Dictionary<string, string>?> BuildPrefillAsync(ContestDefinition def, string call)
+    {
+        var wanted = def.RcvdExchange
+            .Where(f => f.Type != ContestFieldType.Rst && f.Type != ContestFieldType.Serial)
+            .Select(f => f.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (wanted.Count == 0) return null;
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1) Call-history file.
+        var fromFile = _callHistory.Lookup(call);
+        if (fromFile != null)
+            foreach (var (k, v) in fromFile)
+                if (wanted.Contains(k)) result[k] = v;
+
+        // 2) Fill gaps from the most recent prior QSO with this call.
+        if (result.Count < wanted.Count)
+        {
+            var prior = await _qsos.GetMostRecentByCallsignAsync(call);
+            if (prior != null)
+            {
+                void Fill(string key, string? value)
+                {
+                    if (wanted.Contains(key) && !result.ContainsKey(key) && !string.IsNullOrWhiteSpace(value))
+                        result[key] = value!;
+                }
+                Fill("name", prior.Contest?.RcvdName ?? prior.Name ?? prior.Station?.Name);
+                Fill("state", prior.Contest?.RcvdState ?? prior.Station?.State);
+                Fill("section", prior.Contest?.RcvdSection);
+                Fill("grid", prior.Contest?.RcvdGrid ?? prior.Grid ?? prior.Station?.Grid);
+                Fill("zone", prior.Contest?.RcvdZone ?? prior.Station?.CqZone?.ToString());
+                Fill("power", prior.Contest?.RcvdPower);
+            }
+        }
+
+        return result.Count > 0 ? result : null;
     }
 
     /// <summary>Log a contest QSO: enrich, evaluate, allocate serial, persist, broadcast.</summary>

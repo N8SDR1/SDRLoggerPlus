@@ -275,6 +275,13 @@ function EntryView() {
     (d) => d.id === contestState.definitionId
   );
 
+  // Super Check Partial: load the call set once, match locally as we type.
+  const { data: scpCalls } = useQuery({
+    queryKey: ['contest-scp'],
+    queryFn: () => api.getScpCalls(),
+    staleTime: 10 * 60 * 1000,
+  });
+
   const [call, setCall] = useState('');
   const [exchange, setExchange] = useState<Record<string, string>>({});
   const [band, setBand] = useState('20m');
@@ -293,14 +300,35 @@ function EntryView() {
     setMode(contestModeFromRig(rigStatus.mode));
   }, [rigStatus]);
 
-  // Debounced dupe/mult check while typing the call.
+  // Super Check Partial matches for the current partial call (local, instant).
+  const scpMatches = useMemo(() => {
+    const q = call.trim().toUpperCase();
+    if (q.length < 2 || !scpCalls) return [];
+    return scpCalls.filter((c) => c.includes(q) && c !== q).slice(0, 10);
+  }, [call, scpCalls]);
+
+  // Debounced dupe/mult check + exchange prefill while typing the call.
   useEffect(() => {
     if (call.trim().length < 3) {
       setCheck(null);
       return;
     }
     const t = setTimeout(() => {
-      api.checkContestCall(call.trim(), band, mode).then(setCheck).catch(() => setCheck(null));
+      api.checkContestCall(call.trim(), band, mode)
+        .then((res) => {
+          setCheck(res);
+          // Prefill received-exchange fields we don't already have a value for.
+          if (res.prefill) {
+            setExchange((prev) => {
+              const next = { ...prev };
+              for (const [key, value] of Object.entries(res.prefill!)) {
+                if (!next[key]) next[key] = value;
+              }
+              return next;
+            });
+          }
+        })
+        .catch(() => setCheck(null));
     }, 250);
     return () => clearTimeout(t);
   }, [call, band, mode]);
@@ -476,6 +504,21 @@ function EntryView() {
               </div>
             ))}
         </div>
+
+        {/* Super Check Partial — click a match to fill the call */}
+        {scpMatches.length > 0 && !isDupe && (
+          <div className="flex flex-wrap gap-1">
+            {scpMatches.map((c) => (
+              <button
+                key={c}
+                onClick={() => { setCall(c); callRef.current?.focus(); }}
+                className="px-1.5 py-0.5 rounded bg-dark-700/70 border border-glass-100 text-xs font-mono text-gray-300 hover:border-accent-primary/50 hover:text-accent-primary transition-colors"
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
 
         {lastLog && <div className="text-xs text-gray-400">Last: {lastLog}</div>}
       </div>
