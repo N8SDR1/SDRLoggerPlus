@@ -303,6 +303,15 @@ function EntryView() {
     setMode(contestModeFromRig(rigStatus.mode));
   }, [rigStatus]);
 
+  // A click on the contest bandmap fills the call here.
+  const contestSpotCall = useAppStore((s) => s.contestSpotCall);
+  useEffect(() => {
+    if (contestSpotCall?.call) {
+      setCall(contestSpotCall.call.toUpperCase());
+      callRef.current?.focus();
+    }
+  }, [contestSpotCall]);
+
   // Super Check Partial matches for the current partial call (local, instant).
   const scpMatches = useMemo(() => {
     const q = call.trim().toUpperCase();

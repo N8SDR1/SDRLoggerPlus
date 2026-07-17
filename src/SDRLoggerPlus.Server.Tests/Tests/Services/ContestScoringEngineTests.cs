@@ -162,6 +162,29 @@ public class ContestScoringEngineTests
     // ---- Recompute totals -------------------------------------------------
 
     [Fact]
+    public void EvaluateBatch_FlagsDupeAndNewMult_AgainstPriorLog()
+    {
+        var def = new ContestDefinition
+        {
+            DupeRule = DupeRule.PerBandMode,
+            MultiplierRules = { new MultRule { Source = MultSource.WpxPrefix } },
+        };
+        var prior = new[] { MakeQso("K1AA", band: "20M") }; // K1 prefix + K1AA worked on 20M/CW
+
+        var results = ContestScoringEngine.EvaluateBatch(def, Me, prior, new[]
+        {
+            MakeQso("K1AA", band: "20M"),  // [0] dupe
+            MakeQso("K1BB", band: "20M"),  // [1] K1 already a mult -> not new mult, not dupe
+            MakeQso("W7XX", band: "20M"),  // [2] new prefix -> new mult
+        });
+
+        results[0].IsDupe.Should().BeTrue();       // K1AA
+        results[1].IsDupe.Should().BeFalse();      // K1BB
+        results[1].Mults.Should().BeEmpty();
+        results[2].Mults.Should().NotBeEmpty();    // W7XX
+    }
+
+    [Fact]
     public void Recompute_ExcludesDupes_AndScoreIsPointsTimesMults()
     {
         var def = new ContestDefinition

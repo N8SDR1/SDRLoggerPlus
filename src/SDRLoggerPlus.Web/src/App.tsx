@@ -9,7 +9,7 @@ import { ConnectionOverlay } from './components/ConnectionOverlay';
 import { SetupWizard } from './components/SetupWizard';
 import { PluginErrorBoundary } from './components/PluginErrorBoundary';
 import { useSignalRConnection } from './hooks/useSignalR';
-import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, ContestEntryPlugin, MultNeededPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, PropagationPanelPlugin, CwKeyerPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin } from './plugins';
+import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, ContestEntryPlugin, MultNeededPlugin, ContestBandmapPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, PropagationPanelPlugin, CwKeyerPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin } from './plugins';
 import { useLayoutStore, defaultLayout } from './store/layoutStore';
 import { useSettingsStore } from './store/settingsStore';
 import { useSetupStore } from './store/setupStore';
@@ -99,6 +99,13 @@ const PLUGINS: Record<string, PluginDef> = {
     component: MultNeededPlugin,
     category: 'Logging',
     tags: ['contest', 'multipliers', 'zones', 'mults'],
+  },
+  'contest-bandmap': {
+    name: 'Bandmap',
+    icon: <Map className="w-4 h-4" />,
+    component: ContestBandmapPlugin,
+    category: 'Logging',
+    tags: ['contest', 'bandmap', 'spots', 'dupe', 'mult'],
   },
   'header-bar': {
     name: 'Header Bar',

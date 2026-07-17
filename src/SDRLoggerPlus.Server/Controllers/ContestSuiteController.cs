@@ -176,6 +176,10 @@ public class ContestSuiteController : ControllerBase
         }
     }
 
+    [HttpPost("check-batch")]
+    public async Task<ActionResult<List<BatchCheckEntry>>> CheckBatch([FromBody] ContestBatchCheckRequest request)
+        => Ok(await _contest.CheckBatchAsync(request.Items ?? new List<BatchCheckItem>()));
+
     [HttpPost("qso")]
     public async Task<ActionResult<ContestLogResult>> LogQso([FromBody] LogContestQsoRequest request)
     {

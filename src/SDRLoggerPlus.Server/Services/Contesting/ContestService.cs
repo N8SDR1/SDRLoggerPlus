@@ -136,6 +136,27 @@ public class ContestService
         return result.Count > 0 ? result : null;
     }
 
+    /// <summary>Batch dupe/new-mult check for a set of spots (bandmap coloring).</summary>
+    public async Task<List<BatchCheckEntry>> CheckBatchAsync(IReadOnlyList<BatchCheckItem> items)
+    {
+        var session = await _sessions.GetActiveAsync();
+        var def = session == null ? null : _definitions.Get(session.DefinitionId);
+        if (session == null || def == null)
+            return items.Select(i => new BatchCheckEntry(i.Call, false, false)).ToList();
+
+        var log = await _qsos.GetByContestSessionAsync(session.Id);
+        var candidates = items.Select(i => BuildQso(session, def,
+            new LogContestQsoRequest(i.Call, i.Band, i.Mode), enrich: true)).ToList();
+        var evals = ContestScoringEngine.EvaluateBatch(def, session.MyExchange, log, candidates);
+
+        // evals is aligned to items order.
+        return items.Select((i, idx) =>
+        {
+            var e = evals[idx];
+            return new BatchCheckEntry(i.Call, e.IsDupe, !e.IsDupe && e.Mults.Count > 0);
+        }).ToList();
+    }
+
     /// <summary>Log a contest QSO: enrich, evaluate, allocate serial, persist, broadcast.</summary>
     public async Task<ContestLogResult> LogQsoAsync(LogContestQsoRequest request)
     {

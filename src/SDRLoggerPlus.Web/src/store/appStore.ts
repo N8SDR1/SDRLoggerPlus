@@ -57,6 +57,10 @@ interface AppState {
   contestState: ContestStateEvent | null;
   setContestState: (state: ContestStateEvent | null) => void;
 
+  // Call sent from the contest bandmap to the contest entry window (click-to-fill).
+  contestSpotCall: { call: string; at: number } | null;
+  setContestSpotCall: (call: string) => void;
+
   // Station info
   stationCallsign: string;
   stationGrid: string;
@@ -273,6 +277,10 @@ export const useAppStore = create<AppState>((set) => ({
 
   contestState: null,
   setContestState: (state) => set({ contestState: state }),
+
+  contestSpotCall: null,
+  // `at` timestamp makes repeated clicks of the same call still trigger the effect.
+  setContestSpotCall: (call) => set({ contestSpotCall: { call, at: Date.now() } }),
 
   // Station
   stationCallsign: '',

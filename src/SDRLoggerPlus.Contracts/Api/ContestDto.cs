@@ -33,6 +33,11 @@ public record ContestCheckResponse(
     Dictionary<string, string>? Prefill = null
 );
 
+/// <summary>Batch dupe/new-mult check for a bandmap's spots.</summary>
+public record ContestBatchCheckRequest(List<BatchCheckItem> Items);
+public record BatchCheckItem(string Call, string Band, string Mode);
+public record BatchCheckEntry(string Call, bool IsDupe, bool IsNewMult);
+
 /// <summary>Result of logging a contest QSO: per-QSO evaluation + fresh state.</summary>
 public record ContestLogResult(
     string QsoId,

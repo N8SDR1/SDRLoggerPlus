@@ -837,6 +837,14 @@ class ApiClient {
     return this.fetch<string[]>('/contest/scp');
   }
 
+  // Batch dupe/new-mult check for bandmap spots.
+  async checkContestBatch(items: { call: string; band: string; mode: string }[]): Promise<BatchCheckEntry[]> {
+    return this.fetch<BatchCheckEntry[]>('/contest/check-batch', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  }
+
   async logContestQso(req: LogContestQsoRequest): Promise<ContestLogResult> {
     return this.fetch<ContestLogResult>('/contest/qso', {
       method: 'POST',
@@ -1086,6 +1094,12 @@ export interface ContestLogResult {
   points: number;
   newMults: string[];
   state: ContestStateEvent;
+}
+
+export interface BatchCheckEntry {
+  call: string;
+  isDupe: boolean;
+  isNewMult: boolean;
 }
 
 // Contest Types

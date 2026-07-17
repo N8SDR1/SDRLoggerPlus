@@ -20,18 +20,39 @@ public static class ContestScoringEngine
     public static QsoEvaluation Evaluate(
         ContestDefinition def, MyExchange me, IReadOnlyList<Qso> priorQsos, Qso qso)
     {
+        var (seenDupeKeys, seenMultKeys) = BuildSeen(def, priorQsos);
+        return EvaluateAgainst(def, me, seenDupeKeys, seenMultKeys, qso);
+    }
+
+    /// <summary>
+    /// Evaluate many candidate QSOs against the same prior log (built once) — used
+    /// to color a bandmap's spots by dupe/new-mult. Candidates don't affect each
+    /// other; results are returned in candidate order (no keying, so duplicate
+    /// calls on different bands don't collide).
+    /// </summary>
+    public static List<QsoEvaluation> EvaluateBatch(
+        ContestDefinition def, MyExchange me, IReadOnlyList<Qso> priorQsos, IReadOnlyList<Qso> candidates)
+    {
+        var (seenDupeKeys, seenMultKeys) = BuildSeen(def, priorQsos);
+        return candidates
+            .Select(c => EvaluateAgainst(def, me, seenDupeKeys, seenMultKeys, c))
+            .ToList();
+    }
+
+    // Build the seen dupe-key / mult-key sets from a prior log (dupes contribute nothing).
+    private static (HashSet<string> Dupe, HashSet<string> Mult) BuildSeen(
+        ContestDefinition def, IReadOnlyList<Qso> priorQsos)
+    {
         var seenDupeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenMultKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var prior in priorQsos)
         {
-            var priorDupeKey = DupeKey(def, prior);
-            if (!seenDupeKeys.Add(priorDupeKey))
+            if (!seenDupeKeys.Add(DupeKey(def, prior)))
                 continue; // prior itself was a dupe -> contributes no points or mults
             foreach (var m in MultKeys(def, prior))
                 seenMultKeys.Add(m);
         }
-
-        return EvaluateAgainst(def, me, seenDupeKeys, seenMultKeys, qso);
+        return (seenDupeKeys, seenMultKeys);
     }
 
     /// <summary>Recompute running totals over a whole session log (chronological).</summary>
