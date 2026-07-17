@@ -137,17 +137,19 @@ public static class SeedContests
                 Pts(1, sameCountry: 1, sameCont: 1, otherCont: 3),
                 new[] { M(MultSource.WpxPrefix) }, serial: SerialMode.AllBand);
 
+        // Own country = 2, same continent (diff country) = 5, different continent = 10.
         foreach (var (m, cab) in New("CQ-160", "CW", "SSB"))
             yield return D($"cq-160-{m.L}", $"CQ 160 {m.N}", cab, new() { "160M" }, m.Modes,
                 new[] { Rst(), StateF("S/P/C") }, new[] { Rst(), StateF("S/P/C") },
-                Pts(2, sameCountry: 5, sameCont: 5, otherCont: 10),
+                Pts(5, sameCountry: 2, otherCont: 10),
                 new[] { M(MultSource.State), M(MultSource.Dxcc) });
 
         yield return D("cq-vhf", "CQ VHF", "CQ-VHF", new() { "6M", "2M" }, new[] { "CW", "SSB", "FT8" },
             new[] { Grid() }, new[] { Grid() }, Pts(1),
             new[] { M(MultSource.Grid, true) });
 
-        yield return D("cq-ww-rtty", "CQ WW RTTY", "CQ-WW-RTTY", HfBands, new[] { "RTTY" },
+        // Five bands (no 160m). Same country 1 / same continent 2 / diff continent 3.
+        yield return D("cq-ww-rtty", "CQ WW RTTY", "CQ-WW-RTTY", HfNo160, new[] { "RTTY" },
             new[] { Rst(), Zone(), StateF() }, new[] { Rst(), Zone(), StateF() },
             Pts(1, sameCountry: 1, sameCont: 2, otherCont: 3),
             new[] { M(MultSource.Dxcc, true), M(MultSource.CqZone, true), M(MultSource.State, true) });
@@ -156,31 +158,60 @@ public static class SeedContests
     // ---- ARRL -------------------------------------------------------------
     private static IEnumerable<ContestDefinition> ArrlContests()
     {
+        // W/VE stations send state/province and work DX only (counting DXCC entities
+        // per band); DX stations send power and work W/VE only (counting states +
+        // provinces per band). 3 points per QSO either way.
         foreach (var (m, cab) in New("ARRL-DX", "CW", "SSB"))
-            yield return D($"arrl-dx-{m.L}", $"ARRL DX {m.N}", cab, HfBands, m.Modes,
+        {
+            var def = D($"arrl-dx-{m.L}", $"ARRL DX {m.N}", cab, HfBands, m.Modes,
                 new[] { Rst(), StateF() }, new[] { Rst(), Power() },
                 Pts(3), new[] { M(MultSource.Dxcc, true) });
+            def.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
+            def.Roles = new Dictionary<ContestRole, RoleRules>
+            {
+                [ContestRole.InArea] = new RoleRules // W/VE
+                {
+                    SentExchange = new[] { Rst(), StateF() }.ToList(),
+                    RcvdExchange = new[] { Rst(), Power() }.ToList(),
+                    MultiplierRules = new[] { M(MultSource.Dxcc, true) }.ToList(),
+                    WorksForPoints = WorkTarget.OutAreaOnly,
+                },
+                [ContestRole.OutArea] = new RoleRules // DX
+                {
+                    SentExchange = new[] { Rst(), Power() }.ToList(),
+                    RcvdExchange = new[] { Rst(), StateF() }.ToList(),
+                    MultiplierRules = new[] { M(MultSource.State, true) }.ToList(),
+                    WorksForPoints = WorkTarget.InAreaOnly,
+                },
+            };
+            yield return def;
+        }
 
+        // Single band (28 MHz). Phone = 2, CW = 4. Mults counted once per mode.
         yield return D("arrl-10m", "ARRL 10 Meter", "ARRL-10", new() { "10M" }, new[] { "CW", "SSB" },
             new[] { Rst(), StateF("S/P/C") }, new[] { Rst(), StateF("S/P/C") },
-            Pts(2), new[] { M(MultSource.State), M(MultSource.Dxcc) });
+            Pm(2, 4), new[] { M(MultSource.State), M(MultSource.Dxcc) }, serial: SerialMode.AllBand);
 
+        // W/VE-to-W/VE = 2, QSO with DX = 5. W/VE also count DXCC as a mult.
         yield return D("arrl-160m", "ARRL 160 Meter", "ARRL-160", new() { "160M" }, new[] { "CW" },
             new[] { Rst(), Section() }, new[] { Rst(), Section() },
-            Pts(2), new[] { M(MultSource.Section) });
+            Pts(2, otherCont: 5), new[] { M(MultSource.Section), M(MultSource.Dxcc) },
+            dupe: DupeRule.PerContest);
 
+        // Multipliers counted once for the whole contest (not per band).
         yield return D("arrl-rtty-roundup", "ARRL RTTY Roundup", "ARRL-RTTY", HfNo160, new[] { "RTTY" },
             new[] { Rst(), StateF("S/P/#") }, new[] { Rst(), StateF("S/P/#") },
-            Pts(1), new[] { M(MultSource.State, true), M(MultSource.Dxcc, true) }, dupe: DupeRule.PerBand);
+            Pts(1), new[] { M(MultSource.State), M(MultSource.Dxcc) }, dupe: DupeRule.PerBand);
 
-        yield return D("arrl-field-day", "ARRL Field Day", "ARRL-FIELD-DAY", Hf6, new[] { "CW", "SSB", "FT8" },
+        // Exchange is class + section (not a scored multiplier). Phone 1 / CW & digital 2.
+        yield return D("arrl-field-day", "ARRL Field Day", "ARRL-FD", Hf6, new[] { "CW", "SSB", "RTTY", "FT8" },
             new[] { Txt("class", "Cls", 4), Section() }, new[] { Txt("class", "Cls", 4), Section() },
-            Pts(1), Array.Empty<MultRule>());
+            Pm(1, 2, 2), Array.Empty<MultRule>());
 
-        // WA7BNM: Category + ARRL/RAC Section (or MX/DX).
-        yield return D("winter-field-day", "Winter Field Day", "WINTER-FIELD-DAY", Hf6, new[] { "CW", "SSB", "FT8" },
+        // WFDA: Category + Class + ARRL/RAC Section (or MX/DX). Phone 1 / CW & digital 2.
+        yield return D("winter-field-day", "Winter Field Day", "WFD", Hf6, new[] { "CW", "SSB", "RTTY", "FT8" },
             new[] { Txt("class", "Cat", 4), Txt("section", "Sec", 5) }, new[] { Txt("class", "Cat", 4), Txt("section", "Sec", 5) },
-            Pts(1), Array.Empty<MultRule>());
+            Pm(1, 2, 2), Array.Empty<MultRule>());
 
         yield return D("arrl-vhf", "ARRL VHF", "ARRL-VHF", VhfBands, new[] { "CW", "SSB", "FT8" },
             new[] { Grid() }, new[] { Grid() }, Pts(1), new[] { M(MultSource.Grid, true) });
@@ -202,10 +233,10 @@ public static class SeedContests
             new[] { Name(), Txt("check", "Yr", 4), StateF("S/P/DX") }, new[] { Name(), Txt("check", "Yr", 4), StateF("S/P/DX") },
             Pts(1), new[] { M(MultSource.State) });
 
-        // WA7BNM: RS(T) + Class (I/C/S) + (state/province/country).
-        yield return D("school-club-roundup", "School Club Roundup", "SCHOOL-CLUB-ROUNDUP", HfBands, new[] { "CW", "SSB" },
+        // RS(T) + Class (I/C/S) + (state/province/country). Phone 1 / CW & digital 2.
+        yield return D("school-club-roundup", "School Club Roundup", "ARRL-SCR", HfBands, new[] { "CW", "SSB", "RTTY" },
             new[] { Rst(), Txt("class", "Cls", 3), StateF("S/P/C") }, new[] { Rst(), Txt("class", "Cls", 3), StateF("S/P/C") },
-            Pts(1), new[] { M(MultSource.State) });
+            Pm(1, 2, 2), new[] { M(MultSource.State), M(MultSource.Dxcc) });
 
         yield return D("kids-day", "Kids Day", "KIDS-DAY", HfNo160, new[] { "SSB" },
             new[] { Name(), Txt("age", "Age", 3, false), Txt("qth", "QTH", 8, false) },

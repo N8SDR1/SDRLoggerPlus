@@ -1,5 +1,6 @@
 using SDRLoggerPlus.Contracts.Models.Contesting;
 using SDRLoggerPlus.Server.Core.Database;
+using SDRLoggerPlus.Server.Services;
 
 namespace SDRLoggerPlus.Server.Services.Contesting;
 
@@ -13,15 +14,18 @@ public class ContestSessionService
 {
     private readonly IContestSessionRepository _repo;
     private readonly ContestDefinitionService _definitions;
+    private readonly ISettingsService _settings;
     private readonly ILogger<ContestSessionService> _logger;
 
     public ContestSessionService(
         IContestSessionRepository repo,
         ContestDefinitionService definitions,
+        ISettingsService settings,
         ILogger<ContestSessionService> logger)
     {
         _repo = repo;
         _definitions = definitions;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -36,6 +40,21 @@ public class ContestSessionService
     {
         var def = _definitions.Get(definitionId)
             ?? throw new ContestDefinitionException($"Unknown contest '{definitionId}'.");
+
+        // Fill the operator's own entity from their callsign when the client didn't
+        // supply it, so role resolution (W/VE vs DX) and same-country/zone points
+        // work without asking the operator to type their country.
+        if (me.Country is null && me.Dxcc is null)
+        {
+            var call = (await _settings.GetSettingsAsync()).Station?.Callsign;
+            if (!string.IsNullOrWhiteSpace(call))
+            {
+                var (country, continent, cqZone) = CtyService.GetEntityFromCallsign(call!);
+                me.Country ??= country;
+                me.Continent ??= continent;
+                me.CqZone ??= cqZone;
+            }
+        }
 
         await _repo.DeactivateAllAsync();
 
