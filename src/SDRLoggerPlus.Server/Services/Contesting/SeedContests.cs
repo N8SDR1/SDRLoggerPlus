@@ -29,34 +29,10 @@ public static class SeedContests
     private static readonly List<string> HfNo160 = new() { "80M", "40M", "20M", "15M", "10M" };
     private static readonly List<string> VhfBands = new() { "6M", "2M", "1.25M", "70CM" };
 
-    // Declared before All so Build() sees it initialized (static fields init in
-    // textual order; All = Build() runs during the static constructor).
-    private static readonly string[] StatePartyNames =
-    {
-        "Alabama", "Arkansas", "California", "Colorado", "Delaware", "Florida", "Georgia",
-        "Hawaii", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana",
-        "Maryland-DC", "Michigan", "Minnesota", "Mississippi", "Missouri", "Nebraska",
-        "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio",
-        "Oklahoma", "Pennsylvania", "South Carolina", "South Dakota", "Tennessee", "Texas",
-        "Virginia", "Washington Salmon Run", "West Virginia", "Wisconsin",
-    };
-
-    // Exchange style per state QSO party, verified against the WA7BNM contest
-    // calendar (contestcalendar.com). Default is RS(T) + location; these are the
-    // parties that deviate. Declared before All so Build() sees it initialized.
+    // Exchange lead field per QSO party: RS(T), a serial number, an operator name,
+    // or none (location-only, no signal report). See the per-party table in
+    // StateQsoParties().
     private enum QpEx { Rst, Serial, Name, Loc }
-    private static readonly Dictionary<string, QpEx> StatePartyExchange = new()
-    {
-        ["California"] = QpEx.Serial,   // Serial No. + county
-        ["Pennsylvania"] = QpEx.Serial, // Serial No. + county
-        ["Virginia"] = QpEx.Serial,     // Serial No. + county
-        ["Minnesota"] = QpEx.Name,      // Name + county
-        ["Colorado"] = QpEx.Name,       // Name + county
-        ["Maryland-DC"] = QpEx.Loc,     // county/city only (no RST)
-        ["North Carolina"] = QpEx.Loc,  // county only (no RST)
-        ["Wisconsin"] = QpEx.Loc,       // county only (no RST)
-        ["Nebraska"] = QpEx.Loc,        // county only (no RST)
-    };
 
     public static IReadOnlyList<ContestDefinition> All { get; } = Build();
 
@@ -72,15 +48,49 @@ public static class SeedContests
     private static ContestField Txt(string key, string label, int width = 6, bool required = true)
         => new() { Key = key, Label = label, Type = ContestFieldType.Text, Width = width, Required = required, PrefillFrom = key };
 
-    // Fresh exchange-field array for a state QSO party of the given style. The
-    // location field doubles as county (in-state) or S/P/DX (out-of-state).
-    private static ContestField[] QpFields(QpEx kind) => kind switch
+    // The operator's own county (in-area sent exchange). Key "county" so the
+    // Cabrillo exporter emits MyExchange.County.
+    private static ContestField County(string label = "Co") => new() { Key = "county", Label = label, Type = ContestFieldType.Text, Width = 4, Required = true, PrefillFrom = "county" };
+
+    // Lead exchange field for a QSO party: RS(T) / serial / name / (none).
+    private static ContestField? QpLead(QpEx ex) => ex switch
     {
-        QpEx.Serial => new[] { Serial(), StateF("S/P/C") },
-        QpEx.Name => new[] { Name(), StateF("S/P/C") },
-        QpEx.Loc => new[] { StateF("S/P/C") },
-        _ => new[] { Rst(), StateF("S/P/C") },
+        QpEx.Serial => Serial(),
+        QpEx.Name => Name(),
+        QpEx.Rst => Rst(),
+        _ => null, // QpEx.Loc — location only, no signal report
     };
+
+    // Exchange = optional lead field + one location field.
+    private static ContestField[] QpEx2(QpEx ex, ContestField loc)
+    {
+        var lead = QpLead(ex);
+        return lead == null ? new[] { loc } : new[] { lead, loc };
+    }
+
+    // Per-mode QSO points (Phone / CW / digital). Digital maps to both the RTTY and
+    // DIGI mode classes; unset modes fall through to the phone value.
+    private static PointsRule Pm(int ph, int cw, int? dig = null)
+    {
+        var by = new Dictionary<string, int> { ["PH"] = ph, ["CW"] = cw };
+        if (dig is int d) { by["RTTY"] = d; by["DIGI"] = d; }
+        return new PointsRule { Default = ph, ByMode = by };
+    }
+
+    // Flat points regardless of mode.
+    private static PointsRule Flat(int n) => new() { Default = n };
+
+    // How a QSO party counts a given multiplier.
+    private enum MultScope { Once, PerMode, PerBand, PerBandMode }
+
+    private static MultRule[] QpMults(MultScope s, bool withDxcc)
+    {
+        var pb = s is MultScope.PerBand or MultScope.PerBandMode;
+        var pm = s is MultScope.PerMode or MultScope.PerBandMode;
+        var list = new List<MultRule> { M(MultSource.State, pb, pm) };
+        if (withDxcc) list.Add(M(MultSource.Dxcc, pb, pm));
+        return list.ToArray();
+    }
 
     private static PointsRule Pts(int def, int? sameCountry = null, int? sameCont = null, int? otherCont = null, int? sameZone = null)
         => new() { Default = def, SameCountry = sameCountry, SameContinent = sameCont, OtherContinent = otherCont, SameZone = sameZone };
@@ -310,34 +320,121 @@ public static class SeedContests
     }
 
     // ---- state / regional QSO parties -------------------------------------
-    // Location captured as a State-typed field so distinct S/P/county values
-    // count as multipliers (an approximation of true county multipliers). The
-    // exchange style (RS(T) / serial / name / location-only) is per-party, taken
-    // from the WA7BNM calendar via StatePartyExchange.
+    // Each party is role-split: the in-area operator sends its county and works
+    // everyone; the out-of-area operator sends its state/province and works only
+    // in-area stations (WorksForPoints = InAreaOnly). Bands, modes, per-mode
+    // points, exchange style, and multiplier scope are per-party, verified against
+    // each sponsor's official rules (docs/design/contest-research/batch-5..7).
+    //
+    // Approximations kept simple by the declarative model: the received location
+    // is a single State-typed field (distinct values ≈ county / S/P multipliers),
+    // and power / station-category multipliers and working-bonus points (not
+    // expressible here) are omitted. Clone-and-edit for a bonus-exact ruleset.
+    private sealed record Qp(
+        string Name, string[] Codes, List<string> Bands, string[] Modes,
+        QpEx Ex, PointsRule Points, MultScope Scope = MultScope.Once,
+        string? Cab = null, string? Id = null);
+
+    private static List<string> Bnd(params string[] b) => b.ToList();
+
     private static IEnumerable<ContestDefinition> StateQsoParties()
     {
-        var bands = new List<string> { "160M", "80M", "40M", "20M", "15M", "10M", "6M" };
-        foreach (var name in StatePartyNames)
+        // Common band sets (WARC always excluded).
+        var b160_10 = Bnd("160M", "80M", "40M", "20M", "15M", "10M");
+        var b80_10 = Bnd("80M", "40M", "20M", "15M", "10M");           // no 160, no 6
+        var b160_6 = Bnd("160M", "80M", "40M", "20M", "15M", "10M", "6M");
+        var b160_2 = Bnd("160M", "80M", "40M", "20M", "15M", "10M", "6M", "2M");
+        var b160_uhf = Bnd("160M", "80M", "40M", "20M", "15M", "10M", "6M", "2M", "1.25M", "70CM");
+        var cwSsb = new[] { "CW", "SSB" };
+        var cwSsbDig = new[] { "CW", "SSB", "RTTY" };
+
+        var table = new List<Qp>
         {
-            var slug = Slug(name);
-            var cab = name.ToUpperInvariant().Replace(" ", "-").Replace("--", "-") + "-QSO-PARTY";
-            var kind = StatePartyExchange.GetValueOrDefault(name, QpEx.Rst);
-            var serial = kind == QpEx.Serial ? SerialMode.AllBand : SerialMode.None;
-            yield return D($"qp-{slug}", $"{name} QSO Party", cab, bands, new[] { "CW", "SSB" },
-                QpFields(kind), QpFields(kind),
-                Pts(2), new[] { M(MultSource.State, true) }, serial: serial);
-        }
+            new("Alabama", new[]{"AL"}, b80_10, cwSsb, QpEx.Rst, Flat(2), MultScope.PerMode),
+            new("Arkansas", new[]{"AR"}, b160_2, cwSsbDig, QpEx.Rst, Flat(1)),
+            new("California", new[]{"CA"}, b160_10, cwSsb, QpEx.Serial, Pm(2, 3)),
+            new("Colorado", new[]{"CO"}, b160_2, cwSsbDig, QpEx.Name, Pm(1, 2, 2), MultScope.PerMode),
+            new("Delaware", new[]{"DE"}, b160_6, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
+            new("Florida", new[]{"FL"}, Bnd("40M", "20M", "15M", "10M"), cwSsb, QpEx.Rst, Pm(1, 2)),
+            new("Georgia", new[]{"GA"}, b160_6, cwSsb, QpEx.Rst, Pm(1, 2), MultScope.PerMode),
+            new("Hawaii", new[]{"HI"}, b160_10, new[]{"CW", "SSB", "RTTY", "FT8", "FT4"}, QpEx.Rst, Pm(2, 3, 3)),
+            new("Illinois", new[]{"IL"}, b160_2, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
+            new("Indiana", new[]{"IN"}, b160_10, cwSsb, QpEx.Rst, Pm(2, 3)),
+            new("Iowa", new[]{"IA"}, b160_uhf, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
+            new("Kansas", new[]{"KS"}, Bnd("80M", "40M", "20M", "15M", "10M", "6M"), cwSsbDig, QpEx.Rst, Pm(2, 3, 3)),
+            new("Kentucky", new[]{"KY"}, Bnd("80M", "40M", "20M", "15M", "10M", "6M", "2M"), cwSsb, QpEx.Rst, Pm(1, 2)),
+            new("Louisiana", new[]{"LA"}, b160_2, cwSsbDig, QpEx.Rst, Pm(2, 4, 4), MultScope.PerBandMode),
+            new("Maryland-DC", new[]{"MD", "DC"}, b160_10, cwSsb, QpEx.Loc, Pm(1, 3), MultScope.Once, "MDC-QSO-PARTY"),
+            new("Michigan", new[]{"MI"}, b80_10, cwSsb, QpEx.Rst, Pm(1, 2), MultScope.PerMode),
+            new("Minnesota", new[]{"MN"}, b160_10, cwSsb, QpEx.Name, Pm(2, 3), MultScope.PerMode),
+            new("Mississippi", new[]{"MS"}, b160_2, new[]{"CW", "SSB", "RTTY", "FT8", "FT4"}, QpEx.Rst, Pm(1, 2, 2)),
+            new("Missouri", new[]{"MO"}, b160_uhf, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
+            new("Nebraska", new[]{"NE"}, b160_2, cwSsbDig, QpEx.Loc, Pm(2, 3, 1)),
+            new("New Jersey", new[]{"NJ"}, b80_10, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
+            new("New Mexico", new[]{"NM"}, b160_2, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
+            new("New York", new[]{"NY"}, b160_2, cwSsbDig, QpEx.Rst, Pm(1, 2, 3)),
+            new("North Carolina", new[]{"NC"}, Bnd("80M", "40M", "20M", "15M", "10M", "6M", "2M"), cwSsbDig, QpEx.Loc, Pm(2, 3, 5)),
+            new("North Dakota", new[]{"ND"}, b160_2, cwSsbDig, QpEx.Rst, Flat(1)),
+            new("Ohio", new[]{"OH"}, b160_10, cwSsb, QpEx.Rst, Pm(1, 2), MultScope.PerMode),
+            new("Oklahoma", new[]{"OK"}, Bnd("80M", "40M", "20M", "15M", "10M", "6M"), cwSsbDig, QpEx.Rst, Pm(2, 3, 3)),
+            new("Pennsylvania", new[]{"PA"}, b160_2, cwSsb, QpEx.Serial, Pm(1, 2)),
+            new("South Carolina", new[]{"SC"}, b160_2, new[]{"CW", "SSB", "RTTY", "FT8", "FT4"}, QpEx.Rst, Flat(2), MultScope.PerBandMode),
+            new("South Dakota", new[]{"SD"}, b160_uhf, cwSsb, QpEx.Rst, Pm(1, 2)),
+            new("Tennessee", new[]{"TN"}, b160_6, cwSsbDig, QpEx.Rst, Flat(3), MultScope.PerBand),
+            new("Texas", new[]{"TX"}, b160_2, cwSsbDig, QpEx.Rst, Pm(2, 3, 3)),
+            new("Virginia", new[]{"VA"}, b160_uhf, new[]{"CW", "SSB", "RTTY", "FT8"}, QpEx.Serial, Pm(1, 2, 2), MultScope.PerBandMode),
+            new("Washington Salmon Run", new[]{"WA"}, b160_6, cwSsb, QpEx.Rst, Pm(2, 3), MultScope.Once, "WA-SALMON-RUN"),
+            new("West Virginia", new[]{"WV"}, b80_10, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
+            new("Wisconsin", new[]{"WI"}, b160_2, cwSsbDig, QpEx.Rst, Pm(1, 2, 2)),
+            // Regionals (multi-state in-area side).
+            new("7th Call Area QSO Party (7QP)", new[]{"WA", "OR", "ID", "MT", "WY", "NV", "UT"},
+                b160_10, cwSsbDig, QpEx.Rst, Pm(2, 3, 4), MultScope.Once, "7QP", "qp-7qp"),
+            new("New England QSO Party (NEQP)", new[]{"CT", "ME", "MA", "NH", "RI", "VT"},
+                b80_10, cwSsbDig, QpEx.Rst, Pm(1, 2, 2), MultScope.Once, "NEQP", "qp-neqp"),
+        };
 
-        // Regionals (multi-state single events).
-        yield return D("qp-7qp", "7th Call Area QSO Party (7QP)", "7QP",
-            new() { "160M", "80M", "40M", "20M", "15M", "10M", "6M" }, new[] { "CW", "SSB" },
-            new[] { Rst(), StateF("S/Cty") }, new[] { Rst(), StateF("S/Cty") },
-            Pts(2), new[] { M(MultSource.State, true) });
+        foreach (var p in table)
+            yield return BuildQp(p);
+    }
 
-        yield return D("qp-neqp", "New England QSO Party (NEQP)", "NEQP",
-            new() { "160M", "80M", "40M", "20M", "15M", "10M", "6M" }, new[] { "CW", "SSB" },
-            new[] { Rst(), StateF("Cty/S") }, new[] { Rst(), StateF("Cty/S") },
-            Pts(2), new[] { M(MultSource.State, true) });
+    // Turn a party's data row into a role-aware definition.
+    private static ContestDefinition BuildQp(Qp p)
+    {
+        var id = p.Id ?? $"qp-{Slug(p.Name)}";
+        var cab = p.Cab ?? $"{p.Codes[0]}-QSO-PARTY";
+        // State rows carry a bare state name ("Ohio"); regional rows carry a full
+        // title ("New England QSO Party (NEQP)") — only append for the former.
+        var name = p.Name.Contains("QSO Party") ? p.Name : $"{p.Name} QSO Party";
+        var serial = p.Ex == QpEx.Serial ? SerialMode.AllBand : SerialMode.None;
+
+        // What the operator captures from the other station: their location plus the
+        // lead field (received serial / name / RST). One field regardless of role.
+        var rcvd = QpEx2(p.Ex, StateF("S/P/C"));
+        // Out-of-area default (also the All-role fallback): send RST + own state.
+        var sentOut = QpEx2(p.Ex, StateF("S/P/DX"));
+        // In-area: send RST + own county.
+        var sentIn = QpEx2(p.Ex, County());
+
+        var def = D(id, name, cab, p.Bands, p.Modes,
+            sentOut, rcvd, p.Points, QpMults(p.Scope, withDxcc: false), serial: serial);
+
+        def.HomeArea = new HomeArea { Kind = HomeAreaKind.StateCounty, States = p.Codes.ToList() };
+        def.Roles = new Dictionary<ContestRole, RoleRules>
+        {
+            [ContestRole.InArea] = new RoleRules
+            {
+                SentExchange = sentIn.ToList(),
+                MultiplierRules = QpMults(p.Scope, withDxcc: true).ToList(),
+                WorksForPoints = WorkTarget.Everyone,
+            },
+            [ContestRole.OutArea] = new RoleRules
+            {
+                SentExchange = sentOut.ToList(),
+                MultiplierRules = QpMults(p.Scope, withDxcc: false).ToList(),
+                WorksForPoints = WorkTarget.InAreaOnly,
+            },
+        };
+        return def;
     }
 
     // ---- generic fallbacks -------------------------------------------------
