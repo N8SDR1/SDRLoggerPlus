@@ -115,7 +115,24 @@ prototype's React-state map with FlexLayout-config persistence.
   (panel 90% in an app at 90% renders at 81%) — intended behavior, no
   compensation logic.
 
-### 5. Persistence (global) — no changes
+### 5. Remove the superseded "compact" controls
+
+Per-panel scaling replaces the app's compact-density features; the operator
+confirmed both go:
+
+- **Settings → Appearance "Compact Mode" toggle** — a dead switch: nothing
+  reads `appearance.compactMode`. Remove the toggle (SettingsPanel.tsx), the
+  `compactMode` field from `AppearanceSettings` (settingsStore.ts), the
+  `[BsonElement("compactMode")]` property (Contracts `Settings.cs`), and the
+  references in `settingsStore.test.ts` / `StartupProviderTests.cs`. Old
+  stored values are simply ignored by LiteDB after removal — no migration.
+- **Per-panel CompactToggle** — the working density buttons on Log History,
+  Contests, DX Cluster, and Rig. Remove `CompactToggle.tsx`,
+  `usePanelCompact.ts`, and their uses in the four plugins; compact-branch
+  styling (`compact ? … : …`) collapses to the non-compact branch. The
+  localStorage `panelCompact:*` keys become orphans — harmless.
+
+### 6. Persistence (global) — no changes
 
 Zoom stays in the Electron per-machine config (existing `saveZoomLevel` /
 `getStoredZoomLevel`), NOT the backend settings DB. Rationale: display scale is
@@ -153,6 +170,11 @@ import/export to another machine. No Contracts change, no migration.
 | `src/SDRLoggerPlus.Web/src/utils/zoomScale.test.ts` | new — unit tests |
 | `src/SDRLoggerPlus.Web/src/components/SettingsPanel.tsx` | UI Scale row in Appearance (Electron-only) |
 | `src/SDRLoggerPlus.Web/src/App.tsx` | `scalable` flag, factory zoom wrapper, tabset stepper, config persistence |
+| `src/SDRLoggerPlus.Web/src/components/CompactToggle.tsx` | DELETE (superseded by panel scale) |
+| `src/SDRLoggerPlus.Web/src/hooks/usePanelCompact.ts` | DELETE (superseded by panel scale) |
+| `LogHistoryPlugin / ContestsPlugin / ClusterPlugin / RigPlugin` | remove compact toggle + branches |
+| `src/SDRLoggerPlus.Contracts/Models/Settings.cs` | remove dead `CompactMode` |
+| `src/SDRLoggerPlus.Web/src/store/settingsStore.ts` | remove dead `compactMode` |
 
 Already committed during prototyping (independent fixes): `MapPlugin.tsx`
 min-h-[500px] removal + ClampedFlyout (`5b0dc30`).
