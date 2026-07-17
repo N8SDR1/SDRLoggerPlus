@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Map as MapIcon, Target, Maximize2, ZoomIn, ZoomOut, Layers, Satellite, Radio, Sun, Zap, Play } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
@@ -477,6 +478,51 @@ interface SpotPathData {
 /** Guard against NaN / undefined / null coordinates that crash Leaflet */
 function isValidCoord(v: number | null | undefined): v is number {
   return typeof v === 'number' && Number.isFinite(v);
+}
+
+/**
+ * Button flyout that clamps itself inside the map container instead of being
+ * clipped by its overflow-hidden. Shifts up when it would extend past the
+ * panel bottom; scrolls internally when taller than the panel. Portaled to
+ * the panel root (#map-plugin-container) so it stacks above the globe circle
+ * (z-20/z-30) — inside MapCore it would be trapped under the z-0 map layer.
+ */
+function ClampedFlyout({ className, children }: { className?: string; children: React.ReactNode }) {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<React.CSSProperties>({ visibility: 'hidden' });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const anchor = anchorRef.current?.parentElement; // the button wrapper
+    const host = document.getElementById('map-plugin-container');
+    if (!el || !anchor || !host) return;
+    const margin = 8;
+    const hostRect = host.getBoundingClientRect();
+    const aRect = anchor.getBoundingClientRect();
+    const maxH = hostRect.height - margin * 2;
+    const h = Math.min(el.getBoundingClientRect().height, maxH);
+    let top = aRect.top - hostRect.top; // align with the button
+    top = Math.max(margin, Math.min(top, hostRect.height - margin - h));
+    setStyle({
+      position: 'absolute',
+      top,
+      right: hostRect.right - aRect.left + 8, // open to the button's left
+      maxHeight: maxH,
+      zIndex: 1000,
+      visibility: 'visible',
+    });
+  }, [children]);
+  const host = document.getElementById('map-plugin-container');
+  const panel = (
+    <div ref={ref} style={style} className={`overflow-y-auto ${className ?? ''}`}>
+      {children}
+    </div>
+  );
+  return (
+    <span ref={anchorRef} className="hidden">
+      {host ? createPortal(panel, host) : panel}
+    </span>
+  );
 }
 
 export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.ReactNode; flyToOffsetX?: number }) {
@@ -1317,7 +1363,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
               <Layers className="w-4 h-4" />
             </button>
             {showLayerPicker && (
-              <div className="absolute right-full mr-2 top-0 glass-panel p-2 min-w-[180px]">
+              <ClampedFlyout className="glass-panel p-2 min-w-[180px]">
                 <div className="text-xs text-gray-400 mb-2 px-2">Base Layers</div>
                 {Object.entries(TILE_LAYERS).map(([key, layer]) => (
                   <button
@@ -1438,7 +1484,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                     )}
                   </div>
                 )}
-              </div>
+              </ClampedFlyout>
             )}
           </div>
           <div className="relative">
@@ -1454,7 +1500,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
               <Sun className="w-4 h-4" />
             </button>
             {showOverlayPanel && (
-              <div className="absolute right-full mr-2 top-0 glass-panel p-3 min-w-[220px]">
+              <ClampedFlyout className="glass-panel p-3 min-w-[220px]">
                 <div className="text-xs font-ui text-dark-200 mb-2 font-semibold">Solar Overlays</div>
 
                 {/* Day/Night Overlay Toggle */}
@@ -1611,7 +1657,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                     <span className="text-sm font-ui text-dark-200">Show photo for current callsign</span>
                   </label>
                 </div>
-              </div>
+              </ClampedFlyout>
             )}
           </div>
         </div>
@@ -1722,7 +1768,7 @@ export function MapPlugin() {
         </div>
       }
     >
-      <div id="map-plugin-container" ref={containerRef} className="relative w-full h-full min-h-[500px] bg-dark-900 overflow-hidden font-ui">
+      <div id="map-plugin-container" ref={containerRef} className="relative w-full h-full bg-dark-900 overflow-hidden font-ui">
         
         {/* Background Map - Full Screen */}
         <div className="absolute inset-0 z-0">
