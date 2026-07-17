@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Swords, Play, Square, Search, AlertTriangle, Sparkles } from 'lucide-react';
+import { Swords, Play, Square, Search, AlertTriangle, Sparkles, Download } from 'lucide-react';
 import {
   api,
   ContestDefinition,
@@ -270,7 +270,8 @@ function EntryView() {
         callsign: call.trim(),
         band,
         mode,
-        frequency: rigStatus ? rigStatus.frequency / 1e6 : undefined,
+        // Qso.Frequency is stored in kHz (ADIF export divides by 1000 → MHz).
+        frequency: rigStatus ? rigStatus.frequency / 1000 : undefined,
         rstSent: rstDefault,
         exchange,
       });
@@ -304,6 +305,20 @@ function EntryView() {
     setContestState(null);
   };
 
+  const exportCabrillo = async () => {
+    try {
+      const { blob, fileName } = await api.downloadCabrillo(contestState.sessionId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setLastLog(e instanceof Error ? e.message : 'Cabrillo export failed');
+    }
+  };
+
   const isDupe = check?.isDupe ?? false;
   const newMults = check?.newMults?.length ?? 0;
 
@@ -315,13 +330,22 @@ function EntryView() {
           <div className="text-sm font-medium text-gray-200 truncate">{contestState.label}</div>
           <div className="text-xs text-gray-500">{contestState.definitionName}</div>
         </div>
-        <button
-          onClick={stopSession}
-          title="Stop contest session"
-          className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-red-400 border border-glass-100 hover:border-red-500/40 transition-colors"
-        >
-          <Square className="w-3 h-3" /> Stop
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={exportCabrillo}
+            title="Export Cabrillo log"
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-accent-primary border border-glass-100 hover:border-accent-primary/40 transition-colors"
+          >
+            <Download className="w-3 h-3" /> Cabrillo
+          </button>
+          <button
+            onClick={stopSession}
+            title="Stop contest session"
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-red-400 border border-glass-100 hover:border-red-500/40 transition-colors"
+          >
+            <Square className="w-3 h-3" /> Stop
+          </button>
+        </div>
       </div>
 
       {/* Entry row */}

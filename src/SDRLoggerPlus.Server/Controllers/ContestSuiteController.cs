@@ -122,6 +122,20 @@ public class ContestSuiteController : ControllerBase
         }
     }
 
+    [HttpGet("sessions/{id}/cabrillo")]
+    public async Task<IActionResult> GetCabrillo(string id)
+    {
+        try
+        {
+            var (fileName, content) = await _contest.GenerateCabrilloAsync(id);
+            return File(System.Text.Encoding.UTF8.GetBytes(content), "text/plain", fileName);
+        }
+        catch (ContestDefinitionException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPost("sessions/{id}/stop")]
     public async Task<IActionResult> StopSession(string id)
     {

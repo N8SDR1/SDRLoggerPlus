@@ -803,6 +803,21 @@ class ApiClient {
     await fetch(`${API_BASE}/contest/sessions/${encodeURIComponent(id)}/stop`, { method: 'POST' });
   }
 
+  // Returns the Cabrillo file as a Blob + suggested filename (or throws with the
+  // server's error message, e.g. missing station callsign).
+  async downloadCabrillo(sessionId: string): Promise<{ blob: Blob; fileName: string }> {
+    const response = await fetch(`${API_BASE}/contest/sessions/${encodeURIComponent(sessionId)}/cabrillo`);
+    if (!response.ok) {
+      let msg = `API error: ${response.status}`;
+      try { msg = (await response.json()).error ?? msg; } catch { /* non-JSON */ }
+      throw new Error(msg);
+    }
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const match = /filename="?([^"]+)"?/.exec(disposition);
+    const fileName = match?.[1] ?? `${sessionId}.cbr`;
+    return { blob: await response.blob(), fileName };
+  }
+
   async getContestState(): Promise<ContestStateEvent | null> {
     const response = await fetch(`${API_BASE}/contest/state`);
     if (response.status === 204) return null;

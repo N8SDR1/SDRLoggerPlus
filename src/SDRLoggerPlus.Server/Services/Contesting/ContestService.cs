@@ -20,6 +20,7 @@ public class ContestService
     private readonly IQsoRepository _qsos;
     private readonly IContestSessionRepository _sessions;
     private readonly ContestDefinitionService _definitions;
+    private readonly ISettingsService _settings;
     private readonly IHubContext<LogHub, ILogHubClient> _hub;
     private readonly ILogger<ContestService> _logger;
 
@@ -27,12 +28,14 @@ public class ContestService
         IQsoRepository qsos,
         IContestSessionRepository sessions,
         ContestDefinitionService definitions,
+        ISettingsService settings,
         IHubContext<LogHub, ILogHubClient> hub,
         ILogger<ContestService> logger)
     {
         _qsos = qsos;
         _sessions = sessions;
         _definitions = definitions;
+        _settings = settings;
         _hub = hub;
         _logger = logger;
     }
@@ -109,6 +112,25 @@ public class ContestService
         await _hub.BroadcastContestState(state);
 
         return new ContestLogResult(created.Id, eval.IsDupe, eval.Points, eval.Mults, state);
+    }
+
+    /// <summary>Generate the Cabrillo log for a session. Returns (filename, content).</summary>
+    public async Task<(string FileName, string Content)> GenerateCabrilloAsync(string sessionId)
+    {
+        var session = await _sessions.GetByIdAsync(sessionId)
+            ?? throw new ContestDefinitionException($"No session '{sessionId}'.");
+        var def = _definitions.Get(session.DefinitionId)
+            ?? throw new ContestDefinitionException($"Unknown contest '{session.DefinitionId}'.");
+
+        var qsos = await _qsos.GetByContestSessionAsync(session.Id);
+        var settings = await _settings.GetSettingsAsync();
+        var call = settings.Station.Callsign;
+        if (string.IsNullOrWhiteSpace(call))
+            throw new ContestDefinitionException("Set your station callsign in Settings before exporting Cabrillo.");
+
+        var content = CabrilloExporter.Generate(def, session, qsos, call!, settings.Station.GridSquare);
+        var fileName = $"{call!.ToUpperInvariant()}_{def.Id}.cbr";
+        return (fileName, content);
     }
 
     /// <summary>Push current state to all clients (after session start/activate/stop).</summary>
