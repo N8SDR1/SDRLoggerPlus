@@ -109,6 +109,10 @@ builder.Services.AddSingleton<IPropagationService, PropagationService>();
 // Register Contests service
 builder.Services.AddSingleton<ContestsService>();
 
+// Register Contest suite (definitions = singleton; sessions = scoped for the repo)
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Contesting.ContestDefinitionService>();
+builder.Services.AddScoped<SDRLoggerPlus.Server.Services.Contesting.ContestSessionService>();
+
 // Register DX News service
 builder.Services.AddScoped<IDXNewsService, DXNewsService>();
 
