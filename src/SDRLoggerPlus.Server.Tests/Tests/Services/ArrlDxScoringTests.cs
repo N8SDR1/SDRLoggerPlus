@@ -102,4 +102,35 @@ public class ArrlDxScoringTests
         pts.ByMode["CW"].Should().Be(2);
         pts.ByMode["DIGI"].Should().Be(2);
     }
+
+    // -- DX / sprint band corrections ---------------------------------------
+
+    [Fact]
+    public void NaqpRtty_HasNo160_ButNaqpCwDoes()
+    {
+        Def("naqp-rtty").Bands.Should().NotContain("160M");
+        Def("naqp-cw").Bands.Should().Contain("160M");
+    }
+
+    [Fact]
+    public void NaSprint_UsesOnlyThreeBands()
+    {
+        Def("na-sprint-cw").Bands.Should().BeEquivalentTo(new[] { "80M", "40M", "20M" });
+    }
+
+    [Fact]
+    public void Wae_HasFiveBands_PerBandSerial()
+    {
+        var wae = Def("wae-cw");
+        wae.Bands.Should().NotContain("160M").And.HaveCount(5);
+        wae.Serial.Should().Be(SerialMode.PerBand);
+    }
+
+    [Fact]
+    public void TenTen_HasNoMultiplier_PerContestDupe()
+    {
+        var t = Def("ten-ten");
+        t.MultiplierRules.Should().BeEmpty();
+        t.DupeRule.Should().Be(DupeRule.PerContest);
+    }
 }

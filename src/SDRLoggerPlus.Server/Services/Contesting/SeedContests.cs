@@ -255,10 +255,12 @@ public static class SeedContests
                 new[] { Rst(), Txt("age", "Age", 3) }, new[] { Rst(), Txt("age", "Age", 3) },
                 Pts(1, otherCont: 3), new[] { M(MultSource.Dxcc, true) });
 
+        // Five bands (no 160m); serials restart per band. QTC traffic points aren't
+        // expressible in the declarative model (base QSO scoring only).
         foreach (var (m, cab) in New("WAE", "CW", "SSB", "RTTY"))
-            yield return D($"wae-{m.L}", $"Worked All Europe {m.N}", cab, HfBands, m.Modes,
+            yield return D($"wae-{m.L}", $"Worked All Europe {m.N}", cab, HfNo160, m.Modes,
                 new[] { Rst(), Serial() }, new[] { Rst(), Serial() },
-                Pts(1), new[] { M(MultSource.Dxcc, true) });
+                Pts(1), new[] { M(MultSource.Dxcc, true) }, serial: SerialMode.PerBand);
 
         foreach (var (m, cab) in New("OCEANIA", "CW", "SSB"))
             yield return D($"oceania-{m.L}", $"Oceania DX {m.N}", cab, HfBands, m.Modes,
@@ -270,17 +272,21 @@ public static class SeedContests
                 new[] { Rst(), Zone() }, new[] { Rst(), Txt("qth", "Pref/Zn", 5) },
                 Pts(1, otherCont: 1), new[] { M(MultSource.Dxcc, true) });
 
-        yield return D("rac", "RAC Canada", "RAC", Hf6, new[] { "CW", "SSB" },
+        // Includes 6m and 2m; provinces counted per band and mode.
+        yield return D("rac", "RAC Canada", "RAC", new() { "160M", "80M", "40M", "20M", "15M", "10M", "6M", "2M" }, new[] { "CW", "SSB" },
             new[] { Rst(), StateF("Prov/#") }, new[] { Rst(), StateF("Prov/#") },
-            Pts(2), new[] { M(MultSource.State, true), M(MultSource.Dxcc, true) });
+            Pts(2), new[] { M(MultSource.State, true, true), M(MultSource.Dxcc, true, true) });
 
+        // Own country 2 / same continent 3 / different continent 5. (Contacts with
+        // Russian stations score 10 — not expressible by geography alone.)
         yield return D("rdxc", "Russian DX (RDXC)", "RDXC", HfBands, new[] { "CW", "SSB" },
             new[] { Rst(), Txt("qth", "Oblast/#", 5) }, new[] { Rst(), Txt("qth", "Oblast/#", 5) },
-            Pts(1, sameCountry: 2, otherCont: 5), new[] { M(MultSource.Dxcc, true) });
+            Pts(3, sameCountry: 2, sameCont: 3, otherCont: 5), new[] { M(MultSource.Dxcc, true) });
 
-        yield return D("ari-dx", "ARI International DX", "ARI-DX", HfBands, new[] { "CW", "SSB", "RTTY" },
+        // Own country 0 / same continent 1 / different continent 3. Five bands.
+        yield return D("ari-dx", "ARI International DX", "ARI-DX", HfNo160, new[] { "CW", "SSB", "RTTY" },
             new[] { Rst(), Txt("qth", "Prov/#", 5) }, new[] { Rst(), Txt("qth", "Prov/#", 5) },
-            Pts(1, otherCont: 3), new[] { M(MultSource.Dxcc, true) });
+            Pts(1, sameCountry: 0, sameCont: 1, otherCont: 3), new[] { M(MultSource.Dxcc, true) });
 
         yield return D("africa-dx", "Africa International DX", "AFRICA-DX", HfBands, new[] { "CW", "SSB" },
             new[] { Rst(), Serial() }, new[] { Rst(), Serial() }, Pts(1), new[] { M(MultSource.Dxcc, true) });
@@ -288,7 +294,9 @@ public static class SeedContests
         yield return D("eu-dx", "EU DX", "EU-DX", HfBands, new[] { "CW", "SSB" },
             new[] { Rst(), Serial() }, new[] { Rst(), Serial() }, Pts(1), new[] { M(MultSource.Dxcc, true) });
 
-        yield return D("iota", "RSGB IOTA", "IOTA", HfBands, new[] { "CW", "SSB" },
+        // Five bands (no 160m). IOTA island references are the true multiplier
+        // (asymmetric island/world points); approximated here by DXCC per band.
+        yield return D("iota", "RSGB IOTA", "IOTA", HfNo160, new[] { "CW", "SSB" },
             new[] { Rst(), Serial(), Txt("iota", "IOTA", 6, false) }, new[] { Rst(), Serial(), Txt("iota", "IOTA", 6, false) },
             Pts(1), new[] { M(MultSource.Dxcc, true) }, serial: SerialMode.AllBand);
 
@@ -306,13 +314,15 @@ public static class SeedContests
     // ---- sprints, clubs, NAQP, digital roundups ---------------------------
     private static IEnumerable<ContestDefinition> SprintsClubsDigital()
     {
+        // RTTY leg drops 160m; CW/SSB use all six HF bands.
         foreach (var (m, cab) in New("NAQP", "CW", "SSB", "RTTY"))
-            yield return D($"naqp-{m.L}", $"NAQP {m.N}", cab, HfBands, m.Modes,
+            yield return D($"naqp-{m.L}", $"NAQP {m.N}", cab, m.N == "RTTY" ? HfNo160 : HfBands, m.Modes,
                 new[] { Name(), StateF() }, new[] { Name(), StateF() },
-                Pts(1), new[] { M(MultSource.State, true), M(MultSource.Dxcc, true) });
+                Pts(1), new[] { M(MultSource.State, true), M(MultSource.Dxcc, true) }, dupe: DupeRule.PerBand);
 
+        // Sprints run on 80/40/20 only; multipliers counted once (all-band).
         foreach (var (m, cab) in New("NA-SPRINT", "CW", "SSB", "RTTY"))
-            yield return D($"na-sprint-{m.L}", $"NA Sprint {m.N}", cab, HfBands, m.Modes,
+            yield return D($"na-sprint-{m.L}", $"NA Sprint {m.N}", cab, new() { "80M", "40M", "20M" }, m.Modes,
                 new[] { Serial(), Name(), StateF() }, new[] { Serial(), Name(), StateF() },
                 Pts(1), new[] { M(MultSource.State), M(MultSource.Dxcc) },
                 dupe: DupeRule.PerBand, serial: SerialMode.AllBand);
@@ -325,9 +335,9 @@ public static class SeedContests
             new[] { Serial(), Name() }, new[] { Serial(), Name() },
             Pts(1), new[] { M(MultSource.WpxPrefix) }, serial: SerialMode.AllBand);
 
-        yield return D("k1usn-sst", "K1USN SST", "K1USN-SST", HfNo160, new[] { "CW" },
+        yield return D("k1usn-sst", "K1USN SST", "K1USN-SST", HfBands, new[] { "CW" },
             new[] { Name(), StateF("S/P/DX") }, new[] { Name(), StateF("S/P/DX") },
-            Pts(1), new[] { M(MultSource.State) });
+            Pts(1), new[] { M(MultSource.State, true) }, dupe: DupeRule.PerBand);
 
         yield return D("icwc-mst", "ICWC Medium Speed Test", "ICWC-MST", HfBands, new[] { "CW" },
             new[] { Name(), Serial() }, new[] { Name(), Serial() },
@@ -337,17 +347,20 @@ public static class SeedContests
             new[] { Rst(), StateF(), Name(), Txt("nr", "Nr/Pwr", 5) }, new[] { Rst(), StateF(), Name(), Txt("nr", "Nr/Pwr", 5) },
             Pts(1), new[] { M(MultSource.State) });
 
+        // Non-member same continent 2 / different continent 4 (members score 5).
         yield return D("qrp-arci", "QRP ARCI", "QRP-ARCI", HfBands, new[] { "CW" },
             new[] { Rst(), StateF("S/P/C"), Txt("nr", "Nr/Pwr", 5) }, new[] { Rst(), StateF("S/P/C"), Txt("nr", "Nr/Pwr", 5) },
-            Pts(1), new[] { M(MultSource.State) });
+            Pts(2, sameCont: 2, otherCont: 4), new[] { M(MultSource.State) });
 
+        // Multipliers counted once (all-band), not per band.
         yield return D("ft-roundup", "FT Roundup", "FT-ROUNDUP", HfNo160, new[] { "FT8", "FT4" },
             new[] { Rst(), StateF("S/P/#") }, new[] { Rst(), StateF("S/P/#") },
-            Pts(1), new[] { M(MultSource.State, true), M(MultSource.Dxcc, true) }, dupe: DupeRule.PerBand);
+            Pts(1), new[] { M(MultSource.State), M(MultSource.Dxcc) }, dupe: DupeRule.PerBand);
 
+        // 10m only, worked once per event; no location multiplier (score = QSO points).
         yield return D("ten-ten", "10-10 QSO Party", "TEN-TEN", new() { "10M" }, new[] { "CW", "SSB" },
             new[] { Name(), Txt("nr", "10-10#", 6, false), StateF("S/P/C") }, new[] { Name(), Txt("nr", "10-10#", 6, false), StateF("S/P/C") },
-            Pts(1), new[] { M(MultSource.State) });
+            Pts(1), Array.Empty<MultRule>(), dupe: DupeRule.PerContest);
     }
 
     // ---- state / regional QSO parties -------------------------------------
