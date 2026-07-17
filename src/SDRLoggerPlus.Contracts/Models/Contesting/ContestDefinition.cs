@@ -43,6 +43,22 @@ public class ContestDefinition
 
     public SerialMode Serial { get; set; } = SerialMode.None;
 
+    /// <summary>
+    /// Defines the contest's "home area" for role-based rules (QSO parties, ARRL
+    /// DX, CQ 160). Null ⇒ no role split; every operator is
+    /// <see cref="ContestRole.All"/> and uses the top-level fields above.
+    /// </summary>
+    public HomeArea? HomeArea { get; set; }
+
+    /// <summary>
+    /// Per-role rule overrides. The operator's role is resolved at session start
+    /// from <see cref="HomeArea"/> and the operator's own location; a missing role
+    /// — or a missing field within a role — falls back to the top-level
+    /// SentExchange/RcvdExchange/QsoPoints/MultiplierRules, so contests without a
+    /// role split need no entry here.
+    /// </summary>
+    public Dictionary<ContestRole, RoleRules>? Roles { get; set; }
+
     /// <summary>Ordered mapping producing the Cabrillo QSO: line.</summary>
     public List<CabrilloColumn> CabrilloMap { get; set; } = new();
 
@@ -80,6 +96,14 @@ public class PointsRule
     public int? OtherContinent { get; set; }
     public int? SameZone { get; set; }
     public int Default { get; set; } = 1;
+
+    /// <summary>
+    /// Base points per mode class ("CW", "PH", "RTTY"). Used when no relationship
+    /// override (SameCountry/SameContinent/…) matches; falls back to
+    /// <see cref="Default"/> when the mode isn't listed. Lets a contest score e.g.
+    /// CW/digital=2, phone=1.
+    /// </summary>
+    public Dictionary<string, int>? ByMode { get; set; }
 }
 
 /// <summary>One multiplier dimension, e.g. CQ zones counted per band.</summary>
@@ -88,6 +112,34 @@ public class MultRule
     public MultSource Source { get; set; }
     public bool PerBand { get; set; }
     public bool PerMode { get; set; }
+}
+
+/// <summary>
+/// Defines a contest's "home area" and how a worked station is classified for
+/// role-based rules. For a QSO party <see cref="States"/> is the host state (e.g.
+/// ["OH"]) or the member states of a regional (7QP's 7, NEQP's 6).
+/// </summary>
+public class HomeArea
+{
+    public HomeAreaKind Kind { get; set; } = HomeAreaKind.None;
+
+    /// <summary>In-area state/province codes.</summary>
+    public List<string> States { get; set; } = new();
+}
+
+/// <summary>
+/// Role-specific rule overrides. Any null field falls back to the definition's
+/// top-level value, so a role only needs to specify what actually differs.
+/// </summary>
+public class RoleRules
+{
+    public List<ContestField>? SentExchange { get; set; }
+    public List<ContestField>? RcvdExchange { get; set; }
+    public PointsRule? QsoPoints { get; set; }
+    public List<MultRule>? MultiplierRules { get; set; }
+
+    /// <summary>Which worked stations count for points/mults in this role.</summary>
+    public WorkTarget WorksForPoints { get; set; } = WorkTarget.Everyone;
 }
 
 /// <summary>Maps a QSO to one column of a Cabrillo QSO: line.</summary>
@@ -113,6 +165,42 @@ public enum ContestFieldType
     Power,
     Check,
     Precedence,
+}
+
+/// <summary>The operator's role for a contest, fixed at session start.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ContestRole
+{
+    /// <summary>No location split (global contests); uses the top-level rules.</summary>
+    All,
+    /// <summary>Operator is inside the contest's home area (in-state; W/VE).</summary>
+    InArea,
+    /// <summary>Operator is outside the home area (rest of W/VE, and DX unless split).</summary>
+    OutArea,
+    /// <summary>Operator is DX, where a contest treats DX distinctly from OutArea.</summary>
+    Dx,
+}
+
+/// <summary>How a contest's home area is defined / how a station is classified.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum HomeAreaKind
+{
+    None,
+    /// <summary>QSO party: in-area = operator/station state in HomeArea.States.</summary>
+    StateCounty,
+    /// <summary>ARRL DX style: in-area = W/VE, out-area = DX.</summary>
+    WVE,
+}
+
+/// <summary>Which worked stations count for points/mults in a given role.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum WorkTarget
+{
+    Everyone,
+    /// <summary>Only in-area stations count (typical for out-of-state QSO-party ops).</summary>
+    InAreaOnly,
+    /// <summary>Only out-of-area stations count (e.g. ARRL DX: W/VE work DX only).</summary>
+    OutAreaOnly,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

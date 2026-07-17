@@ -20,8 +20,9 @@ public static class ContestScoringEngine
     public static QsoEvaluation Evaluate(
         ContestDefinition def, MyExchange me, IReadOnlyList<Qso> priorQsos, Qso qso)
     {
-        var (seenDupeKeys, seenMultKeys) = BuildSeen(def, priorQsos);
-        return EvaluateAgainst(def, me, seenDupeKeys, seenMultKeys, qso);
+        var eff = Resolve(def, me);
+        var (seenDupeKeys, seenMultKeys) = BuildSeen(def, eff, priorQsos);
+        return EvaluateAgainst(def, eff, me, seenDupeKeys, seenMultKeys, qso);
     }
 
     /// <summary>
@@ -33,15 +34,17 @@ public static class ContestScoringEngine
     public static List<QsoEvaluation> EvaluateBatch(
         ContestDefinition def, MyExchange me, IReadOnlyList<Qso> priorQsos, IReadOnlyList<Qso> candidates)
     {
-        var (seenDupeKeys, seenMultKeys) = BuildSeen(def, priorQsos);
+        var eff = Resolve(def, me);
+        var (seenDupeKeys, seenMultKeys) = BuildSeen(def, eff, priorQsos);
         return candidates
-            .Select(c => EvaluateAgainst(def, me, seenDupeKeys, seenMultKeys, c))
+            .Select(c => EvaluateAgainst(def, eff, me, seenDupeKeys, seenMultKeys, c))
             .ToList();
     }
 
-    // Build the seen dupe-key / mult-key sets from a prior log (dupes contribute nothing).
+    // Build the seen dupe-key / mult-key sets from a prior log (dupes and
+    // invalid-target QSOs contribute nothing).
     private static (HashSet<string> Dupe, HashSet<string> Mult) BuildSeen(
-        ContestDefinition def, IReadOnlyList<Qso> priorQsos)
+        ContestDefinition def, Effective eff, IReadOnlyList<Qso> priorQsos)
     {
         var seenDupeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenMultKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -49,7 +52,9 @@ public static class ContestScoringEngine
         {
             if (!seenDupeKeys.Add(DupeKey(def, prior)))
                 continue; // prior itself was a dupe -> contributes no points or mults
-            foreach (var m in MultKeys(def, prior))
+            if (!IsValidTarget(eff, prior))
+                continue; // station this role can't score claims no mults
+            foreach (var m in MultKeys(eff, prior))
                 seenMultKeys.Add(m);
         }
         return (seenDupeKeys, seenMultKeys);
@@ -59,6 +64,7 @@ public static class ContestScoringEngine
     public static ScoreSummary Recompute(
         ContestDefinition def, MyExchange me, IReadOnlyList<Qso> qsos)
     {
+        var eff = Resolve(def, me);
         var seenDupeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenMultKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var multsBySource = new Dictionary<string, HashSet<string>>();
@@ -67,7 +73,7 @@ public static class ContestScoringEngine
 
         foreach (var qso in qsos)
         {
-            var eval = EvaluateAgainst(def, me, seenDupeKeys, seenMultKeys, qso);
+            var eval = EvaluateAgainst(def, eff, me, seenDupeKeys, seenMultKeys, qso);
             if (eval.IsDupe)
             {
                 summary.Dupes++;
@@ -89,8 +95,8 @@ public static class ContestScoringEngine
 
         summary.Multipliers = seenMultKeys.Count;
         summary.Score = summary.Points * Math.Max(summary.Multipliers, 1);
-        // When a contest has no multiplier rules, score is just points.
-        if (def.MultiplierRules.Count == 0)
+        // When this role has no multiplier rules, score is just points.
+        if (eff.Mults.Count == 0)
             summary.Score = summary.Points;
         summary.MultsBySource = multsBySource.ToDictionary(
             kv => kv.Key, kv => kv.Value.OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList());
@@ -100,7 +106,7 @@ public static class ContestScoringEngine
     // -- core evaluation against an already-accumulated seen-state ----------
 
     private static QsoEvaluation EvaluateAgainst(
-        ContestDefinition def, MyExchange me,
+        ContestDefinition def, Effective eff, MyExchange me,
         HashSet<string> seenDupeKeys, HashSet<string> seenMultKeys, Qso qso)
     {
         var eval = new QsoEvaluation();
@@ -112,13 +118,108 @@ public static class ContestScoringEngine
             return eval; // dupes score nothing and claim no mults
         }
 
-        eval.Points = Points(def, me, qso);
-        foreach (var key in MultKeys(def, qso))
+        // A station this role can't score (e.g. an out-of-state op working
+        // another out-of-state station) is logged but worth 0 points and no mults.
+        if (!IsValidTarget(eff, qso))
+            return eval;
+
+        eval.Points = Points(eff, me, qso);
+        foreach (var key in MultKeys(eff, qso))
         {
             if (!seenMultKeys.Contains(key))
                 eval.Mults.Add(key);
         }
         return eval;
+    }
+
+    // -- role resolution ----------------------------------------------------
+
+    /// <summary>
+    /// The operator's role for this contest, from the definition's HomeArea and
+    /// the operator's own location. <see cref="ContestRole.All"/> when there is no
+    /// role split.
+    /// </summary>
+    public static ContestRole DetermineRole(ContestDefinition def, MyExchange me)
+    {
+        var home = def.HomeArea;
+        if (home is null || home.Kind == HomeAreaKind.None)
+            return ContestRole.All;
+
+        return home.Kind switch
+        {
+            HomeAreaKind.StateCounty =>
+                !string.IsNullOrWhiteSpace(me.State)
+                && home.States.Any(s => s.Equals(me.State, StringComparison.OrdinalIgnoreCase))
+                    ? ContestRole.InArea : ContestRole.OutArea,
+            HomeAreaKind.WVE => IsUsOrCanada(me.Country, me.Continent)
+                ? ContestRole.InArea : ContestRole.OutArea,
+            _ => ContestRole.All,
+        };
+    }
+
+    // The rules actually in force for the operator's role: the matching RoleRules
+    // entry with per-field fallback to the definition's top-level values.
+    private static Effective Resolve(ContestDefinition def, MyExchange me)
+    {
+        RoleRules? rr = null;
+        def.Roles?.TryGetValue(DetermineRole(def, me), out rr);
+        return new Effective(
+            rr?.QsoPoints ?? def.QsoPoints,
+            rr?.MultiplierRules ?? def.MultiplierRules,
+            rr?.WorksForPoints ?? WorkTarget.Everyone,
+            def.HomeArea);
+    }
+
+    private readonly record struct Effective(
+        PointsRule Points, IReadOnlyList<MultRule> Mults, WorkTarget WorksForPoints, HomeArea? Home);
+
+    private static bool IsValidTarget(Effective eff, Qso qso)
+    {
+        if (eff.WorksForPoints == WorkTarget.Everyone) return true;
+        var cls = ClassifyStation(eff.Home, qso);
+        return eff.WorksForPoints switch
+        {
+            WorkTarget.InAreaOnly => cls == StationClass.InArea,
+            WorkTarget.OutAreaOnly => cls != StationClass.InArea,
+            _ => true,
+        };
+    }
+
+    private enum StationClass { InArea, OutArea, Dx }
+
+    // Classify a worked station relative to the contest's home area. For QSO
+    // parties, in-area stations send a county code (3+ chars) and out-of-area
+    // stations send a 2-letter S/P (or "DX"), so length disambiguates without a
+    // county table; an explicit home-state code also counts as in-area. This is a
+    // heuristic pending per-contest county reference data (sub-project C).
+    private static StationClass ClassifyStation(HomeArea? home, Qso qso)
+    {
+        if (home is null || home.Kind == HomeAreaKind.None)
+            return StationClass.OutArea;
+
+        var na = IsUsOrCanada(qso.Country ?? qso.Station?.Country, qso.Continent);
+
+        if (home.Kind == HomeAreaKind.WVE)
+            return na ? StationClass.InArea : StationClass.Dx;
+
+        // StateCounty
+        var loc = (qso.Contest?.RcvdState ?? qso.Station?.State ?? string.Empty)
+            .Trim().ToUpperInvariant();
+        if (loc.Length > 0 && home.States.Any(s => s.Equals(loc, StringComparison.OrdinalIgnoreCase)))
+            return StationClass.InArea;
+        if (loc.Length == 2) return StationClass.OutArea;   // a state/province code, or "DX"
+        if (loc.Length >= 3) return StationClass.InArea;    // a county code (in-area station)
+        return na ? StationClass.OutArea : StationClass.Dx; // no location -> classify by entity
+    }
+
+    private static bool IsUsOrCanada(string? country, string? continent)
+    {
+        if (!string.IsNullOrEmpty(country)
+            && (country.Equals("United States", StringComparison.OrdinalIgnoreCase)
+                || country.Equals("Canada", StringComparison.OrdinalIgnoreCase)
+                || country.Contains("USA", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return false;
     }
 
     // -- dupe ---------------------------------------------------------------
@@ -136,9 +237,9 @@ public static class ContestScoringEngine
 
     // -- points -------------------------------------------------------------
 
-    private static int Points(ContestDefinition def, MyExchange me, Qso qso)
+    private static int Points(Effective eff, MyExchange me, Qso qso)
     {
-        var rule = def.QsoPoints;
+        var rule = eff.Points;
 
         // Precedence: same country > same zone > same continent > other continent.
         // The first relation that both holds AND has a value configured wins.
@@ -158,7 +259,21 @@ public static class ContestScoringEngine
         if (!sameContinent && !string.IsNullOrEmpty(qso.Continent) && rule.OtherContinent.HasValue)
             return rule.OtherContinent.Value;
 
+        // No relationship override: per-mode base if configured, else Default.
+        if (rule.ByMode is not null && rule.ByMode.TryGetValue(ModeClass(qso.Mode), out var byMode))
+            return byMode;
+
         return rule.Default;
+    }
+
+    // Normalized mode class for per-mode points ("CW", "PH", "RTTY", "DIGI").
+    private static string ModeClass(string? mode)
+    {
+        var m = (mode ?? string.Empty).ToUpperInvariant();
+        if (m.StartsWith("CW")) return "CW";
+        if (m is "SSB" or "USB" or "LSB" or "PH" or "AM" or "FM" or "NFM") return "PH";
+        if (m is "RTTY" or "RY") return "RTTY";
+        return "DIGI";
     }
 
     // DXCC number when both sides have it; otherwise fall back to the CTY country
@@ -173,9 +288,9 @@ public static class ContestScoringEngine
 
     // -- multipliers --------------------------------------------------------
 
-    private static IEnumerable<string> MultKeys(ContestDefinition def, Qso qso)
+    private static IEnumerable<string> MultKeys(Effective eff, Qso qso)
     {
-        foreach (var rule in def.MultiplierRules)
+        foreach (var rule in eff.Mults)
         {
             var value = MultValue(rule.Source, qso);
             if (string.IsNullOrWhiteSpace(value))

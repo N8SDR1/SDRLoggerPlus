@@ -19,6 +19,14 @@ public class ContestSession
     /// <summary>The operator's own exchange / station facts, used for scoring relations.</summary>
     public MyExchange MyExchange { get; set; } = new();
 
+    /// <summary>
+    /// The operator's role for this contest, resolved at start from the
+    /// definition's HomeArea + MyExchange. Stored so scoring stays consistent even
+    /// if station facts are edited later. <see cref="ContestRole.All"/> for
+    /// contests without a role split.
+    /// </summary>
+    public ContestRole Role { get; set; } = ContestRole.All;
+
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
     public DateTime? EndedAt { get; set; }
 
@@ -47,6 +55,10 @@ public class MyExchange
     public int? CqZone { get; set; }
     public int? ItuZone { get; set; }
     public string? State { get; set; }
+
+    /// <summary>The operator's own county (in-area QSO-party sent exchange).</summary>
+    public string? County { get; set; }
+
     public string? Section { get; set; }
     public string? Grid { get; set; }
 

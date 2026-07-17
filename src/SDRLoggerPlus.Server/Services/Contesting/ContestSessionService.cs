@@ -44,6 +44,7 @@ public class ContestSessionService
             DefinitionId = def.Id,
             Label = string.IsNullOrWhiteSpace(label) ? $"{def.Name} {DateTime.UtcNow:yyyy}" : label!,
             MyExchange = me,
+            Role = ContestScoringEngine.DetermineRole(def, me),
             StartedAt = DateTime.UtcNow,
             Active = true,
         };

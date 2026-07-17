@@ -12,7 +12,8 @@ public class ContestScoringEngineTests
     private static Qso MakeQso(
         string call, string band = "20M", string mode = "CW",
         int? dxcc = null, string? cont = null, int? cqZone = null,
-        string? section = null, string? state = null)
+        string? section = null, string? state = null,
+        string? rcvdState = null, string? country = null)
     {
         return new Qso
         {
@@ -21,8 +22,9 @@ public class ContestScoringEngineTests
             Mode = mode,
             Dxcc = dxcc,
             Continent = cont,
+            Country = country,
             Station = new StationInfo { CqZone = cqZone, State = state },
-            Contest = new ContestInfo { RcvdSection = section },
+            Contest = new ContestInfo { RcvdSection = section, RcvdState = rcvdState },
         };
     }
 
@@ -205,5 +207,107 @@ public class ContestScoringEngineTests
         summary.Points.Should().Be(6);
         summary.Multipliers.Should().Be(2);
         summary.Score.Should().Be(12);
+    }
+
+    // ---- roles: in-state / out-of-state (QSO parties) ---------------------
+
+    // An Ohio-QSO-Party-shaped definition: in-state ops work everyone and count
+    // state/prov + DXCC mults; out-of-state ops work only Ohio stations and count
+    // Ohio county mults.
+    private static ContestDefinition OhioQsoParty() => new()
+    {
+        DupeRule = DupeRule.PerBandMode,
+        HomeArea = new HomeArea { Kind = HomeAreaKind.StateCounty, States = { "OH" } },
+        QsoPoints = new PointsRule { Default = 2 },
+        MultiplierRules = { new MultRule { Source = MultSource.State } },
+        Roles = new()
+        {
+            [ContestRole.InArea] = new RoleRules
+            {
+                WorksForPoints = WorkTarget.Everyone,
+                MultiplierRules = new()
+                {
+                    new MultRule { Source = MultSource.State },
+                    new MultRule { Source = MultSource.Dxcc },
+                },
+            },
+            [ContestRole.OutArea] = new RoleRules
+            {
+                WorksForPoints = WorkTarget.InAreaOnly,
+                MultiplierRules = new() { new MultRule { Source = MultSource.State } },
+            },
+        },
+    };
+
+    private static readonly MyExchange OhioOp = new() { Country = "United States", Continent = "NA", State = "OH" };
+    private static readonly MyExchange CalifOp = new() { Country = "United States", Continent = "NA", State = "CA" };
+
+    [Fact]
+    public void DetermineRole_NoHomeArea_IsAll()
+    {
+        var def = new ContestDefinition();
+        ContestScoringEngine.DetermineRole(def, OhioOp).Should().Be(ContestRole.All);
+    }
+
+    [Fact]
+    public void DetermineRole_OperatorInHomeState_IsInArea()
+    {
+        ContestScoringEngine.DetermineRole(OhioQsoParty(), OhioOp).Should().Be(ContestRole.InArea);
+    }
+
+    [Fact]
+    public void DetermineRole_OperatorOutsideHomeState_IsOutArea()
+    {
+        ContestScoringEngine.DetermineRole(OhioQsoParty(), CalifOp).Should().Be(ContestRole.OutArea);
+    }
+
+    [Fact]
+    public void OutOfStateOp_ScoresInStateStation_ButNotAnotherOutOfStateStation()
+    {
+        var def = OhioQsoParty();
+
+        // Working an Ohio station (sends a county code) counts; mult is the county.
+        var ohio = ContestScoringEngine.Evaluate(def, CalifOp, Array.Empty<Qso>(),
+            MakeQso("W8XYZ", rcvdState: "FRA", country: "United States"));
+        ohio.Points.Should().Be(2);
+        ohio.Mults.Should().Contain("State:FRA");
+
+        // Working another out-of-state station (sends a 2-letter S/P) scores nothing.
+        var texas = ContestScoringEngine.Evaluate(def, CalifOp, Array.Empty<Qso>(),
+            MakeQso("K5AAA", rcvdState: "TX", country: "United States"));
+        texas.Points.Should().Be(0);
+        texas.Mults.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void InStateOp_ScoresEveryone_AndCountsStateAndDxccMults()
+    {
+        var def = OhioQsoParty();
+        var summary = ContestScoringEngine.Recompute(def, OhioOp, new[]
+        {
+            MakeQso("W8AAA", rcvdState: "ALL", country: "United States"),         // OH county
+            MakeQso("K5BBB", rcvdState: "TX", country: "United States"),          // out-of-state S/P
+            MakeQso("DL1CCC", rcvdState: "DX", dxcc: 230, cont: "EU", country: "Germany"), // DX
+        });
+
+        summary.Qsos.Should().Be(3);   // in-state op works everyone
+        summary.Points.Should().Be(6); // 3 QSOs * 2 pts
+        // State mults from every worked station's location; DXCC mults per country.
+        summary.MultsBySource["State"].Should().BeEquivalentTo("ALL", "TX", "DX");
+        summary.MultsBySource["Dxcc"].Should().Contain("230"); // Germany counts as a DXCC mult
+    }
+
+    [Fact]
+    public void ByMode_Points_UseModeClass()
+    {
+        var def = new ContestDefinition
+        {
+            QsoPoints = new PointsRule { Default = 1, ByMode = new() { ["CW"] = 2, ["PH"] = 1 } },
+        };
+
+        ContestScoringEngine.Evaluate(def, Me, Array.Empty<Qso>(), MakeQso("N8SDR", mode: "CW"))
+            .Points.Should().Be(2);
+        ContestScoringEngine.Evaluate(def, Me, Array.Empty<Qso>(), MakeQso("N8SDR", mode: "SSB"))
+            .Points.Should().Be(1);
     }
 }
