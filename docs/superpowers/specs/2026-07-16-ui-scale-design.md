@@ -1,10 +1,16 @@
-# UI Scale (whole-app zoom) — Design
+# UI Scale (global + per-panel) — Design
 
-**Date:** 2026-07-16
+**Date:** 2026-07-16 (revised after live prototype on the operator's 1080p monitor)
 **Problem:** On a 1920×1080 monitor, panels (Log Entry and most others) need more
 vertical room than they get — content is cut off or forces scrolling. The panels
-already use small type; the practical fix is letting the operator scale the whole
-UI down (~85–90%) so more fits.
+already use small type; the practical fix is letting the operator scale the UI
+down (~85–90%) so more fits — **globally** (whole app) and **per panel**
+(each panel independently), which compose multiplicatively.
+
+**Prototype verdict (operator-tested):** per-panel stepper in the tabset header
+approved ("I like it"); canvas panels must be exempt (scaling broke the 2D map's
+globe geometry); two standalone fit bugs found and fixed during the demo
+(committed separately as `fix(map)`: min-h-[500px] removal + ClampedFlyout).
 
 **Key finding:** The Electron shell already has complete zoom plumbing — IPC
 handlers `get-zoom-level` / `set-zoom-level` (main.js), `saveZoomLevel()` to the
@@ -16,12 +22,21 @@ no new persistence or IPC.
 
 ## Scope
 
-- **In:** Electron menu + keyboard zoom, Ctrl+wheel zoom, a UI Scale control in
-  Settings → Appearance. Electron only — the control hides in a plain browser.
-- **Out:** CSS-based scaling for non-Electron browsers (native browser zoom
-  covers that). Per-panel responsive/reflow work. The clipping bugs in
-  Contests / Log History / DX Cluster (no scrollbar on overflow) — separate
-  follow-up, they're broken at any scale.
+- **In:**
+  - **Global scale:** Electron menu + keyboard zoom and a UI Scale control in
+    Settings → Appearance. Electron only — the control hides in a plain browser.
+  - **Per-panel scale:** a small − % + stepper in each tabset header (acts on
+    the active tab), CSS `zoom` on the panel's content wrapper, persisted in
+    the FlexLayout tab config. Works in browser and Electron alike.
+- **Out:**
+  - **Ctrl+wheel global zoom — deliberately dropped.** The Panadapter and
+    Globe already bind Ctrl+wheel to zoom themselves; a global binding would
+    fight them. (The existing `zoom-changed` save-only listener stays as-is.)
+  - CSS-based **global** scaling for non-Electron browsers (native browser
+    zoom covers that).
+  - Per-panel responsive/reflow work. The clipping bugs in
+    Contests / Log History / DX Cluster (no scrollbar on overflow) — separate
+    follow-up, they're broken at any scale.
 
 ## Design
 
@@ -38,9 +53,9 @@ no new persistence or IPC.
 - **Step:** ±0.5 zoom-level per action (≈ ±9.5%).
 - **Clamp:** level −2.0 … 0 (≈ 69% … 100% — scaling **down only**; the operator asked for no upscaling). All entry points clamp
   (menu, wheel, IPC `set-zoom-level`, restore-on-launch).
-- **Ctrl+wheel:** the existing `zoom-changed` listener currently only saves;
-  change it to *apply* ±0.5 per event (`zoomDirection === 'in' ? +0.5 : −0.5`),
-  clamp, set, save.
+- **Ctrl+wheel:** NOT wired globally (see Scope — conflicts with the
+  Panadapter/Globe Ctrl+wheel zoom). The existing save-only `zoom-changed`
+  listener is left untouched.
 - **IPC:** unchanged (`get-zoom-level`, `set-zoom-level`) except `set-zoom-level`
   gains the clamp.
 - A `zoom-level-changed` notification from main → renderer (via
@@ -54,7 +69,7 @@ no new persistence or IPC.
   - Current percentage readout (e.g. **85%**)
   - **−** / **+** buttons stepping 5 percentage points, clamped 70–100%
   - **Reset** button → 100%
-  - Hint text: "Ctrl + = / − / 0 or Ctrl + mouse wheel also work anywhere."
+  - Hint text: "Ctrl + = / − / 0 also work anywhere."
 - Reads initial value via `window.electron.getZoomLevel()`; writes via
   `window.electron.setZoomLevel(level)`; subscribes to `onZoomLevelChanged` to
   stay current.
@@ -72,7 +87,35 @@ Electron zoom level is log-scale: `factor = 1.2^level`.
   `STEP_PERCENT = 5`.
 - Pure functions — unit-tested.
 
-### 4. Persistence — no changes
+### 4. Per-panel scale — `src/SDRLoggerPlus.Web/src/App.tsx`
+
+Prototype validated live by the operator; the final version replaces the
+prototype's React-state map with FlexLayout-config persistence.
+
+- **Plugin registry:** `PluginDef` gains `scalable?: boolean`. `'map'`,
+  `'globe-3d'`, and `'panadapter'` set `scalable: false` — canvas/WebGL panels
+  measure their containers in real pixels, and CSS zoom breaks their geometry
+  (the 2D map's embedded globe circle visibly tore in the prototype). Their
+  content renders unwrapped and their tabset shows no stepper.
+- **Factory wrapper:** for scalable plugins the factory wraps the component:
+  `<div style={{ zoom: scale / 100, height: '100%' }}>` where
+  `scale = (node.getConfig()?.scale as number | undefined) ?? 100`.
+- **Stepper UI (`onRenderTabSet`):** pushed to `renderValues.buttons` (before
+  the sticky "+" add-panel button) when the tabset's selected tab is a
+  scalable plugin: `−` button, `NN%` readout (click = reset to 100), `+`
+  button. Same look as the prototype: `text-[10px] font-mono text-dark-300`,
+  `flexlayout__tab_toolbar_button` class on the buttons.
+- **Steps/clamp:** 10-point steps, clamped 70–100% (down-only, matching the
+  global scale decision).
+- **Persistence:** the scale lives in the tab node's `config`
+  (`Actions.updateNodeAttributes(tabId, { config: { ...config, scale } })`),
+  which serializes into the layout JSON and rides the existing debounced
+  layout save to the backend — survives restart, per layout, no new storage.
+- **Composition:** per-panel CSS zoom multiplies with global Electron zoom
+  (panel 90% in an app at 90% renders at 81%) — intended behavior, no
+  compensation logic.
+
+### 5. Persistence (global) — no changes
 
 Zoom stays in the Electron per-machine config (existing `saveZoomLevel` /
 `getStoredZoomLevel`), NOT the backend settings DB. Rationale: display scale is
@@ -85,21 +128,31 @@ import/export to another machine. No Contracts change, no migration.
   restore.
 - Settings control guards on `window.electron` — absent (browser) it renders
   nothing; IPC failures fall back to leaving the readout unchanged.
+- Per-panel: a missing/non-numeric `config.scale` reads as 100; values are
+  clamped to [70, 100] wherever read, so a hand-edited layout can't break
+  rendering.
 
 ## Testing
 
 - **Unit (vitest):** `zoomScale.test.ts` — round-trips (100% ↔ 0, 85% → level →
-  85%), clamping, monotonicity.
-- **Manual in the Electron app:** menu items + accelerators, Ctrl+wheel, the
-  Settings stepper, persistence across an app restart, clamp at both ends.
-  (Shell behavior isn't reachable by the web test suite or headless browser.)
+  85%), clamping, monotonicity. Per-panel: a small test for the clamp/step
+  helper if extracted; the FlexLayout wiring is exercised manually.
+- **Manual in the Electron app:** menu items + accelerators, the Settings
+  stepper, per-panel stepper (scale, reset, exempt panels show none),
+  persistence across an app restart (both global zoom and per-panel scales),
+  clamp at both ends. (Shell behavior isn't reachable by the web test suite
+  or headless browser.)
 
 ## Affected files
 
 | File | Change |
 |---|---|
-| `src/SDRLoggerPlus.Desktop/main.js` | View-menu zoom items, wheel-zoom apply, clamp, change notification |
+| `src/SDRLoggerPlus.Desktop/main.js` | View-menu zoom items, clamp, change notification |
 | `src/SDRLoggerPlus.Desktop/preload.js` | expose `onZoomLevelChanged` |
 | `src/SDRLoggerPlus.Web/src/utils/zoomScale.ts` | new — percent↔level conversion + clamps |
 | `src/SDRLoggerPlus.Web/src/utils/zoomScale.test.ts` | new — unit tests |
 | `src/SDRLoggerPlus.Web/src/components/SettingsPanel.tsx` | UI Scale row in Appearance (Electron-only) |
+| `src/SDRLoggerPlus.Web/src/App.tsx` | `scalable` flag, factory zoom wrapper, tabset stepper, config persistence |
+
+Already committed during prototyping (independent fixes): `MapPlugin.tsx`
+min-h-[500px] removal + ClampedFlyout (`5b0dc30`).
