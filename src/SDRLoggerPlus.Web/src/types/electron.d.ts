@@ -6,6 +6,10 @@ interface ElectronAPI {
   removeOpenAboutListener: () => void;
   restartApp: () => Promise<void>;
   openExternal: (url: string) => Promise<void>;
+  getZoomLevel?: () => Promise<number>;
+  setZoomLevel?: (level: number) => Promise<void>;
+  onZoomLevelChanged?: (callback: (level: number) => void) => void;
+  removeZoomLevelChangedListener?: () => void;
 }
 
 declare global {
