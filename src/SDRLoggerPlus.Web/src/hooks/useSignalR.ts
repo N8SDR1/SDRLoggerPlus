@@ -158,6 +158,9 @@ export function useSignalRConnection() {
             queryClient.invalidateQueries({ queryKey: ['qsos'] });
             queryClient.invalidateQueries({ queryKey: ['statistics'] });
           },
+          onContestState: (evt) => {
+            useAppStore.getState().setContestState(evt);
+          },
           onSpotReceived: (evt) => {
             // Add spot to ephemeral in-memory store
             const spot = {

@@ -39,6 +39,10 @@ public class ContestSession
 public class MyExchange
 {
     public int? Dxcc { get; set; }
+
+    /// <summary>CTY country name fallback when the ADIF entity number is unknown.</summary>
+    public string? Country { get; set; }
+
     public string? Continent { get; set; }
     public int? CqZone { get; set; }
     public int? ItuZone { get; set; }

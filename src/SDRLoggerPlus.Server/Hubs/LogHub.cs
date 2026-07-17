@@ -27,6 +27,7 @@ public interface ILogHubClient
     Task OnRigStatus(RigStatusEvent evt);
     Task OnTciMeters(TciMetersEvent evt);
     Task OnStationLocation(StationLocationEvent evt);
+    Task OnContestState(SDRLoggerPlus.Contracts.Api.ContestStateDto state);
 
     // Antenna Genius events
     Task OnAntennaGeniusDiscovered(AntennaGeniusDiscoveredEvent evt);
@@ -1343,6 +1344,11 @@ public static class LogHubExtensions
     public static async Task BroadcastQso(this IHubContext<LogHub, ILogHubClient> hub, QsoLoggedEvent evt)
     {
         await hub.Clients.All.OnQsoLogged(evt);
+    }
+
+    public static async Task BroadcastContestState(this IHubContext<LogHub, ILogHubClient> hub, SDRLoggerPlus.Contracts.Api.ContestStateDto state)
+    {
+        await hub.Clients.All.OnContestState(state);
     }
 
     public static async Task BroadcastCallsignLookup(this IHubContext<LogHub, ILogHubClient> hub, CallsignLookedUpEvent evt)

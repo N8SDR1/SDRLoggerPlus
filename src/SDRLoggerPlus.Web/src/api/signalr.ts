@@ -668,6 +668,24 @@ export function clearTciMetersCallback(cb: (evt: TciMetersEvent) => void): void 
 export interface LightningStrikeMsg { lat: number; lon: number; timestampUtc: string; local: boolean }
 export interface LightningStrikesEvent { strikes: LightningStrikeMsg[] }
 
+/** Live contest state pushed after every contest QSO / session change. */
+export interface ContestStateEvent {
+  sessionId: string;
+  definitionId: string;
+  definitionName: string;
+  label: string;
+  serialInUse: boolean;
+  nextSerial: number;
+  qsos: number;
+  dupes: number;
+  points: number;
+  multipliers: number;
+  score: number;
+  rateLastHour: number;
+  rateLast10: number;
+  multsBySource: Record<string, string[]>;
+}
+
 let lightningStrikesCallback: ((evt: LightningStrikesEvent) => void) | null = null;
 export function setLightningStrikesCallback(cb: ((evt: LightningStrikesEvent) => void) | null): void {
   lightningStrikesCallback = cb;
@@ -693,6 +711,7 @@ type EventHandlers = {
   onComboLogRequested?: (evt: ComboLogRequestedEvent) => void;
   onRotatorPosition?: (evt: RotatorPositionEvent) => void;
   onRigStatus?: (evt: RigStatusEvent) => void;
+  onContestState?: (evt: ContestStateEvent) => void;
   // Antenna Genius handlers
   onAntennaGeniusDiscovered?: (evt: AntennaGeniusDiscoveredEvent) => void;
   onAntennaGeniusDisconnected?: (evt: AntennaGeniusDisconnectedEvent) => void;
@@ -932,6 +951,10 @@ class SignalRService {
 
     this.connection.on('OnQsoLogged', (evt: QsoLoggedEvent) => {
       this.handlers.onQsoLogged?.(evt);
+    });
+
+    this.connection.on('OnContestState', (evt: ContestStateEvent) => {
+      this.handlers.onContestState?.(evt);
     });
 
     this.connection.on('OnBandOpening', (evt: { band: string; dxCall: string; skimmer: string; distance: number; unit: string; snr: number; mode: string }) => {

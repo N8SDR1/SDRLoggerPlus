@@ -121,7 +121,7 @@ public static class ContestScoringEngine
 
         // Precedence: same country > same zone > same continent > other continent.
         // The first relation that both holds AND has a value configured wins.
-        if (rule.SameCountry.HasValue && me.Dxcc.HasValue && qso.Dxcc.HasValue && qso.Dxcc == me.Dxcc)
+        if (rule.SameCountry.HasValue && SameCountry(me, qso))
             return rule.SameCountry.Value;
 
         if (rule.SameZone.HasValue && me.CqZone.HasValue && qso.Station?.CqZone.HasValue == true
@@ -138,6 +138,16 @@ public static class ContestScoringEngine
             return rule.OtherContinent.Value;
 
         return rule.Default;
+    }
+
+    // DXCC number when both sides have it; otherwise fall back to the CTY country
+    // name (the enrichment path resolves names but not always ADIF entity numbers).
+    private static bool SameCountry(MyExchange me, Qso qso)
+    {
+        if (me.Dxcc.HasValue && qso.Dxcc.HasValue)
+            return qso.Dxcc == me.Dxcc;
+        return !string.IsNullOrEmpty(me.Country)
+            && string.Equals(me.Country, qso.Country, StringComparison.OrdinalIgnoreCase);
     }
 
     // -- multipliers --------------------------------------------------------
@@ -159,7 +169,7 @@ public static class ContestScoringEngine
 
     private static string? MultValue(MultSource source, Qso qso) => source switch
     {
-        MultSource.Dxcc => qso.Dxcc?.ToString(),
+        MultSource.Dxcc => qso.Dxcc?.ToString() ?? qso.Country,
         MultSource.CqZone => qso.Station?.CqZone?.ToString(),
         MultSource.ItuZone => qso.Station?.ItuZone?.ToString(),
         MultSource.State => qso.Contest?.RcvdState ?? qso.Station?.State,

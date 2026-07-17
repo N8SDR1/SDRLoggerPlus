@@ -1,4 +1,4 @@
-import type { SatState } from './signalr';
+import type { SatState, ContestStateEvent } from './signalr';
 export type { SatState } from './signalr';
 
 const API_BASE = '/api';
@@ -762,6 +762,66 @@ class ApiClient {
     return this.fetch<Contest[]>('/contests/live');
   }
 
+  // Contest suite (/api/contest — rule presets, sessions, live operating)
+  async getContestDefinitions(): Promise<ContestDefinition[]> {
+    return this.fetch<ContestDefinition[]>('/contest/definitions');
+  }
+
+  async saveContestDefinition(def: ContestDefinition): Promise<ContestDefinition> {
+    return this.fetch<ContestDefinition>('/contest/definitions', {
+      method: 'POST',
+      body: JSON.stringify(def),
+    });
+  }
+
+  async cloneContestDefinition(id: string, newName: string): Promise<ContestDefinition> {
+    return this.fetch<ContestDefinition>(
+      `/contest/definitions/${encodeURIComponent(id)}/clone?newName=${encodeURIComponent(newName)}`,
+      { method: 'POST' });
+  }
+
+  async deleteContestDefinition(id: string): Promise<void> {
+    await fetch(`${API_BASE}/contest/definitions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  async getContestSessions(): Promise<ContestSession[]> {
+    return this.fetch<ContestSession[]>('/contest/sessions');
+  }
+
+  async startContestSession(req: StartContestSessionRequest): Promise<ContestSession> {
+    return this.fetch<ContestSession>('/contest/sessions', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async activateContestSession(id: string): Promise<ContestSession> {
+    return this.fetch<ContestSession>(`/contest/sessions/${encodeURIComponent(id)}/activate`, { method: 'POST' });
+  }
+
+  async stopContestSession(id: string): Promise<void> {
+    await fetch(`${API_BASE}/contest/sessions/${encodeURIComponent(id)}/stop`, { method: 'POST' });
+  }
+
+  async getContestState(): Promise<ContestStateEvent | null> {
+    const response = await fetch(`${API_BASE}/contest/state`);
+    if (response.status === 204) return null;
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    return response.json();
+  }
+
+  async checkContestCall(callsign: string, band: string, mode: string): Promise<ContestCheckResponse> {
+    const params = new URLSearchParams({ callsign, band, mode });
+    return this.fetch<ContestCheckResponse>(`/contest/check?${params}`);
+  }
+
+  async logContestQso(req: LogContestQsoRequest): Promise<ContestLogResult> {
+    return this.fetch<ContestLogResult>('/contest/qso', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
   // DX News
   async getDXNews(): Promise<DXNewsItem[]> {
     return this.fetch<DXNewsItem[]>('/dxnews');
@@ -914,6 +974,94 @@ export interface SavedLayoutSlot {
   name: string;
   layoutJson: string;
   savedAt: string;
+}
+
+// Contest suite types (rule presets / sessions / live operating)
+export type { ContestStateEvent } from './signalr';
+
+export interface ContestField {
+  key: string;
+  label: string;
+  type: 'text' | 'rst' | 'serial' | 'zone' | 'state' | 'section' | 'grid' | 'name' | 'power' | 'check' | 'precedence' | string;
+  width: number;
+  required?: boolean;
+  validate?: string;
+  prefillFrom?: string;
+}
+
+export interface ContestDefinition {
+  id: string;
+  name: string;
+  cabrilloName: string;
+  builtin: boolean;
+  bands: string[];
+  modes: string[];
+  sentExchange: ContestField[];
+  rcvdExchange: ContestField[];
+  qsoPoints: {
+    sameCountry?: number;
+    sameContinent?: number;
+    otherContinent?: number;
+    sameZone?: number;
+    default: number;
+  };
+  multiplierRules: { source: string; perBand: boolean; perMode?: boolean }[];
+  dupeRule: 'PerBand' | 'PerBandMode' | 'PerContest';
+  serial: 'None' | 'PerBand' | 'AllBand';
+  scoringStrategyId?: string;
+}
+
+export interface ContestMyExchange {
+  dxcc?: number;
+  country?: string;
+  continent?: string;
+  cqZone?: number;
+  ituZone?: number;
+  state?: string;
+  section?: string;
+  grid?: string;
+  category?: string;
+  power?: string;
+  name?: string;
+}
+
+export interface ContestSession {
+  id: string;
+  definitionId: string;
+  label: string;
+  myExchange: ContestMyExchange;
+  startedAt: string;
+  endedAt?: string;
+  active: boolean;
+}
+
+export interface StartContestSessionRequest {
+  definitionId: string;
+  myExchange: ContestMyExchange;
+  label?: string;
+}
+
+export interface LogContestQsoRequest {
+  callsign: string;
+  band: string;
+  mode: string;
+  frequency?: number;
+  rstSent?: string;
+  exchange?: Record<string, string>;
+}
+
+export interface ContestCheckResponse {
+  isDupe: boolean;
+  workedCount: number;
+  newMults: string[];
+}
+
+export interface ContestLogResult {
+  qsoId: string;
+  isDupe: boolean;
+  points: number;
+  newMults: string[];
+  state: ContestStateEvent;
 }
 
 // Contest Types

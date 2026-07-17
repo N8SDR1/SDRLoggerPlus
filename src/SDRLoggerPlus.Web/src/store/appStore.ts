@@ -15,6 +15,7 @@ import type {
   RadioStateChangedEvent,
   SpotSelectedEvent,
   CwKeyerStatusEvent,
+  ContestStateEvent,
 } from '../api/signalr';
 import type { PotaSpot, CallsignMapImage } from '../api/client';
 
@@ -51,6 +52,10 @@ interface AppState {
   // Rig
   rigStatus: RigStatusEvent | null;
   setRigStatus: (status: RigStatusEvent | null) => void;
+
+  // Contest (live state pushed after each contest QSO / session change)
+  contestState: ContestStateEvent | null;
+  setContestState: (state: ContestStateEvent | null) => void;
 
   // Station info
   stationCallsign: string;
@@ -265,6 +270,9 @@ export const useAppStore = create<AppState>((set) => ({
   // Rig
   rigStatus: null,
   setRigStatus: (status) => set({ rigStatus: status }),
+
+  contestState: null,
+  setContestState: (state) => set({ contestState: state }),
 
   // Station
   stationCallsign: '',
