@@ -3,6 +3,33 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-16 — v2.4.0 "Vega+" 🌟
+
+More reach, less friction: see who's hearing *you*, filter the FT8 firehose down
+to your alert rules, and reach rig setup straight from the status bar.
+
+### New
+- **"Heard Me" signal-path layers** — PSK Reporter (digital) and RBN skimmer
+  (CW/RTTY) arcs from your station to every receiver that recently spotted you,
+  on both the **3D globe** and the **2D map**. Band follows your rig (or pick one
+  / All bands), per-layer look-back windows, clickable receiver points showing
+  the RX report (freq / mode / SNR / age). *(N9BC)*
+- **Rig status-bar switcher** — the bottom-right pill shows the connected radio;
+  **left-click** to switch or connect any configured rig, **right-click** (or
+  "Add / manage radios") to open the Rig panel for setup. *(N9BC + N8SDR)*
+- **"Match Alerts" decode filter** — the Digital Decodes list can now be narrowed
+  to just the decodes that match your **Digital Decode Alert** rules, so a
+  "needed grids, North America" rule filters the list too, not only the alerts.
+
+### Changed
+- The **Map's Overlays** menu is now simple toggles (Lightning, Rotate Globe,
+  PSK Layer, RBN Layer) with shared band/window controls; RBN cluster-feed
+  settings moved into **Settings → Map**. *(N9BC)*
+
+### Fixed
+- **8-character extended grids** (e.g. `EN54xl17` from PSK Reporter) were rejected
+  by the grid→lat/lon parser, silently dropping every 2D-map arc. Now accepted. *(N9BC)*
+
 ## 2026-07-16 — v2.3.0 "Vega+" 🌟
 
 Native FT8 / digital-mode tools — decode monitoring, smart alerting, and grid
