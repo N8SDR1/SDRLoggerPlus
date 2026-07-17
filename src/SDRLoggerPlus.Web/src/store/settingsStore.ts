@@ -330,6 +330,14 @@ export interface AiSettings {
   includeSpotComments: boolean;
 }
 
+export interface ContestSettings {
+  n1mmUdpEnabled: boolean;
+  n1mmUdpHost: string;
+  n1mmUdpPort: number;
+  onlineScoreEnabled: boolean;
+  onlineScoreUrl: string;
+}
+
 export interface Settings {
   station: StationSettings;
   qrz: QrzSettings;
@@ -355,6 +363,7 @@ export interface Settings {
   wsjtx: WsjtxSettings;
   weather: WeatherSettings;
   sat: SatControllerSettings;
+  contest: ContestSettings;
   gridStates: Record<string, string>;
 }
 
@@ -405,6 +414,7 @@ interface SettingsState {
   updateWsjtxSettings: (wsjtx: Partial<WsjtxSettings>) => void;
   updateWeatherSettings: (weather: Partial<WeatherSettings>) => void;
   updateSatSettings: (sat: Partial<SatControllerSettings>) => void;
+  updateContestSettings: (contest: Partial<ContestSettings>) => void;
   updateSpotStatusSettings: (spotStatus: Partial<SpotStatusSettings>) => void;
   addClusterConnection: () => void;
   removeClusterConnection: (connectionId: string) => void;
@@ -653,6 +663,13 @@ const defaultSettings: Settings = {
     controllerIp: '',
     udpPort: 9932,
     adifPort: 1100,
+  },
+  contest: {
+    n1mmUdpEnabled: false,
+    n1mmUdpHost: '127.0.0.1',
+    n1mmUdpPort: 12060,
+    onlineScoreEnabled: false,
+    onlineScoreUrl: 'https://contestonlinescore.com/post/',
   },
   gridStates: {},
 };
@@ -918,6 +935,16 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       isDirty: true,
     })),
 
+  // Contest interop settings (N1MM UDP / online score)
+  updateContestSettings: (contest) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        contest: { ...state.settings.contest, ...contest },
+      },
+      isDirty: true,
+    })),
+
   // Spot status settings
   updateSpotStatusSettings: (spotStatus) =>
     set((state) => ({
@@ -1107,6 +1134,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
             credentials: { ...defaultSettings.weather.credentials, ...settings.weather?.credentials },
           },
           sat: { ...defaultSettings.sat, ...settings.sat },
+          contest: { ...defaultSettings.contest, ...settings.contest },
           gridStates: { ...defaultSettings.gridStates, ...settings.gridStates },
         };
         // One-time migration: clear the legacy "United States" spotter-country

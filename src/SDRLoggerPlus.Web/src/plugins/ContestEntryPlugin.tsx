@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Swords, Play, Square, Search, AlertTriangle, Sparkles, Download, Plus, Copy, Pencil, Trash2 } from 'lucide-react';
+import { Swords, Play, Square, Search, AlertTriangle, Sparkles, Download, Plus, Copy, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   api,
   ContestDefinition,
@@ -8,6 +8,7 @@ import {
   ContestCheckResponse,
 } from '../api/client';
 import { useAppStore } from '../store/appStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { ContestEditor } from '../components/ContestEditor';
 
@@ -198,6 +199,8 @@ function SetupView() {
           <div className="text-center text-sm text-gray-500 py-6">No contests match</div>
         )}
       </div>
+
+      <InteropConfig />
 
       {editor && (
         <ContestEditor
@@ -531,6 +534,53 @@ function EntryView() {
         <ScoreCell label="Score" value={contestState.score.toLocaleString()} accent />
         <ScoreCell label="Rate/hr" value={contestState.rateLastHour} />
       </div>
+    </div>
+  );
+}
+
+// Collapsible config for N1MM UDP broadcast + online score reporting. Persists
+// through the shared settings store; the server broadcasts when enabled.
+function InteropConfig() {
+  const settings = useSettingsStore((s) => s.settings.contest);
+  const update = useSettingsStore((s) => s.updateContestSettings);
+  const save = useSettingsStore((s) => s.saveSettings);
+  const [open, setOpen] = useState(false);
+
+  const commit = (patch: Parameters<typeof update>[0]) => { update(patch); void save(); };
+
+  return (
+    <div className="border-t border-glass-100 pt-2">
+      <button onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200">
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        Broadcast / score reporting
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 text-xs text-gray-400">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={settings.n1mmUdpEnabled}
+              onChange={(e) => commit({ n1mmUdpEnabled: e.target.checked })} />
+            N1MM UDP broadcast
+          </label>
+          {settings.n1mmUdpEnabled && (
+            <div className="flex gap-2 pl-6">
+              <input className="glass-input text-xs px-2 py-1 flex-1" value={settings.n1mmUdpHost}
+                onChange={(e) => commit({ n1mmUdpHost: e.target.value })} placeholder="host" />
+              <input className="glass-input text-xs px-2 py-1 w-20" type="number" value={settings.n1mmUdpPort}
+                onChange={(e) => commit({ n1mmUdpPort: Number(e.target.value) || 0 })} placeholder="port" />
+            </div>
+          )}
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={settings.onlineScoreEnabled}
+              onChange={(e) => commit({ onlineScoreEnabled: e.target.checked })} />
+            Online score reporting
+          </label>
+          {settings.onlineScoreEnabled && (
+            <input className="glass-input text-xs px-2 py-1 w-full ml-0" value={settings.onlineScoreUrl}
+              onChange={(e) => commit({ onlineScoreUrl: e.target.value })} placeholder="score post URL" />
+          )}
+        </div>
+      )}
     </div>
   );
 }

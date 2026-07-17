@@ -113,6 +113,7 @@ builder.Services.AddSingleton<ContestsService>();
 builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Contesting.ContestDefinitionService>();
 builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Contesting.ScpService>();
 builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Contesting.CallHistoryService>();
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Contesting.ContestBroadcastService>();
 builder.Services.AddScoped<SDRLoggerPlus.Server.Services.Contesting.ContestSessionService>();
 builder.Services.AddScoped<SDRLoggerPlus.Server.Services.Contesting.ContestService>();
 

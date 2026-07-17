@@ -23,6 +23,7 @@ public class ContestService
     private readonly ISettingsService _settings;
     private readonly ScpService _scp;
     private readonly CallHistoryService _callHistory;
+    private readonly ContestBroadcastService _broadcast;
     private readonly IHubContext<LogHub, ILogHubClient> _hub;
     private readonly ILogger<ContestService> _logger;
 
@@ -33,6 +34,7 @@ public class ContestService
         ISettingsService settings,
         ScpService scp,
         CallHistoryService callHistory,
+        ContestBroadcastService broadcast,
         IHubContext<LogHub, ILogHubClient> hub,
         ILogger<ContestService> logger)
     {
@@ -42,6 +44,7 @@ public class ContestService
         _settings = settings;
         _scp = scp;
         _callHistory = callHistory;
+        _broadcast = broadcast;
         _hub = hub;
         _logger = logger;
     }
@@ -175,6 +178,13 @@ public class ContestService
             created.Band, created.Mode, created.Frequency,
             created.RstSent, created.RstRcvd, created.Station?.Grid));
         await _hub.BroadcastContestState(state);
+
+        // Fire-and-forget N1MM UDP / online-score interop — never block logging.
+        // Snapshot settings in-scope; the background task holds no scoped services.
+        var settings = await _settings.GetSettingsAsync();
+        var myCall = settings.Station.Callsign;
+        if (!string.IsNullOrWhiteSpace(myCall) && (settings.Contest.N1mmUdpEnabled || settings.Contest.OnlineScoreEnabled))
+            _ = Task.Run(() => _broadcast.OnQsoLoggedAsync(settings.Contest, def, session, created, state, myCall!));
 
         return new ContestLogResult(created.Id, eval.IsDupe, eval.Points, eval.Mults, state);
     }

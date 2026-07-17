@@ -81,6 +81,9 @@ public class UserSettings
     [BsonElement("sat")]
     public SatSettings Sat { get; set; } = new();
 
+    [BsonElement("contest")]
+    public ContestSettings Contest { get; set; } = new();
+
     [BsonElement("layoutJson")]
     public string? LayoutJson { get; set; }
 
@@ -122,6 +125,29 @@ public class WindowState
 
     [BsonElement("maximized")]
     public bool Maximized { get; set; }
+}
+
+[BsonIgnoreExtraElements]
+public class ContestSettings
+{
+    // N1MM-compatible UDP broadcast of contact + score XML (for external
+    // scoreboards / SO2R helpers / DXLog).
+    [BsonElement("n1mmUdpEnabled")]
+    public bool N1mmUdpEnabled { get; set; }
+
+    [BsonElement("n1mmUdpHost")]
+    public string N1mmUdpHost { get; set; } = "127.0.0.1";
+
+    [BsonElement("n1mmUdpPort")]
+    public int N1mmUdpPort { get; set; } = 12060;
+
+    // Live score upload to a contestonlinescore.com-style endpoint (posts the
+    // same N1MM <dynamicresults> score XML over HTTP).
+    [BsonElement("onlineScoreEnabled")]
+    public bool OnlineScoreEnabled { get; set; }
+
+    [BsonElement("onlineScoreUrl")]
+    public string OnlineScoreUrl { get; set; } = "https://contestonlinescore.com/post/";
 }
 
 [BsonIgnoreExtraElements]
