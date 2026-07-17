@@ -213,6 +213,12 @@ public class ContestInfo
     [BsonElement("exchange")]
     public string? Exchange { get; set; }
 
+    // All received-exchange field values keyed by the definition's field keys
+    // (e.g. {"age":"42","check":"73","prec":"A"}). Preserves fidelity for exotic
+    // exchanges the typed fields below don't cover, so Cabrillo can emit them.
+    [BsonElement("rcvdFields")]
+    public Dictionary<string, string>? RcvdFields { get; set; }
+
     // Structured received-exchange components used for scoring / Cabrillo.
     [BsonElement("rcvdZone")]
     public string? RcvdZone { get; set; }

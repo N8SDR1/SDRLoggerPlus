@@ -272,6 +272,12 @@ public class ContestService
                         .Select(f => Ex(f.Key))
                         .Where(v => v != null))
                     : null,
+                // Keep every received field (incl. non-typed ones like age/check/
+                // member#) so Cabrillo can emit the full exchange.
+                RcvdFields = exchange.Count > 0
+                    ? exchange.Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+                        .ToDictionary(kv => kv.Key, kv => kv.Value.Trim(), StringComparer.OrdinalIgnoreCase)
+                    : null,
             },
         };
 

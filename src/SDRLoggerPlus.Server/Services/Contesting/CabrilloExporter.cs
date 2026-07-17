@@ -80,18 +80,21 @@ public static class CabrilloExporter
     private static string RcvdValue(ContestField f, Qso qso)
     {
         var c = qso.Contest;
-        return f.Type switch
+        var typed = f.Type switch
         {
             ContestFieldType.Rst => qso.RstRcvd ?? (IsCw(qso.Mode) ? "599" : "59"),
-            ContestFieldType.Serial => c?.SerialRcvd ?? "",
-            ContestFieldType.Zone => c?.RcvdZone ?? "",
-            ContestFieldType.State => c?.RcvdState ?? "",
-            ContestFieldType.Section => c?.RcvdSection ?? "",
-            ContestFieldType.Name => c?.RcvdName ?? "",
-            ContestFieldType.Grid => c?.RcvdGrid ?? "",
-            ContestFieldType.Power => c?.RcvdPower ?? "",
-            _ => "",
+            ContestFieldType.Serial => c?.SerialRcvd,
+            ContestFieldType.Zone => c?.RcvdZone,
+            ContestFieldType.State => c?.RcvdState,
+            ContestFieldType.Section => c?.RcvdSection,
+            ContestFieldType.Name => c?.RcvdName,
+            ContestFieldType.Grid => c?.RcvdGrid,
+            ContestFieldType.Power => c?.RcvdPower,
+            _ => null,
         };
+        // Fall back to the generic received-field store for non-typed exchange
+        // fields (age, check, precedence, member#, IOTA ref, county, …).
+        return typed ?? (c?.RcvdFields != null && c.RcvdFields.TryGetValue(f.Key, out var v) ? v : "");
     }
 
     private static string CategoryMode(ContestDefinition def)
