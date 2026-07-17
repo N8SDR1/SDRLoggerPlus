@@ -20,6 +20,8 @@ export interface QsoResponse {
   station?: StationInfo;
   comment?: string;
   createdAt: string;
+  // Contest this QSO was logged under (ContestDefinition id), null for casual QSOs.
+  contestId?: string;
 }
 
 export interface StationInfo {

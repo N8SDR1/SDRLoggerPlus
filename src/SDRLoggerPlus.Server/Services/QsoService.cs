@@ -222,6 +222,7 @@ public class QsoService : IQsoService
             qso.Station?.Longitude
         ),
         qso.Comment,
-        qso.CreatedAt
+        qso.CreatedAt,
+        qso.Contest?.ContestId
     );
 }

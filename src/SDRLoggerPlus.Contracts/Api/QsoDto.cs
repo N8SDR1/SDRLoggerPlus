@@ -65,7 +65,10 @@ public record QsoResponse(
     string? RstRcvd,
     StationInfoDto? Station,
     string? Comment,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    // The contest this QSO was logged under (ContestDefinition id / ADIF CONTEST_ID),
+    // null for casual QSOs. Surfaced as the Log History "Contest" column.
+    string? ContestId = null
 );
 
 public record StationInfoDto(

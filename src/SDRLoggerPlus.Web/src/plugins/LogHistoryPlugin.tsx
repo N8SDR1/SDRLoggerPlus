@@ -283,6 +283,18 @@ export function LogHistoryPlugin() {
     queryFn: () => api.getStatistics(),
   });
 
+  // Resolve a QSO's contestId → the definition's display name for the Contest column.
+  const { data: contestDefs } = useQuery({
+    queryKey: ['contest-definitions'],
+    queryFn: () => api.getContestDefinitions(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const contestNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    contestDefs?.forEach((d) => map.set(d.id, d.name));
+    return map;
+  }, [contestDefs]);
+
   const qsos = response?.items || [];
   const totalCount = response?.totalCount || 0;
   const totalPages = response?.totalPages || 1;
@@ -377,6 +389,21 @@ export function LogHistoryPlugin() {
       resizable: true,
     },
     {
+      // Contest column — which contest this QSO was logged under. Resolves the
+      // stored ContestDefinition id to its display name, falling back to the raw
+      // id if the definition is gone. Blank for casual QSOs.
+      headerName: 'Contest',
+      field: 'contestId',
+      valueGetter: (params) => {
+        const id = params.data?.contestId;
+        if (!id) return '';
+        return contestNameById.get(id) ?? id;
+      },
+      cellClass: 'text-dark-300 truncate',
+      width: 130,
+      resizable: true,
+    },
+    {
       // Remarks column — v1.x parity. Log-entry writes the "Remarks" field
       // into Qso.Comment (the ADIF-exported field), so we surface it here.
       // Fills the previously-blank gap between Country and the action icons.
@@ -402,7 +429,7 @@ export function LogHistoryPlugin() {
       sortable: false,
       pinned: 'right',
     },
-  ], []);
+  ], [contestNameById]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,

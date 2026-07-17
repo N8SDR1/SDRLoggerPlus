@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Swords, Play, Square, Search, AlertTriangle, Sparkles, Download } from 'lucide-react';
+import { Swords, Play, Square, Search, AlertTriangle, Sparkles, Download, Plus, Copy, Pencil, Trash2 } from 'lucide-react';
 import {
   api,
   ContestDefinition,
@@ -9,6 +9,7 @@ import {
 } from '../api/client';
 import { useAppStore } from '../store/appStore';
 import { GlassPanel } from '../components/GlassPanel';
+import { ContestEditor } from '../components/ContestEditor';
 
 const BANDS = ['160m', '80m', '40m', '20m', '15m', '10m', '6m', '2m'];
 const MODES = ['CW', 'SSB', 'FT8', 'FT4', 'RTTY'];
@@ -61,17 +62,44 @@ export function ContestEntryPlugin() {
 
 function SetupView() {
   const setContestState = useAppStore((s) => s.setContestState);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [label, setLabel] = useState('');
   const [myEx, setMyEx] = useState<ContestMyExchange>({});
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  // { open } drives the editor modal; initial is the draft to edit (null = new).
+  const [editor, setEditor] = useState<{ initial: ContestDefinition | null } | null>(null);
 
   const { data: definitions } = useQuery({
     queryKey: ['contest-definitions'],
     queryFn: () => api.getContestDefinitions(),
   });
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['contest-definitions'] });
+
+  const clone = async (id: string) => {
+    setError(null);
+    try {
+      const draft = await api.cloneContestDefinition(id, `${definitions?.find((d) => d.id === id)?.name ?? 'Contest'} copy`);
+      setEditor({ initial: draft });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Clone failed');
+    }
+  };
+
+  const remove = async (id: string, name: string) => {
+    if (!window.confirm(`Delete your contest "${name}"? This cannot be undone.`)) return;
+    setError(null);
+    try {
+      await api.deleteContestDefinition(id);
+      if (selectedId === id) setSelectedId(null);
+      refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed');
+    }
+  };
 
   const filtered = useMemo(() => {
     if (!definitions) return [];
@@ -108,45 +136,76 @@ function SetupView() {
 
   return (
     <div className="flex flex-col h-full p-4 gap-3 overflow-y-auto">
-      {/* Search */}
-      <div className="relative">
-        <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search contests…"
-          className="glass-input w-full text-sm pl-8 pr-2 py-1.5"
-        />
+      {/* Search + new */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search contests…"
+            className="glass-input w-full text-sm pl-8 pr-2 py-1.5"
+          />
+        </div>
+        <button
+          onClick={() => setEditor({ initial: null })}
+          title="Create a custom contest"
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm bg-dark-700/50 border border-glass-100 text-gray-300 hover:bg-dark-600/50 whitespace-nowrap"
+        >
+          <Plus className="w-4 h-4" /> New
+        </button>
       </div>
 
       {/* Definition list */}
       <div className="flex-1 min-h-[8rem] overflow-y-auto space-y-1">
         {filtered.map((d) => (
-          <button
+          <div
             key={d.id}
-            onClick={() => setSelectedId(d.id)}
-            className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
+            className={`flex items-stretch rounded-lg border text-sm transition-colors ${
               selectedId === d.id
-                ? 'bg-accent-primary/20 border-accent-primary/50 text-gray-100'
-                : 'bg-dark-700/50 border-glass-100 text-gray-300 hover:bg-dark-600/50'
+                ? 'bg-accent-primary/20 border-accent-primary/50'
+                : 'bg-dark-700/50 border-glass-100 hover:bg-dark-600/50'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="font-medium truncate">{d.name}</span>
-              <span className="text-xs text-gray-500 ml-2 shrink-0">
-                {d.builtin ? d.modes.join('/') : 'custom'}
-              </span>
+            <button
+              onClick={() => setSelectedId(d.id)}
+              className="flex-1 text-left px-3 py-2 min-w-0"
+            >
+              <div className="flex items-center justify-between">
+                <span className={`font-medium truncate ${selectedId === d.id ? 'text-gray-100' : 'text-gray-300'}`}>{d.name}</span>
+                <span className="text-xs text-gray-500 ml-2 shrink-0">
+                  {d.builtin ? d.modes.join('/') : 'custom'}
+                </span>
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                Exchange: {d.rcvdExchange.map((f) => f.label).join(' + ') || '—'}
+              </div>
+            </button>
+            <div className="flex items-center gap-0.5 pr-1.5 shrink-0">
+              {d.builtin ? (
+                <IconBtn title="Clone this contest" onClick={() => clone(d.id)}><Copy className="w-3.5 h-3.5" /></IconBtn>
+              ) : (
+                <>
+                  <IconBtn title="Edit this contest" onClick={() => setEditor({ initial: d })}><Pencil className="w-3.5 h-3.5" /></IconBtn>
+                  <IconBtn title="Delete this contest" danger onClick={() => remove(d.id, d.name)}><Trash2 className="w-3.5 h-3.5" /></IconBtn>
+                </>
+              )}
             </div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              Exchange: {d.rcvdExchange.map((f) => f.label).join(' + ') || '—'}
-            </div>
-          </button>
+          </div>
         ))}
         {filtered.length === 0 && (
           <div className="text-center text-sm text-gray-500 py-6">No contests match</div>
         )}
       </div>
+
+      {editor && (
+        <ContestEditor
+          initial={editor.initial}
+          onClose={() => setEditor(null)}
+          onSaved={() => { setEditor(null); refresh(); }}
+        />
+      )}
 
       {/* Session setup for the selected contest */}
       {selected && (
@@ -430,6 +489,18 @@ function EntryView() {
         <ScoreCell label="Rate/hr" value={contestState.rateLastHour} />
       </div>
     </div>
+  );
+}
+
+function IconBtn({ title, onClick, danger, children }: { title: string; onClick: () => void; danger?: boolean; children: React.ReactNode }) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      className={`p-1.5 rounded text-gray-500 transition-colors ${danger ? 'hover:text-red-400' : 'hover:text-accent-primary'}`}
+    >
+      {children}
+    </button>
   );
 }
 
