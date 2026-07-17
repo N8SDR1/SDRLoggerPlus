@@ -195,8 +195,13 @@ public class EqslStatus
 
 public class ContestInfo
 {
+    // The ContestDefinition id (maps to/from ADIF CONTEST_ID).
     [BsonElement("id")]
     public string? ContestId { get; set; }
+
+    // Which ContestSession this QSO belongs to.
+    [BsonElement("sessionId")]
+    public string? SessionId { get; set; }
 
     [BsonElement("serialSent")]
     public string? SerialSent { get; set; }
@@ -204,6 +209,37 @@ public class ContestInfo
     [BsonElement("serialRcvd")]
     public string? SerialRcvd { get; set; }
 
+    // Raw received exchange text (whatever the operator typed).
     [BsonElement("exchange")]
     public string? Exchange { get; set; }
+
+    // Structured received-exchange components used for scoring / Cabrillo.
+    [BsonElement("rcvdZone")]
+    public string? RcvdZone { get; set; }
+
+    [BsonElement("rcvdState")]
+    public string? RcvdState { get; set; }
+
+    [BsonElement("rcvdSection")]
+    public string? RcvdSection { get; set; }
+
+    [BsonElement("rcvdName")]
+    public string? RcvdName { get; set; }
+
+    [BsonElement("rcvdPower")]
+    public string? RcvdPower { get; set; }
+
+    [BsonElement("rcvdGrid")]
+    public string? RcvdGrid { get; set; }
+
+    // Snapshot of the engine's evaluation at log time (keeps exports reproducible).
+    [BsonElement("qsoPoints")]
+    public int? QsoPoints { get; set; }
+
+    [BsonElement("isDupe")]
+    public bool IsDupe { get; set; }
+
+    // Multiplier keys this QSO claimed (source-qualified, e.g. "CqZone:14@20M").
+    [BsonElement("mults")]
+    public List<string>? Mults { get; set; }
 }
