@@ -10,12 +10,17 @@ namespace SDRLoggerPlus.Server.Services.Contesting;
 /// in by <see cref="ContestDefinitionService"/>.
 ///
 /// Fidelity note: every definition's <b>exchange fields, dupe rule, serial mode,
-/// and Cabrillo name</b> are correct so logging and submission work. QSO points
-/// and multipliers are exact for the well-known contests (CQ/ARRL DX, WPX, NAQP,
-/// sprints, Sweepstakes, IARU) and a reasonable approximation for the long tail —
-/// especially state QSO parties, whose county multipliers the declarative model
-/// approximates by counting distinct received locations. Clone-and-edit for a
-/// perfect ruleset; a named scoring strategy can refine any of them later.
+/// and Cabrillo name</b> are correct so logging and submission work. State QSO
+/// party exchanges are verified against the WA7BNM contest calendar
+/// (contestcalendar.com) — including the parties that use a serial number
+/// (California, Pennsylvania, Virginia), an operator name (Minnesota, Colorado),
+/// or location only with no RST (Maryland-DC, North Carolina, Wisconsin,
+/// Nebraska). QSO points and multipliers are exact for the well-known contests
+/// (CQ/ARRL DX, WPX, NAQP, sprints, Sweepstakes, IARU) and a reasonable
+/// approximation for the long tail — especially state QSO parties, whose county
+/// multipliers the declarative model approximates by counting distinct received
+/// locations. Clone-and-edit for a perfect ruleset; a named scoring strategy can
+/// refine any of them later.
 /// </summary>
 public static class SeedContests
 {
@@ -36,6 +41,23 @@ public static class SeedContests
         "Virginia", "Washington Salmon Run", "West Virginia", "Wisconsin",
     };
 
+    // Exchange style per state QSO party, verified against the WA7BNM contest
+    // calendar (contestcalendar.com). Default is RS(T) + location; these are the
+    // parties that deviate. Declared before All so Build() sees it initialized.
+    private enum QpEx { Rst, Serial, Name, Loc }
+    private static readonly Dictionary<string, QpEx> StatePartyExchange = new()
+    {
+        ["California"] = QpEx.Serial,   // Serial No. + county
+        ["Pennsylvania"] = QpEx.Serial, // Serial No. + county
+        ["Virginia"] = QpEx.Serial,     // Serial No. + county
+        ["Minnesota"] = QpEx.Name,      // Name + county
+        ["Colorado"] = QpEx.Name,       // Name + county
+        ["Maryland-DC"] = QpEx.Loc,     // county/city only (no RST)
+        ["North Carolina"] = QpEx.Loc,  // county only (no RST)
+        ["Wisconsin"] = QpEx.Loc,       // county only (no RST)
+        ["Nebraska"] = QpEx.Loc,        // county only (no RST)
+    };
+
     public static IReadOnlyList<ContestDefinition> All { get; } = Build();
 
     // -- field helpers ------------------------------------------------------
@@ -49,6 +71,16 @@ public static class SeedContests
     private static ContestField Power() => new() { Key = "power", Label = "Pwr", Type = ContestFieldType.Power, Width = 4 };
     private static ContestField Txt(string key, string label, int width = 6, bool required = true)
         => new() { Key = key, Label = label, Type = ContestFieldType.Text, Width = width, Required = required, PrefillFrom = key };
+
+    // Fresh exchange-field array for a state QSO party of the given style. The
+    // location field doubles as county (in-state) or S/P/DX (out-of-state).
+    private static ContestField[] QpFields(QpEx kind) => kind switch
+    {
+        QpEx.Serial => new[] { Serial(), StateF("S/P/C") },
+        QpEx.Name => new[] { Name(), StateF("S/P/C") },
+        QpEx.Loc => new[] { StateF("S/P/C") },
+        _ => new[] { Rst(), StateF("S/P/C") },
+    };
 
     private static PointsRule Pts(int def, int? sameCountry = null, int? sameCont = null, int? otherCont = null, int? sameZone = null)
         => new() { Default = def, SameCountry = sameCountry, SameContinent = sameCont, OtherContinent = otherCont, SameZone = sameZone };
@@ -135,8 +167,9 @@ public static class SeedContests
             new[] { Txt("class", "Cls", 4), Section() }, new[] { Txt("class", "Cls", 4), Section() },
             Pts(1), Array.Empty<MultRule>());
 
+        // WA7BNM: Category + ARRL/RAC Section (or MX/DX).
         yield return D("winter-field-day", "Winter Field Day", "WINTER-FIELD-DAY", Hf6, new[] { "CW", "SSB", "FT8" },
-            new[] { Txt("class", "Cls", 4), Txt("section", "Cat", 5) }, new[] { Txt("class", "Cls", 4), Txt("section", "Cat", 5) },
+            new[] { Txt("class", "Cat", 4), Txt("section", "Sec", 5) }, new[] { Txt("class", "Cat", 4), Txt("section", "Sec", 5) },
             Pts(1), Array.Empty<MultRule>());
 
         yield return D("arrl-vhf", "ARRL VHF", "ARRL-VHF", VhfBands, new[] { "CW", "SSB", "FT8" },
@@ -159,8 +192,9 @@ public static class SeedContests
             new[] { Name(), Txt("check", "Yr", 4), StateF("S/P/DX") }, new[] { Name(), Txt("check", "Yr", 4), StateF("S/P/DX") },
             Pts(1), new[] { M(MultSource.State) });
 
+        // WA7BNM: RS(T) + Class (I/C/S) + (state/province/country).
         yield return D("school-club-roundup", "School Club Roundup", "SCHOOL-CLUB-ROUNDUP", HfBands, new[] { "CW", "SSB" },
-            new[] { Txt("class", "Cls", 3), Name(), StateF("S/P/C") }, new[] { Txt("class", "Cls", 3), Name(), StateF("S/P/C") },
+            new[] { Rst(), Txt("class", "Cls", 3), StateF("S/P/C") }, new[] { Rst(), Txt("class", "Cls", 3), StateF("S/P/C") },
             Pts(1), new[] { M(MultSource.State) });
 
         yield return D("kids-day", "Kids Day", "KIDS-DAY", HfNo160, new[] { "SSB" },
@@ -277,7 +311,9 @@ public static class SeedContests
 
     // ---- state / regional QSO parties -------------------------------------
     // Location captured as a State-typed field so distinct S/P/county values
-    // count as multipliers (an approximation of true county multipliers).
+    // count as multipliers (an approximation of true county multipliers). The
+    // exchange style (RS(T) / serial / name / location-only) is per-party, taken
+    // from the WA7BNM calendar via StatePartyExchange.
     private static IEnumerable<ContestDefinition> StateQsoParties()
     {
         var bands = new List<string> { "160M", "80M", "40M", "20M", "15M", "10M", "6M" };
@@ -285,9 +321,11 @@ public static class SeedContests
         {
             var slug = Slug(name);
             var cab = name.ToUpperInvariant().Replace(" ", "-").Replace("--", "-") + "-QSO-PARTY";
+            var kind = StatePartyExchange.GetValueOrDefault(name, QpEx.Rst);
+            var serial = kind == QpEx.Serial ? SerialMode.AllBand : SerialMode.None;
             yield return D($"qp-{slug}", $"{name} QSO Party", cab, bands, new[] { "CW", "SSB" },
-                new[] { Rst(), StateF("S/P/C") }, new[] { Rst(), StateF("S/P/C") },
-                Pts(2), new[] { M(MultSource.State, true) });
+                QpFields(kind), QpFields(kind),
+                Pts(2), new[] { M(MultSource.State, true) }, serial: serial);
         }
 
         // Regionals (multi-state single events).
