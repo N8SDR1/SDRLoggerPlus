@@ -13,8 +13,6 @@ import { useAppStore, Spot } from '../store/appStore';
 import { useAgGridState } from '../hooks/useAgGridState';
 import { rigModeToSpotModes } from '../utils/rigTracking';
 import { getBandFromFrequency, BAND_OPTIONS, MODE_OPTIONS } from '../utils/spotBands';
-import { usePanelCompact } from '../hooks/usePanelCompact';
-import { CompactToggle } from '../components/CompactToggle';
 
 const STATUS_OPTIONS: MultiSelectOption[] = [
   { value: 'newDxcc', label: 'New DXCC' },
@@ -473,8 +471,6 @@ export function ClusterPlugin() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
 
-  const [compact, toggleCompact] = usePanelCompact('cluster');
-
   // Get spots from app store (ephemeral, in-memory only)
   const spots = useAppStore((state) => state.dxClusterSpots);
   const clearDxClusterSpots = useAppStore((state) => state.clearDxClusterSpots);
@@ -804,7 +800,6 @@ export function ClusterPlugin() {
               <Eraser className="w-4 h-4" />
             </button>
           )}
-          <CompactToggle compact={compact} onToggle={toggleCompact} />
           <button
             onClick={() => setDxClusterMapEnabled(!dxClusterMapEnabled)}
             className={`glass-button p-1.5 ${dxClusterMapEnabled ? 'text-accent-info' : 'text-dark-300'}`}
@@ -1003,7 +998,7 @@ export function ClusterPlugin() {
         </div>
 
         {/* Filters */}
-        <div className={`${compact ? 'p-2' : 'p-4 space-y-4'} flex-shrink-0`}>
+        <div className="p-4 space-y-4 flex-shrink-0">
           <div className="flex gap-3 items-center">
             {/* Fuzzy Search Input */}
             <div className="relative flex-1">
@@ -1102,7 +1097,7 @@ export function ClusterPlugin() {
         </div>
 
         {/* AG Grid Table */}
-        <div className={`flex-1 min-h-0 ${compact ? 'px-2 pb-2' : 'px-4 pb-4'}`}>
+        <div className="flex-1 min-h-0 px-4 pb-4">
           <div className="ag-theme-alpine-dark h-full">
             {filteredSpots?.length === 0 ? (
               <div className="text-center py-8 text-dark-300">
@@ -1125,8 +1120,8 @@ export function ClusterPlugin() {
                 rowData={filteredSpots}
                 columnDefs={columnDefs}
                 defaultColDef={defaultColDef}
-                rowHeight={compact ? 26 : 36}
-                headerHeight={compact ? 30 : 40}
+                rowHeight={36}
+                headerHeight={40}
                 suppressCellFocus={true}
                 animateRows={true}
                 onRowClicked={handleRowClick}

@@ -5,8 +5,6 @@ import { useSettingsStore } from "../store/settingsStore";
 import { useSignalR } from "../hooks/useSignalR";
 import { useRigConnection } from "../hooks/useRigConnection";
 import { GlassPanel } from "../components/GlassPanel";
-import { CompactToggle } from "../components/CompactToggle";
-import { usePanelCompact } from "../hooks/usePanelCompact";
 import { signalRService } from "../api/signalr";
 import type {
   RadioConnectionState,
@@ -181,8 +179,6 @@ export function RigPlugin() {
   } = useSignalR();
   // Shared rig teardown (type-specific) — same logic the status-bar switcher uses.
   const { disconnect: disconnectRig } = useRigConnection();
-
-  const [compact, toggleCompact] = usePanelCompact('rig');
 
   // Radio settings from store (persisted to database)
   const { settings, updateRadioSettings, updateTciSettings, updateFlrigSettings, saveSettings } = useSettingsStore();
@@ -636,8 +632,7 @@ export function RigPlugin() {
     const el = connectedViewRef.current;
     if (!el) return;
 
-    // Compact hides the TX/RX row + radio-info subline, so its natural height is lower.
-    const baseHeight = compact ? 96 : CONNECTED_VIEW_BASE_HEIGHT;
+    const baseHeight = CONNECTED_VIEW_BASE_HEIGHT;
     const updateScale = () => {
       setConnectedScale(Math.min(
         1,
@@ -651,7 +646,7 @@ export function RigPlugin() {
     observer.observe(el);
 
     return () => observer.disconnect();
-  }, [showConnectedView, compact]);
+  }, [showConnectedView]);
 
   // Panel-level wheel handler — fires when the user scrolls outside a specific digit span.
   // FrequencyReadout.stopPropagation() means digit-hover scrolls never reach here.
@@ -690,7 +685,6 @@ export function RigPlugin() {
         icon={<RadioReceiver className="w-5 h-5" />}
         actions={
           <div className="flex items-center gap-2">
-            <CompactToggle compact={compact} onToggle={toggleCompact} />
             <button
               onClick={handleToggleAutoReconnect}
               title={autoReconnect ? "Auto-reconnect enabled" : "Auto-reconnect disabled"}
@@ -715,7 +709,7 @@ export function RigPlugin() {
       >
         <div ref={connectedViewRef} className="h-full overflow-hidden">
         <div
-          className={compact ? "p-2 space-y-1" : "p-3 space-y-2"}
+          className="p-3 space-y-2"
           style={connectedScale < 1 ? {
             width: `${100 / connectedScale}%`,
             transform: `scale(${connectedScale})`,
@@ -780,8 +774,7 @@ export function RigPlugin() {
             </div>
           </div>
 
-          {/* TX/RX Status (hidden in compact density) */}
-          {!compact && (
+          {/* TX/RX Status */}
           <div className="flex items-center gap-3">
             <TxRxIndicator
               isTransmitting={selectedRadioState?.isTransmitting ?? false}
@@ -799,7 +792,6 @@ export function RigPlugin() {
               </span>
             )}
           </div>
-          )}
 
         </div>
         </div>

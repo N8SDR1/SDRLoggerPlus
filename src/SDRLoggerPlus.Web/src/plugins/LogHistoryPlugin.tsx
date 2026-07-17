@@ -12,8 +12,6 @@ import { getCountryFlag } from '../core/countryFlags';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAgGridState } from '../hooks/useAgGridState';
-import { usePanelCompact } from '../hooks/usePanelCompact';
-import { CompactToggle } from '../components/CompactToggle';
 
 // Common RST values for phone modes (SSB, AM, FM)
 const RST_PHONE = ['59', '58', '57', '56', '55', '54', '53', '52', '51'];
@@ -123,7 +121,6 @@ const ActionCellRenderer = (props: ICellRendererParams<QsoResponse> & {
 
 export function LogHistoryPlugin() {
   const { onGridReady, onColumnChanged, onSortChanged } = useAgGridState('logHistory');
-  const [compact, toggleCompact] = usePanelCompact('logHistory');
   const [callsignSearch, setCallsignSearch] = useState('');
   const [nameSearch, setNameSearch] = useState('');
   const [selectedBand, setSelectedBand] = useState<string>('');
@@ -508,7 +505,6 @@ export function LogHistoryPlugin() {
         <div className="flex items-center gap-3 text-sm text-dark-300 font-ui">
           <span>{stats?.uniqueCountries || 0} DXCC</span>
           <div className="flex items-center gap-1">
-            <CompactToggle compact={compact} onToggle={toggleCompact} />
             <span className="text-glass-100 mx-1">|</span>
             <button
               onClick={() => setShowImportModal(true)}
@@ -576,7 +572,7 @@ export function LogHistoryPlugin() {
         </div>
       }
     >
-      <div className={compact ? 'p-2 space-y-2' : 'p-4 space-y-4'}>
+      <div className="p-4 space-y-4">
         {/* QRZ Sync Starting (before first progress event) */}
         {isSyncing && !qrzSyncProgress && (
           <div className="bg-dark-700/80 rounded-lg p-3 border border-accent-info/30">
@@ -982,8 +978,8 @@ export function LogHistoryPlugin() {
               rowData={qsos}
               columnDefs={columnDefs}
               defaultColDef={defaultColDef}
-              rowHeight={compact ? 26 : 36}
-              headerHeight={compact ? 30 : 40}
+              rowHeight={36}
+              headerHeight={40}
               suppressCellFocus={true}
               suppressRowClickSelection={true}
               animateRows={true}
