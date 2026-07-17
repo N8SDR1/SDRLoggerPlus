@@ -30,6 +30,8 @@ interface PluginDef {
   component: React.ComponentType;
   category: PluginCategory;
   tags?: string[];
+  /** false = canvas/WebGL panel whose geometry breaks under CSS zoom — no per-panel scale. */
+  scalable?: boolean;
 }
 
 const PLUGINS: Record<string, PluginDef> = {
@@ -79,6 +81,7 @@ const PLUGINS: Record<string, PluginDef> = {
     component: GlobePlugin,
     category: 'Maps & Navigation',
     tags: ['map', 'earth'],
+    scalable: false,
   },
   'rig': {
     name: 'Rig',
@@ -162,6 +165,7 @@ const PLUGINS: Record<string, PluginDef> = {
     component: PanadapterPlugin,
     category: 'Radio & Equipment',
     tags: ['spectrum', 'waterfall', 'fft', 'sdr', 'panadapter'],
+    scalable: false,
   },
   'statistics': {
     name: 'Statistics',
@@ -176,6 +180,7 @@ const PLUGINS: Record<string, PluginDef> = {
     component: MapPlugin,
     category: 'Maps & Navigation',
     tags: ['map', '2d', 'leaflet', 'spots'],
+    scalable: false,
   },
 };
 
@@ -370,6 +375,9 @@ export function App() {
     };
   }, [saveLayoutImmediately]);
 
+  // PROTOTYPE: per-panel scale (tabId -> percent). Not persisted — demo only.
+  const [panelScales, setPanelScales] = useState<Record<string, number>>({});
+
   // Factory function to render components
   const factory = useCallback((node: TabNode) => {
     const component = node.getComponent();
@@ -377,9 +385,21 @@ export function App() {
 
     if (plugin) {
       const Component = plugin.component;
+      // Canvas/WebGL panels (map, globe, panadapter) measure their containers in
+      // real pixels — CSS zoom breaks their geometry, so they render unwrapped.
+      if (plugin.scalable === false) {
+        return (
+          <PluginErrorBoundary pluginId={component || 'unknown'}>
+            <Component />
+          </PluginErrorBoundary>
+        );
+      }
+      const scale = panelScales[node.getId()] ?? 100;
       return (
         <PluginErrorBoundary pluginId={component || 'unknown'}>
-          <Component />
+          <div style={{ zoom: scale / 100, height: '100%' }}>
+            <Component />
+          </div>
         </PluginErrorBoundary>
       );
     }
@@ -389,7 +409,7 @@ export function App() {
         Unknown component: {component}
       </div>
     );
-  }, []);
+  }, [panelScales]);
 
   // Add a new panel to a specific tabset
   const handleAddPanel = useCallback((pluginId: string) => {
@@ -501,6 +521,42 @@ export function App() {
   // Custom tabset rendering - add + button to each tabset
   const onRenderTabSet = useCallback((node: TabSetNode | BorderNode, renderValues: ITabSetRenderValues) => {
     if (node instanceof TabSetNode) {
+      // PROTOTYPE: per-panel scale stepper for the active tab (demo only).
+      // Hidden for canvas/WebGL panels that can't scale (map, globe, panadapter).
+      const selected = node.getSelectedNode();
+      const selectedPlugin =
+        selected instanceof TabNode ? PLUGINS[selected.getComponent() || ''] : undefined;
+      if (selected && selectedPlugin && selectedPlugin.scalable !== false) {
+        const tabId = selected.getId();
+        const scale = panelScales[tabId] ?? 100;
+        const setScale = (pct: number) =>
+          setPanelScales((s) => ({ ...s, [tabId]: Math.min(100, Math.max(70, pct)) }));
+        renderValues.buttons.push(
+          <div key="panel-scale" className="flex items-center gap-0.5 mr-1 text-[10px] font-mono text-dark-300">
+            <button
+              title="Shrink this panel's content"
+              className="flexlayout__tab_toolbar_button"
+              onClick={() => setScale(scale - 10)}
+            >
+              −
+            </button>
+            <span
+              title="Panel content scale — click to reset to 100%"
+              className="cursor-pointer min-w-[30px] text-center"
+              onClick={() => setScale(100)}
+            >
+              {scale}%
+            </span>
+            <button
+              title="Grow this panel's content (max 100%)"
+              className="flexlayout__tab_toolbar_button"
+              onClick={() => setScale(scale + 10)}
+            >
+              +
+            </button>
+          </div>
+        );
+      }
       renderValues.stickyButtons.push(
         <button
           key="add-panel"
@@ -515,7 +571,7 @@ export function App() {
         </button>
       );
     }
-  }, []);
+  }, [panelScales]);
 
   // Re-apply the default FlexLayout model whenever a reset is requested from
   // anywhere (the store's resetLayout() bumps resetToken). This is what the
