@@ -4,7 +4,8 @@
 
 /**
  * Convert Maidenhead grid square to latitude and longitude coordinates
- * Supports 4-character (field+square) and 6-character (field+square+subsquare) grid squares
+ * Supports 4-character (field+square), 6-character (field+square+subsquare), and longer
+ * even-length grids (e.g. 8-char extended like "EN54xl17"), using up to 6-char precision.
  * 
  * @param grid Maidenhead grid square (e.g., "JO20cx", "IO63", "FN31pr")
  * @returns { lat, lon } coordinates, or null if invalid
@@ -19,8 +20,10 @@ export function gridToLatLon(grid: string): { lat: number; lon: number } | null 
   // Normalize: uppercase and trim
   grid = grid.toUpperCase().trim();
   
-  // Must be 4 or 6 characters
-  if (grid.length !== 4 && grid.length !== 6) {
+  // Maidenhead precisions are even-length (4=square, 6=subsquare, 8=extended, …).
+  // Accept any even length ≥ 4 and use up to the 6-char subsquare — extended
+  // precision beyond 6 chars is unnecessary for mapping. Reject odd lengths.
+  if (grid.length < 4 || grid.length % 2 !== 0) {
     return null;
   }
   
@@ -34,7 +37,7 @@ export function gridToLatLon(grid: string): { lat: number; lon: number } | null 
   
   const field = grid.substring(0, 2);
   const square = grid.substring(2, 4);
-  const subsquare = grid.length === 6 ? grid.substring(4, 6) : null;
+  const subsquare = grid.length >= 6 ? grid.substring(4, 6) : null;
   
   if (!fieldPattern.test(field)) return null;
   if (!squarePattern.test(square)) return null;

@@ -68,7 +68,12 @@ public record QsoResponse(
     DateTime CreatedAt,
     // The contest this QSO was logged under (ContestDefinition id / ADIF CONTEST_ID),
     // null for casual QSOs. Surfaced as the Log History "Contest" column.
-    string? ContestId = null
+    string? ContestId = null,
+    // Per-QSO confirmation status for the Log History "QSL" column.
+    bool ConfirmedLotw = false,
+    bool ConfirmedEqsl = false,
+    bool ConfirmedQrz = false,
+    bool ConfirmedCard = false
 );
 
 public record StationInfoDto(

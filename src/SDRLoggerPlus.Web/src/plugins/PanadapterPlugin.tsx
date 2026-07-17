@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Activity, Pause, Play, ZoomIn, ZoomOut } from 'lucide-react';
+import { Activity, Palette, Pause, Play, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
 import { GlassPanel } from '../components/GlassPanel';
 import {
   clearSpectrumDataCallback,
@@ -106,6 +106,19 @@ const PALETTE_STORAGE_KEY = 'sdrloggerplus-panadapter-palette';       // Palette
 const WF_FLOOR_STORAGE_KEY = 'sdrloggerplus-panadapter-wf-floor';     // 0.0..0.6, values below scale*floor render black
 const WF_CEIL_STORAGE_KEY = 'sdrloggerplus-panadapter-wf-ceil';       // 0.3..1.5, values above scale*ceil saturate to LUT top
 const WF_GRID_STORAGE_KEY = 'sdrloggerplus-panadapter-wf-grid';       // 'on' | 'off'
+const SPEC_SCALE_STORAGE_KEY = 'sdrloggerplus-panadapter-spec-scale'; // 0.3..1.0 vertical scale of the spectrum trace
+const SPEC_COLOR_STORAGE_KEY = 'sdrloggerplus-panadapter-spec-color'; // hex colour of the spectrum trace
+const DEFAULT_SPEC_COLOR = '#00e5ff';
+
+/** Hex (#rgb or #rrggbb) → an rgba() string, for the translucent fill under the trace. */
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const r = parseInt(full.slice(0, 2), 16) || 0;
+  const g = parseInt(full.slice(2, 4), 16) || 0;
+  const b = parseInt(full.slice(4, 6), 16) || 0;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 const AXIS_HEIGHT = 20;     // pixels for frequency axis between spectrum and waterfall
 const MAX_SMOOTH = 0.95;    // cap so the trace never fully freezes
 const MIN_ZOOM = 1;
@@ -161,6 +174,24 @@ export function PanadapterPlugin() {
     localStorage.setItem(SMOOTH_STORAGE_KEY, smoothing.toFixed(2));
     if (smoothing <= 0) smoothedRef.current = null;
   }, [smoothing]);
+
+  // Spectrum trace vertical scale — fraction of the spectrum pane the trace
+  // amplitude uses. Lower it so the signal line rides lower (default gives a
+  // little headroom off the top).
+  const [specScale, setSpecScale] = useState(() => loadNumber(SPEC_SCALE_STORAGE_KEY, 0.8, 0.3, 1.0));
+  const specScaleRef = useRef(specScale);
+  useEffect(() => {
+    specScaleRef.current = specScale;
+    localStorage.setItem(SPEC_SCALE_STORAGE_KEY, specScale.toFixed(2));
+  }, [specScale]);
+
+  // Spectrum trace colour (line + translucent fill under it).
+  const [specColor, setSpecColor] = useState(() => localStorage.getItem(SPEC_COLOR_STORAGE_KEY) || DEFAULT_SPEC_COLOR);
+  const specColorRef = useRef(specColor);
+  useEffect(() => {
+    specColorRef.current = specColor;
+    localStorage.setItem(SPEC_COLOR_STORAGE_KEY, specColor);
+  }, [specColor]);
 
   // Waterfall intensity — brightness gain on the mapped LUT position.
   // With the new auto-tracked noise-floor mapping, 1.0 = neutral (noise
@@ -235,6 +266,44 @@ export function PanadapterPlugin() {
     wfGridRef.current = wfGrid;
     localStorage.setItem(WF_GRID_STORAGE_KEY, wfGrid ? 'on' : 'off');
   }, [wfGrid]);
+
+  // Responsive header toolbar. The full control row needs ~1150px; below
+  // that sliders slim down and the mode chip drops its passband text; below
+  // ~1000px the waterfall controls collapse into a ⚙ popover so nothing is
+  // ever clipped off the header. Width comes from the canvas ResizeObserver.
+  const [panelWidth, setPanelWidth] = useState(0);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsRef = useRef<HTMLDivElement>(null);
+  // Appearance popover (palette + spectrum line colour) — rarely changed, so
+  // it lives behind a gear to keep the main control row short.
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const appearanceRef = useRef<HTMLDivElement>(null);
+  const compactToolbar = panelWidth < 1150;
+  const narrowToolbar = panelWidth > 0 && panelWidth < 1000;
+
+  // Close the controls popover on any outside click
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
+        setToolsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [toolsOpen]);
+
+  // Close the appearance popover on any outside click
+  useEffect(() => {
+    if (!appearanceOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (appearanceRef.current && !appearanceRef.current.contains(e.target as Node)) {
+        setAppearanceOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [appearanceOpen]);
 
   // Zoom: 1× = full IQ span; higher zooms into the RX (window centered on the VFO).
   const [zoom, setZoom] = useState(() => loadNumber(ZOOM_STORAGE_KEY, 1, MIN_ZOOM, MAX_ZOOM));
@@ -432,15 +501,19 @@ export function PanadapterPlugin() {
     };
 
     // --- Spectrum line graph ---
+    // specScale compresses the trace toward the baseline so the operator can
+    // stop it riding high in the pane; specColor recolours the line + fill.
+    const specScale = specScaleRef.current;
+    const specColor = specColorRef.current;
     ctx.save();
     ctx.beginPath();
     for (let x = 0; x <= w; x++) {
       const normalized = Math.min(points[xToIdx(x)] / scale, 1);
-      const y = spectrumH - normalized * spectrumH;
+      const y = spectrumH - normalized * spectrumH * specScale;
       if (x === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
-    ctx.strokeStyle = '#00e5ff';
+    ctx.strokeStyle = specColor;
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -448,7 +521,7 @@ export function PanadapterPlugin() {
     ctx.lineTo(w, spectrumH);
     ctx.lineTo(0, spectrumH);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(0, 229, 255, 0.08)';
+    ctx.fillStyle = hexToRgba(specColor, 0.08);
     ctx.fill();
     ctx.restore();
 
@@ -633,6 +706,8 @@ export function PanadapterPlugin() {
       if (ctx) ctx.scale(dpr, dpr);
       // Reset waterfall buffer on resize
       waterfallBufRef.current = null;
+      // Drives the responsive header toolbar (compact/overflow modes)
+      setPanelWidth(rect.width);
     };
 
     const observer = new ResizeObserver(resize);
@@ -816,133 +891,229 @@ export function PanadapterPlugin() {
     return null;
   });
 
+  // The waterfall/tuning controls render either inline in the header row
+  // (wide panels) or stacked inside the narrow-mode popover — one
+  // definition, two layouts, so the two can never drift apart.
+  const renderWfControls = (stacked: boolean) => {
+    const row = stacked ? 'flex items-center justify-between gap-2' : 'flex items-center gap-1.5';
+    const label = `text-[10px] font-ui text-dark-300 uppercase tracking-wide${stacked ? ' w-9 flex-shrink-0' : ''}`;
+    const slider = (w: string) =>
+      `${stacked ? 'flex-1' : compactToolbar ? 'w-10' : w} accent-[rgb(var(--accent-primary))] cursor-pointer`;
+    return (
+      <>
+        {/* Spectrum smoothing */}
+        <div className={row} title={`Spectrum smoothing: ${Math.round(smoothing * 100)}% — mouse wheel to adjust, Shift+wheel 5×`}>
+          <span className={label}>SM</span>
+          <input
+            type="range"
+            min={0}
+            max={MAX_SMOOTH}
+            step={0.05}
+            value={smoothing}
+            onChange={(e) => setSmoothing(parseFloat(e.target.value))}
+            onWheel={sliderWheel(smoothing, setSmoothing, 0, MAX_SMOOTH, 0.05)}
+            className={slider('w-16')}
+          />
+        </div>
+        {/* Spectrum trace height — lower it so the signal line rides lower */}
+        <div className={row} title={`Spectrum height: ${Math.round(specScale * 100)}% of the pane — mouse wheel to adjust, Shift+wheel 5×`}>
+          <span className={label}>SPC</span>
+          <input
+            type="range"
+            min={0.3}
+            max={1.0}
+            step={0.05}
+            value={specScale}
+            onChange={(e) => setSpecScale(parseFloat(e.target.value))}
+            onWheel={sliderWheel(specScale, setSpecScale, 0.3, 1.0, 0.05)}
+            className={slider('w-16')}
+          />
+        </div>
+        {/* Waterfall intensity */}
+        <div className={row} title={`Waterfall intensity: ${wfIntensity.toFixed(2)}× — mouse wheel to adjust, Shift+wheel 5×`}>
+          <span className={label}>INT</span>
+          <input
+            type="range"
+            min={0.3}
+            max={2.0}
+            step={0.05}
+            value={wfIntensity}
+            onChange={(e) => setWfIntensity(parseFloat(e.target.value))}
+            onWheel={sliderWheel(wfIntensity, setWfIntensity, 0.3, 2.0, 0.05)}
+            className={slider('w-16')}
+          />
+        </div>
+        {/* Waterfall floor / ceiling — offsets into the auto-tracked
+            signal range. FLR up = suppress noise more; CEL down =
+            compress the LUT into the interesting signal window so
+            weak signals pop. */}
+        <div className={row} title={`Waterfall floor (push more noise to background): +${(wfFloor * 100).toFixed(1)}% above auto — mouse wheel to adjust, Shift+wheel 5×`}>
+          <span className={label}>FLR</span>
+          <input
+            type="range"
+            min={0.0}
+            max={0.4}
+            step={0.005}
+            value={wfFloor}
+            onChange={(e) => setWfFloor(parseFloat(e.target.value))}
+            onWheel={sliderWheel(wfFloor, setWfFloor, 0.0, 0.4, 0.005)}
+            className={slider('w-14')}
+          />
+        </div>
+        <div className={row} title={`Waterfall ceiling (LUT saturates at this fraction of peak): ${(wfCeil * 100).toFixed(0)}% — mouse wheel to adjust, Shift+wheel 5×`}>
+          <span className={label}>CEL</span>
+          <input
+            type="range"
+            min={0.5}
+            max={1.0}
+            step={0.01}
+            value={wfCeil}
+            onChange={(e) => setWfCeil(parseFloat(e.target.value))}
+            onWheel={sliderWheel(wfCeil, setWfCeil, 0.5, 1.0, 0.01)}
+            className={slider('w-14')}
+          />
+        </div>
+        {/* Waterfall speed */}
+        <div className={row} title={`Waterfall speed: ${wfSpeed}/10 — mouse wheel to adjust`}>
+          <span className={label}>WF</span>
+          <input
+            type="range"
+            min={1}
+            max={10}
+            value={wfSpeed}
+            onChange={(e) => setWfSpeed(parseInt(e.target.value))}
+            onWheel={sliderWheel(wfSpeed, setWfSpeed, 1, 10, 1)}
+            className={slider('w-16')}
+          />
+        </div>
+        {/* Scroll-tune step picker — mouse-wheel tunes the VFO by this
+            amount per notch. Shared with the Rig panel: a change here
+            also affects the Rig VFO's wheel step. */}
+        <div className={row} title="Mouse-wheel tuning step (shared with Rig panel)">
+          <span className={label}>STEP</span>
+          <select
+            value={scrollTuneStepHz}
+            onChange={(e) => updateRadioSettings({ scrollTuneStepHz: parseInt(e.target.value, 10) })}
+            className={`glass-input text-[10px] font-mono px-1 py-0.5${stacked ? ' flex-1' : ''}`}
+          >
+            {[1, 10, 100, 500, 1000, 2500, 5000, 10000].map((hz) => (
+              <option key={hz} value={hz}>{formatStep(hz)}</option>
+            ))}
+          </select>
+        </div>
+        {/* Grid toggle */}
+        <button
+          onClick={() => setWfGrid((g) => !g)}
+          title={wfGrid ? 'Hide waterfall grid' : 'Show waterfall grid'}
+          className={`text-[10px] font-ui uppercase tracking-wide px-1.5 py-0.5 rounded border transition-colors ${
+            wfGrid
+              ? 'border-accent-secondary/40 text-accent-secondary/90'
+              : 'border-dark-500 text-dark-400 hover:text-dark-200'
+          }`}
+        >
+          Grid
+        </button>
+      </>
+    );
+  };
+
+  // Appearance controls (palette + spectrum line colour) — always shown stacked
+  // inside the gear popover, since they change rarely and don't belong in the
+  // live control row.
+  const renderAppearanceControls = () => {
+    const row = 'flex items-center justify-between gap-2';
+    const label = 'text-[10px] font-ui text-dark-300 uppercase tracking-wide w-10 flex-shrink-0';
+    return (
+      <>
+        <div className={row} title="Waterfall colour palette">
+          <span className={label}>PAL</span>
+          <select
+            value={palette}
+            onChange={(e) => setPalette(e.target.value as PaletteId)}
+            className="glass-input text-[10px] font-mono px-1 py-0.5 flex-1"
+          >
+            {(Object.keys(PALETTES) as PaletteId[]).map((id) => (
+              <option key={id} value={id}>{PALETTES[id].label}</option>
+            ))}
+          </select>
+        </div>
+        <div className={row} title="Spectrum line colour">
+          <span className={label}>LINE</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={specColor}
+              onChange={(e) => setSpecColor(e.target.value)}
+              className="h-5 w-8 cursor-pointer rounded border border-dark-500 bg-transparent p-0"
+              title="Spectrum line colour"
+            />
+            {specColor.toLowerCase() !== DEFAULT_SPEC_COLOR && (
+              <button
+                onClick={() => setSpecColor(DEFAULT_SPEC_COLOR)}
+                title="Reset spectrum line colour"
+                className="text-[10px] font-ui text-dark-400 hover:text-dark-200 uppercase tracking-wide"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  };
+
   return (
     <GlassPanel
       title="Panadapter"
       icon={<Activity className="w-4 h-4" />}
       actions={
         <div className="flex items-center gap-3">
-          {modeChip && (
+          {/* Mode chip yields entirely on sliver-width panels — pause/zoom
+              (and the controls popover) matter more than the mode readout */}
+          {modeChip && !(panelWidth > 0 && panelWidth < 560) && (
             <span
-              className="text-[10px] font-ui text-accent-secondary/90 border border-accent-secondary/30 rounded px-1.5 py-0.5 flex items-center gap-1"
-              title="RX mode + filter passband width (from TCI)"
+              className="text-[10px] font-ui text-accent-secondary/90 border border-accent-secondary/30 rounded px-1.5 py-0.5 flex items-center gap-1 whitespace-nowrap"
+              title={`RX mode + filter passband width (from TCI)${modeChip.width ? `: ${modeChip.width}` : ''}`}
             >
               <span className="font-bold tracking-wider">{modeChip.mode}</span>
-              {modeChip.width && (
+              {modeChip.width && !compactToolbar && (
                 <span className="text-dark-100 font-mono">{modeChip.width}</span>
               )}
             </span>
           )}
-          {/* Spectrum smoothing */}
-          <div className="flex items-center gap-1.5" title={`Spectrum smoothing: ${Math.round(smoothing * 100)}% — mouse wheel to adjust, Shift+wheel 5×`}>
-            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">SM</span>
-            <input
-              type="range"
-              min={0}
-              max={MAX_SMOOTH}
-              step={0.05}
-              value={smoothing}
-              onChange={(e) => setSmoothing(parseFloat(e.target.value))}
-              onWheel={sliderWheel(smoothing, setSmoothing, 0, MAX_SMOOTH, 0.05)}
-              className="w-16 accent-[rgb(var(--accent-primary))] cursor-pointer"
-            />
-          </div>
-          {/* Waterfall intensity */}
-          <div className="flex items-center gap-1.5" title={`Waterfall intensity: ${wfIntensity.toFixed(2)}× — mouse wheel to adjust, Shift+wheel 5×`}>
-            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">INT</span>
-            <input
-              type="range"
-              min={0.3}
-              max={2.0}
-              step={0.05}
-              value={wfIntensity}
-              onChange={(e) => setWfIntensity(parseFloat(e.target.value))}
-              onWheel={sliderWheel(wfIntensity, setWfIntensity, 0.3, 2.0, 0.05)}
-              className="w-16 accent-[rgb(var(--accent-primary))] cursor-pointer"
-            />
-          </div>
-          {/* Waterfall floor / ceiling — offsets into the auto-tracked
-              signal range. FLR up = suppress noise more; CEL down =
-              compress the LUT into the interesting signal window so
-              weak signals pop. */}
-          <div className="flex items-center gap-1.5" title={`Waterfall floor (push more noise to background): +${(wfFloor * 100).toFixed(1)}% above auto — mouse wheel to adjust, Shift+wheel 5×`}>
-            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">FLR</span>
-            <input
-              type="range"
-              min={0.0}
-              max={0.4}
-              step={0.005}
-              value={wfFloor}
-              onChange={(e) => setWfFloor(parseFloat(e.target.value))}
-              onWheel={sliderWheel(wfFloor, setWfFloor, 0.0, 0.4, 0.005)}
-              className="w-14 accent-[rgb(var(--accent-primary))] cursor-pointer"
-            />
-          </div>
-          <div className="flex items-center gap-1.5" title={`Waterfall ceiling (LUT saturates at this fraction of peak): ${(wfCeil * 100).toFixed(0)}% — mouse wheel to adjust, Shift+wheel 5×`}>
-            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">CEL</span>
-            <input
-              type="range"
-              min={0.5}
-              max={1.0}
-              step={0.01}
-              value={wfCeil}
-              onChange={(e) => setWfCeil(parseFloat(e.target.value))}
-              onWheel={sliderWheel(wfCeil, setWfCeil, 0.5, 1.0, 0.01)}
-              className="w-14 accent-[rgb(var(--accent-primary))] cursor-pointer"
-            />
-          </div>
-          {/* Scroll-tune step picker — mouse-wheel tunes the VFO by this
-              amount per notch. Shared with the Rig panel: a change here
-              also affects the Rig VFO's wheel step. */}
-          <div className="flex items-center gap-1.5" title="Mouse-wheel tuning step (shared with Rig panel)">
-            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">STEP</span>
-            <select
-              value={scrollTuneStepHz}
-              onChange={(e) => updateRadioSettings({ scrollTuneStepHz: parseInt(e.target.value, 10) })}
-              className="glass-input text-[10px] font-mono px-1 py-0.5"
+          {!narrowToolbar && renderWfControls(false)}
+          {narrowToolbar && (
+            <div ref={toolsRef} className="relative">
+              <button
+                onClick={() => setToolsOpen((o) => !o)}
+                className={`glass-button p-1.5 ${toolsOpen ? 'text-accent-secondary' : ''}`}
+                title="Waterfall & tuning controls"
+                aria-label="Waterfall and tuning controls"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+              </button>
+              {toolsOpen && (
+                <div className="absolute right-0 top-full mt-2 z-50 glass-panel p-3 w-64 flex flex-col gap-2.5 shadow-xl">
+                  {renderWfControls(true)}
+                </div>
+              )}
+            </div>
+          )}
+          {/* Appearance gear — palette + spectrum line colour (set-and-forget) */}
+          <div ref={appearanceRef} className="relative">
+            <button
+              onClick={() => setAppearanceOpen((o) => !o)}
+              className={`glass-button p-1.5 ${appearanceOpen ? 'text-accent-secondary' : ''}`}
+              title="Colours — palette & spectrum line"
+              aria-label="Colour settings"
             >
-              {[1, 10, 100, 500, 1000, 2500, 5000, 10000].map((hz) => (
-                <option key={hz} value={hz}>{formatStep(hz)}</option>
-              ))}
-            </select>
-          </div>
-          {/* Palette picker */}
-          <div className="flex items-center gap-1.5" title="Waterfall colour palette">
-            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">PAL</span>
-            <select
-              value={palette}
-              onChange={(e) => setPalette(e.target.value as PaletteId)}
-              className="glass-input text-[10px] font-mono px-1 py-0.5"
-            >
-              {(Object.keys(PALETTES) as PaletteId[]).map((id) => (
-                <option key={id} value={id}>{PALETTES[id].label}</option>
-              ))}
-            </select>
-          </div>
-          {/* Grid toggle */}
-          <button
-            onClick={() => setWfGrid((g) => !g)}
-            title={wfGrid ? 'Hide waterfall grid' : 'Show waterfall grid'}
-            className={`text-[10px] font-ui uppercase tracking-wide px-1.5 py-0.5 rounded border transition-colors ${
-              wfGrid
-                ? 'border-accent-secondary/40 text-accent-secondary/90'
-                : 'border-dark-500 text-dark-400 hover:text-dark-200'
-            }`}
-          >
-            Grid
-          </button>
-          {/* Waterfall speed */}
-          <div className="flex items-center gap-1.5" title={`Waterfall speed: ${wfSpeed}/10 — mouse wheel to adjust`}>
-            <span className="text-[10px] font-ui text-dark-300 uppercase tracking-wide">WF</span>
-            <input
-              type="range"
-              min={1}
-              max={10}
-              value={wfSpeed}
-              onChange={(e) => setWfSpeed(parseInt(e.target.value))}
-              onWheel={sliderWheel(wfSpeed, setWfSpeed, 1, 10, 1)}
-              className="w-16 accent-[rgb(var(--accent-primary))] cursor-pointer"
-            />
+              <Palette className="w-3.5 h-3.5" />
+            </button>
+            {appearanceOpen && (
+              <div className="absolute right-0 top-full mt-2 z-50 glass-panel p-3 w-56 flex flex-col gap-2.5 shadow-xl">
+                {renderAppearanceControls()}
+              </div>
+            )}
           </div>
           {/* Zoom */}
           <div className="flex items-center gap-1" title="Zoom (or Ctrl/Shift + scroll)">

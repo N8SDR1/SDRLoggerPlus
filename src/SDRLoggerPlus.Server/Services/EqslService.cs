@@ -107,6 +107,46 @@ public class EqslService
         }
     }
 
+    /// <summary>
+    /// Download the eQSL Inbox as ADIF (received QSLs = confirmations). Two-step,
+    /// the way eQSL's API works: DownloadInBox.cfm builds a file and returns a
+    /// page linking to it, then we fetch that .adi. Reads creds + last-sync from
+    /// settings; returns the raw ADIF ("" when there's nothing new). Throws with a
+    /// clear message on missing creds / bad login / non-AG account.
+    /// </summary>
+    public async Task<string> DownloadInboxAdifAsync(CancellationToken ct = default)
+    {
+        var eqsl = (await _settingsService.GetSettingsAsync()).Eqsl;
+        if (string.IsNullOrWhiteSpace(eqsl.Username) || string.IsNullOrWhiteSpace(eqsl.Password))
+            throw new InvalidOperationException("Set your eQSL username + password in Settings → eQSL first.");
+
+        var url = new StringBuilder("https://www.eQSL.cc/qslcard/DownloadInBox.cfm?");
+        url.Append($"UserName={Uri.EscapeDataString(eqsl.Username!)}&Password={Uri.EscapeDataString(eqsl.Password!)}");
+        if (eqsl.LastConfirmationSync is { } since)
+            url.Append($"&RcvdSince={since:yyyyMMddHHmm}");
+
+        var html = await _http.GetStringAsync(url.ToString(), ct);
+
+        var link = System.Text.RegularExpressions.Regex.Match(
+            html, @"/downloadedfiles/[^""'<>\s]+?\.adi",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (!link.Success)
+        {
+            if (html.Contains("Bad", StringComparison.OrdinalIgnoreCase) ||
+                html.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                html.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+                html.Contains("Authenticity", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "eQSL rejected the login, or your account isn't Authenticity-Guaranteed (required for inbox downloads). Check your eQSL username/password.");
+            // Valid page, no link = nothing new since the last sync.
+            return "";
+        }
+
+        var adifUrl = "https://www.eQSL.cc" + link.Value;
+        return await _http.GetStringAsync(adifUrl, ct);
+    }
+
     /// <summary>Uploads one QSO. Fire-and-forget style; the caller ignores the return except in tests.</summary>
     public async Task<(bool Ok, string? Error)> UploadQsoAsync(Qso qso, CancellationToken ct = default)
     {

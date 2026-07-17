@@ -61,6 +61,21 @@ public record GridDetail(
     DateTime? LastWorked
 );
 
+// Grid-tracker map: worked 4-char grids across ALL bands (or a filtered band/mode),
+// reading Station.Grid with the top-level Grid as fallback. "Needed" = any grid
+// NOT in this set; live activity comes from the decode stream on the frontend.
+public record WorkedGrid(
+    string Grid,
+    bool Confirmed,
+    int QsoCount
+);
+
+public record GridMapStatistics(
+    int TotalGrids,
+    int ConfirmedGrids,
+    List<WorkedGrid> Grids
+);
+
 // POTA Statistics
 public record PotaStatistics(
     int UniqueParksActivated,

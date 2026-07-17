@@ -38,6 +38,10 @@ export interface LotwSettings {
   tqslPath: string;
   // Optional TQSL station location name (passed as `-l <name>`); empty = TQSL default.
   stationCallsign: string;
+  // LoTW website login (separate from the TQSL cert) — used to download the
+  // confirmation report from lotw.arrl.org.
+  username: string;
+  password: string;
 }
 
 export interface RbnAlertSettings {
@@ -86,9 +90,58 @@ export interface EqslSettings {
   qthNickname: string; // optional: pick a QTH when your eQSL account has multiple
 }
 
+/** Hands-off background confirmation sync (LoTW / eQSL). */
+export interface ConfirmationSyncSettings {
+  autoSync: boolean;
+  intervalHours: number;
+  syncOnStartup: boolean;
+  lotw: boolean;
+  eqsl: boolean;
+  qrz: boolean;
+}
+
 export interface PotaSettings {
   username: string;  // POTA.app account username
   password: string;  // POTA.app account password (basic-auth on /spot)
+  /** POTA Activators panel: follow the rig's band / mode (persisted, like the cluster). */
+  followRigBand: boolean;
+  followRigMode: boolean;
+}
+
+/** Shared voice used for every spoken announcement (band-opening, Hot List, RBN…). */
+export interface VoiceSettings {
+  /** SpeechSynthesisVoice.voiceURI to speak with. '' = the browser default voice. */
+  voiceUri: string;
+  /** Speaking rate, 0.5 (slow) – 1.5 (fast). */
+  rate: number;
+  /** Announcement volume, 0–1. Shared by every spoken alert. */
+  volume: number;
+}
+
+export interface DxCoachSettings {
+  /**
+   * Minimum predicted path reliability (0–99%) an opportunity must clear to
+   * appear in the DX Coach. Spots with no propagation data (no QTH set, or no
+   * DX location resolved) are always shown — they can't be fairly judged.
+   * 0 = show every opportunity.
+   */
+  minReliability: number;
+  /** Speak newly-arriving high-value opportunities (new DXCC / new zone) aloud. */
+  voice: boolean;
+  /** Coach DXCC opportunities (new entity / new band-slot). */
+  showDxcc: boolean;
+  /** Coach WAZ opportunities (new CQ zone / new zone-band). */
+  showWaz: boolean;
+  /** Show MF/LF low-band opportunities (2200m, 630m). */
+  showLowBand: boolean;
+  /** Show HF opportunities (160m–10m). */
+  showHf: boolean;
+  /** Show 6m opportunities (its own toggle — HF+6m rigs are common). */
+  show6m: boolean;
+  /** Show VHF opportunities (2m, 1.25m). */
+  showVhf: boolean;
+  /** Show UHF opportunities (70cm, 33cm, 23cm and up). */
+  showUhf: boolean;
 }
 
 export interface AppearanceSettings {
@@ -96,6 +149,17 @@ export interface AppearanceSettings {
   compactMode: boolean;
   /** Used when theme === 'custom'; seeded from the previously active theme. */
   customColors: CustomColors;
+  /**
+   * Master unit system. Drives every physical readout app-wide (distance,
+   * satellite range/altitude, lightning proximity, wind, temperature) unless a
+   * feature explicitly overrides it.
+   */
+  unitSystem: 'imperial' | 'metric';
+  /**
+   * Effective distance unit, kept in sync with unitSystem (imperial → mi,
+   * metric → km). Retained as the value distance consumers read directly.
+   */
+  distanceUnit: 'km' | 'mi';
 }
 
 export interface RotatorPreset {
@@ -181,6 +245,8 @@ export interface MapSettings {
   rbn: RbnSettings;
   showPotaOverlay: boolean;
   showLightning: boolean;
+  /** Slow auto-spin of the 2D Map's embedded globe circle. */
+  rotateGlobe: boolean;
   showDayNightOverlay: boolean;
   showGrayLine: boolean;
   showSunMarker: boolean;
@@ -190,6 +256,10 @@ export interface MapSettings {
   showCallsignImages: boolean;
   maxCallsignImages: number;
   showDxNewsTicker: boolean; // scrolling DX-World news bar at the bottom of the 2D Map
+  // 2D-map DX signal path: animated sine wave or a plain dashed line, in a
+  // user-picked colour (hex).
+  dxPathStyle: 'sine' | 'dash';
+  dxPathColor: string;
   showPskOverlay: boolean;
   pskCallsign: string; // callsign to look up on PSK Reporter; empty = use station callsign
   showAuroraOverlay: boolean;
@@ -197,6 +267,17 @@ export interface MapSettings {
   // is always drawn when a callsign is focused; the cyan long-path arc is
   // opt-in so operators who only care about SP get a cleaner view.
   showLongPath: boolean;
+  // Draw the short path as an ionospheric-skip zigzag (bouncing between the
+  // ground and the ionosphere) on the 3D Globe, and tilt the view to an
+  // oblique angle so the hops are visible. Off = a single smooth arc.
+  showIonosphereHops: boolean;
+  // "Heard Me" globe layers — arcs from your station to stations that heard you.
+  showGlobeHeardMePsk: boolean;   // PSK Reporter (digital)
+  showGlobeHeardMeRbn: boolean;   // RBN (CW/RTTY skimmers)
+  heardMeBand: string;            // manual band fallback when no rig connected
+  heardMePskWindowMinutes: number; // PSK look-back, clamped [5,60]
+  heardMeRbnWindowMinutes: number; // RBN look-back, clamped [5,15] (RbnService buffer retains ~15 min)
+  show2dHeardMeRbn: boolean; // "Heard Me — RBN" overlay on the 2D map (distinct from the RBN cluster layer)
 }
 
 export interface HeaderSettings {
@@ -275,7 +356,8 @@ export interface WindAlertSettings {
   useEcowitt: boolean;
   threshSustainedMph: number;
   threshGustMph: number;
-  displayUnit: 'mph' | 'kph';
+  /** 'auto' follows the master unit system; 'mph'/'kph' force a display unit. */
+  displayUnit: 'auto' | 'mph' | 'kph';
   cooldownMinutes: number;
 }
 
@@ -300,10 +382,51 @@ export interface SatControllerSettings {
   adifPort: number;
 }
 
-export interface WsjtxSettings {
+/** One WSJT-X/JTDX UDP listener (a decoder app reporting to a host:port). */
+export interface WsjtxSource {
   enabled: boolean;
   port: number;
   multicastAddress?: string | null;
+}
+
+export interface WsjtxSettings {
+  // Source 1 (primary) — flat fields, unchanged for backward compatibility.
+  enabled: boolean;
+  port: number;
+  multicastAddress?: string | null;
+  // Source 2 (secondary) — a second decoder on its own port (e.g. JTDX while
+  // WSJT-X runs on the primary). Disabled by default.
+  source2: WsjtxSource;
+}
+
+/** One geo-scoped needed-status alert rule over the decode stream. */
+export interface DecodeAlertRule {
+  id: string;
+  enabled: boolean;
+  name: string;
+  // Award needs — alert when the decode is any enabled kind.
+  newDxcc: boolean;
+  newBand: boolean;
+  newZone: boolean;
+  newGrid: boolean;
+  // Scope filters — each, if non-empty, must match.
+  continents: string[];
+  dxccEntities: string[];
+  callAreas: number[];   // US call districts 0-9
+  prefixes: string[];    // e.g. W, K, VE3
+  gridFields: string[];  // 2-char grid fields, e.g. EM
+  bands: string[];
+  modes: string[];
+  // Actions.
+  sound: boolean;
+  voice: boolean;
+  popup: boolean;
+  cooldownMinutes: number;
+}
+
+export interface DecodeAlertsSettings {
+  enabled: boolean;
+  rules: DecodeAlertRule[];
 }
 
 export interface HotListSettings {
@@ -320,10 +443,14 @@ export interface BackupSettings {
   destinationPath?: string | null;
 }
 
+export type AiProvider = 'anthropic' | 'openai' | 'groq' | 'openrouter' | 'ollama' | 'custom';
+
 export interface AiSettings {
-  provider: 'anthropic' | 'openai';
+  provider: AiProvider;
   apiKey: string;
   model: string;
+  /** OpenAI-compatible API base URL; blank = the provider preset's default. */
+  baseUrl: string;
   autoGenerateTalkPoints: boolean;
   includeQrzProfile: boolean;
   includeQsoHistory: boolean;
@@ -346,7 +473,10 @@ export interface Settings {
   clubLog: ClubLogSettings;
   hrdLog: HrdLogSettings;
   eqsl: EqslSettings;
+  confirmationSync: ConfirmationSyncSettings;
   pota: PotaSettings;
+  dxCoach: DxCoachSettings;
+  voice: VoiceSettings;
   adifMonitor: AdifMonitorSettings;
   adifUdp: AdifUdpSettings;
   rbnAlerts: RbnAlertSettings;
@@ -361,13 +491,14 @@ export interface Settings {
   backup: BackupSettings;
   hotList: HotListSettings;
   wsjtx: WsjtxSettings;
+  decodeAlerts: DecodeAlertsSettings;
   weather: WeatherSettings;
   sat: SatControllerSettings;
   contest: ContestSettings;
   gridStates: Record<string, string>;
 }
 
-export type SettingsSection = 'station' | 'weblogbooks' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'about';
+export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'decodealerts' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'dxcoach' | 'voice' | 'about';
 
 interface SettingsState {
   // Settings data
@@ -395,7 +526,10 @@ interface SettingsState {
   updateClubLogSettings: (clubLog: Partial<ClubLogSettings>) => void;
   updateHrdLogSettings: (hrdLog: Partial<HrdLogSettings>) => void;
   updateEqslSettings: (eqsl: Partial<EqslSettings>) => void;
+  updateConfirmationSyncSettings: (confirmationSync: Partial<ConfirmationSyncSettings>) => void;
   updatePotaSettings: (pota: Partial<PotaSettings>) => void;
+  updateDxCoachSettings: (dxCoach: Partial<DxCoachSettings>) => void;
+  updateVoiceSettings: (voice: Partial<VoiceSettings>) => void;
   updateAdifMonitorSettings: (adifMonitor: Partial<AdifMonitorSettings>) => void;
   updateAdifUdpSettings: (adifUdp: Partial<AdifUdpSettings>) => void;
   updateRbnAlertSettings: (rbnAlerts: Partial<RbnAlertSettings>) => void;
@@ -412,6 +546,7 @@ interface SettingsState {
   updateBackupSettings: (backup: Partial<BackupSettings>) => void;
   updateHotListSettings: (hotList: Partial<HotListSettings>) => void;
   updateWsjtxSettings: (wsjtx: Partial<WsjtxSettings>) => void;
+  updateDecodeAlertsSettings: (decodeAlerts: Partial<DecodeAlertsSettings>) => void;
   updateWeatherSettings: (weather: Partial<WeatherSettings>) => void;
   updateSatSettings: (sat: Partial<SatControllerSettings>) => void;
   updateContestSettings: (contest: Partial<ContestSettings>) => void;
@@ -453,6 +588,8 @@ const defaultSettings: Settings = {
     enabled: false,
     tqslPath: '',
     stationCallsign: '',
+    username: '',
+    password: '',
   },
   clubLog: {
     enabled: false,
@@ -472,9 +609,35 @@ const defaultSettings: Settings = {
     password: '',
     qthNickname: '',
   },
+  confirmationSync: {
+    autoSync: false,
+    intervalHours: 6,
+    syncOnStartup: true,
+    lotw: true,
+    eqsl: true,
+    qrz: true,
+  },
   pota: {
     username: '',
     password: '',
+    followRigBand: false,
+    followRigMode: false,
+  },
+  dxCoach: {
+    minReliability: 30,
+    voice: false,
+    showDxcc: true,
+    showWaz: true,
+    showLowBand: true,
+    showHf: true,
+    show6m: true,
+    showVhf: true,
+    showUhf: true,
+  },
+  voice: {
+    voiceUri: '',
+    rate: 0.95,
+    volume: 0.8,
   },
   adifMonitor: {
     enabled: false,
@@ -502,6 +665,8 @@ const defaultSettings: Settings = {
     theme: 'dark',
     compactMode: false,
     customColors: getSeedColors('dark'),
+    unitSystem: 'metric',
+    distanceUnit: 'km',
   },
   rotator: {
     enabled: false,
@@ -558,6 +723,7 @@ const defaultSettings: Settings = {
     },
     showPotaOverlay: false,
     showLightning: false,
+    rotateGlobe: false,
     showDayNightOverlay: false,
     showGrayLine: false,
     showSunMarker: true,
@@ -567,10 +733,19 @@ const defaultSettings: Settings = {
     showCallsignImages: true,
     maxCallsignImages: 50,
     showDxNewsTicker: true,
+    dxPathStyle: 'sine', // 'sine' | 'dash'
+    dxPathColor: '#39ff14', // matches accent-secondary green in the default theme
     showPskOverlay: false,
     pskCallsign: '',
     showAuroraOverlay: false,
-    showLongPath: true, // default ON — hams commonly want to see both paths
+    showLongPath: false, // default OFF (user call) — opt-in via Settings > Map
+    showIonosphereHops: false, // opt-in — tilts the globe when on
+    showGlobeHeardMePsk: false,
+    showGlobeHeardMeRbn: false,
+    heardMeBand: '20m',
+    heardMePskWindowMinutes: 60,
+    heardMeRbnWindowMinutes: 15,
+    show2dHeardMeRbn: false,
   },
   cluster: {
     connections: [],
@@ -606,6 +781,7 @@ const defaultSettings: Settings = {
     provider: 'anthropic',
     apiKey: '',
     model: 'claude-sonnet-4-5-20250929',
+    baseUrl: '',
     autoGenerateTalkPoints: true,
     includeQrzProfile: true,
     includeQsoHistory: true,
@@ -627,6 +803,11 @@ const defaultSettings: Settings = {
     enabled: false,
     port: 2237,
     multicastAddress: '',
+    source2: { enabled: false, port: 2333, multicastAddress: '' },
+  },
+  decodeAlerts: {
+    enabled: false,
+    rules: [],
   },
   weather: {
     lightning: {
@@ -647,7 +828,7 @@ const defaultSettings: Settings = {
       useEcowitt: false,
       threshSustainedMph: 30,
       threshGustMph: 45,
-      displayUnit: 'mph',
+      displayUnit: 'auto',
       cooldownMinutes: 20,
     },
     credentials: {
@@ -750,11 +931,38 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       isDirty: true,
     })),
 
+  updateConfirmationSyncSettings: (confirmationSync) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        confirmationSync: { ...state.settings.confirmationSync, ...confirmationSync },
+      },
+      isDirty: true,
+    })),
+
   updatePotaSettings: (pota) =>
     set((state) => ({
       settings: {
         ...state.settings,
         pota: { ...state.settings.pota, ...pota },
+      },
+      isDirty: true,
+    })),
+
+  updateDxCoachSettings: (dxCoach) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        dxCoach: { ...state.settings.dxCoach, ...dxCoach },
+      },
+      isDirty: true,
+    })),
+
+  updateVoiceSettings: (voice) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        voice: { ...state.settings.voice, ...voice },
       },
       isDirty: true,
     })),
@@ -907,6 +1115,16 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       settings: {
         ...state.settings,
         wsjtx: { ...state.settings.wsjtx, ...wsjtx },
+      },
+      isDirty: true,
+    })),
+
+  // Decode-alert rules
+  updateDecodeAlertsSettings: (decodeAlerts) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        decodeAlerts: { ...state.settings.decodeAlerts, ...decodeAlerts },
       },
       isDirty: true,
     })),
@@ -1087,13 +1305,28 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           clubLog: { ...defaultSettings.clubLog, ...settings.clubLog },
           hrdLog: { ...defaultSettings.hrdLog, ...settings.hrdLog },
           eqsl: { ...defaultSettings.eqsl, ...settings.eqsl },
+          confirmationSync: { ...defaultSettings.confirmationSync, ...settings.confirmationSync },
           pota: { ...defaultSettings.pota, ...settings.pota },
+          dxCoach: { ...defaultSettings.dxCoach, ...settings.dxCoach },
+          voice: {
+            ...defaultSettings.voice,
+            ...settings.voice,
+            // Carry a customized volume over from the old RBN-only slider.
+            volume:
+              settings.voice?.volume ??
+              (settings.rbnAlerts as { voiceVolume?: number } | undefined)?.voiceVolume ??
+              defaultSettings.voice.volume,
+          },
           adifMonitor: { ...defaultSettings.adifMonitor, ...settings.adifMonitor },
           adifUdp: { ...defaultSettings.adifUdp, ...settings.adifUdp },
           rbnAlerts: { ...defaultSettings.rbnAlerts, ...settings.rbnAlerts },
           appearance: {
             ...defaultSettings.appearance,
             ...settings.appearance,
+            // Seed the master unit system for installs that predate it, from the
+            // legacy standalone distance toggle (mi → imperial, else metric).
+            unitSystem: settings.appearance?.unitSystem
+              ?? (settings.appearance?.distanceUnit === 'mi' ? 'imperial' : 'metric'),
             customColors: {
               ...defaultSettings.appearance.customColors,
               ...settings.appearance?.customColors,
@@ -1127,7 +1360,16 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           ai: { ...defaultSettings.ai, ...settings.ai },
           backup: { ...defaultSettings.backup, ...settings.backup },
           hotList: { ...defaultSettings.hotList, ...settings.hotList },
-          wsjtx: { ...defaultSettings.wsjtx, ...settings.wsjtx },
+          wsjtx: {
+            ...defaultSettings.wsjtx,
+            ...settings.wsjtx,
+            source2: { ...defaultSettings.wsjtx.source2, ...settings.wsjtx?.source2 },
+          },
+          decodeAlerts: {
+            ...defaultSettings.decodeAlerts,
+            ...settings.decodeAlerts,
+            rules: settings.decodeAlerts?.rules ?? defaultSettings.decodeAlerts.rules,
+          },
           weather: {
             lightning: { ...defaultSettings.weather.lightning, ...settings.weather?.lightning },
             wind: { ...defaultSettings.weather.wind, ...settings.weather?.wind },

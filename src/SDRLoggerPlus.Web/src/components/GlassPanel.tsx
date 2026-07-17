@@ -20,7 +20,7 @@ export function GlassPanel({ children, className = '', title, icon, actions }: G
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
       )}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-auto">
         {children}
       </div>
     </div>

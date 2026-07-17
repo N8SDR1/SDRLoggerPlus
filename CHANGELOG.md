@@ -3,6 +3,121 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-16 — v2.4.0 "Vega+" 🌟
+
+More reach, less friction: see who's hearing *you*, filter the FT8 firehose down
+to your alert rules, and reach rig setup straight from the status bar.
+
+### New
+- **"Heard Me" signal-path layers** — PSK Reporter (digital) and RBN skimmer
+  (CW/RTTY) arcs from your station to every receiver that recently spotted you,
+  on both the **3D globe** and the **2D map**. Band follows your rig (or pick one
+  / All bands), per-layer look-back windows, clickable receiver points showing
+  the RX report (freq / mode / SNR / age). *(N9BC)*
+- **Rig status-bar switcher** — the bottom-right pill shows the connected radio;
+  **left-click** to switch or connect any configured rig, **right-click** (or
+  "Add / manage radios") to open the Rig panel for setup. *(N9BC + N8SDR)*
+- **"Match Alerts" decode filter** — the Digital Decodes list can now be narrowed
+  to just the decodes that match your **Digital Decode Alert** rules, so a
+  "needed grids, North America" rule filters the list too, not only the alerts.
+
+### Changed
+- The **Map's Overlays** menu is now simple toggles (Lightning, Rotate Globe,
+  PSK Layer, RBN Layer) with shared band/window controls; RBN cluster-feed
+  settings moved into **Settings → Map**. *(N9BC)*
+
+### Fixed
+- **8-character extended grids** (e.g. `EN54xl17` from PSK Reporter) were rejected
+  by the grid→lat/lon parser, silently dropping every 2D-map arc. Now accepted. *(N9BC)*
+
+## 2026-07-16 — v2.3.0 "Vega+" 🌟
+
+Native FT8 / digital-mode tools — decode monitoring, smart alerting, and grid
+tracking, built right into SDRLoggerPlus. No JTAlert or GridTracker needed.
+
+### New
+- **Digital Decodes panel** — the live FT8/FT4 decode stream from WSJT-X / JTDX /
+  MSHV over UDP, each decode coloured by what it would give you (new DXCC / band /
+  zone / grid), with Needed-only and CQ-only filters. **Double-click a decode**
+  and your decoder answers that CQ (WSJT-X / JTDX, with "Accept UDP requests" on).
+- **Digital Decode Alerts** (Settings → Digital Decode Alerts) — geo-scoped rules
+  that sound / speak / pop only for what you want: an award need (DXCC / band /
+  zone / grid) × a region (continent, DXCC entity, US call area, prefix, grid
+  field) × band/mode. So "needed grids, North America only, 20m" is one rule.
+  Quick-add presets; voice uses the shared Voice section.
+- **Grid Tracker panel** — a Maidenhead grid map: worked (green, brighter =
+  confirmed), needed (red tint), and stations active right now from the decode
+  stream (cyan ring; a needed + live grid pulses "chase now"). Country outlines,
+  pan / zoom, hover, VUCC progress, and **Follow Digital Decodes (FDD)** to lock
+  the map to your decoding session.
+- **Live log-entry populate** — when your decoder's DX Call changes (you call CQ,
+  or a station answers you), it fills the Log Entry, fires the callbook lookup
+  (QRZ Profile), and drops the station on the map. The finished FT8 QSO auto-logs
+  to Log History.
+- **Compact Log History summary** — QSOs / Countries / Grids / Today on one line.
+
+### Changed
+- **Settings → WSJT-X / JTDX** is now **Decoder Link (UDP)** — it feeds both
+  auto-logging and the live decode stream.
+
+### Fixed
+- A grid you just worked no longer re-appears as "needed" on the next decode —
+  logging now records the grid in the needed-status cache.
+
+## 2026-07-15 — v2.2.1
+
+### Fixed
+- **Settings wouldn't save (HTTP 400).** A non-nullable field that shipped empty
+  in 2.2.0 tripped implicit validation and blocked every settings save, on every
+  tab. Fixed.
+
+## 2026-07-15 — v2.2.0 "Vega" 🌟
+
+### New
+- **DX Coach** — turns live spots + your award needs + solar / gray-line data
+  into proactive, factually-grounded operating suggestions, with a needs matrix
+  (DXCC / WAS / zones), band-class filters, and optional voice.
+- **Confirmations** — Log4OM-style confirmation ingest: LoTW / eQSL / QRZ merge
+  into your log with a QSL column (L / E / Q / C), one-click downloads, and
+  background auto-sync.
+- **Voice** — a shared announcement voice (accent + male / female) for band
+  openings, Hot List, RBN alerts, and the DX Coach, with a volume control.
+
+## 2026-07-10 — v2.1.0 "Vega" 🌟
+
+Feature release on the 2.0 "Vega" line.
+
+### New
+- **Units — Imperial / Metric master toggle** (Settings → Appearance). One
+  switch drives distance, satellite range/altitude, wind, temperature, and
+  lightning proximity. The Weather wind switch can still override it (defaults
+  to follow the master).
+- **WSJT-X / JTDX** now has its own Settings section, with a **second
+  independent UDP source** — auto-log from two decoders at once (e.g. WSJT-X
+  and JTDX on separate ports).
+- **AI talk points — bring your own provider.** Chat AI works with any
+  OpenAI-compatible endpoint via a Base-URL field: OpenAI, Anthropic, **Groq**,
+  **OpenRouter**, and **Ollama** (local, no key), plus Custom. Provider errors
+  now show the real reason. The Help Guide includes an Ollama setup walkthrough.
+- **POTA Activators filters** — the DX-cluster toolbar on the POTA panel:
+  Follow-rig (Band/Mode), Band, Mode, a Region filter (park location), and
+  search. Follow-rig persists across restarts.
+- **TCI rig setup — connection check + edit.** Adding a TCI rig probes the
+  host:port first, so a wrong port tells you immediately instead of leaving a
+  rig that never connects. Saved rigs now have an Edit button (name/host/port).
+- **Panadapter** — spectrum height (SPC) and spectrum line-colour controls; the
+  palette and line colour live behind a colour gear.
+- **ADIF Monitor** — Browse buttons to pick the watched `.adi` files.
+
+### Improvements
+- Larger, more legible band-activity tiles in the header bar.
+- About page shows the real version number.
+- New landscape splash screen.
+
+### Fixes
+- **Lightning proximity alert** now reads the freshest strikes (last ~0–10 min)
+  instead of data up to an hour old — storm warnings reflect current conditions.
+
 ## 2026-07-08 — v2.0.1
 
 ### Fixes

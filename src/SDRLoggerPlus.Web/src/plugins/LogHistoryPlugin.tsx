@@ -1,12 +1,12 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ScrollText, Search, Calendar, Radio, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown, X, CloudUpload, Loader2, Pencil, Trash2, Upload, Download, FileText, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { ScrollText, Search, Calendar, Radio, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, CloudUpload, Loader2, Pencil, Trash2, Upload, Download, FileText, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, ICellRendererParams } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
-import { api, QsoResponse, UpdateQsoRequest, AdifImportResponse } from '../api/client';
+import { api, QsoResponse, UpdateQsoRequest, AdifImportResponse, ConfirmationSource, ConfirmationMergeResponse } from '../api/client';
 import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
 import { useAppStore } from '../store/appStore';
@@ -21,6 +21,35 @@ const RST_PHONE = ['59', '58', '57', '56', '55', '54', '53', '52', '51'];
 const RST_CW_DIGITAL = ['599', '589', '579', '569', '559', '549', '539', '529', '519'];
 
 // Custom cell renderer for mode badges
+// QSL column — a green badge per confirmed channel (LoTW / eQSL / card).
+const QslCellRenderer = (props: ICellRendererParams<QsoResponse>) => {
+  const q = props.data;
+  const channels: Array<{ on?: boolean; letter: string; title: string }> = [
+    { on: q?.confirmedLotw, letter: 'L', title: 'LoTW' },
+    { on: q?.confirmedEqsl, letter: 'E', title: 'eQSL' },
+    { on: q?.confirmedQrz, letter: 'Q', title: 'QRZ Logbook' },
+    { on: q?.confirmedCard, letter: 'C', title: 'Card / paper QSL' },
+  ];
+  const confirmed = channels.filter((c) => c.on);
+  return (
+    <div className="flex items-center gap-1 h-full">
+      {confirmed.length === 0 ? (
+        <span className="text-dark-500 text-xs">—</span>
+      ) : (
+        confirmed.map((c) => (
+          <span
+            key={c.letter}
+            title={`${c.title} confirmed`}
+            className="inline-flex items-center justify-center w-4 h-4 rounded-sm bg-accent-success/20 text-accent-success text-[10px] font-bold font-ui"
+          >
+            {c.letter}
+          </span>
+        ))
+      )}
+    </div>
+  );
+};
+
 const ModeCellRenderer = (props: ICellRendererParams<QsoResponse>) => {
   const mode = props.value;
   const getModeClass = (mode: string) => {
@@ -103,7 +132,6 @@ export function LogHistoryPlugin() {
   const [toDate, setToDate] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
-  const [showSummary, setShowSummary] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [editingQso, setEditingQso] = useState<QsoResponse | null>(null);
   const [deletingQso, setDeletingQso] = useState<QsoResponse | null>(null);
@@ -118,6 +146,12 @@ export function LogHistoryPlugin() {
   const [markAsSyncedToQrz, setMarkAsSyncedToQrz] = useState(true);
   const [clearExistingLogs, setClearExistingLogs] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mergeFileInputRef = useRef<HTMLInputElement>(null);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeSource, setMergeSource] = useState<ConfirmationSource>('lotw');
+  const [mergeResult, setMergeResult] = useState<ConfirmationMergeResponse | null>(null);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
 
   const queryClient = useQueryClient();
   const { qrzSyncProgress, setQrzSyncProgress, adifImportProgress, setAdifImportProgress, logHistoryCallsignFilter, lotwUploadProgress, setLotwUploadProgress } = useAppStore();
@@ -233,6 +267,48 @@ export function LogHistoryPlugin() {
       fileInputRef.current.value = '';
     }
   }, [importMutation]);
+
+  const handleMergeFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (mergeFileInputRef.current) mergeFileInputRef.current.value = '';
+    if (!file) return;
+    setIsMerging(true);
+    setMergeResult(null);
+    setMergeError(null);
+    try {
+      const result = await api.mergeConfirmations(file, mergeSource);
+      setMergeResult(result);
+      queryClient.invalidateQueries({ queryKey: ['qsos'] });
+      queryClient.invalidateQueries({ queryKey: ['statistics'] });
+    } catch (error) {
+      console.error('Failed to merge confirmations:', error);
+      setMergeError(error instanceof Error ? error.message : 'Merge failed');
+    } finally {
+      setIsMerging(false);
+    }
+  }, [mergeSource, queryClient]);
+
+  const handleDownloadSync = useCallback(async (kind: 'lotw' | 'eqsl' | 'qrz') => {
+    setIsMerging(true);
+    setMergeResult(null);
+    setMergeError(null);
+    try {
+      const result =
+        kind === 'lotw'
+          ? await api.downloadLotwConfirmations()
+          : kind === 'eqsl'
+          ? await api.downloadEqslConfirmations()
+          : await api.downloadQrzConfirmations();
+      setMergeResult(result);
+      queryClient.invalidateQueries({ queryKey: ['qsos'] });
+      queryClient.invalidateQueries({ queryKey: ['statistics'] });
+    } catch (error) {
+      console.error(`Failed to download ${kind} confirmations:`, error);
+      setMergeError(error instanceof Error ? error.message : `${kind} download failed`);
+    } finally {
+      setIsMerging(false);
+    }
+  }, [queryClient]);
 
   const handleDelete = useCallback(async () => {
     if (!deletingQso || isDeleting) return;
@@ -367,6 +443,19 @@ export function LogHistoryPlugin() {
       resizable: true,
     },
     {
+      headerName: 'QSL',
+      cellRenderer: QslCellRenderer,
+      // Numeric sort key so the column sorts by confirmation strength.
+      valueGetter: (params) =>
+        (params.data?.confirmedLotw ? 8 : 0) +
+        (params.data?.confirmedEqsl ? 4 : 0) +
+        (params.data?.confirmedQrz ? 2 : 0) +
+        (params.data?.confirmedCard ? 1 : 0),
+      width: 70,
+      resizable: true,
+      headerTooltip: 'Confirmations — L: LoTW, E: eQSL, Q: card / paper QSL',
+    },
+    {
       headerName: 'Name',
       valueGetter: (params) => params.data?.station?.name || params.data?.name || '-',
       cellClass: 'text-dark-200',
@@ -444,14 +533,6 @@ export function LogHistoryPlugin() {
       icon={<ScrollText className="w-5 h-5" />}
       actions={
         <div className="flex items-center gap-3 text-sm text-dark-300 font-ui">
-          <span>
-            {stats?.totalQsos.toLocaleString() || 0}
-            {hasActiveFilters && totalCount !== stats?.totalQsos && (
-              <span className="text-accent-primary ml-1">({totalCount.toLocaleString()})</span>
-            )}
-            {' '}QSOs
-          </span>
-          <span className="text-glass-100">|</span>
           <span>{stats?.uniqueCountries || 0} DXCC</span>
           <div className="flex items-center gap-1">
             <CompactToggle compact={compact} onToggle={toggleCompact} />
@@ -510,6 +591,14 @@ export function LogHistoryPlugin() {
                 </span>
               </button>
             )}
+            <button
+              onClick={() => { setMergeResult(null); setMergeError(null); setShowMergeModal(true); }}
+              className="glass-button p-1.5 flex items-center gap-1.5 text-accent-success hover:text-accent-primary"
+              title="Sync confirmations — download from LoTW, or import a LoTW / eQSL / QRZ / card report"
+            >
+              <CheckCircle className="w-4 h-4" />
+              <span className="text-xs">Confirmations</span>
+            </button>
           </div>
         </div>
       }
@@ -755,48 +844,29 @@ export function LogHistoryPlugin() {
           </div>
         )}
 
-        {/* Collapsible Summary Section */}
+        {/* Summary — single line, counts spread across the panel to save vertical space */}
         {stats && (
-          <div className="bg-dark-700/50 rounded-lg overflow-hidden">
-            <button
-              onClick={() => setShowSummary(!showSummary)}
-              className="w-full flex items-center justify-between p-3 hover:bg-dark-600/50 transition-colors"
-            >
-              <div className="flex items-center gap-2 text-sm text-dark-200 font-ui">
-                <span className="font-medium">Summary</span>
-                <span className="text-dark-300">|</span>
-                <span className="text-accent-primary font-display font-bold">{stats.totalQsos.toLocaleString()}</span>
-                {hasActiveFilters && totalCount !== stats.totalQsos && (
-                  <span className="text-accent-info font-display font-bold">({totalCount.toLocaleString()})</span>
-                )}
-                <span className="text-dark-300">QSOs</span>
-              </div>
-              {showSummary ? (
-                <ChevronUp className="w-4 h-4 text-dark-300" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-dark-300" />
+          <div className="bg-dark-700/50 rounded-lg px-5 py-1.5 flex items-center justify-between flex-nowrap gap-x-6 overflow-x-auto whitespace-nowrap font-ui leading-none">
+            <span className="font-medium text-dark-200 text-sm">Summary</span>
+            <span className="flex items-baseline gap-2">
+              <span className="font-display font-bold text-accent-primary text-xl leading-none">{stats.totalQsos.toLocaleString()}</span>
+              {hasActiveFilters && totalCount !== stats.totalQsos && (
+                <span className="font-display font-bold text-accent-info text-xl leading-none">({totalCount.toLocaleString()})</span>
               )}
-            </button>
-            {showSummary && (
-              <div className="grid grid-cols-4 gap-4 p-4 pt-2 border-t border-glass-100">
-                <div className="text-center">
-                  <p className="text-2xl font-display font-bold text-accent-primary">{stats.totalQsos.toLocaleString()}</p>
-                  <p className="text-xs text-dark-300 font-ui">Total QSOs</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-display font-bold text-accent-success">{stats.uniqueCountries}</p>
-                  <p className="text-xs text-dark-300 font-ui">Countries</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-display font-bold text-accent-info">{stats.uniqueGrids}</p>
-                  <p className="text-xs text-dark-300 font-ui">Grids</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-display font-bold text-accent-warning">{stats.qsosToday}</p>
-                  <p className="text-xs text-dark-300 font-ui">Today</p>
-                </div>
-              </div>
-            )}
+              <span className="text-[13px] text-dark-300">QSOs</span>
+            </span>
+            <span className="flex items-baseline gap-2">
+              <span className="font-display font-bold text-accent-success text-xl leading-none">{stats.uniqueCountries}</span>
+              <span className="text-[13px] text-dark-300">Countries</span>
+            </span>
+            <span className="flex items-baseline gap-2">
+              <span className="font-display font-bold text-accent-info text-xl leading-none">{stats.uniqueGrids}</span>
+              <span className="text-[13px] text-dark-300">Grids</span>
+            </span>
+            <span className="flex items-baseline gap-2">
+              <span className="font-display font-bold text-accent-warning text-xl leading-none">{stats.qsosToday}</span>
+              <span className="text-[13px] text-dark-300">Today</span>
+            </span>
           </div>
         )}
 
@@ -1171,6 +1241,158 @@ export function LogHistoryPlugin() {
                 )}
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Confirmation merge modal */}
+      {showMergeModal && createPortal(
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+          onClick={() => !isMerging && setShowMergeModal(false)}
+        >
+          <div
+            className="bg-dark-800 rounded-lg p-6 max-w-md w-full mx-4 border border-glass-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-ui font-semibold text-white flex items-center gap-2 mb-1">
+              <CheckCircle className="w-5 h-5 text-accent-success" />
+              Merge Confirmations
+            </h3>
+            <p className="text-sm text-dark-300 mb-4">
+              Download your confirmation report from LoTW, eQSL, or QRZ, pick the source, then select the file.
+              Matching QSOs are marked <span className="text-accent-success font-medium">Confirmed</span> — no
+              duplicates are created.
+            </p>
+
+            {!mergeResult ? (
+              <>
+                <label className="text-sm font-medium text-dark-200">Confirmation source</label>
+                <div className="grid grid-cols-4 gap-2 mt-2 mb-4">
+                  {([['lotw', 'LoTW'], ['eqsl', 'eQSL'], ['qrz', 'QRZ'], ['card', 'Card']] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => setMergeSource(val)}
+                      className={`rounded-lg border px-3 py-2 text-sm font-ui transition-colors ${
+                        mergeSource === val
+                          ? 'border-accent-primary/50 bg-accent-primary/15 text-accent-primary'
+                          : 'border-glass-100 bg-dark-700/40 text-dark-300 hover:text-dark-100'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {(mergeSource === 'lotw' || mergeSource === 'eqsl' || mergeSource === 'qrz') && (
+                  <div className="mb-4">
+                    {(() => {
+                      const label = mergeSource === 'lotw' ? 'LoTW' : mergeSource === 'eqsl' ? 'eQSL' : 'QRZ';
+                      const note =
+                        mergeSource === 'lotw'
+                          ? 'Uses your LoTW website login from Settings → LoTW. Pulls only new confirmations since the last sync.'
+                          : mergeSource === 'eqsl'
+                          ? 'Uses your eQSL login from Settings → eQSL. Requires an Authenticity-Guaranteed account. Pulls only new confirmations since the last sync.'
+                          : 'Uses your QRZ Logbook API key from Settings → QRZ. Fetches your logbook and confirms matching QSOs.';
+                      return (
+                        <>
+                          <button
+                            onClick={() => handleDownloadSync(mergeSource as 'lotw' | 'eqsl' | 'qrz')}
+                            disabled={isMerging}
+                            className="w-full bg-accent-primary/15 hover:bg-accent-primary/25 text-accent-primary border border-accent-primary/40 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-50"
+                          >
+                            {isMerging ? (
+                              <><Loader2 className="w-4 h-4 animate-spin" />Downloading from {label}…</>
+                            ) : (
+                              <><CloudUpload className="w-4 h-4 rotate-180" />Download from {label} (one-click)</>
+                            )}
+                          </button>
+                          <p className="text-[11px] text-dark-400 mt-1.5">{note}</p>
+                        </>
+                      );
+                    })()}
+                    <div className="flex items-center gap-2 my-3">
+                      <div className="flex-1 h-px bg-glass-100" />
+                      <span className="text-[10px] text-dark-500 uppercase tracking-wide">or import a file</span>
+                      <div className="flex-1 h-px bg-glass-100" />
+                    </div>
+                  </div>
+                )}
+
+                {mergeError && (
+                  <div className="mb-3 p-2.5 rounded-lg bg-accent-danger/10 border border-accent-danger/30 text-xs text-accent-danger">
+                    {mergeError}
+                  </div>
+                )}
+
+                <input
+                  ref={mergeFileInputRef}
+                  type="file"
+                  accept=".adi,.adif"
+                  onChange={handleMergeFileSelect}
+                  className="hidden"
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowMergeModal(false)}
+                    disabled={isMerging}
+                    className="flex-1 glass-button py-3"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => mergeFileInputRef.current?.click()}
+                    disabled={isMerging}
+                    className="flex-1 bg-accent-success/20 hover:bg-accent-success/30 text-accent-success border border-accent-success/30 py-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isMerging ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Merging…
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="w-5 h-5" />
+                        Select {mergeSource === 'lotw' ? 'LoTW' : mergeSource === 'eqsl' ? 'eQSL' : mergeSource === 'qrz' ? 'QRZ' : 'card'} ADIF
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  <div className="text-center">
+                    <p className="text-2xl font-display font-bold text-accent-primary">{mergeResult.totalRecords}</p>
+                    <p className="text-xs text-dark-300 font-ui">In file</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-display font-bold text-accent-success">{mergeResult.updated}</p>
+                    <p className="text-xs text-dark-300 font-ui">Confirmed</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-display font-bold text-dark-200">{mergeResult.alreadyConfirmed}</p>
+                    <p className="text-xs text-dark-300 font-ui">Already</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-display font-bold text-accent-warning">{mergeResult.unmatched}</p>
+                    <p className="text-xs text-dark-300 font-ui">No match</p>
+                  </div>
+                </div>
+                <p className="text-xs text-dark-400 mb-4">
+                  {mergeResult.updated} QSO{mergeResult.updated === 1 ? '' : 's'} newly confirmed via{' '}
+                  {mergeSource === 'lotw' ? 'LoTW' : mergeSource === 'eqsl' ? 'eQSL' : mergeSource === 'qrz' ? 'QRZ' : 'card'}. Unmatched records aren't
+                  in your log (call / band / mode / date didn't line up). The Statistics panel now reflects the new
+                  Confirmed counts.
+                </p>
+                <button
+                  onClick={() => { setMergeResult(null); setShowMergeModal(false); }}
+                  className="w-full glass-button py-3"
+                >
+                  Done
+                </button>
+              </>
+            )}
           </div>
         </div>,
         document.body

@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { DecodeAlertsSection } from './settings/DecodeAlertsSection';
+import {
+  loadAnnouncementVoices,
+  applyAnnouncementVoice,
+  guessVoiceGender,
+  formatAccent,
+} from '../utils/announcementVoice';
 import {
   X,
   Settings,
@@ -40,19 +47,24 @@ import {
   Waves,
   Bell,
   Satellite,
+  RadioTower,
   Radar,
   Sparkles,
   Snowflake,
   MessageSquare,
   Newspaper,
+  Activity,
+  Target,
+  Volume2,
 } from 'lucide-react';
-import { useSettingsStore, SettingsSection, StationSettings } from '../store/settingsStore';
+import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type AiProvider } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
 import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
 import { useLayoutStore } from '../store/layoutStore';
 import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
 import { Model } from 'flexlayout-react';
 import { gridToLatLon } from '../utils/maidenhead';
+import { distanceUnitFor, resolveSpeedUnit } from '../utils/units';
 import { APP_VERSION } from '../version';
 
 // Settings navigation items
@@ -67,7 +79,7 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     id: 'weblogbooks',
     name: 'Web Logbooks',
     icon: <CloudUpload className="w-5 h-5" />,
-    description: 'QRZ, LOTW, Club Log, HRDLog, WSJT-X',
+    description: 'QRZ, LOTW, Club Log, HRDLog, eQSL',
   },
   {
     id: 'alerts',
@@ -80,6 +92,18 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     name: 'ADIF Monitor',
     icon: <FileCode className="w-5 h-5" />,
     description: 'Auto-import QSOs from external .adi files',
+  },
+  {
+    id: 'wsjtx',
+    name: 'Decoder Link (UDP)',
+    icon: <RadioTower className="w-5 h-5" />,
+    description: 'UDP link to WSJT-X / JTDX / MSHV — auto-log + live decodes',
+  },
+  {
+    id: 'decodealerts',
+    name: 'Digital Decode Alerts',
+    icon: <Bell className="w-5 h-5" />,
+    description: 'Geo-scoped needed-status alerts on the digital decode stream',
   },
   {
     id: 'rbnalerts',
@@ -128,6 +152,18 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     name: 'Chat AI',
     icon: <Bot className="w-5 h-5" />,
     description: 'LLM API settings for talk points',
+  },
+  {
+    id: 'dxcoach',
+    name: 'DX Coach',
+    icon: <Target className="w-5 h-5" />,
+    description: 'Award-opportunity coach + propagation gate',
+  },
+  {
+    id: 'voice',
+    name: 'Voice',
+    icon: <Volume2 className="w-5 h-5" />,
+    description: 'Voice for spoken announcements (accent, male/female)',
   },
   {
     id: 'about',
@@ -525,6 +561,7 @@ function LotwSettingsSection() {
   const { settings, updateLotwSettings } = useSettingsStore();
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
+  const [showLotwPassword, setShowLotwPassword] = useState(false);
 
   const lotw = settings.lotw;
 
@@ -687,6 +724,49 @@ function LotwSettingsSection() {
             Passed to TQSL as <code className="font-mono">-l &lt;name&gt;</code>.
             Useful if your TQSL has multiple station locations configured.
           </p>
+        </div>
+
+        <div className="pt-2 border-t border-glass-100 space-y-3">
+          <div>
+            <p className="text-sm font-medium font-ui text-dark-200">Download confirmations (LoTW website login)</p>
+            <p className="text-xs text-dark-300">
+              Separate from the TQSL certificate — this is your{' '}
+              <a href="https://lotw.arrl.org" target="_blank" rel="noreferrer" className="text-accent-primary hover:underline">lotw.arrl.org</a>{' '}
+              website username &amp; password, used to download your confirmation report for the
+              Log History → <span className="font-medium">Confirmations</span> button.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium font-ui text-dark-200">LoTW Username</label>
+              <input
+                type="text"
+                value={lotw.username}
+                onChange={(e) => updateLotwSettings({ username: e.target.value })}
+                placeholder="Your LoTW login (callsign)"
+                className="glass-input w-full font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium font-ui text-dark-200">LoTW Password</label>
+              <div className="relative">
+                <input
+                  type={showLotwPassword ? 'text' : 'password'}
+                  value={lotw.password}
+                  onChange={(e) => updateLotwSettings({ password: e.target.value })}
+                  placeholder="LoTW website password"
+                  className="glass-input w-full font-mono pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLotwPassword((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200 text-xs"
+                >
+                  {showLotwPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -1491,6 +1571,29 @@ function RbnAlertsSettingsSection() {
             <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${rbn.voice ? 'translate-x-5' : ''}`} />
           </button>
         </div>
+
+        {rbn.voice && (
+          <div className="p-3 bg-dark-700/50 rounded-lg border border-glass-100 flex items-center justify-between gap-3">
+            <p className="text-xs text-dark-300">
+              🔊 The announcement <span className="font-medium text-dark-200">voice, accent and volume</span> are shared
+              across every spoken alert — set them in <span className="font-medium text-dark-200">Settings → Voice</span>.
+              Turn the volume down there so a band opening won't blast over a weak signal you're working.
+            </p>
+            <button
+              onClick={() => {
+                if (typeof speechSynthesis !== 'undefined') {
+                  const u = new SpeechSynthesisUtterance('Band opening! 10 meters. Test.');
+                  applyAnnouncementVoice(u);
+                  speechSynthesis.cancel();
+                  speechSynthesis.speak(u);
+                }
+              }}
+              className="glass-button px-3 py-1.5 text-sm whitespace-nowrap"
+            >
+              Test
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1501,6 +1604,28 @@ function AdifMonitorSettingsSection() {
   const { settings, updateAdifMonitorSettings, updateAdifUdpSettings } = useSettingsStore();
   const monitor = settings.adifMonitor;
   const udp = settings.adifUdp;
+
+  // The native file picker is only available under Electron (via the preload
+  // bridge); in the browser dev server the user types/pastes the path.
+  const hasElectronFilePicker = typeof window !== 'undefined'
+    && (window as unknown as { electronAPI?: { selectFile?: unknown } }).electronAPI?.selectFile !== undefined;
+
+  const browseForAdif = async (which: 'file1' | 'file2') => {
+    const api = (window as unknown as { electronAPI: { selectFile: (opts: {
+      title?: string;
+      defaultPath?: string;
+      filters?: { name: string; extensions: string[] }[];
+    }) => Promise<string | null> } }).electronAPI;
+    const picked = await api.selectFile({
+      title: 'Select an ADIF log file',
+      defaultPath: (which === 'file1' ? monitor.file1 : monitor.file2) || undefined,
+      filters: [
+        { name: 'ADIF logs', extensions: ['adi', 'adif'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (picked) updateAdifMonitorSettings(which === 'file1' ? { file1: picked } : { file2: picked });
+  };
 
   return (
     <div className="space-y-6">
@@ -1529,23 +1654,33 @@ function AdifMonitorSettingsSection() {
       <div className={`space-y-4 ${!monitor.enabled ? 'opacity-50' : ''}`}>
         <div className="space-y-2">
           <label className="text-sm font-medium font-ui text-dark-200">Watched File 1</label>
-          <input
-            type="text"
-            value={monitor.file1}
-            onChange={(e) => updateAdifMonitorSettings({ file1: e.target.value })}
-            placeholder="C:\\VarAC\\VarAC_qsos.adi"
-            className="glass-input w-full font-mono"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={monitor.file1}
+              onChange={(e) => updateAdifMonitorSettings({ file1: e.target.value })}
+              placeholder="C:\\VarAC\\VarAC_qsos.adi"
+              className="glass-input w-full font-mono"
+            />
+            {hasElectronFilePicker && (
+              <button onClick={() => browseForAdif('file1')} className="glass-button px-3 py-2 whitespace-nowrap" title="Browse for an ADIF file">Browse…</button>
+            )}
+          </div>
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium font-ui text-dark-200">Watched File 2</label>
-          <input
-            type="text"
-            value={monitor.file2}
-            onChange={(e) => updateAdifMonitorSettings({ file2: e.target.value })}
-            placeholder="C:\\MSHV\\log.adi (optional)"
-            className="glass-input w-full font-mono"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={monitor.file2}
+              onChange={(e) => updateAdifMonitorSettings({ file2: e.target.value })}
+              placeholder="C:\\MSHV\\log.adi (optional)"
+              className="glass-input w-full font-mono"
+            />
+            {hasElectronFilePicker && (
+              <button onClick={() => browseForAdif('file2')} className="glass-button px-3 py-2 whitespace-nowrap" title="Browse for an ADIF file">Browse…</button>
+            )}
+          </div>
         </div>
         <p className="text-xs text-dark-300">
           Full paths to .adi files. QSOs already in the file when monitoring starts are not imported —
@@ -1896,6 +2031,331 @@ function EqslSettingsSection() {
 // the operator's activation. POTA's /spot endpoint uses HTTP basic auth;
 // the "Spot Myself" button in the LogEntry POTA banner is disabled until
 // both fields are populated.
+function VoiceSettingsSection() {
+  const { settings, updateVoiceSettings } = useSettingsStore();
+  const voice = settings.voice;
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => loadAnnouncementVoices());
+  const [gender, setGender] = useState<'all' | 'male' | 'female'>('all');
+
+  const selected = voices.find((v) => v.voiceURI === voice.voiceUri) ?? null;
+  const [accent, setAccent] = useState<string>(selected?.lang ?? '');
+
+  // Voices load asynchronously — refresh the list (and seed the accent from the
+  // saved voice) when they arrive.
+  useEffect(() => {
+    const refresh = () => setVoices(loadAnnouncementVoices().slice());
+    refresh();
+    if (typeof speechSynthesis !== 'undefined' && speechSynthesis.addEventListener) {
+      speechSynthesis.addEventListener('voiceschanged', refresh);
+      return () => speechSynthesis.removeEventListener('voiceschanged', refresh);
+    }
+  }, []);
+  useEffect(() => {
+    if (selected && !accent) setAccent(selected.lang);
+  }, [selected, accent]);
+
+  const accents = useMemo(
+    () => Array.from(new Set(voices.map((v) => v.lang))).sort(),
+    [voices],
+  );
+
+  const voiceOptions = useMemo(() => {
+    const list = voices
+      .filter((v) => !accent || v.lang === accent)
+      .filter((v) => gender === 'all' || guessVoiceGender(v.name) === gender)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    // Always keep the currently-saved voice visible even if filtered out.
+    if (selected && !list.some((v) => v.voiceURI === selected.voiceURI)) list.unshift(selected);
+    return list;
+  }, [voices, accent, gender, selected]);
+
+  const testVoice = () => {
+    if (typeof speechSynthesis === 'undefined') return;
+    const u = new SpeechSynthesisUtterance('DX Coach. New D X C C. Bravo Juliet. Benin. 17 meters.');
+    applyAnnouncementVoice(u);
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">Voice</h3>
+        <p className="text-sm text-dark-300">
+          The voice used for every spoken announcement — band openings, Hot List, and RBN alerts.
+          Choose an accent and a specific voice from those installed on this computer.
+          {' '}Windows &amp; Edge ship extra natural voices under Settings → Time &amp; Language → Speech.
+        </p>
+      </div>
+
+      {voices.length === 0 ? (
+        <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 text-sm text-accent-warning">
+          No speech voices were detected in this browser, so announcements will use the system default.
+        </div>
+      ) : (
+        <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-dark-200">Accent</label>
+              <select
+                value={accent}
+                onChange={(e) => setAccent(e.target.value)}
+                className="glass-input w-full"
+              >
+                <option value="">All accents</option>
+                {accents.map((lang) => (
+                  <option key={lang} value={lang}>
+                    {formatAccent(lang)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-dark-200">Voice type</label>
+              <select
+                value={gender}
+                onChange={(e) => setGender(e.target.value as 'all' | 'male' | 'female')}
+                className="glass-input w-full"
+              >
+                <option value="all">Male &amp; female</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-dark-200">Voice</label>
+            <select
+              value={voice.voiceUri}
+              onChange={(e) => updateVoiceSettings({ voiceUri: e.target.value })}
+              className="glass-input w-full"
+            >
+              <option value="">System default</option>
+              {voiceOptions.map((v) => {
+                const g = guessVoiceGender(v.name);
+                return (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {v.name}
+                    {g ? ` — ${g}` : ''}
+                  </option>
+                );
+              })}
+            </select>
+            <p className="text-xs text-dark-300">
+              Male/female detection is a best guess from the voice name — trust your ears and the Test button.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-dark-200">Volume</label>
+                <span className="text-xs text-dark-300 font-mono">{Math.round(voice.volume * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={voice.volume}
+                onChange={(e) => updateVoiceSettings({ volume: parseFloat(e.target.value) })}
+                className="w-full accent-[rgb(var(--accent-primary))] cursor-pointer"
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-dark-200">Speaking rate</label>
+                <span className="text-xs text-dark-300 font-mono">{voice.rate.toFixed(2)}×</span>
+              </div>
+              <input
+                type="range"
+                min={0.5}
+                max={1.5}
+                step={0.05}
+                value={voice.rate}
+                onChange={(e) => updateVoiceSettings({ rate: parseFloat(e.target.value) })}
+                className="w-full accent-[rgb(var(--accent-primary))] cursor-pointer"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-dark-400">
+            Turn the volume down so a band opening won't blast over a weak signal you're working.
+          </p>
+
+          <button
+            onClick={testVoice}
+            className="px-4 py-2 rounded-lg bg-accent-primary/20 text-accent-primary border border-accent-primary/40 hover:bg-accent-primary/30 transition-colors text-sm font-medium"
+          >
+            🔊 Test voice
+          </button>
+
+          <p className="text-xs text-dark-400 border-t border-glass-100 pt-3 leading-relaxed">
+            <span className="text-accent-warning font-medium">Heads up:</span> this list comes from
+            Windows, and not every voice actually speaks in the browser — some Microsoft voices
+            (especially the “Online (Natural)” ones) are listed but stay silent. Hit{' '}
+            <span className="font-medium">Test voice</span> after choosing; if you hear nothing, pick a
+            different one. Anything that fails just falls back to the system default.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DxCoachSettingsSection() {
+  const { settings, updateDxCoachSettings } = useSettingsStore();
+  const coach = settings.dxCoach;
+  const station = settings.station;
+  const hasQth =
+    (station.latitude != null && station.longitude != null) || !!station.gridSquare;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">DX Coach</h3>
+        <p className="text-sm text-dark-300">
+          The DX Coach panel surfaces live spots that would fill an award gap, ranked, with a coarse
+          propagation read. These preferences tune what it shows.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+        <div className="pr-3">
+          <label className="text-sm font-medium text-dark-200">Speak new opportunities</label>
+          <p className="text-xs text-dark-400 mt-0.5">
+            Announce a fresh new DXCC or new CQ zone aloud as it's spotted (throttled, so a pileup won't
+            spam). Uses the shared voice in <span className="font-medium text-dark-200">Settings → Voice</span>.
+          </p>
+        </div>
+        <button
+          onClick={() => updateDxCoachSettings({ voice: !coach.voice })}
+          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${coach.voice ? 'bg-accent-primary' : 'bg-dark-500'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${coach.voice ? 'translate-x-5' : ''}`} />
+        </button>
+      </div>
+
+      <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
+        <label className="text-sm font-medium text-dark-200">Award types to coach</label>
+        <p className="text-xs text-dark-300">
+          Which award chases the Coach hunts for. A single spot can fill more than one at once.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            ['showDxcc', 'DXCC', 'New entity / band-slot'],
+            ['showWaz', 'CQ Zones (WAZ)', 'New zone / zone-band'],
+          ] as const).map(([key, label, sub]) => {
+            const on = coach[key];
+            return (
+              <button
+                key={key}
+                onClick={() => updateDxCoachSettings({ [key]: !on })}
+                title={`${label} — ${on ? 'on' : 'off'}`}
+                className={`relative rounded-lg border px-3 py-2 text-left transition-colors ${
+                  on
+                    ? 'border-accent-primary/50 bg-accent-primary/15 text-accent-primary'
+                    : 'border-glass-100 bg-dark-800/40 text-dark-400 hover:text-dark-200'
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ${
+                    on ? 'bg-accent-success' : 'bg-transparent ring-1 ring-dark-400'
+                  }`}
+                />
+                <div className="text-sm font-semibold font-ui">{label}</div>
+                <div className="text-[10px] font-mono opacity-70">{sub}</div>
+              </button>
+            );
+          })}
+        </div>
+        {!coach.showDxcc && !coach.showWaz && (
+          <p className="text-xs text-accent-warning">
+            Both award types are off — the DX Coach will be empty. Turn at least one back on.
+          </p>
+        )}
+      </div>
+
+      <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-dark-200">Minimum path reliability</label>
+          <span className="text-xs text-dark-300 font-mono">
+            {coach.minReliability === 0 ? 'Off (show all)' : `${coach.minReliability}%`}
+          </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={90}
+          step={5}
+          value={coach.minReliability}
+          onChange={(e) => updateDxCoachSettings({ minReliability: parseInt(e.target.value) || 0 })}
+          className="w-full accent-[rgb(var(--accent-primary))] cursor-pointer"
+        />
+        <p className="text-xs text-dark-300">
+          Hide opportunities whose predicted contact reliability falls below this, so the panel keeps
+          only realistic chances instead of listing dead paths. Set to <span className="font-mono">0</span> to show every
+          opportunity. Spots with no propagation data are always shown — they can't be fairly judged.
+        </p>
+        {!hasQth && (
+          <p className="text-xs text-accent-warning">
+            The propagation gate needs your station location. Set your grid square (or lat/lon) in{' '}
+            <span className="font-medium">Settings → Station</span>, otherwise this threshold has nothing to
+            filter and every opportunity is shown.
+          </p>
+        )}
+      </div>
+
+      <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
+        <label className="text-sm font-medium text-dark-200">Bands to coach</label>
+        <p className="text-xs text-dark-300">
+          Only surface opportunities on the bands you're actually running. 6m is its own toggle, so an
+          HF+6m rig can pick <span className="font-medium">HF + 6m</span> and leave 2m / 70cm out.
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            ['showLowBand', 'LF/MF', '2200m · 630m'],
+            ['showHf', 'HF', '160m–10m'],
+            ['show6m', '6m', '50 MHz'],
+            ['showVhf', 'VHF', '2m · 1.25m'],
+            ['showUhf', 'UHF', '70cm+'],
+          ] as const).map(([key, label, sub]) => {
+            const on = coach[key];
+            return (
+              <button
+                key={key}
+                onClick={() => updateDxCoachSettings({ [key]: !on })}
+                title={`${label} — ${on ? 'on (showing)' : 'off (hidden)'}`}
+                className={`relative rounded-lg border px-3 py-2 text-center transition-colors ${
+                  on
+                    ? 'border-accent-primary/50 bg-accent-primary/15 text-accent-primary'
+                    : 'border-glass-100 bg-dark-800/40 text-dark-400 hover:text-dark-200'
+                }`}
+              >
+                {/* On/off indicator — green = on, hollow gray = off */}
+                <span
+                  aria-hidden
+                  className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ${
+                    on ? 'bg-accent-success' : 'bg-transparent ring-1 ring-dark-400'
+                  }`}
+                />
+                <div className="text-sm font-semibold font-ui">{label}</div>
+                <div className="text-[10px] font-mono opacity-70">{sub}</div>
+              </button>
+            );
+          })}
+        </div>
+        {!coach.showLowBand && !coach.showHf && !coach.show6m && !coach.showVhf && !coach.showUhf && (
+          <p className="text-xs text-accent-warning">
+            All band classes are off — the DX Coach will be empty. Turn at least one back on.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PotaSettingsSection() {
   const { settings, updatePotaSettings } = useSettingsStore();
   const pota = settings.pota;
@@ -2157,6 +2617,32 @@ function AppearanceSettingsSection() {
         </button>
       </div>
 
+      {/* Units — master imperial/metric preference driving every physical readout.
+          Keeps distanceUnit in sync so distance consumers read it directly. */}
+      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+        <div>
+          <p className="font-medium font-ui text-dark-200">Units</p>
+          <p className="text-sm text-dark-300">
+            Imperial or metric app-wide — distance, satellite, wind, temperature
+          </p>
+        </div>
+        <div className="flex rounded-lg overflow-hidden border border-glass-100">
+          {(['metric', 'imperial'] as const).map((sys) => (
+            <button
+              key={sys}
+              onClick={() => updateAppearanceSettings({ unitSystem: sys, distanceUnit: distanceUnitFor(sys) })}
+              className={`px-3 py-1.5 text-sm font-ui transition-colors ${
+                (appearance.unitSystem ?? 'metric') === sys
+                  ? 'bg-accent-success text-dark-900 font-semibold'
+                  : 'bg-dark-800 text-dark-300 hover:text-dark-200'
+              }`}
+            >
+              {sys === 'metric' ? 'Metric · km °C' : 'Imperial · mi °F'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <LayoutPresetsSubsection />
     </div>
   );
@@ -2168,7 +2654,7 @@ function AppearanceSettingsSection() {
 // layoutStore's setLayout to persist swaps (which flows through the
 // normal hasEverLoaded-gated auto-save path).
 function LayoutPresetsSubsection() {
-  const { layout, setLayout } = useLayoutStore();
+  const { layout, setLayout, resetLayout } = useLayoutStore();
   const [savedLayouts, setSavedLayouts] = useState<SavedLayoutSlot[]>([]);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -2256,6 +2742,22 @@ function LayoutPresetsSubsection() {
         </button>
       </div>
 
+      <div className="flex items-center justify-between gap-3 px-3 py-2 rounded bg-dark-700/40 border border-glass-100 mb-1">
+        <p className="text-xs text-dark-300">Restore the original panel arrangement.</p>
+        <button
+          onClick={() => {
+            if (window.confirm('Reset all panels to the default layout? Your saved presets are kept.')) {
+              resetLayout();
+              flash('ok', 'Layout reset to default');
+            }
+          }}
+          className="px-3 py-1.5 rounded text-xs font-ui border border-accent-danger/40 text-accent-danger hover:bg-accent-danger/10 transition-colors whitespace-nowrap"
+          title="Reset all panels to the default arrangement"
+        >
+          Reset to default layout
+        </button>
+      </div>
+
       {savedLayouts.length === 0 ? (
         <p className="text-xs text-dark-400 font-ui italic mt-3">
           No saved layouts yet. Arrange your panels how you like them and click <b>Save Current</b>.
@@ -2300,6 +2802,47 @@ function LayoutPresetsSubsection() {
           {message.text}
         </p>
       )}
+    </div>
+  );
+}
+
+// Bands offered by the on-globe "Heard Me" manual band picker (used when no
+// rig is connected — mirrors the HF band lists used elsewhere in the app).
+const HEARD_ME_BANDS = ['all', '160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m'];
+
+// Collapsible "dropdown" group used to keep the Map settings from getting busy —
+// the header row toggles the body open/closed. Collapsed by default.
+function CollapsibleGroup({
+  title,
+  subtitle,
+  icon,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-dark-700/30 rounded-lg border border-glass-100">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between p-4 hover:bg-dark-700/50 transition-colors rounded-lg"
+      >
+        <div className="flex items-center gap-3 text-left">
+          {icon}
+          <div>
+            <div className="font-medium font-ui text-dark-200">{title}</div>
+            {subtitle && <div className="text-sm text-dark-300">{subtitle}</div>}
+          </div>
+        </div>
+        <ChevronDown className={`w-5 h-5 text-dark-300 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <div className="px-4 pb-4 space-y-4">{children}</div>}
     </div>
   );
 }
@@ -2368,6 +2911,24 @@ function MapSettingsSection() {
           />
         </label>
 
+        {/* Ionospheric Hops — short path bounces off the ionosphere and the
+            globe tilts to an oblique angle so the hops are visible. */}
+        <label className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100 cursor-pointer hover:bg-dark-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <Radio className="w-5 h-5 text-accent-danger" />
+            <div>
+              <div className="font-medium font-ui text-dark-200">Ionospheric Hops</div>
+              <div className="text-sm text-dark-300">Show the short path skipping off the ionosphere on the 3D Globe (tilts the view when a callsign is focused)</div>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={map.showIonosphereHops}
+            onChange={(e) => updateMapSettings({ showIonosphereHops: e.target.checked })}
+            className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
+          />
+        </label>
+
         {/* Day/Night Shading — intensity for the 3D Globe's terminator shader
             shell. On/off lives on the Globe panel's sun button; this slider
             only sets how dark the night side gets. */}
@@ -2412,6 +2973,41 @@ function MapSettingsSection() {
             className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
           />
         </label>
+
+        {/* Signal Path — style + colour of the 2D-map line to the focused DX */}
+        <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+          <div className="flex items-center gap-3 mb-3">
+            <Activity className="w-5 h-5 text-accent-secondary" />
+            <div>
+              <div className="font-medium font-ui text-dark-200">Signal Path</div>
+              <div className="text-sm text-dark-300">How the path to the focused DX station is drawn on the 2D Map</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 text-sm font-ui text-dark-200">
+              <span className="text-dark-300">Style</span>
+              <select
+                value={map.dxPathStyle ?? 'sine'}
+                onChange={(e) => updateMapSettings({ dxPathStyle: e.target.value as 'sine' | 'dash' })}
+                className="bg-dark-800 border border-glass-100 rounded px-2 py-1.5 text-sm font-ui text-gray-100 focus:outline-none focus:border-accent-secondary/50"
+              >
+                <option value="sine">Sine wave (animated)</option>
+                <option value="dash">Dashed line</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm font-ui text-dark-200">
+              <span className="text-dark-300">Color</span>
+              <input
+                type="color"
+                value={map.dxPathColor || '#39ff14'}
+                onChange={(e) => updateMapSettings({ dxPathColor: e.target.value })}
+                className="w-9 h-7 rounded border border-glass-100 bg-dark-800 cursor-pointer p-0.5"
+                title="Signal path color"
+              />
+              <span className="font-mono text-xs text-dark-300">{(map.dxPathColor || '#39ff14').toUpperCase()}</span>
+            </label>
+          </div>
+        </div>
 
         {/* Satellite Selection */}
         {map.showSatellites && (
@@ -2461,6 +3057,179 @@ function MapSettingsSection() {
             </div>
           </div>
         </div>
+
+        {/* Heard Me — PSK (globe) — "who heard me" arcs from PSK Reporter on the 3D Globe. */}
+        <label className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100 cursor-pointer hover:bg-dark-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <Radio className="w-5 h-5 text-accent-primary" />
+            <div>
+              <div className="font-medium font-ui text-dark-200">Heard Me — PSK (globe)</div>
+              <div className="text-sm text-dark-300">Draw arcs to stations that heard your PSK Reporter-tracked digital signal on the 3D Globe</div>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={map.showGlobeHeardMePsk}
+            onChange={(e) => updateMapSettings({ showGlobeHeardMePsk: e.target.checked })}
+            className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
+          />
+        </label>
+
+        {/* Heard Me — RBN (globe) — "who heard me" arcs from the Reverse Beacon Network (CW/RTTY skimmers). */}
+        <label className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100 cursor-pointer hover:bg-dark-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <Radio className="w-5 h-5 text-accent-primary" />
+            <div>
+              <div className="font-medium font-ui text-dark-200">Heard Me — RBN (globe)</div>
+              <div className="text-sm text-dark-300">Draw arcs to Reverse Beacon Network skimmers that heard your CW/RTTY signal on the 3D Globe</div>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={map.showGlobeHeardMeRbn}
+            onChange={(e) => updateMapSettings({ showGlobeHeardMeRbn: e.target.checked })}
+            className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
+          />
+        </label>
+
+        {/* Heard Me — manual band fallback + per-layer look-back windows */}
+        {(map.showGlobeHeardMePsk || map.showGlobeHeardMeRbn) && (
+          <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
+            <div className="flex items-center gap-3 mb-1">
+              <Radio className="w-5 h-5 text-accent-primary" />
+              <div>
+                <div className="font-medium font-ui text-dark-200">Heard Me — Band &amp; Windows</div>
+                <div className="text-sm text-dark-300">Manual band used when no rig is connected, and how far back each layer looks for reports</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-dark-300 w-28">Band (manual)</span>
+              <select
+                value={map.heardMeBand}
+                onChange={(e) => updateMapSettings({ heardMeBand: e.target.value })}
+                aria-label="Heard Me manual band"
+                className="flex-1 px-3 py-2 rounded-lg bg-dark-800 border border-glass-100 text-dark-200 text-sm font-mono"
+              >
+                {HEARD_ME_BANDS.map((b) => (
+                  <option key={b} value={b}>{b === 'all' ? 'All bands' : b}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-dark-300 w-28">PSK window</span>
+              <select
+                value={map.heardMePskWindowMinutes}
+                onChange={(e) => updateMapSettings({ heardMePskWindowMinutes: Number(e.target.value) })}
+                aria-label="Heard Me PSK look-back window"
+                className="flex-1 px-3 py-2 rounded-lg bg-dark-800 border border-glass-100 text-dark-200 text-sm font-mono"
+              >
+                {[15, 30, 60].map((m) => (
+                  <option key={m} value={m}>{m} min</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-dark-300 w-28">RBN window</span>
+              <select
+                value={map.heardMeRbnWindowMinutes}
+                onChange={(e) => updateMapSettings({ heardMeRbnWindowMinutes: Number(e.target.value) })}
+                aria-label="Heard Me RBN look-back window"
+                className="flex-1 px-3 py-2 rounded-lg bg-dark-800 border border-glass-100 text-dark-200 text-sm font-mono"
+              >
+                {[5, 10, 15].map((m) => (
+                  <option key={m} value={m}>{m} min</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* RBN Cluster Feed — the full Reverse Beacon Network spot overlay on the
+            2D Map. Relocated here from the map's Layers → Overlays fly-out so that
+            menu stays a simple set of toggles. Collapsed dropdown to reduce clutter. */}
+        <CollapsibleGroup
+          title="RBN Cluster Feed (2D Map)"
+          subtitle="Full Reverse Beacon Network spot overlay and its display filters"
+          icon={<Radio className="w-5 h-5 text-accent-primary" />}
+        >
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm font-ui text-dark-200">Show RBN cluster spots on the 2D Map</span>
+            <input
+              type="checkbox"
+              checked={map.rbn.enabled}
+              onChange={(e) => updateMapSettings({ rbn: { ...map.rbn, enabled: e.target.checked } })}
+              className="w-5 h-5 rounded bg-dark-700 border-glass-100 text-accent-primary focus:ring-2 focus:ring-accent-primary focus:ring-offset-0 focus:ring-offset-dark-800"
+            />
+          </label>
+
+          <div className={`space-y-4 ${!map.rbn.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            {/* Opacity */}
+            <div>
+              <label className="block mb-1 text-sm text-dark-300">
+                Opacity: {Math.round(map.rbn.opacity * 100)}%
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.1}
+                value={map.rbn.opacity}
+                onChange={(e) => updateMapSettings({ rbn: { ...map.rbn, opacity: parseFloat(e.target.value) } })}
+                aria-label="RBN cluster opacity"
+                className="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-accent-primary"
+              />
+            </div>
+
+            {/* Show signal paths */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={map.rbn.showPaths}
+                onChange={(e) => updateMapSettings({ rbn: { ...map.rbn, showPaths: e.target.checked } })}
+                className="rounded bg-dark-700 border-glass-100 text-accent-primary"
+              />
+              <span className="text-sm text-dark-300">Show signal paths</span>
+            </label>
+
+            {/* Time window */}
+            <div>
+              <label className="block mb-1 text-sm text-dark-300">
+                Time Window: {map.rbn.timeWindowMinutes} min
+              </label>
+              <input
+                type="range"
+                min={1}
+                max={15}
+                step={1}
+                value={map.rbn.timeWindowMinutes}
+                onChange={(e) => updateMapSettings({ rbn: { ...map.rbn, timeWindowMinutes: parseInt(e.target.value) } })}
+                aria-label="RBN cluster time window"
+                className="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-accent-primary"
+              />
+            </div>
+
+            {/* Min SNR */}
+            <div>
+              <label className="block mb-1 text-sm text-dark-300">
+                Min SNR: {map.rbn.minSnr} dB
+              </label>
+              <input
+                type="range"
+                min={-30}
+                max={30}
+                step={5}
+                value={map.rbn.minSnr}
+                onChange={(e) => updateMapSettings({ rbn: { ...map.rbn, minSnr: parseInt(e.target.value) } })}
+                aria-label="RBN cluster minimum SNR"
+                className="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-accent-primary"
+              />
+            </div>
+
+            <div className="pt-2 border-t border-glass-100 text-xs text-dark-400">
+              Data from reversebeacon.net
+            </div>
+          </div>
+        </CollapsibleGroup>
       </div>
     </div>
   );
@@ -2555,6 +3324,27 @@ function HeaderSettingsSection() {
 
 
 // AI Settings Section
+// AI provider presets. Anthropic uses its native API; every other preset speaks
+// the OpenAI chat-completions format against baseUrl — so free/cheap providers
+// (Groq, Gemini, OpenRouter, Ollama) work with just a URL + model.
+const AI_PRESETS: Record<AiProvider, { label: string; baseUrl: string; defaultModel: string; keyUrl: string; needsKey: boolean; free?: boolean; note?: string }> = {
+  anthropic:  { label: 'Anthropic (Claude)',        baseUrl: '',                                                        defaultModel: 'claude-sonnet-4-5-20250929',              keyUrl: 'https://console.anthropic.com/settings/keys', needsKey: true },
+  openai:     { label: 'OpenAI',                     baseUrl: '',                                                        defaultModel: 'gpt-4o-mini',                             keyUrl: 'https://platform.openai.com/api-keys',        needsKey: true },
+  groq:       { label: 'Groq — free & fast',         baseUrl: 'https://api.groq.com/openai/v1',                          defaultModel: 'llama-3.3-70b-versatile',                 keyUrl: 'https://console.groq.com/keys',               needsKey: true, free: true },
+  openrouter: { label: 'OpenRouter — free models',   baseUrl: 'https://openrouter.ai/api/v1',                            defaultModel: 'meta-llama/llama-3.3-70b-instruct:free',  keyUrl: 'https://openrouter.ai/keys',                  needsKey: true, free: true },
+  ollama:     { label: 'Ollama — local, no key',     baseUrl: 'http://localhost:11434/v1',                               defaultModel: 'llama3.2',                                keyUrl: '',                                            needsKey: false, free: true, note: 'ollama' },
+  custom:     { label: 'Custom (OpenAI-compatible)', baseUrl: '',                                                        defaultModel: '',                                        keyUrl: '',                                            needsKey: false },
+};
+
+const AI_MODEL_SUGGESTIONS: Record<AiProvider, string[]> = {
+  anthropic:  ['claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'],
+  openai:     ['gpt-4o-mini', 'gpt-4o'],
+  groq:       ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+  openrouter: ['meta-llama/llama-3.3-70b-instruct:free', 'google/gemma-2-9b-it:free', 'deepseek/deepseek-chat'],
+  ollama:     ['llama3.2', 'phi3', 'gemma2', 'mistral'],
+  custom:     [],
+};
+
 function AiSettingsSection() {
   const { settings, updateAiSettings } = useSettingsStore();
   const ai = settings.ai;
@@ -2562,20 +3352,30 @@ function AiSettingsSection() {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message?: string } | null>(null);
 
+  const preset = AI_PRESETS[ai.provider] ?? AI_PRESETS.custom;
+  const keyRequired = preset.needsKey;
+  const showKey = ai.provider !== 'ollama';
+
+  const selectProvider = (p: AiProvider) => {
+    const next = AI_PRESETS[p];
+    updateAiSettings({ provider: p, baseUrl: next.baseUrl, model: next.defaultModel || ai.model });
+    setTestResult(null);
+  };
+
   const handleTestApiKey = async () => {
-    if (!ai.apiKey) return;
+    if (keyRequired && !ai.apiKey) return;
     setIsTesting(true);
     setTestResult(null);
     try {
       const response = await fetch('/api/ai/test-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: ai.provider, apiKey: ai.apiKey, model: ai.model }),
+        body: JSON.stringify({ provider: ai.provider, apiKey: ai.apiKey, model: ai.model, baseUrl: ai.baseUrl }),
       });
       const result = await response.json();
-      setTestResult({ success: result.isValid, message: result.errorMessage || 'API key is valid!' });
+      setTestResult({ success: result.isValid, message: result.errorMessage || 'Connection works!' });
     } catch (error) {
-      setTestResult({ success: false, message: 'Failed to test API key' });
+      setTestResult({ success: false, message: 'Failed to reach the provider' });
     } finally {
       setIsTesting(false);
     }
@@ -2585,53 +3385,80 @@ function AiSettingsSection() {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-gray-100 mb-1">AI Provider Settings</h3>
-        <p className="text-sm text-gray-500">Configure your LLM provider for AI-powered talk points.</p>
+        <p className="text-sm text-gray-500">Pick an LLM provider for AI talk points. Free options: <b>Ollama</b> (local, no key), <b>Groq</b>, <b>OpenRouter</b>.</p>
+        <p className="text-xs text-dark-400 mt-1">
+          🔊 This chooses the AI <span className="font-medium text-dark-200">source</span>. Any spoken output uses the shared voice in <span className="font-medium text-dark-200">Settings → Voice</span>.
+        </p>
       </div>
       <div className="space-y-2">
         <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
           <Bot className="w-4 h-4 text-accent-primary" />
           Provider
         </label>
-        <div className="flex gap-2">
-          <button onClick={() => updateAiSettings({ provider: 'anthropic', model: 'claude-sonnet-4-5-20250929' })} className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${ai.provider === 'anthropic' ? 'bg-accent-primary/10 border-accent-primary text-accent-primary' : 'bg-dark-700/50 border-glass-100 text-gray-400 hover:bg-dark-700'}`}>Anthropic</button>
-          <button onClick={() => updateAiSettings({ provider: 'openai', model: 'gpt-5.2-chat-latest' })} className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${ai.provider === 'openai' ? 'bg-accent-primary/10 border-accent-primary text-accent-primary' : 'bg-dark-700/50 border-glass-100 text-gray-400 hover:bg-dark-700'}`}>OpenAI</button>
-        </div>
+        <select value={ai.provider} onChange={(e) => selectProvider(e.target.value as AiProvider)} className="glass-input w-full">
+          {(Object.keys(AI_PRESETS) as AiProvider[]).map((p) => (
+            <option key={p} value={p}>{AI_PRESETS[p].label}</option>
+          ))}
+        </select>
+        {ai.provider === 'ollama' && (
+          <p className="text-xs text-amber-300/80">
+            Runs on your PC — install from{' '}
+            <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">ollama.com</a>
+            , then run <code className="text-amber-200">ollama pull llama3.2</code>
+          </p>
+        )}
       </div>
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
-          <Key className="w-4 h-4 text-accent-primary" />
-          API Key
-        </label>
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
+      {ai.provider !== 'anthropic' && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-300">API Base URL</label>
+          <input type="text" value={ai.baseUrl} onChange={(e) => updateAiSettings({ baseUrl: e.target.value })}
+            placeholder={preset.baseUrl || 'https://api.openai.com/v1'} className="glass-input w-full font-mono text-sm" />
+          <p className="text-xs text-gray-500">OpenAI-compatible endpoint. Leave blank to use the provider's default.</p>
+        </div>
+      )}
+      {showKey && (
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
+            <Key className="w-4 h-4 text-accent-primary" />
+            API Key{!keyRequired && <span className="text-gray-500 font-normal">(optional)</span>}
+          </label>
+          <div className="relative">
             <input type={showApiKey ? 'text' : 'password'} value={ai.apiKey} onChange={(e) => updateAiSettings({ apiKey: e.target.value })} placeholder={ai.provider === 'anthropic' ? 'sk-ant-...' : 'sk-...'} className="glass-input w-full font-mono pr-10" />
             <button type="button" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-gray-300 transition-colors">
               {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          <button onClick={handleTestApiKey} disabled={!ai.apiKey || isTesting} className="glass-button px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed">
-            {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Test'}
-          </button>
+          {preset.keyUrl && (
+            <p className="text-xs text-gray-500">
+              Get a{preset.free ? ' free' : 'n'} API key from{' '}
+              <a href={preset.keyUrl} target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">
+                {preset.keyUrl.replace(/^https?:\/\//, '')}
+              </a>
+            </p>
+          )}
         </div>
+      )}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button onClick={handleTestApiKey} disabled={isTesting || (keyRequired && !ai.apiKey)} className="glass-button px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed">
+          {isTesting ? <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Testing…</span> : 'Test connection'}
+        </button>
         {testResult && <div className={`text-sm flex items-center gap-2 ${testResult.success ? 'text-green-400' : 'text-red-400'}`}>{testResult.success ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}{testResult.message}</div>}
-        <p className="text-xs text-gray-500">Get your API key from {ai.provider === 'anthropic' ? 'console.anthropic.com' : 'platform.openai.com'}</p>
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-300">Model</label>
-        <select value={ai.model} onChange={(e) => updateAiSettings({ model: e.target.value })} className="glass-input w-full">
-          {ai.provider === 'anthropic' ? (
-            <>
-              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Recommended)</option>
-              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Faster)</option>
-            </>
-          ) : (
-            <>
-              <option value="gpt-5.2-chat-latest">GPT-5.2 Instant (Recommended)</option>
-              <option value="gpt-5-mini">GPT-5 Mini (Faster)</option>
-              <option value="gpt-5.2">GPT-5.2 Thinking (Most Capable)</option>
-            </>
-          )}
-        </select>
+        {(AI_MODEL_SUGGESTIONS[ai.provider] ?? []).length > 0 && (
+          <select
+            value={(AI_MODEL_SUGGESTIONS[ai.provider] ?? []).includes(ai.model) ? ai.model : ''}
+            onChange={(e) => { if (e.target.value) updateAiSettings({ model: e.target.value }); }}
+            className="glass-input w-full"
+          >
+            <option value="" disabled>Choose a model…</option>
+            {(AI_MODEL_SUGGESTIONS[ai.provider] ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        )}
+        <input type="text" value={ai.model} onChange={(e) => updateAiSettings({ model: e.target.value })}
+          placeholder={preset.defaultModel || 'model name'} className="glass-input w-full font-mono text-sm" />
+        <p className="text-xs text-gray-500">Pick a suggested model above, or type any model your key supports.</p>
       </div>
       <div className="border-t border-glass-100 pt-4">
         <h4 className="text-sm font-medium text-gray-300 mb-3">Behavior</h4>
@@ -2925,7 +3752,10 @@ function HotListSettingsSection() {
       <div className="flex items-center justify-between p-3 bg-dark-700 rounded-lg">
         <div>
           <label className="text-sm font-medium text-dark-200">Voice Announcements</label>
-          <p className="text-xs text-dark-400 mt-0.5">Speak hot spots aloud (per-call cooldown below)</p>
+          <p className="text-xs text-dark-400 mt-0.5">
+            Speak hot spots aloud (per-call cooldown below). Voice &amp; volume in{' '}
+            <span className="font-medium text-dark-200">Settings → Voice</span>.
+          </p>
         </div>
         <button
           onClick={() => updateHotListSettings({ ttsEnabled: !hotList.ttsEnabled })}
@@ -2992,20 +3822,21 @@ function HotListSettingsSection() {
   );
 }
 
-// WSJT-X Settings Section
+// WSJT-X Settings Section — up to two independent decoder sources (e.g. WSJT-X
+// on the primary port and JTDX on a second), each its own UDP listener.
 function WsjtxSettingsSection() {
   const { settings, updateWsjtxSettings } = useSettingsStore();
   const wsjtx = settings.wsjtx;
-  const [status, setStatus] = useState<WsjtxStatus | null>(null);
+  const [statuses, setStatuses] = useState<WsjtxStatus[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
       try {
         const st = await api.getWsjtxStatus();
-        if (!cancelled) setStatus(st);
+        if (!cancelled) setStatuses(st);
       } catch {
-        if (!cancelled) setStatus(null);
+        if (!cancelled) setStatuses(null);
       }
     };
     poll();
@@ -3013,81 +3844,122 @@ function WsjtxSettingsSection() {
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
+  const statusFor = (source: number) => statuses?.find((s) => s.source === source) ?? null;
+
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">WSJT-X / JTDX Auto-Logging</h3>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">Decoder Link (UDP)</h3>
         <p className="text-sm text-dark-300">
-          Listen for the WSJT-X UDP protocol and automatically log FT8/FT4 QSOs the moment they
-          complete. Works with WSJT-X, JTDX, and MSHV.
+          Listen for the WSJT-X UDP protocol to auto-log FT8/FT4 QSOs and feed the live decode
+          stream (Digital Decodes panel, Digital Decode Alerts, Grid Tracker). Works with WSJT-X, JTDX,
+          and MSHV. Enable a second source to run two decoders at once — each on its own port.
         </p>
       </div>
 
-      <div className="flex items-center justify-between p-3 bg-dark-700 rounded-lg">
+      <WsjtxSourceCard
+        title="Source 1"
+        subtitle="Primary decoder — default WSJT-X on port 2237"
+        source={{ enabled: wsjtx.enabled, port: wsjtx.port, multicastAddress: wsjtx.multicastAddress }}
+        defaultPort={2237}
+        onPatch={(p) => updateWsjtxSettings(p)}
+        status={statusFor(1)}
+      />
+
+      <WsjtxSourceCard
+        title="Source 2"
+        subtitle="Optional second decoder on its own port — e.g. JTDX on 2333"
+        source={wsjtx.source2}
+        defaultPort={2333}
+        onPatch={(p) => updateWsjtxSettings({ source2: { ...wsjtx.source2, ...p } })}
+        status={statusFor(2)}
+      />
+    </div>
+  );
+}
+
+// One WSJT-X source: enable toggle, and (when enabled) its port, multicast and
+// live listener status. onPatch applies to whichever source the parent wires in.
+function WsjtxSourceCard({ title, subtitle, source, defaultPort, onPatch, status }: {
+  title: string;
+  subtitle: string;
+  source: WsjtxSource;
+  defaultPort: number;
+  onPatch: (patch: Partial<WsjtxSource>) => void;
+  status: WsjtxStatus | null;
+}) {
+  return (
+    <div className="rounded-lg border border-glass-100 bg-dark-700/40 p-4 space-y-4">
+      <div className="flex items-center justify-between">
         <div>
-          <label className="text-sm font-medium text-dark-200">Enable Auto-Logging</label>
-          <p className="text-xs text-dark-400 mt-0.5">Bind the UDP listener and log completed QSOs</p>
+          <label className="text-sm font-medium text-dark-200">{title}</label>
+          <p className="text-xs text-dark-400 mt-0.5">{subtitle}</p>
         </div>
         <button
-          onClick={() => updateWsjtxSettings({ enabled: !wsjtx.enabled })}
-          className={`relative w-11 h-6 rounded-full transition-colors ${wsjtx.enabled ? 'bg-accent-primary' : 'bg-dark-500'}`}
+          onClick={() => onPatch({ enabled: !source.enabled })}
+          className={`relative w-11 h-6 rounded-full transition-colors ${source.enabled ? 'bg-accent-primary' : 'bg-dark-500'}`}
         >
-          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${wsjtx.enabled ? 'translate-x-5' : ''}`} />
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${source.enabled ? 'translate-x-5' : ''}`} />
         </button>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-dark-200 mb-1">UDP Port</label>
-        <input
-          type="number"
-          value={wsjtx.port}
-          onChange={(e) => updateWsjtxSettings({ port: parseInt(e.target.value) || 2237 })}
-          className="glass-input w-32"
-          min={1024}
-          max={65535}
-        />
-        <p className="text-xs text-dark-400 mt-1">Default: 2237 (WSJT-X Settings → Reporting → UDP Server)</p>
-      </div>
+      {source.enabled && (
+        <>
+          <div className="flex flex-wrap gap-6">
+            <div>
+              <label className="block text-sm font-medium text-dark-200 mb-1">UDP Port</label>
+              <input
+                type="number"
+                value={source.port}
+                onChange={(e) => onPatch({ port: parseInt(e.target.value) || defaultPort })}
+                className="glass-input w-32"
+                min={1024}
+                max={65535}
+              />
+            </div>
+            <div className="flex-1 min-w-[12rem]">
+              <label className="block text-sm font-medium text-dark-200 mb-1">Multicast Group (optional)</label>
+              <input
+                type="text"
+                value={source.multicastAddress ?? ''}
+                onChange={(e) => onPatch({ multicastAddress: e.target.value })}
+                className="glass-input w-full max-w-xs"
+                placeholder="e.g. 224.0.0.1 (blank = unicast)"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-dark-400">
+            WSJT-X / JTDX: Settings → Reporting → UDP Server. Give each source a different port.
+            Set a multicast group only if the decoder is configured for multicast.
+          </p>
 
-      <div>
-        <label className="block text-sm font-medium text-dark-200 mb-1">Multicast Group (optional)</label>
-        <input
-          type="text"
-          value={wsjtx.multicastAddress ?? ''}
-          onChange={(e) => updateWsjtxSettings({ multicastAddress: e.target.value })}
-          className="glass-input w-64"
-          placeholder="e.g. 224.0.0.1 (blank = unicast)"
-        />
-        <p className="text-xs text-dark-400 mt-1">
-          Set this when WSJT-X is configured for multicast so several loggers can listen at once.
-        </p>
-      </div>
-
-      <div className="p-3 bg-dark-700 rounded-lg border border-glass-100 space-y-1 text-xs">
-        <h4 className="text-sm font-medium text-dark-200 mb-1">Status</h4>
-        {status ? (
-          <>
-            <p className="text-dark-300">
-              Listener: {status.listening
-                ? <span className="text-accent-success">active on port {status.port}</span>
-                : <span className="text-dark-400">not listening{status.error ? ` — ${status.error}` : ''}</span>}
-            </p>
-            <p className="text-dark-300">
-              Clients: {status.clients.length > 0
-                ? status.clients.map(c => `${c.id}${c.version ? ` v${c.version}` : ''}`).join(', ')
-                : 'none heard yet'}
-            </p>
-            {status.lastQsoCall && (
-              <p className="text-dark-300">
-                Last auto-logged: <span className="font-mono text-accent-secondary">{status.lastQsoCall}</span>
-                {status.lastQsoAtUtc && ` at ${new Date(status.lastQsoAtUtc).toLocaleTimeString()}`}
-              </p>
+          <div className="p-3 bg-dark-700 rounded-lg border border-glass-100 space-y-1 text-xs">
+            <h4 className="text-sm font-medium text-dark-200 mb-1">Status</h4>
+            {status ? (
+              <>
+                <p className="text-dark-300">
+                  Listener: {status.listening
+                    ? <span className="text-accent-success">active on port {status.port}</span>
+                    : <span className="text-dark-400">not listening{status.error ? ` — ${status.error}` : ''}</span>}
+                </p>
+                <p className="text-dark-300">
+                  Clients: {status.clients.length > 0
+                    ? status.clients.map((c) => `${c.id}${c.version ? ` v${c.version}` : ''}`).join(', ')
+                    : 'none heard yet'}
+                </p>
+                {status.lastQsoCall && (
+                  <p className="text-dark-300">
+                    Last auto-logged: <span className="font-mono text-accent-secondary">{status.lastQsoCall}</span>
+                    {status.lastQsoAtUtc && ` at ${new Date(status.lastQsoAtUtc).toLocaleTimeString()}`}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-dark-400">Status unavailable</p>
             )}
-          </>
-        ) : (
-          <p className="text-dark-400">Status unavailable</p>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3096,7 +3968,8 @@ function WsjtxSettingsSection() {
 function WeatherSettingsSection() {
   const { settings, updateWeatherSettings } = useSettingsStore();
   const weather = settings.weather;
-  const isKph = weather.wind.displayUnit === 'kph';
+  // The wind switch may be 'auto' — resolve it against the master unit system.
+  const isKph = resolveSpeedUnit(weather.wind.displayUnit, settings.appearance.unitSystem) === 'kph';
   const toDisplay = (mph: number) => isKph ? Math.round(mph * 1.60934) : mph;
   const fromDisplay = (v: number) => isKph ? v / 1.60934 : v;
 
@@ -3198,8 +4071,9 @@ function WeatherSettingsSection() {
             onChange={(e) => updateWeatherSettings({ wind: { threshGustMph: fromDisplay(parseInt(e.target.value) || 45) } as never })}
             className="glass-input w-16" />
           <select value={weather.wind.displayUnit}
-            onChange={(e) => updateWeatherSettings({ wind: { displayUnit: e.target.value as 'mph' | 'kph' } as never })}
+            onChange={(e) => updateWeatherSettings({ wind: { displayUnit: e.target.value as 'auto' | 'mph' | 'kph' } as never })}
             className="glass-input px-2 py-1">
+            <option value="auto">Auto</option>
             <option value="mph">mph</option>
             <option value="kph">kph</option>
           </select>
@@ -3267,7 +4141,9 @@ function WeatherSettingsSection() {
 // banner so it fires even when weather alerts are otherwise disabled.
 function WeatherPreviewSubsection() {
   const { startPreview } = useWeatherPreviewStore();
-  const kph = useSettingsStore(state => state.settings.weather.wind.displayUnit === 'kph');
+  const kph = useSettingsStore(
+    state => resolveSpeedUnit(state.settings.weather.wind.displayUnit, state.settings.appearance.unitSystem) === 'kph',
+  );
 
   const fakeLightning = () => startPreview({
     lightning: {
@@ -3495,8 +4371,103 @@ function AboutSection() {
   );
 }
 
-// Web Logbooks — groups QRZ, LOTW, Club Log, HRDLog, and WSJT-X under one category with sub-tabs.
-type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'eqsl' | 'pota' | 'wsjtx' | 'countryfiles';
+// Web Logbooks — groups QRZ, LOTW, Club Log, HRDLog, eQSL and POTA under one category with sub-tabs.
+type WebLogbookTab = 'qrz' | 'hamqth' | 'lotw' | 'clublog' | 'hrdlog' | 'eqsl' | 'sync' | 'pota' | 'countryfiles';
+
+function ConfirmationSyncSettingsSection() {
+  const { settings, updateConfirmationSyncSettings } = useSettingsStore();
+  const cs = settings.confirmationSync;
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">Auto-Sync Confirmations</h3>
+        <p className="text-sm text-dark-300">
+          Periodically download your LoTW / eQSL / QRZ confirmations and mark matching QSOs Confirmed in the
+          background — no clicking. Uses the logins from the LoTW, eQSL, and QRZ tabs; you'll get a toast when
+          new confirmations land.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+        <div className="pr-3">
+          <label className="text-sm font-medium text-dark-200">Enable background sync</label>
+          <p className="text-xs text-dark-400 mt-0.5">Off by default.</p>
+        </div>
+        <button
+          onClick={() => updateConfirmationSyncSettings({ autoSync: !cs.autoSync })}
+          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${cs.autoSync ? 'bg-accent-primary' : 'bg-dark-500'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${cs.autoSync ? 'translate-x-5' : ''}`} />
+        </button>
+      </div>
+
+      <div
+        className={`p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-4 transition-opacity ${
+          cs.autoSync ? '' : 'opacity-50'
+        }`}
+      >
+        {!cs.autoSync && (
+          <p className="text-xs text-dark-400 italic">Enable background sync above to change these.</p>
+        )}
+
+        <div className="space-y-2 pt-1">
+          <p className="text-sm font-medium text-dark-200">Sources</p>
+          {([['lotw', 'LoTW'], ['eqsl', 'eQSL'], ['qrz', 'QRZ']] as const).map(([key, label]) => (
+            <label
+              key={key}
+              className={`flex items-center justify-between ${cs.autoSync ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+            >
+              <span className="text-sm text-dark-200">{label}</span>
+              <input
+                type="checkbox"
+                disabled={!cs.autoSync}
+                checked={cs[key]}
+                onChange={(e) => updateConfirmationSyncSettings({ [key]: e.target.checked })}
+                className="w-4 h-4 accent-[rgb(var(--accent-primary))]"
+              />
+            </label>
+          ))}
+          <p className="text-xs text-dark-400">
+            Each source needs its login filled in on the matching tab — LoTW website login, eQSL login, or
+            your QRZ Logbook API key. Leave any you don't use unchecked (e.g. LoTW off, eQSL / QRZ on).
+          </p>
+        </div>
+
+        <div className="space-y-2 pt-1 border-t border-glass-100">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-dark-200">Sync every</label>
+            <span className="text-xs text-dark-300 font-mono">
+              {cs.intervalHours} hour{cs.intervalHours === 1 ? '' : 's'}
+            </span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={24}
+            step={1}
+            disabled={!cs.autoSync}
+            value={cs.intervalHours}
+            onChange={(e) => updateConfirmationSyncSettings({ intervalHours: parseInt(e.target.value) || 6 })}
+            className="w-full accent-[rgb(var(--accent-primary))] cursor-pointer disabled:cursor-not-allowed"
+          />
+        </div>
+
+        <label
+          className={`flex items-center justify-between ${cs.autoSync ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+        >
+          <span className="text-sm text-dark-200">Sync shortly after startup</span>
+          <input
+            type="checkbox"
+            disabled={!cs.autoSync}
+            checked={cs.syncOnStartup}
+            onChange={(e) => updateConfirmationSyncSettings({ syncOnStartup: e.target.checked })}
+            className="w-4 h-4 accent-[rgb(var(--accent-primary))]"
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
 
 function WebLogbooksSection() {
   const [tab, setTab] = useState<WebLogbookTab>('qrz');
@@ -3507,8 +4478,8 @@ function WebLogbooksSection() {
     { id: 'clublog', label: 'Club Log' },
     { id: 'hrdlog', label: 'HRDLog' },
     { id: 'eqsl', label: 'eQSL' },
+    { id: 'sync', label: 'Auto-Sync' },
     { id: 'pota', label: 'POTA' },
-    { id: 'wsjtx', label: 'WSJT-X' },
     { id: 'countryfiles', label: 'Country Files' },
   ];
 
@@ -3536,8 +4507,8 @@ function WebLogbooksSection() {
       {tab === 'clublog' && <ClubLogSettingsSection />}
       {tab === 'hrdlog' && <HrdLogSettingsSection />}
       {tab === 'eqsl' && <EqslSettingsSection />}
+      {tab === 'sync' && <ConfirmationSyncSettingsSection />}
       {tab === 'pota' && <PotaSettingsSection />}
-      {tab === 'wsjtx' && <WsjtxSettingsSection />}
       {tab === 'countryfiles' && <CountryFilesSection />}
     </div>
   );
@@ -3828,6 +4799,10 @@ export function SettingsPanel() {
         return <StationSettingsSection />;
       case 'weblogbooks':
         return <WebLogbooksSection />;
+      case 'wsjtx':
+        return <WsjtxSettingsSection />;
+      case 'decodealerts':
+        return <DecodeAlertsSection />;
       case 'rotator':
         return <RotatorSettingsSection />;
       case 'appearance':
@@ -3848,6 +4823,10 @@ export function SettingsPanel() {
         return <AlertsSection />;
       case 'sat':
         return <SatSettingsSection />;
+      case 'dxcoach':
+        return <DxCoachSettingsSection />;
+      case 'voice':
+        return <VoiceSettingsSection />;
       case 'about':
         return <AboutSection />;
       default:

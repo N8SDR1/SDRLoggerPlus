@@ -67,6 +67,22 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
+    /// Worked 4-char grids across all bands (or a filtered band/mode) for the
+    /// Grid Tracker map — worked + confirmed status per grid.
+    /// </summary>
+    [HttpGet("gridmap")]
+    [ProducesResponseType(typeof(GridMapStatistics), StatusCodes.Status200OK)]
+    public async Task<ActionResult<GridMapStatistics>> GetGridMap(
+        [FromQuery] string? band = null,
+        [FromQuery] string? mode = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null)
+    {
+        var filters = new StatisticsFilters(Band: band, Mode: mode, FromDate: fromDate, ToDate: toDate);
+        return Ok(await _awardsService.GetGridMapAsync(filters));
+    }
+
+    /// <summary>
     /// Get POTA (Parks on the Air) statistics
     /// </summary>
     [HttpGet("pota")]

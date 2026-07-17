@@ -254,29 +254,27 @@ export function ChatAiPlugin() {
         </button>
       }
     >
-      <div className="p-4 h-full flex flex-col">
-        {/* Callsign header */}
-        <div className="glass-panel mb-4 p-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-lg font-mono font-bold text-accent-primary">{callsign}</p>
-              {focusedCallsignInfo?.name && (
-                <p className="text-sm text-gray-400">{focusedCallsignInfo.name}</p>
-              )}
-            </div>
-            <div className="text-right text-sm text-gray-500">
-              {focusedCallsignInfo?.grid && (
-                <div>Grid: {focusedCallsignInfo.grid}</div>
-              )}
-              {focusedCallsignInfo?.distance && (
-                <div>{Math.round(focusedCallsignInfo.distance).toLocaleString()} km</div>
-              )}
-            </div>
+      <div className="p-3">
+        {/* Callsign header — compact single line so short panels leave room for talk points */}
+        <div className="flex items-center justify-between gap-2 mb-2 px-0.5">
+          <div className="flex items-baseline gap-2 min-w-0">
+            <span className="text-base font-mono font-bold text-accent-primary">{callsign}</span>
+            {focusedCallsignInfo?.name && (
+              <span className="text-xs text-gray-400 truncate">{focusedCallsignInfo.name}</span>
+            )}
           </div>
+          {(focusedCallsignInfo?.grid || focusedCallsignInfo?.distance != null) && (
+            <span className="text-xs text-gray-500 whitespace-nowrap shrink-0">
+              {focusedCallsignInfo?.grid}
+              {focusedCallsignInfo?.distance != null
+                ? `${focusedCallsignInfo?.grid ? ' · ' : ''}${Math.round(focusedCallsignInfo.distance).toLocaleString()} km`
+                : ''}
+            </span>
+          )}
         </div>
 
-        {/* Scrollable content area */}
-        <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+        {/* Content — flows naturally; the GlassPanel wrapper scrolls the whole panel */}
+        <div className="space-y-4 mb-4">
           {/* Previous QSOs */}
           {talkPointsData && talkPointsData.previousQsos.length > 0 && (
             <div>

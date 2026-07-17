@@ -9,6 +9,8 @@ a fast .NET backend with a React UI of drag-and-drop, dockable panels so you can
 exactly the station dashboard you want — logbook, DX cluster, maps, award progress, rig and
 rotator control, and more, all updating in real time.
 
+**[⬇ Download](https://github.com/N8SDR1/SDRLoggerPlus/releases)** · **[💬 Join the Discord](https://discord.gg/r3Cuj5NA9p)**
+
 ## Features
 
 **Logging**
@@ -34,13 +36,11 @@ rotator control, and more, all updating in real time.
 
 **Radio & station control**
 - CAT control via **Hamlib** (bundled)
-- **TCI** radio control (Thetis / SunSDR) with panadapter and meters
-- **CW keyer** panel
-- **Rotator** control — `rotctld` and ARCO (GS-232A over TCP)
-- Station accessory integrations: Antenna Genius, Tuner Genius, PGXL amplifier
+- **TCI** radio control (Lyra / Thetis / SunSDR) with panadapter and meters
+- **Lyra Combo Link** — two-way link with the Lyra SDR console over TCI: band / mode / frequency sync, spot push with click-to-tune, and CW logging with call + RST
 
 **Digital & online services**
-- **WSJT-X** auto-logging
+- **WSJT-X / JTDX** auto-logging (two independent UDP sources)
 - **LoTW** upload (via TQSL), **Club Log** realtime, **HRDLog**, and **PSK Reporter**
 
 **Satellite & propagation**
@@ -72,9 +72,9 @@ rotator control, and more, all updating in real time.
 
 ## Install
 
-SDRLoggerPlus ships as a desktop app (Windows NSIS installer, macOS DMG, Linux AppImage/deb).
-No public releases are posted yet while the project is in alpha — for now, run it from source
-(below) or build a package with `npm run package:<platform>`.
+SDRLoggerPlus ships as a desktop app (Windows NSIS installer, macOS DMG, Linux AppImage).
+Download the latest build from the **[Releases page](https://github.com/N8SDR1/SDRLoggerPlus/releases)**,
+or run it from source (below) or build a package with `npm run package:<platform>`.
 
 ## Development
 
@@ -114,7 +114,7 @@ automatically copied over (copy, not move — the original is left as a safety n
 ## Credits & Lineage
 
 - **Lead developer:** Rick Langford (N8SDR) — creator of SDRLogger+.
-- **Contributor:** Brent Crier (N9BC) — built this cross-platform .NET / React / Electron edition.
+- **Contributor:** Brent Crier (N9BC) — cross-platform .NET / React / Electron edition.
 
 It builds on the work of two earlier projects:
 
@@ -125,7 +125,3 @@ It builds on the work of two earlier projects:
 
 MIT License — © 2026 Rick Langford (N8SDR) and contributors. See `LICENSE`.
 Bundled Hamlib and libusb are LGPL-2.1; see `THIRD-PARTY-NOTICES.txt`.
-
----
-
-*Icon/logo: currently using placeholder artwork inherited from the fork — SDRLoggerPlus artwork TBD.*

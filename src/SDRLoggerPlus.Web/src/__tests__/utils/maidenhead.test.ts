@@ -26,6 +26,17 @@ describe('gridToLatLon', () => {
     expect(gridToLatLon('FN31YY')).toBeNull(); // Y > X
   });
 
+  it('parses 8-char extended grids as their 6-char subsquare', () => {
+    // PSK Reporter sends extended grids like EN54xl17; must not be rejected as null
+    // (regression: 2D PSK "Heard Me" arcs use the sender grid as their origin).
+    const ext = gridToLatLon('EN54xl17');
+    const six = gridToLatLon('EN54xl');
+    expect(ext).not.toBeNull();
+    expect(six).not.toBeNull();
+    expect(ext!.lat).toBeCloseTo(six!.lat, 5);
+    expect(ext!.lon).toBeCloseTo(six!.lon, 5);
+  });
+
   it('converts a valid 4-char grid to lat/lon (center of square)', () => {
     // IO63 (Ireland) -> center of the 2° x 1° square
     const result = gridToLatLon('IO63');

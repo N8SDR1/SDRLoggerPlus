@@ -5,7 +5,21 @@ namespace SDRLoggerPlus.Server.Services;
 public interface ISpotStatusService
 {
     string? GetSpotStatus(string dxCall, string? country, double frequencyKhz, string? mode);
-    void OnQsoLogged(string callsign, string? country, string band, string mode);
+    /// <summary>
+    /// CQ-zone (WAZ) status for a spot: the resolved CQ zone plus whether it's a
+    /// new zone entirely ("newZone") or a worked zone on a new band ("newZoneBand"),
+    /// or null if already worked on this band / unresolvable. Independent of the
+    /// DXCC status — a worked country+band can still be a new zone (5BWAZ).
+    /// </summary>
+    (int? Zone, string? Status) GetZoneStatus(string dxCall, double frequencyKhz);
+    /// <summary>
+    /// Maidenhead grid status for a spot/decode carrying a locator: "newGrid"
+    /// (this 4-char grid never worked), "newGridBand" (worked but not on this
+    /// band), or null (already worked on this band / no grid). Grid comes from
+    /// the FT8 message or a callbook lookup, not cty.dat.
+    /// </summary>
+    string? GetGridStatus(string? grid, double frequencyKhz);
+    void OnQsoLogged(string callsign, string? country, string band, string mode, string? grid = null);
     Task InvalidateCacheAsync();
 }
 
@@ -18,6 +32,13 @@ public class SpotStatusService : ISpotStatusService, IHostedService
     private HashSet<string> _workedCountries = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _workedCountryBands = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _workedCountryBandModes = new(StringComparer.OrdinalIgnoreCase);
+    // CQ-zone (WAZ) worked sets: zones ever worked, and zone+band for 5BWAZ.
+    private HashSet<int> _workedZones = new();
+    private HashSet<string> _workedZoneBands = new(StringComparer.OrdinalIgnoreCase);
+    // Maidenhead grid (VUCC / grid-chasing) worked sets: 4-char grids ever
+    // worked, and grid+band.
+    private HashSet<string> _workedGrids = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _workedGridBands = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _cacheLock = new();
 
     public SpotStatusService(
@@ -126,7 +147,61 @@ public class SpotStatusService : ISpotStatusService, IHostedService
         return null;
     }
 
-    public void OnQsoLogged(string callsign, string? country, string band, string mode)
+    public (int? Zone, string? Status) GetZoneStatus(string dxCall, double frequencyKhz)
+    {
+        // Same warm-up guard as GetSpotStatus — no verdict until the cache is ready.
+        if (!_cacheReady.Task.IsCompleted)
+            return (null, null);
+
+        // CQ zone comes straight from cty.dat (per-call/prefix, exceptions included).
+        var (_, _, cqZone) = CtyService.GetEntityFromCallsign(dxCall);
+        if (cqZone is null)
+            return (null, null);
+
+        var band = BandHelper.GetBand((long)(frequencyKhz * 1000));
+        if (band == "Unknown")
+            return (cqZone, null);
+
+        lock (_cacheLock)
+        {
+            // New zone — never worked this CQ zone at all (basic WAZ).
+            if (!_workedZones.Contains(cqZone.Value))
+                return (cqZone, "newZone");
+
+            // Worked zone, but not on this band (5-band WAZ fill).
+            if (!_workedZoneBands.Contains($"{cqZone.Value}:{band}"))
+                return (cqZone, "newZoneBand");
+        }
+
+        return (cqZone, null);
+    }
+
+    public string? GetGridStatus(string? grid, double frequencyKhz)
+    {
+        if (!_cacheReady.Task.IsCompleted)
+            return null;
+
+        var g = NormalizeGrid(grid);
+        if (g is null)
+            return null;
+
+        var band = BandHelper.GetBand((long)(frequencyKhz * 1000));
+
+        lock (_cacheLock)
+        {
+            // New grid — never worked this 4-char square at all.
+            if (!_workedGrids.Contains(g))
+                return "newGrid";
+
+            // Worked grid, but not on this band.
+            if (band != "Unknown" && !_workedGridBands.Contains($"{g}:{band}"))
+                return "newGridBand";
+        }
+
+        return null;
+    }
+
+    public void OnQsoLogged(string callsign, string? country, string band, string mode, string? grid = null)
     {
         lock (_cacheLock)
         {
@@ -157,6 +232,23 @@ public class SpotStatusService : ISpotStatusService, IHostedService
                     _workedCountryBandModes.Add($"{normalizedCtyCountry}:{band}:{normalizedMode}");
                 }
             }
+
+            // CQ zone (WAZ) — resolve from the callsign via cty.dat so it's
+            // present even when the QSO didn't store a zone.
+            var (_, _, cqZone) = CtyService.GetEntityFromCallsign(callsign);
+            if (cqZone is not null && !string.IsNullOrEmpty(band))
+            {
+                _workedZones.Add(cqZone.Value);
+                _workedZoneBands.Add($"{cqZone.Value}:{band}");
+            }
+
+            var normalizedGrid = NormalizeGrid(grid);
+            if (normalizedGrid is not null)
+            {
+                _workedGrids.Add(normalizedGrid);
+                if (!string.IsNullOrEmpty(band))
+                    _workedGridBands.Add($"{normalizedGrid}:{band}");
+            }
         }
 
         _logger.LogDebug("SpotStatusService cache updated for {Callsign} on {Band} {Mode}", callsign, band, mode);
@@ -179,6 +271,10 @@ public class SpotStatusService : ISpotStatusService, IHostedService
             var newCountries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var newCountryBands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var newCountryBandModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var newZones = new HashSet<int>();
+            var newZoneBands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var newGrids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var newGridBands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var qso in allQsos)
             {
@@ -189,6 +285,25 @@ public class SpotStatusService : ISpotStatusService, IHostedService
 
                 if (string.IsNullOrEmpty(band) || string.IsNullOrEmpty(callsign))
                     continue;
+
+                // Grids live in Station.Grid (populated by QRZ/callbook lookups &
+                // the QRZ import), with the top-level Grid as fallback — matching
+                // GridOf() in LiteQsoRepository, the source of the log's grid stat.
+                var grid = NormalizeGrid(qso.Station?.Grid ?? qso.Grid);
+                if (grid is not null)
+                {
+                    newGrids.Add(grid);
+                    newGridBands.Add($"{grid}:{band}");
+                }
+
+                // CQ zone (WAZ): prefer the logged zone, else resolve from the
+                // callsign via cty.dat so older QSOs without a stored zone count.
+                var cqZone = qso.Station?.CqZone ?? CtyService.GetEntityFromCallsign(callsign).CqZone;
+                if (cqZone is not null)
+                {
+                    newZones.Add(cqZone.Value);
+                    newZoneBands.Add($"{cqZone.Value}:{band}");
+                }
 
                 if (!string.IsNullOrEmpty(country))
                 {
@@ -223,11 +338,15 @@ public class SpotStatusService : ISpotStatusService, IHostedService
                 _workedCountries = newCountries;
                 _workedCountryBands = newCountryBands;
                 _workedCountryBandModes = newCountryBandModes;
+                _workedZones = newZones;
+                _workedZoneBands = newZoneBands;
+                _workedGrids = newGrids;
+                _workedGridBands = newGridBands;
             }
 
             _logger.LogInformation(
-                "SpotStatusService cache built: {CountryCount} countries, {BandCount} country+band combos, {ModeCount} country+band+mode entries",
-                newCountries.Count, newCountryBands.Count, newCountryBandModes.Count);
+                "SpotStatusService cache built: {CountryCount} countries, {BandCount} country+band combos, {ModeCount} country+band+mode entries, {ZoneCount} CQ zones, {GridCount} grids",
+                newCountries.Count, newCountryBands.Count, newCountryBandModes.Count, newZones.Count, newGrids.Count);
 
             return true;
         }
@@ -253,6 +372,21 @@ public class SpotStatusService : ISpotStatusService, IHostedService
     private static string NormalizeCountryName(string country)
     {
         return CountryAliases.TryGetValue(country, out var normalized) ? normalized : country;
+    }
+
+    /// <summary>
+    /// Reduce a locator to its 4-char field+square (the VUCC/grid-award unit),
+    /// uppercased. Returns null for anything shorter or malformed.
+    /// </summary>
+    private static string? NormalizeGrid(string? grid)
+    {
+        if (string.IsNullOrWhiteSpace(grid) || grid.Length < 4)
+            return null;
+        var g = grid.Trim().ToUpperInvariant();
+        if (g[0] < 'A' || g[0] > 'R' || g[1] < 'A' || g[1] > 'R' ||
+            g[2] < '0' || g[2] > '9' || g[3] < '0' || g[3] > '9')
+            return null;
+        return g[..4];
     }
 
     private static string NormalizeMode(string mode)

@@ -169,12 +169,18 @@ export interface Spot {
   timestamp: string;
   country?: string;
   status?: 'newDxcc' | 'newBand' | 'worked';
+  /** CQ zone (WAZ) of the DX station, and whether it fills a zone gap. */
+  cqZone?: number;
+  zoneStatus?: 'newZone' | 'newZoneBand';
   isHot?: boolean;
   dxStation?: {
     country?: string;
     dxcc?: number;
     grid?: string;
     continent?: string;
+    /** Approximate lat/lon (cty.dat country centroid) — coarse, for the prop gate. */
+    lat?: number;
+    lon?: number;
   };
   spotterStation?: {
     country?: string;

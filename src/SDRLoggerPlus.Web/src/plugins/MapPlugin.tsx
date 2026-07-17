@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
-import { Map as MapIcon, Target, Maximize2, ZoomIn, ZoomOut, Layers, Satellite, Radio, Sun } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
+import { Map as MapIcon, Target, Maximize2, ZoomIn, ZoomOut, Layers, Satellite, Radio, Sun, Zap, Play } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { useAppStore, Spot } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -11,7 +11,9 @@ import { DayNightOverlay } from '../components/DayNightOverlay';
 import { GrayLineOverlay } from '../components/GrayLineOverlay';
 import { AuroraOverlay } from '../components/AuroraOverlay';
 import { PskReporterOverlay } from '../components/PskReporterOverlay';
+import { RbnHeardMeOverlay } from '../components/RbnHeardMeOverlay';
 import { gridToLatLon, calculateDistance, calculateBearing, getAnimationDuration } from '../utils/maidenhead';
+import { formatDistance } from '../utils/units';
 import { fetchTLEData, calculateSatellitePosition, calculateOrbitTrack, type SatellitePosition, type SatelliteTLE } from '../utils/satellite';
 import { api, type RbnSpot } from '../api/client';
 import { GlobeCore } from './GlobePlugin';
@@ -97,56 +99,65 @@ const satelliteIcon = new L.DivIcon({
   iconAnchor: [9, 9],
 });
 
-// Create callsign image marker icon
+// Create callsign image marker icon — a map pin (teardrop) whose circular
+// hole holds the operator's QRZ photo; the pin's point anchors on the
+// station coordinate, callsign label sits just below.
 function createCallsignImageIcon(imageUrl: string | undefined | null, callsign: string, scale: '1x' | '2x') {
-  const size = scale === '2x' ? 56 : 44;
-  const borderWidth = scale === '2x' ? 3 : 2;
-  const borderColor = scale === '2x' ? '#ffb432' : '#00ddff';
-  const shadowSpread = scale === '2x' ? 8 : 5;
-  const fontSize = scale === '2x' ? 11 : 10;
+  const pinW = scale === '2x' ? 52 : 42;   // pin width in px
+  const pinH = Math.round(pinW * 1.32);    // teardrop taller than wide
+  // Panel-name green (accent-secondary), via the CSS var so it tracks themes.
+  const bodyColor = 'rgb(var(--accent-secondary))';
+  const fontSize = scale === '2x' ? 12 : 10;
+  const emojiPx = Math.round(pinW * 0.42);
   // Escape HTML special chars in callsign to prevent XSS
   const safeCallsign = callsign.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const contentHtml = imageUrl
-    ? `<img
-            src="${imageUrl}"
-            alt="${safeCallsign}"
-            style="width: 100%; height: 100%; object-fit: cover; display: block;"
-            onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${Math.round(size * 0.5)}px\\'>📻</div>'"
-          />`
-    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${Math.round(size * 0.5)}px">📻</div>`;
+  // Photo (or 📻 fallback) rides in a foreignObject over the pin's hole, so
+  // the browser's <img> onerror fallback still works inside the SVG.
+  const holeContent = imageUrl
+    ? `<img src="${imageUrl}" alt="${safeCallsign}"
+            style="width:100%;height:100%;object-fit:cover;display:block;"
+            onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${emojiPx}px\\'>📻</div>'" />`
+    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${emojiPx}px">📻</div>`;
+
+  // Geometry in a 40×52 viewBox: circular bulge centered (20,18) r18,
+  // tapering to the point at (20,50). Hole = circle (20,18) r14.5 — the
+  // photo nearly fills the bulge, leaving a thin coloured rim.
+  const pin = `
+    <svg width="${pinW}" height="${pinH}" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg"
+         style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.55));">
+      <path d="M20 50 C 9 33, 2 27, 2 18 A 18 18 0 1 1 38 18 C 38 27, 31 33, 20 50 Z"
+            style="fill:${bodyColor}" stroke="#0a0e14" stroke-width="2.5" stroke-linejoin="round" />
+      <foreignObject x="5.5" y="3.5" width="29" height="29">
+        <div xmlns="http://www.w3.org/1999/xhtml"
+             style="width:29px;height:29px;border-radius:50%;overflow:hidden;background:#1a1e26;">
+          ${holeContent}
+        </div>
+      </foreignObject>
+    </svg>`;
 
   return new L.DivIcon({
     className: 'custom-callsign-image-marker',
+    // translate so the pin's point (bottom-center of the SVG) sits on the
+    // geographic coordinate; the label hangs just beneath it.
     html: `
       <div style="
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 2px;
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, -${pinH}px);
         pointer-events: auto;
       ">
-        <div style="
-          width: ${size}px;
-          height: ${size}px;
-          border-radius: 50%;
-          border: ${borderWidth}px solid ${borderColor};
-          box-shadow: 0 0 ${shadowSpread}px ${borderColor}80;
-          overflow: hidden;
-          background: #1a1e26;
-          flex-shrink: 0;
-        ">
-          ${contentHtml}
-        </div>
+        ${pin}
         <span style="
           font-family: monospace;
           font-size: ${fontSize}px;
           font-weight: bold;
-          color: ${borderColor};
-          text-shadow: 0 0 4px rgba(0,0,0,0.8), 0 1px 2px rgba(0,0,0,0.9);
+          color: ${bodyColor};
+          text-shadow: 0 0 4px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.9);
           white-space: nowrap;
           line-height: 1;
+          margin-top: 1px;
         ">${safeCallsign}</span>
       </div>
     `,
@@ -219,31 +230,6 @@ function calculateAzimuth(lat1: number, lon1: number, lat2: number, lon2: number
 
   return Math.round(azimuth);
 }
-
-// Calculate destination point from start, azimuth, and distance
-function getDestinationPoint(lat: number, lon: number, azimuth: number, distanceKm: number): [number, number] {
-  const R = 6371;
-  const toRad = Math.PI / 180;
-  const toDeg = 180 / Math.PI;
-
-  const lat1Rad = lat * toRad;
-  const lon1Rad = lon * toRad;
-  const azimuthRad = azimuth * toRad;
-  const angularDistance = distanceKm / R;
-
-  const lat2Rad = Math.asin(
-    Math.sin(lat1Rad) * Math.cos(angularDistance) +
-    Math.cos(lat1Rad) * Math.sin(angularDistance) * Math.cos(azimuthRad)
-  );
-
-  const lon2Rad = lon1Rad + Math.atan2(
-    Math.sin(azimuthRad) * Math.sin(angularDistance) * Math.cos(lat1Rad),
-    Math.cos(angularDistance) - Math.sin(lat1Rad) * Math.sin(lat2Rad)
-  );
-
-  return [lat2Rad * toDeg, ((lon2Rad * toDeg + 540) % 360) - 180];
-}
-
 
 // Band colors for DX cluster spot paths (matching typical ham radio conventions)
 const BAND_COLORS: Record<string, string> = {
@@ -345,6 +331,100 @@ function generateGreatCirclePoints(
   return segments;
 }
 
+/**
+ * Animated great-circle path drawn as a traveling sine wave. Each base point
+ * of the segment is offset perpendicular to the local path direction by a
+ * sine whose phase advances every frame (so the wave travels from the station
+ * toward the DX). A sin() envelope tapers the amplitude to zero at both ends,
+ * keeping the wave anchored to the two markers. Rendered as a direct Leaflet
+ * layer (updated in a rAF loop, no React re-render per frame); colour + the
+ * gentle opacity breath come from the shared .dx-target-path CSS class.
+ */
+function SineWavePath({ segment, color }: { segment: [number, number][]; color: string }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!segment || segment.length < 3) return;
+    const toRad = Math.PI / 180, toDeg = 180 / Math.PI, R = 6371;
+    // Cumulative along-path distance (km) of the coarse base points.
+    const baseCum = [0];
+    for (let i = 1; i < segment.length; i++) {
+      baseCum[i] = baseCum[i - 1] + calculateDistance(segment[i - 1][0], segment[i - 1][1], segment[i][0], segment[i][1]);
+    }
+    const total = baseCum[segment.length - 1];
+    if (total <= 0) return;
+
+    // Wave geometry proportional to path length so density/height read the
+    // same for a 500 km hop or a 15 000 km path.
+    const waves = Math.max(6, Math.min(40, Math.round(total / 450)));
+    const wavelengthKm = total / waves;
+    const amplitudeKm = Math.max(20, Math.min(280, wavelengthKm * 0.32));
+
+    // Resample the coarse great-circle path to many evenly-spaced points —
+    // ~28 per wave — so each oscillation is a smooth curve, not a few straight
+    // segments. Linear interpolation between adjacent base points is fine at
+    // this spacing (they're only tens of km apart).
+    const N = Math.max(200, Math.min(1100, waves * 28));
+    const dense: { lat: number; lon: number; d: number }[] = [];
+    let j = 0;
+    for (let k = 0; k <= N; k++) {
+      const target = (total * k) / N;
+      while (j < segment.length - 2 && baseCum[j + 1] < target) j++;
+      const segLen = baseCum[j + 1] - baseCum[j];
+      const t = segLen > 0 ? (target - baseCum[j]) / segLen : 0;
+      dense.push({
+        lat: segment[j][0] + (segment[j + 1][0] - segment[j][0]) * t,
+        lon: segment[j][1] + (segment[j + 1][1] - segment[j][1]) * t,
+        d: target,
+      });
+    }
+
+    // Perpendicular bearing at each dense point (path bearing + 90°).
+    const perp = dense.map((_, i) => {
+      const a = dense[Math.max(0, i - 1)];
+      const b = dense[Math.min(dense.length - 1, i + 1)];
+      return (calculateBearing(a.lat, a.lon, b.lat, b.lon) + 90) % 360;
+    });
+
+    // Offset a lat/lon by a signed distance (km) along a bearing.
+    const offset = (lat: number, lon: number, brg: number, distKm: number): [number, number] => {
+      let b = brg, d = distKm;
+      if (d < 0) { b = (brg + 180) % 360; d = -d; }
+      const delta = d / R, theta = b * toRad, phi1 = lat * toRad, lam1 = lon * toRad;
+      const phi2 = Math.asin(Math.sin(phi1) * Math.cos(delta) + Math.cos(phi1) * Math.sin(delta) * Math.cos(theta));
+      const lam2 = lam1 + Math.atan2(Math.sin(theta) * Math.sin(delta) * Math.cos(phi1), Math.cos(delta) - Math.sin(phi1) * Math.sin(phi2));
+      return [phi2 * toDeg, lam2 * toDeg];
+    };
+
+    // Wave points for a given phase.
+    const waveAt = (phase: number): [number, number][] =>
+      dense.map((p, i) => {
+        const envelope = Math.sin(Math.PI * p.d / total); // 0 at ends, 1 mid
+        const off = amplitudeKm * envelope * Math.sin(2 * Math.PI * p.d / wavelengthKm - phase);
+        return offset(p.lat, p.lon, perp[i], off);
+      });
+
+    // Draw the first frame synchronously so the smooth wave shows immediately
+    // (independent of the rAF loop, which only drives the travel animation).
+    // smoothFactor: 0 disables Leaflet's Douglas-Peucker simplification —
+    // otherwise it decimates our dense wave points back into jagged segments.
+    const poly = L.polyline(waveAt(0), { weight: 2, smoothFactor: 0, color, className: 'dx-target-path' }).addTo(map);
+    let raf = 0;
+    let phase = 0;
+    const frame = () => {
+      phase += 0.30; // travel speed (rad/frame)
+      poly.setLatLngs(waveAt(phase));
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      map.removeLayer(poly);
+    };
+  }, [segment, map, color]);
+  return null;
+}
+
 // Custom DX spot marker (small diamond)
 function createSpotIcon(color: string, isHighlighted: boolean) {
   const size = isHighlighted ? 10 : 6;
@@ -403,19 +483,17 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const lastTargetCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
-  const { stationGrid, rotatorPosition, focusedCallsignInfo, potaSpots, dxClusterMapEnabled, hoveredSpotId } = useAppStore();
+  const { stationGrid, focusedCallsignInfo, potaSpots, dxClusterMapEnabled, hoveredSpotId } = useAppStore();
   const { settings, updateMapSettings, saveSettings } = useSettingsStore();
   const { commandRotator, selectSpot } = useSignalR();
 
   // DX cluster spots from ephemeral in-memory store (populated via SignalR)
   const spots = useAppStore((state) => state.dxClusterSpots);
-  const [currentAzimuth, setCurrentAzimuth] = useState(0);
   const [showLayerPicker, setShowLayerPicker] = useState(false);
   const [satellitePositions, setSatellitePositions] = useState<Map<string, SatellitePosition>>(new Map());
   const [satelliteTLEs, setSatelliteTLEs] = useState<Map<string, SatelliteTLE>>(new Map());
   const [satelliteOrbits, setSatelliteOrbits] = useState<Map<string, Array<{ lat: number; lon: number }>>>(new Map());
   const [rbnSpots, setRbnSpots] = useState<RbnSpot[]>([]);
-  const [showRbnPanel, setShowRbnPanel] = useState(false);
   const [showOverlayPanel, setShowOverlayPanel] = useState(false);
 
   // Get tile layer and RBN settings from persisted settings
@@ -508,13 +586,6 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
     const bands = new Set(spotPaths.map(sp => sp.band));
     return Object.entries(BAND_COLORS).filter(([band]) => bands.has(band));
   }, [spotPaths]);
-
-  // Update azimuth from rotator position only
-  useEffect(() => {
-    if (rotatorPosition?.currentAzimuth !== undefined) {
-      setCurrentAzimuth(rotatorPosition.currentAzimuth);
-    }
-  }, [rotatorPosition]);
 
   // Update map center when station coordinates change
   useEffect(() => {
@@ -641,7 +712,6 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
   // Handle click on map to set bearing (only when rotator enabled)
   const handleBearingClick = useCallback((azimuth: number) => {
     if (!rotatorEnabled) return; // Ignore clicks when rotator disabled
-    setCurrentAzimuth(azimuth);
     commandRotator(azimuth, 'map');
   }, [commandRotator, rotatorEnabled]);
 
@@ -650,13 +720,6 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
     updateMapSettings({ showSatellites: !settings.map.showSatellites });
     saveSettings();
   }, [settings.map.showSatellites, updateMapSettings, saveSettings]);
-
-  // Generate rotator beam visualization line (cyan)
-  const beamLinePoints: [number, number][] = [];
-  const beamDistance = 5000; // 5000km beam visualization
-  for (let d = 0; d <= beamDistance; d += 100) {
-    beamLinePoints.push(getDestinationPoint(stationLat, stationLon, currentAzimuth, d));
-  }
 
   // Target location from focused callsign
   const targetLat = focusedCallsignInfo?.latitude;
@@ -750,6 +813,19 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
           {settings.map.showPskOverlay && (
             <PskReporterOverlay
               callsign={settings.map.pskCallsign || settings.station.callsign || ''}
+              band={settings.map.heardMeBand}
+              minutes={settings.map.heardMePskWindowMinutes}
+            />
+          )}
+
+          {/* Heard Me — RBN: skimmers (CW/RTTY) that spotted my callsign */}
+          {settings.map.show2dHeardMeRbn && (
+            <RbnHeardMeOverlay
+              callsign={settings.map.pskCallsign || settings.station.callsign || ''}
+              stationLat={stationLat}
+              stationLon={stationLon}
+              band={settings.map.heardMeBand}
+              minutes={settings.map.heardMeRbnWindowMinutes}
             />
           )}
 
@@ -783,31 +859,29 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
             }}
           />
 
-          {/* Rotator beam direction line - only show when rotator enabled (cyan) */}
-          {rotatorEnabled && (
-            <Polyline
-              positions={beamLinePoints}
-              pathOptions={{
-                color: '#00ddff',
-                weight: 3,
-                opacity: 0.7,
-                dashArray: '10, 5',
-              }}
-            />
-          )}
-
-          {/* Great circle path to focused callsign (amber) */}
+          {/* Great circle path to focused callsign — animated sine wave or a
+              plain dashed line, in the user-picked colour (Settings → Map →
+              Signal Path). Short segments (< 3 pts, antimeridian slivers)
+              always fall back to a plain line. */}
           {targetPathSegments.map((segment, segmentIndex) => (
-            <Polyline
-              key={`target-path-${segmentIndex}`}
-              positions={segment}
-              pathOptions={{
-                color: '#ffb432',
-                weight: 2,
-                opacity: 0.8,
-                dashArray: '5, 10',
-              }}
-            />
+            segment.length >= 3 && (settings.map.dxPathStyle ?? 'sine') === 'sine' ? (
+              <SineWavePath
+                key={`target-wave-${segmentIndex}`}
+                segment={segment}
+                color={settings.map.dxPathColor || '#39ff14'}
+              />
+            ) : (
+              <Polyline
+                key={`target-path-${segmentIndex}`}
+                positions={segment}
+                pathOptions={{
+                  weight: 2,
+                  color: settings.map.dxPathColor || '#39ff14',
+                  dashArray: '5, 10',
+                  className: 'dx-target-path',
+                }}
+              />
+            )
           ))}
 
           {/* Target marker - show callsign image icon (2x) with image or placeholder, or standard dot if callsign images disabled */}
@@ -828,7 +902,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                     )}
                     {focusedCallsignInfo?.bearing != null && (
                       <div style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", color: '#00ddff', marginTop: 2 }}>
-                        {focusedCallsignInfo.bearing.toFixed(0)}° / {Math.round(focusedCallsignInfo.distance ?? 0).toLocaleString()} km
+                        {focusedCallsignInfo.bearing.toFixed(0)}° / {formatDistance(focusedCallsignInfo.distance, settings.appearance.distanceUnit)}
                       </div>
                     )}
                     <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
@@ -864,7 +938,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                     )}
                     {focusedCallsignInfo?.bearing != null && (
                       <div style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", color: '#00ddff', marginTop: 2 }}>
-                        {focusedCallsignInfo.bearing.toFixed(0)}° / {Math.round(focusedCallsignInfo.distance ?? 0).toLocaleString()} km
+                        {focusedCallsignInfo.bearing.toFixed(0)}° / {formatDistance(focusedCallsignInfo.distance, settings.appearance.distanceUnit)}
                       </div>
                     )}
                     <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
@@ -992,7 +1066,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                       <div style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", color: '#a5b4c8', marginTop: 1 }}>{spot.grid6}</div>
                     )}
                     <div style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", color: '#00ddff', marginTop: 3 }}>
-                      {spBearing.toFixed(0)}&deg; / {Math.round(dist).toLocaleString()} km
+                      {spBearing.toFixed(0)}&deg; / {formatDistance(dist, settings.appearance.distanceUnit)}
                     </div>
                     {/* Rotator buttons: SP and LP */}
                     {rotatorEnabled && (
@@ -1262,32 +1336,107 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                 ))}
                 <div className="border-t border-gray-600 my-2"></div>
                 <div className="text-xs text-gray-400 mb-2 px-2">Overlays</div>
+
+                {/* Lightning — live strike rings on the globe circle (Blitzortung feed) */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    updateMapSettings({
-                      rbn: { ...rbnSettings, enabled: !rbnSettings.enabled }
-                    });
+                    updateMapSettings({ showLightning: !settings.map.showLightning });
                     saveSettings();
                   }}
                   className="w-full text-left px-2 py-1 text-sm rounded hover:bg-dark-600 flex items-center justify-between"
                 >
-                  <span className={rbnSettings.enabled ? 'text-accent-primary' : 'text-gray-300'}>
+                  <span className={settings.map.showLightning ? 'text-accent-primary' : 'text-gray-300'}>
+                    Lightning
+                  </span>
+                  {settings.map.showLightning && <Zap className="w-3 h-3" />}
+                </button>
+
+                {/* Rotate Globe — slow auto-spin of the globe circle */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateMapSettings({ rotateGlobe: !settings.map.rotateGlobe });
+                    saveSettings();
+                  }}
+                  className="w-full text-left px-2 py-1 text-sm rounded hover:bg-dark-600 flex items-center justify-between"
+                >
+                  <span className={settings.map.rotateGlobe ? 'text-accent-primary' : 'text-gray-300'}>
+                    Rotate Globe
+                  </span>
+                  {settings.map.rotateGlobe && <Play className="w-3 h-3" />}
+                </button>
+
+                {/* PSK Layer — "who heard me" (digital, PSK Reporter) */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateMapSettings({ showPskOverlay: !settings.map.showPskOverlay });
+                    saveSettings();
+                  }}
+                  className="w-full text-left px-2 py-1 text-sm rounded hover:bg-dark-600 flex items-center justify-between"
+                >
+                  <span className={settings.map.showPskOverlay ? 'text-accent-primary' : 'text-gray-300'}>
+                    PSK Layer
+                  </span>
+                  {settings.map.showPskOverlay && <Radio className="w-3 h-3" />}
+                </button>
+
+                {/* RBN Layer — "who heard me" (CW/RTTY skimmers that spotted my callsign) */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateMapSettings({ show2dHeardMeRbn: !settings.map.show2dHeardMeRbn });
+                    saveSettings();
+                  }}
+                  className="w-full text-left px-2 py-1 text-sm rounded hover:bg-dark-600 flex items-center justify-between"
+                >
+                  <span className={settings.map.show2dHeardMeRbn ? 'text-accent-primary' : 'text-gray-300'}>
                     RBN Layer
                   </span>
-                  {rbnSettings.enabled && <Radio className="w-3 h-3" />}
+                  {settings.map.show2dHeardMeRbn && <Radio className="w-3 h-3" />}
                 </button>
-                {rbnSettings.enabled && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowRbnPanel(!showRbnPanel);
-                      setShowLayerPicker(false);
-                    }}
-                    className="w-full text-left px-2 py-1 text-xs text-gray-400 hover:text-gray-300"
-                  >
-                    ⚙️ RBN Settings
-                  </button>
+
+                {/* Shared band + timeframe for the Heard-Me overlays */}
+                {(settings.map.showPskOverlay || settings.map.show2dHeardMeRbn) && (
+                  <div className="px-2 py-1 space-y-1 border-t border-dark-600 mt-1" onClick={(e) => e.stopPropagation()}>
+                    <label className="flex items-center justify-between gap-2 text-xs text-gray-400">
+                      <span>Band</span>
+                      <select
+                        value={settings.map.heardMeBand}
+                        onChange={(e) => { updateMapSettings({ heardMeBand: e.target.value }); saveSettings(); }}
+                        className="bg-dark-800 border border-glass-100 rounded px-1 py-0.5 text-xs font-mono text-gray-200"
+                      >
+                        {['all', '160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m'].map((b) => (
+                          <option key={b} value={b}>{b === 'all' ? 'All bands' : b}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {settings.map.showPskOverlay && (
+                      <label className="flex items-center justify-between gap-2 text-xs text-gray-400">
+                        <span>PSK window</span>
+                        <select
+                          value={settings.map.heardMePskWindowMinutes}
+                          onChange={(e) => { updateMapSettings({ heardMePskWindowMinutes: Number(e.target.value) }); saveSettings(); }}
+                          className="bg-dark-800 border border-glass-100 rounded px-1 py-0.5 text-xs font-mono text-gray-200"
+                        >
+                          {[15, 30, 60].map((m) => <option key={m} value={m}>{m} min</option>)}
+                        </select>
+                      </label>
+                    )}
+                    {settings.map.show2dHeardMeRbn && (
+                      <label className="flex items-center justify-between gap-2 text-xs text-gray-400">
+                        <span>RBN window</span>
+                        <select
+                          value={settings.map.heardMeRbnWindowMinutes}
+                          onChange={(e) => { updateMapSettings({ heardMeRbnWindowMinutes: Number(e.target.value) }); saveSettings(); }}
+                          className="bg-dark-800 border border-glass-100 rounded px-1 py-0.5 text-xs font-mono text-gray-200"
+                        >
+                          {[5, 10, 15].map((m) => <option key={m} value={m}>{m} min</option>)}
+                        </select>
+                      </label>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -1439,41 +1588,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                     <span className="text-sm font-ui text-dark-200">🌌 Aurora Oval</span>
                   </label>
 
-                  {/* PSK Reporter Toggle */}
-                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={settings.map.showPskOverlay}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        updateMapSettings({ showPskOverlay: e.target.checked });
-                        saveSettings();
-                      }}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm font-ui text-dark-200">📡 PSK Reporter</span>
-                  </label>
-
-                  {settings.map.showPskOverlay && (
-                    <div className="ml-6">
-                      <label className="flex flex-col gap-1 text-xs text-dark-300">
-                        <span>Callsign (who's hearing it):</span>
-                        <input
-                          type="text"
-                          value={settings.map.pskCallsign}
-                          placeholder={settings.station.callsign || 'e.g. W1AW'}
-                          onChange={(e) => {
-                            updateMapSettings({ pskCallsign: e.target.value.toUpperCase() });
-                          }}
-                          onBlur={() => saveSettings()}
-                          className="glass-input px-2 py-1 text-sm font-mono uppercase"
-                        />
-                      </label>
-                      <div className="mt-1 text-[10px] text-dark-400">
-                        Blank = your station callsign · refreshes every 5 min
-                      </div>
-                    </div>
-                  )}
+                  {/* PSK "who heard me" moved to the Layers → Overlays menu ("PSK Layer"). */}
                 </div>
 
                 {/* Callsign image — QRZ photo icon for the currently worked
@@ -1501,118 +1616,7 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
           </div>
         </div>
 
-        {/* Instructions overlay */}
-        <div className="absolute bottom-12 right-4 glass-panel px-3 py-2 z-[1000] text-xs font-ui text-dark-300">
-          {rotatorEnabled ? 'Click on map to set bearing' : 'Rotator disabled'}
-        </div>
-
-        {/* RBN Settings Panel */}
-        {showRbnPanel && (
-          <div className="absolute top-20 right-4 glass-panel p-4 z-[1001] min-w-[300px]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-accent-primary flex items-center gap-2">
-                <Radio className="w-4 h-4" />
-                RBN Settings
-              </h3>
-              <button
-                onClick={() => setShowRbnPanel(false)}
-                className="text-gray-400 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-sm">
-              {/* Spots count */}
-              <div className="text-xs text-gray-400">
-                Showing {rbnSpots.length} spot{rbnSpots.length !== 1 ? 's' : ''} for {settings.station.callsign || 'your callsign'}
-              </div>
-
-              {/* Opacity */}
-              <div>
-                <label className="block mb-1 text-gray-300">
-                  Opacity: {Math.round(rbnSettings.opacity * 100)}%
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  value={rbnSettings.opacity}
-                  onChange={(e) => {
-                    updateMapSettings({
-                      rbn: { ...rbnSettings, opacity: parseFloat(e.target.value) }
-                    });
-                  }}
-                  onMouseUp={() => saveSettings()}
-                  className="w-full"
-                />
-              </div>
-
-              {/* Show Paths */}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={rbnSettings.showPaths}
-                  onChange={(e) => {
-                    updateMapSettings({
-                      rbn: { ...rbnSettings, showPaths: e.target.checked }
-                    });
-                    saveSettings();
-                  }}
-                  className="rounded"
-                />
-                <span className="text-gray-300">Show signal paths</span>
-              </label>
-
-              {/* Time Window */}
-              <div>
-                <label className="block mb-1 text-gray-300">
-                  Time Window: {rbnSettings.timeWindowMinutes} min
-                </label>
-                <input
-                  type="range"
-                  min="1"
-                  max="15"
-                  step="1"
-                  value={rbnSettings.timeWindowMinutes}
-                  onChange={(e) => {
-                    updateMapSettings({
-                      rbn: { ...rbnSettings, timeWindowMinutes: parseInt(e.target.value) }
-                    });
-                  }}
-                  onMouseUp={() => saveSettings()}
-                  className="w-full"
-                />
-              </div>
-
-              {/* Min SNR */}
-              <div>
-                <label className="block mb-1 text-gray-300">
-                  Min SNR: {rbnSettings.minSnr} dB
-                </label>
-                <input
-                  type="range"
-                  min="-30"
-                  max="30"
-                  step="5"
-                  value={rbnSettings.minSnr}
-                  onChange={(e) => {
-                    updateMapSettings({
-                      rbn: { ...rbnSettings, minSnr: parseInt(e.target.value) }
-                    });
-                  }}
-                  onMouseUp={() => saveSettings()}
-                  className="w-full"
-                />
-              </div>
-
-              <div className="pt-2 border-t border-gray-600 text-xs text-gray-500">
-                Data from reversebeacon.net
-              </div>
-            </div>
-          </div>
-        )}
+        {/* RBN cluster-feed settings moved to Settings → Map (RBN Cluster Feed). */}
 
         {/* Band color legend - shown when DX cluster map overlay is active */}
         {dxClusterMapEnabled && activeBands.length > 0 && (
@@ -1761,7 +1765,7 @@ export function MapPlugin() {
             className={`absolute top-1/2 -translate-y-1/2 pointer-events-auto rounded-full overflow-hidden bg-[#020304] ${showCockpit ? '' : 'border-[2px] border-[#334155] drop-shadow-[0_0_20px_rgba(0,0,0,0.85)]'}`}
             style={{ left: globeOffset, width: globeSize, height: globeSize }}
           >
-            <GlobeCore hideOverlays={true} />
+            <GlobeCore hideOverlays={true} rotating={settings.map.rotateGlobe} />
           </div>
 
           {/* Sidebar Content (Rendered after Globe to stay on top if screen is very short) */}
@@ -1819,7 +1823,7 @@ export function MapPlugin() {
                 {focusedCallsignInfo.bearing != null && (
                   <p className="text-xs font-mono text-accent-secondary">
                     {focusedCallsignInfo.bearing.toFixed(0)}°
-                    {focusedCallsignInfo.distance != null && ` / ${Math.round(focusedCallsignInfo.distance)} km`}
+                    {focusedCallsignInfo.distance != null && ` / ${formatDistance(focusedCallsignInfo.distance, settings.appearance.distanceUnit)}`}
                   </p>
                 )}
               </div>

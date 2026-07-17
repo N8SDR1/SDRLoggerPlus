@@ -3,9 +3,11 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
 using SDRLoggerPlus.Contracts.Events;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Hubs;
+using SDRLoggerPlus.Server.Services.Rbn;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -315,11 +317,37 @@ public class RbnService : IRbnService, IHostedService, IDisposable
             return cached;
         }
 
-        // In a real implementation, this would query QRZ or similar
-        // For now, return null to indicate location not found
-        var result = (Grid: (string?)null, Lat: (double?)null, Lon: (double?)null, Country: (string?)null);
-        _skimmerLocations.TryAdd(callsign, result);
+        double? qrzLat = null, qrzLon = null;
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var qrz = scope.ServiceProvider.GetService<IQrzService>();
+            if (qrz is not null)
+            {
+                var info = await qrz.LookupCallsignAsync(callsign);
+                qrzLat = info?.Latitude;
+                qrzLon = info?.Longitude;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "QRZ lookup failed for skimmer {Skimmer}; falling back to cty.dat", callsign);
+        }
 
+        var centroid = CtyService.GetCentroidFromCallsign(callsign);
+        var picked = RbnHeardMeLogic.PickLocation(qrzLat, qrzLon, centroid);
+
+        // Grid/Country stay null — arcs only need lat/lon; the tuple shape is unchanged.
+        var result = picked is { } p
+            ? (Grid: (string?)null, Lat: (double?)p.Lat, Lon: (double?)p.Lon, Country: (string?)null)
+            : (Grid: (string?)null, Lat: (double?)null, Lon: (double?)null, Country: (string?)null);
+
+        // Only cache a successful lookup. Caching an all-null result forever would prevent a
+        // transient QRZ failure (rate limit, timeout) from ever being retried on a later poll.
+        if (picked is not null)
+        {
+            _skimmerLocations.TryAdd(callsign, result);
+        }
         return result;
     }
 }

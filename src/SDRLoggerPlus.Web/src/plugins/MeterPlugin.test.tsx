@@ -44,21 +44,24 @@ describe('MeterPlugin', () => {
     expect(screen.getByText(/No meter data/i)).toBeInTheDocument();
   });
 
-  it('renders tile values after a meter event arrives', () => {
+  it('renders the meter content after a meter event arrives', () => {
     render(<MeterPlugin />);
     expect(registeredCallback).not.toBeNull();
 
     act(() => registeredCallback!(makeEvent()));
 
-    expect(screen.getByTestId('meter-swr').textContent).toBe('1.42');
-    expect(screen.getByTestId('meter-pwr').textContent).toBe('4.8 W');
+    // The empty state is replaced by the S-meter + freq/mode line. (Power/SWR
+    // tiles are TX-side and now live in Lyra, so they're no longer rendered.)
+    expect(screen.queryByText(/No meter data/i)).toBeNull();
+    expect(screen.getByTestId('meter-content')).toBeInTheDocument();
+    expect(screen.getByTestId('meter-freq-line')).toBeInTheDocument();
   });
 
   it('keeps the analog view and exposes the round meter view', () => {
     render(<MeterPlugin />);
     act(() => registeredCallback!(makeEvent()));
 
-    expect(screen.getByTestId('meter-pwr')).toBeInTheDocument();
+    expect(screen.getByTestId('meter-content')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Round' }));
 
     expect(screen.getByTestId('round-meter-canvas')).toBeInTheDocument();
@@ -68,13 +71,14 @@ describe('MeterPlugin', () => {
     expect(screen.getByLabelText('Spectrum')).toBeChecked();
   });
 
-  it('shows placeholders for sensors that have not reported', () => {
+  it('shows a dash for frequency when the radio reports none', () => {
     render(<MeterPlugin />);
 
-    act(() => registeredCallback!(makeEvent({ txSwr: null, txPowerWatts: null })));
+    // A bare meter event carries no VFO frequency (that comes from the TCI
+    // radio state), so the freq tile shows the placeholder dash.
+    act(() => registeredCallback!(makeEvent()));
 
-    expect(screen.getByTestId('meter-swr').textContent).toBe('—');
-    expect(screen.getByTestId('meter-pwr').textContent).toBe('—');
+    expect(screen.getByTestId('meter-freq').textContent).toBe('—');
   });
 
   it('unregisters the callback on unmount', () => {
@@ -87,19 +91,23 @@ describe('MeterPlugin', () => {
   it('ignores events from a second radio while the first is live', () => {
     render(<MeterPlugin />);
 
-    act(() => registeredCallback!(makeEvent({ radioId: 'radio1', txSwr: 1.42 })));
-    act(() => registeredCallback!(makeEvent({ radioId: 'radio2', txSwr: 3.0 })));
+    // The meter locks onto the first radio it hears and ignores others until
+    // that source goes stale. radio2's TX event must not flip the meter to TX.
+    act(() => registeredCallback!(makeEvent({ radioId: 'radio1', isTransmitting: false })));
+    act(() => registeredCallback!(makeEvent({ radioId: 'radio2', isTransmitting: true })));
 
-    expect(screen.getByTestId('meter-swr').textContent).toBe('1.42');
+    expect(screen.queryByText('TX')).toBeNull();
+    expect(screen.getByTestId('meter-freq-line').className).toContain('text-white');
   });
 
-  it('treats non-finite values as missing', () => {
+  it('accepts non-finite values without crashing the meter', () => {
     render(<MeterPlugin />);
 
-    act(() => registeredCallback!(makeEvent({ txSwr: Number.NaN, txPowerWatts: Infinity })));
+    // The callback defensively normalizes NaN/Infinity to null before the
+    // canvas math, so a garbage event must still render cleanly.
+    act(() => registeredCallback!(makeEvent({ rxSignalDbm: Number.NaN, rxAvgSignalDbm: Infinity })));
 
-    expect(screen.getByTestId('meter-swr').textContent).toBe('—');
-    expect(screen.getByTestId('meter-pwr').textContent).toBe('—');
+    expect(screen.getByTestId('meter-content')).toBeInTheDocument();
   });
 
   it('dims the tiles once data goes stale', () => {

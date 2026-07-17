@@ -35,6 +35,24 @@ public class WsjtxMessageReaderTests
             return this;
         }
 
+        public DatagramBuilder I32(int v)
+        {
+            Span<byte> b = stackalloc byte[4];
+            BinaryPrimitives.WriteInt32BigEndian(b, v);
+            _bytes.AddRange(b.ToArray());
+            return this;
+        }
+
+        public DatagramBuilder F64(double v)
+        {
+            Span<byte> b = stackalloc byte[8];
+            BinaryPrimitives.WriteDoubleBigEndian(b, v);
+            _bytes.AddRange(b.ToArray());
+            return this;
+        }
+
+        public DatagramBuilder Bool(bool v) => U8(v ? (byte)1 : (byte)0);
+
         public DatagramBuilder Utf8(string? s)
         {
             if (s == null) return U32(0xFFFFFFFF);
@@ -126,6 +144,49 @@ public class WsjtxMessageReaderTests
         var msg = WsjtxMessageReader.Parse(data);
 
         msg.Should().BeOfType<WsjtxQsoLogged>().Which.AdifPropagationMode.Should().Be("ES");
+    }
+
+    [Fact]
+    public void Parse_Decode_MapsAllFields()
+    {
+        var data = Header(2)
+            .Bool(true)              // New
+            .U32(52_215_000)         // Time (ms since midnight)
+            .I32(-11)                // snr (signed)
+            .F64(0.2)                // delta time (8-byte double)
+            .U32(1523)               // delta frequency Hz
+            .Utf8("FT8")             // mode
+            .Utf8("CQ K1ABC FN42")   // message
+            .Bool(false)             // low confidence
+            .Bool(false)             // off air
+            .Build();
+
+        var d = WsjtxMessageReader.Parse(data).Should().BeOfType<WsjtxDecode>().Subject;
+        d.New.Should().BeTrue();
+        d.TimeMsSinceMidnight.Should().Be(52_215_000);
+        d.Snr.Should().Be(-11);
+        d.DeltaTimeSeconds.Should().BeApproximately(0.2, 1e-9);
+        d.DeltaFrequencyHz.Should().Be(1523);
+        d.Mode.Should().Be("FT8");
+        d.Message.Should().Be("CQ K1ABC FN42");
+        d.LowConfidence.Should().BeFalse();
+        d.OffAir.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Parse_Decode_MissingTrailingBooleans_StillParses()
+    {
+        // A sender that omits low-confidence/off-air must still yield a decode
+        // (Message is the field we actually need).
+        var data = Header(2)
+            .Bool(false).U32(1000).I32(3).F64(-0.1).U32(800)
+            .Utf8("FT4").Utf8("W9XYZ K1ABC -07")
+            .Build();
+
+        var d = WsjtxMessageReader.Parse(data).Should().BeOfType<WsjtxDecode>().Subject;
+        d.Message.Should().Be("W9XYZ K1ABC -07");
+        d.LowConfidence.Should().BeFalse();
+        d.OffAir.Should().BeFalse();
     }
 
     [Fact]

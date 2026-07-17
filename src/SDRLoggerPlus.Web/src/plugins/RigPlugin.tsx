@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, type ReactNode } from "react";
-import { Radio, RadioReceiver, Wifi, WifiOff, Power, PowerOff, Plus, Settings, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { Radio, RadioReceiver, Wifi, WifiOff, Power, PowerOff, Plus, Pencil, Settings, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { useSignalR } from "../hooks/useSignalR";
+import { useRigConnection } from "../hooks/useRigConnection";
 import { GlassPanel } from "../components/GlassPanel";
 import { CompactToggle } from "../components/CompactToggle";
 import { usePanelCompact } from "../hooks/usePanelCompact";
@@ -178,6 +179,8 @@ export function RigPlugin() {
     deleteTciConfig,
     saveFlrigConfig,
   } = useSignalR();
+  // Shared rig teardown (type-specific) — same logic the status-bar switcher uses.
+  const { disconnect: disconnectRig } = useRigConnection();
 
   const [compact, toggleCompact] = usePanelCompact('rig');
 
@@ -190,6 +193,9 @@ export function RigPlugin() {
   // TCI form state
   const [showTciForm, setShowTciForm] = useState(false);
   const [isConnectingTci, setIsConnectingTci] = useState(false);
+  const [editingRadioId, setEditingRadioId] = useState<string | null>(null);
+  const [tciTestResult, setTciTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [isTestingTci, setIsTestingTci] = useState(false);
 
   // flrig form state (v1.x SDRLogger+ port)
   const [showFlrigForm, setShowFlrigForm] = useState(false);
@@ -362,14 +368,7 @@ export function RigPlugin() {
 
   const handleDisconnect = async () => {
     if (selectedRadioId) {
-      const radio = discoveredRadios.get(selectedRadioId);
-      if (radio?.type === "Hamlib" || selectedRadioId.startsWith("hamlib-")) {
-        await disconnectHamlibRig();
-      } else if (radio?.type === "Tci" || selectedRadioId.startsWith("tci-")) {
-        await disconnectTci(selectedRadioId);
-      } else {
-        await disconnectRadio(selectedRadioId);
-      }
+      await disconnectRig(selectedRadioId);
       // Disable auto-reconnect when manually disconnecting
       updateRadioSettings({ autoReconnect: false });
       saveSettings();
@@ -477,18 +476,84 @@ export function RigPlugin() {
     }
   };
 
-  const handleAddTci = async () => {
-    const port = tciSettings.port;
+  // Probe a TCI host:port via the backend (WebSocket handshake, 4 s timeout).
+  const testTciConnection = async (host: string, port: number): Promise<{ ok: boolean; message: string }> => {
+    try {
+      const res = await fetch('/api/tci/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host, port }),
+      });
+      const data = await res.json();
+      return data.ok
+        ? { ok: true, message: `TCI server responding at ${host}:${port}` }
+        : { ok: false, message: data.error || 'No response from the TCI server.' };
+    } catch {
+      return { ok: false, message: 'Could not reach the backend to run the test.' };
+    }
+  };
+
+  const handleTestTci = async () => {
+    const { host, port } = tciSettings;
+    if (!host || !port) return;
+    setIsTestingTci(true);
+    setTciTestResult(null);
+    setTciTestResult(await testTciConnection(host, port));
+    setIsTestingTci(false);
+  };
+
+  // Add or save a TCI rig. Probes host:port first (unless the operator chose
+  // "Add anyway" after a failed probe) so a wrong port can't silently create a
+  // rig that never connects.
+  const handleSaveTci = async (skipProbe = false) => {
     const host = tciSettings.host;
+    const port = tciSettings.port;
     if (!host || !port) return;
 
-    setShowTciForm(false);
+    if (!skipProbe) {
+      setIsTestingTci(true);
+      setTciTestResult(null);
+      const result = await testTciConnection(host, port);
+      setIsTestingTci(false);
+      setTciTestResult(result);
+      if (!result.ok) return; // stay on the form; the "Add anyway" button appears
+    }
 
     try {
+      // Editing to a different host:port changes the rig id — drop the old entry.
+      if (editingRadioId) {
+        const newId = `tci-${host}:${port}`;
+        if (editingRadioId !== newId) await deleteTciConfig(editingRadioId);
+      }
       await saveTciConfig(host, port, tciSettings.name || undefined);
     } catch (error) {
       console.error('Failed to save TCI config:', error);
     }
+
+    setShowTciForm(false);
+    setEditingRadioId(null);
+    setTciTestResult(null);
+  };
+
+  const handleEditTci = (radio: { id: string; ipAddress: string; port?: number; model?: string; nickname?: string }) => {
+    // The rig's name lives in nickname (if set) or model; blank the
+    // auto-generated "TCI (host)" default so the placeholder shows instead.
+    const autoName = `TCI (${radio.ipAddress})`;
+    const current = radio.nickname || radio.model || '';
+    updateTciSettings({
+      host: radio.ipAddress,
+      port: radio.port ?? 50001,
+      name: current === autoName ? '' : current,
+    });
+    setEditingRadioId(radio.id);
+    setTciTestResult(null);
+    setShowTciForm(true);
+  };
+
+  const closeTciForm = () => {
+    setShowTciForm(false);
+    setEditingRadioId(null);
+    setTciTestResult(null);
   };
 
   // Save flrig config — flips FlrigService's poll state on the backend
@@ -1229,7 +1294,7 @@ export function RigPlugin() {
         {showTciForm && (
           <div className="bg-dark-700/50 rounded-lg p-4 border border-accent-secondary/30 space-y-3">
             <div className="text-xs text-accent-secondary uppercase tracking-wider mb-2 font-ui">
-              Connect to TCI Server
+              {editingRadioId ? 'Edit TCI Rig' : 'Connect to TCI Server'}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1263,22 +1328,44 @@ export function RigPlugin() {
                 className="w-full px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-mono focus:outline-none focus:border-accent-secondary/50"
               />
             </div>
+            {tciTestResult && (
+              <div className={`text-xs rounded-lg px-3 py-2 border ${tciTestResult.ok ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary' : 'bg-accent-warning/10 border-accent-warning/40 text-accent-warning'}`}>
+                {tciTestResult.ok ? '✓ ' : '⚠ '}{tciTestResult.message}
+              </div>
+            )}
             <div className="flex gap-2 pt-2">
               <button
-                onClick={handleAddTci}
-                disabled={!tciSettings.host}
+                onClick={handleTestTci}
+                disabled={!tciSettings.host || isTestingTci}
+                title="Check that a TCI server is reachable at this host:port"
+                className="px-4 py-2 text-sm font-medium font-ui flex items-center justify-center gap-2 bg-dark-700 text-dark-200 rounded-lg hover:bg-dark-600 transition-all disabled:opacity-50"
+              >
+                <Wifi className={`w-4 h-4 ${isTestingTci ? 'animate-pulse' : ''}`} />
+                Test
+              </button>
+              <button
+                onClick={() => handleSaveTci()}
+                disabled={!tciSettings.host || isTestingTci}
                 className="flex-1 px-4 py-2 text-sm font-medium font-ui flex items-center justify-center gap-2 bg-accent-secondary/20 text-accent-secondary rounded-lg hover:bg-accent-secondary/30 transition-all disabled:opacity-50"
               >
                 <Plus className="w-4 h-4" />
-                Add
+                {editingRadioId ? 'Save' : 'Add'}
               </button>
               <button
-                onClick={() => setShowTciForm(false)}
+                onClick={closeTciForm}
                 className="px-4 py-2 text-sm font-medium font-ui bg-dark-700 text-dark-300 rounded-lg hover:bg-dark-600 transition-all"
               >
                 Cancel
               </button>
             </div>
+            {tciTestResult && !tciTestResult.ok && !isTestingTci && (
+              <button
+                onClick={() => handleSaveTci(true)}
+                className="w-full px-4 py-2 text-xs font-medium font-ui bg-accent-warning/15 text-accent-warning rounded-lg hover:bg-accent-warning/25 transition-all"
+              >
+                {editingRadioId ? 'Save anyway' : 'Add anyway'} (skip the check)
+              </button>
+            )}
           </div>
         )}
 
@@ -1354,6 +1441,16 @@ export function RigPlugin() {
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${autoReconnect && autoConnectRigId === radio.id ? "" : "opacity-50"}`} />
                       </button>
+                      {radio.type === 'Tci' && (
+                        <button
+                          onClick={() => handleEditTci(radio)}
+                          title="Edit rig (name / host / port)"
+                          className="px-3 py-1.5 text-xs font-medium font-ui flex items-center gap-1.5 bg-dark-700 text-dark-300 rounded-lg hover:text-dark-200 transition-all"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                      )}
                       <button
                         onClick={() => handleConnect(radio.id)}
                         disabled={isConnecting}

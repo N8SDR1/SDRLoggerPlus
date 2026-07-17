@@ -1,10 +1,13 @@
 using System.Buffers.Binary;
 using System.Text;
 using FluentAssertions;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SDRLoggerPlus.Contracts.Api;
+using SDRLoggerPlus.Contracts.Events;
+using SDRLoggerPlus.Server.Hubs;
 using SDRLoggerPlus.Server.Services;
 using SDRLoggerPlus.Server.Services.Wsjtx;
 using Xunit;
@@ -15,8 +18,12 @@ namespace SDRLoggerPlus.Server.Tests.Tests.Services;
 public class WsjtxServiceTests
 {
     private readonly Mock<IQsoService> _qsoService = new();
+    private readonly Mock<ISpotStatusService> _spotStatus = new();
+    private readonly Mock<ILogHubClient> _hubClient = new();
     private readonly WsjtxService _service;
     private readonly List<CreateQsoRequest> _created = new();
+    private readonly List<WsjtxDecodeEvent> _decodes = new();
+    private readonly List<SpotSelectedEvent> _spots = new();
 
     public WsjtxServiceTests()
     {
@@ -26,9 +33,47 @@ public class WsjtxServiceTests
                 "id1", r.Callsign, r.QsoDate, r.TimeOn, null, r.Band, r.Mode, r.Frequency,
                 r.RstSent, r.RstRcvd, null, r.Comment, DateTime.UtcNow));
 
+        _hubClient.Setup(c => c.OnWsjtxDecode(It.IsAny<WsjtxDecodeEvent>()))
+            .Callback<WsjtxDecodeEvent>(e => _decodes.Add(e))
+            .Returns(Task.CompletedTask);
+        _hubClient.Setup(c => c.OnSpotSelected(It.IsAny<SpotSelectedEvent>()))
+            .Callback<SpotSelectedEvent>(e => _spots.Add(e))
+            .Returns(Task.CompletedTask);
+        var clients = new Mock<IHubClients<ILogHubClient>>();
+        clients.Setup(c => c.All).Returns(_hubClient.Object);
+        var hub = new Mock<IHubContext<LogHub, ILogHubClient>>();
+        hub.Setup(h => h.Clients).Returns(clients.Object);
+
         var services = new ServiceCollection();
         services.AddScoped(_ => _qsoService.Object);
-        _service = new WsjtxService(services.BuildServiceProvider(), NullLogger<WsjtxService>.Instance);
+        _service = new WsjtxService(
+            services.BuildServiceProvider(), NullLogger<WsjtxService>.Instance,
+            hub.Object, _spotStatus.Object);
+    }
+
+    private static byte[] BuildStatusDatagram(ulong dialFreqHz, string mode = "FT8", string? dxCall = null)
+    {
+        var bytes = new List<byte>();
+        void U32(uint v) { Span<byte> b = stackalloc byte[4]; BinaryPrimitives.WriteUInt32BigEndian(b, v); bytes.AddRange(b.ToArray()); }
+        void U64(ulong v) { Span<byte> b = stackalloc byte[8]; BinaryPrimitives.WriteUInt64BigEndian(b, v); bytes.AddRange(b.ToArray()); }
+        void Utf8(string s) { var d = Encoding.UTF8.GetBytes(s); U32((uint)d.Length); bytes.AddRange(d); }
+        U32(0xadbccbda); U32(2); U32(1); Utf8("WSJT-X"); U64(dialFreqHz); Utf8(mode);
+        if (dxCall != null) Utf8(dxCall);
+        return bytes.ToArray();
+    }
+
+    private static byte[] BuildDecodeDatagram(string message, uint audioOffsetHz, int snr = -10, string mode = "FT8")
+    {
+        var bytes = new List<byte>();
+        void U8(byte v) => bytes.Add(v);
+        void U32(uint v) { Span<byte> b = stackalloc byte[4]; BinaryPrimitives.WriteUInt32BigEndian(b, v); bytes.AddRange(b.ToArray()); }
+        void I32(int v) { Span<byte> b = stackalloc byte[4]; BinaryPrimitives.WriteInt32BigEndian(b, v); bytes.AddRange(b.ToArray()); }
+        void F64(double v) { Span<byte> b = stackalloc byte[8]; BinaryPrimitives.WriteDoubleBigEndian(b, v); bytes.AddRange(b.ToArray()); }
+        void Utf8(string s) { var d = Encoding.UTF8.GetBytes(s); U32((uint)d.Length); bytes.AddRange(d); }
+        U32(0xadbccbda); U32(2); U32(2); Utf8("WSJT-X");
+        U8(1); U32(52_000_000); I32(snr); F64(0.2); U32(audioOffsetHz);
+        Utf8(mode); Utf8(message); U8(0); U8(0);
+        return bytes.ToArray();
     }
 
     private static byte[] BuildQsoLoggedDatagram(string dxCall, DateTime timeOff)
@@ -81,6 +126,74 @@ public class WsjtxServiceTests
     {
         await _service.HandleDatagramAsync([0x01, 0x02, 0x03]);
         _created.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Decode_AfterStatus_BroadcastsEnrichedDecode()
+    {
+        // Status supplies the dial frequency; the decode carries only the audio
+        // offset. RF = 14.074 MHz + 1500 Hz = 14.0755 MHz → 20m.
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000));
+        await _service.HandleDatagramAsync(BuildDecodeDatagram("CQ K1ABC FN42", audioOffsetHz: 1500));
+
+        _decodes.Should().ContainSingle();
+        var d = _decodes[0];
+        d.Callsign.Should().Be("K1ABC");
+        d.Grid.Should().Be("FN42");
+        d.IsCq.Should().BeTrue();
+        d.AudioOffsetHz.Should().Be(1500);
+        d.FrequencyHz.Should().Be(14_075_500);
+        d.Band.Should().Be("20m");
+        _service.GetRecentDecodes().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Decode_WithoutStatus_StillBroadcastsWithoutBand()
+    {
+        // No Status yet → no dial frequency → decode still surfaces (call/grid),
+        // just without a band/frequency.
+        await _service.HandleDatagramAsync(BuildDecodeDatagram("CQ DL1XYZ JO31", audioOffsetHz: 800));
+
+        _decodes.Should().ContainSingle();
+        _decodes[0].Callsign.Should().Be("DL1XYZ");
+        _decodes[0].FrequencyHz.Should().Be(0);
+        _decodes[0].Band.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Decode_FreeText_NotBroadcast()
+    {
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000));
+        await _service.HandleDatagramAsync(BuildDecodeDatagram("TNX 73 GL", audioOffsetHz: 1500));
+
+        _decodes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StatusWithDxCall_PopulatesLogEntry()
+    {
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000, dxCall: "K1ABC"));
+
+        _spots.Should().ContainSingle();
+        _spots[0].DxCall.Should().Be("K1ABC");
+        _spots[0].Frequency.Should().Be(14_074.0); // kHz
+    }
+
+    [Fact]
+    public async Task Status_UnchangedDxCall_PopulatesOnce()
+    {
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000, dxCall: "K1ABC"));
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000, dxCall: "K1ABC"));
+
+        _spots.Should().ContainSingle(); // Status arrives constantly; only fire on change
+    }
+
+    [Fact]
+    public async Task Status_EmptyDxCall_DoesNotPopulate()
+    {
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000));
+
+        _spots.Should().BeEmpty();
     }
 
     [Fact]

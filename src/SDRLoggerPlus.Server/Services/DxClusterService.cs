@@ -500,15 +500,24 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
 
         // Determine spot status (new DXCC, new band, worked, etc.)
         string? spotStatus = null;
+        int? cqZone = null;
+        string? zoneStatus = null;
         try
         {
             spotStatus = _spotStatusService.GetSpotStatus(
                 parsedSpot.DxCall, parsedSpot.Country, parsedSpot.Frequency, parsedSpot.Mode);
+            (cqZone, zoneStatus) = _spotStatusService.GetZoneStatus(
+                parsedSpot.DxCall, parsedSpot.Frequency);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to determine spot status for {DxCall}", parsedSpot.DxCall);
         }
+
+        // Approximate DX location from the cty.dat country centroid (offline,
+        // cached, no rate limit) so the DX Coach can run its propagation gate
+        // without a per-spot QRZ lookup. Coarse by design.
+        var dxCentroid = CtyService.GetCentroidFromCallsign(parsedSpot.DxCall);
 
         // Broadcast to clients (spots are kept in memory on frontend only, not persisted)
         var evt = new SpotReceivedEvent(
@@ -528,7 +537,11 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
             spotterGrid,
             spotterContinent,
             spotStatus,
-            _hotListService.IsHot(parsedSpot.DxCall)
+            _hotListService.IsHot(parsedSpot.DxCall),
+            dxCentroid?.Lat,
+            dxCentroid?.Lon,
+            cqZone,
+            zoneStatus
         );
 
         // Keep a short replay buffer: spots are ephemeral broadcasts, and any

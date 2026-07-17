@@ -10,6 +10,13 @@ public interface IQrzService
     Task<QrzSubscriptionStatus> CheckSubscriptionAsync();
 
     /// <summary>
+    /// Fetch the full QRZ logbook as ADIF (paginated via AFTERLOGID). Records
+    /// carry app_qrzlog_status, so the confirmation merge can pick the confirmed
+    /// ones. Uses the QRZ Logbook API key.
+    /// </summary>
+    Task<string> FetchLogbookAdifAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Upload a single QSO to QRZ logbook
     /// </summary>
     Task<QrzUploadResult> UploadQsoAsync(Qso qso);

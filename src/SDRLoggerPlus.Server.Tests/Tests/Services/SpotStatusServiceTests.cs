@@ -133,6 +133,60 @@ public class SpotStatusServiceTests
 
     #endregion
 
+    #region GetZoneStatus — WAZ
+
+    [Fact]
+    public void GetZoneStatus_BeforeCacheBuilt_ReturnsNull()
+    {
+        var (zone, status) = _service.GetZoneStatus("DL1ABC", 14000.0);
+        zone.Should().BeNull();
+        status.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetZoneStatus_NeverWorkedZone_ReturnsNewZone()
+    {
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // Empty log — Germany's CQ zone 14 has never been worked.
+        var (zone, status) = _service.GetZoneStatus("DL1ABC", 14000.0);
+        zone.Should().Be(14);
+        status.Should().Be("newZone");
+    }
+
+    [Fact]
+    public async Task GetZoneStatus_WorkedZoneSameBand_ReturnsNull()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("DL1ABC", country: "Germany", band: "20m", mode: "SSB"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // Another zone-14 station on the same band — already worked.
+        var (_, status) = _service.GetZoneStatus("DL2XYZ", 14000.0);
+        status.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetZoneStatus_WorkedZoneDifferentBand_ReturnsNewZoneBand()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("DL1ABC", country: "Germany", band: "40m", mode: "SSB"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // Zone 14 worked, but on 40m — 20m is a new band-slot for the zone.
+        var (_, status) = _service.GetZoneStatus("DL2XYZ", 14000.0);
+        status.Should().Be("newZoneBand");
+    }
+
+    #endregion
+
     #region GetSpotStatus — worked
 
     [Fact]
@@ -259,6 +313,21 @@ public class SpotStatusServiceTests
             .Should().Be("worked");
     }
 
+    [Fact]
+    public async Task OnQsoLogged_WithGrid_GridStopsBeingNeeded()
+    {
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        _service.GetGridStatus("FN30", 14000.0).Should().Be("newGrid");
+
+        // Logging a QSO in FN30 must record the grid so the next decode from
+        // there isn't flagged needed again.
+        _service.OnQsoLogged("KA2DUT", "United States", "20m", "FT8", "FN30");
+
+        _service.GetGridStatus("FN30", 14000.0).Should().BeNull();
+    }
+
     #endregion
 
     #region InvalidateCacheAsync
@@ -373,6 +442,98 @@ public class SpotStatusServiceTests
 
     #endregion
 
+    #region GetGridStatus — VUCC / grid chasing
+
+    [Fact]
+    public void GetGridStatus_BeforeCacheBuilt_ReturnsNull()
+        => _service.GetGridStatus("FN42", 14000.0).Should().BeNull();
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("FN")]      // too short
+    [InlineData("4242")]    // not a valid locator
+    public async Task GetGridStatus_MissingOrInvalidGrid_ReturnsNull(string? grid)
+    {
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        _service.GetGridStatus(grid, 14000.0).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetGridStatus_NeverWorkedGrid_ReturnsNewGrid()
+    {
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // Empty log — FN42 has never been worked.
+        _service.GetGridStatus("FN42", 14000.0).Should().Be("newGrid");
+    }
+
+    [Fact]
+    public async Task GetGridStatus_WorkedGridSameBand_ReturnsNull()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("W1ABC", country: "United States", band: "20m", mode: "FT8", grid: "FN42"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        _service.GetGridStatus("FN42", 14000.0).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetGridStatus_WorkedGridDifferentBand_ReturnsNewGridBand()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("W1ABC", country: "United States", band: "40m", mode: "FT8", grid: "FN42"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // FN42 worked on 40m, seen now on 20m → new band-slot for the grid.
+        _service.GetGridStatus("FN42", 14000.0).Should().Be("newGridBand");
+    }
+
+    [Fact]
+    public async Task GetGridStatus_GridInStationInfo_IsCounted()
+    {
+        // The log stores grids in Station.Grid (not the top-level Grid), so the
+        // cache must read that field — a station in FN42 must count as worked.
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            new()
+            {
+                Callsign = "W1ABC", Country = "United States", Band = "20m", Mode = "FT8",
+                Station = new StationInfo { Grid = "FN42" },
+            },
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        _service.GetGridStatus("FN42", 14000.0).Should().BeNull();      // worked, same band
+        _service.GetGridStatus("EM79", 14000.0).Should().Be("newGrid"); // never worked
+    }
+
+    [Fact]
+    public async Task GetGridStatus_SixCharAndLowercase_NormalizedToField()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("W1ABC", country: "United States", band: "20m", mode: "FT8", grid: "FN42dx"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        // Stored as 6-char "FN42dx"; a lowercase 4-char "fn42" on the same band is worked.
+        _service.GetGridStatus("fn42", 14000.0).Should().BeNull();
+    }
+
+    #endregion
+
     #region Frequency to band mapping
 
     [Theory]
@@ -397,7 +558,7 @@ public class SpotStatusServiceTests
 
     #region Helpers
 
-    private static Qso MakeQso(string callsign, string? country, string band, string mode)
+    private static Qso MakeQso(string callsign, string? country, string band, string mode, string? grid = null)
     {
         return new Qso
         {
@@ -405,6 +566,7 @@ public class SpotStatusServiceTests
             Country = country,
             Band = band,
             Mode = mode,
+            Grid = grid,
         };
     }
 

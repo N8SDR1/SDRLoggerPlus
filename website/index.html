@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDRLoggerPlus — Modern amateur radio logging</title>
+<meta name="description" content="SDRLoggerPlus — a modern, cross-platform amateur radio logger for Windows, macOS and Linux. Logbook, DX cluster, FT8/FT4 decodes & alerts, grid tracking, maps, awards, rig & rotator control, all in real time.">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #111620;
+    --panel-2: #0f1420;
+    --line: rgba(255,255,255,0.07);
+    --accent: #00e5ff;
+    --text: #cdd9e5;
+    --head: #e6edf3;
+    --muted: #6b7a8d;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background:
+      radial-gradient(circle at 50% -10%, rgba(0,229,255,0.10), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  /* Hero */
+  header { text-align: center; padding: 72px 0 40px; }
+  .logo {
+    width: 120px; height: 120px; border-radius: 26px;
+    box-shadow: 0 12px 48px rgba(0,229,255,0.28);
+  }
+  .wordmark {
+    margin-top: 22px;
+    font-size: clamp(38px, 8vw, 60px);
+    font-weight: 800; letter-spacing: 1px; color: var(--head); line-height: 1;
+  }
+  .wordmark .plus { color: var(--accent); text-shadow: 0 0 22px rgba(0,229,255,0.6); }
+  .tagline { margin-top: 14px; font-size: clamp(15px, 2.4vw, 19px); color: var(--text); }
+  .badge {
+    display: inline-block; margin-top: 16px; padding: 4px 12px; border-radius: 999px;
+    font-size: 12px; letter-spacing: 1px; text-transform: uppercase;
+    color: #ffcf70; background: rgba(255,207,112,0.10); border: 1px solid rgba(255,207,112,0.30);
+  }
+
+  /* CTAs */
+  .cta { margin-top: 30px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 22px; border-radius: 12px; font-size: 15px; font-weight: 600;
+    border: 1px solid var(--line); transition: transform .12s ease, background .2s ease, border-color .2s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary { background: var(--accent); color: #04121a; border-color: transparent; box-shadow: 0 8px 30px rgba(0,229,255,0.25); }
+  .btn-primary:hover { background: #4af0ff; }
+  .btn-ghost { background: rgba(255,255,255,0.03); color: var(--head); }
+  .btn-ghost:hover { border-color: rgba(0,229,255,0.5); color: var(--accent); }
+  .platforms { margin-top: 18px; font-size: 13px; color: var(--muted); letter-spacing: 0.4px; }
+
+  /* Showcase screenshot in a browser-window frame */
+  .showcase { padding: 8px 0 24px; }
+  .frame {
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    background: var(--panel-2);
+    box-shadow: 0 30px 90px rgba(0,0,0,0.6), 0 0 60px rgba(0,229,255,0.06);
+  }
+  .frame-bar { display: flex; align-items: center; gap: 7px; padding: 9px 14px; background: #0c1119; border-bottom: 1px solid var(--line); }
+  .frame-bar .dot { width: 10px; height: 10px; border-radius: 50%; background: #2a3342; }
+  .frame-title { margin-left: 10px; font-size: 12px; color: var(--muted); letter-spacing: 0.3px; }
+  .frame img { display: block; width: 100%; height: auto; }
+
+  /* Sections */
+  section { padding: 40px 0; }
+  h2 { font-size: 13px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); margin-bottom: 22px; text-align: center; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px;
+  }
+  .card h3 { color: var(--head); font-size: 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 9px; }
+  .card p { font-size: 14px; color: var(--text); }
+  .card .ico { font-size: 18px; }
+
+  /* Credits */
+  .credits { background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; padding: 26px; }
+  .credits p { font-size: 14.5px; margin: 6px 0; }
+  .credits .name { color: var(--head); font-weight: 600; }
+
+  /* Companion app (Lyra) callout */
+  .companion {
+    display: flex; align-items: center; gap: 26px;
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid rgba(0,229,255,0.22); border-radius: 16px; padding: 26px 28px;
+    box-shadow: 0 0 50px rgba(0,229,255,0.06);
+  }
+  .companion > img { width: 84px; height: 84px; border-radius: 18px; flex-shrink: 0; box-shadow: 0 8px 30px rgba(0,229,255,0.25); }
+  .companion h3 { color: var(--head); font-size: 18px; margin-bottom: 8px; }
+  .companion p { font-size: 14.5px; color: var(--text); }
+  .companion-cta { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+  @media (max-width: 560px) { .companion { flex-direction: column; text-align: center; } }
+
+  footer { text-align: center; padding: 34px 0 56px; color: var(--muted); font-size: 13px; }
+  footer a { color: var(--muted); }
+  footer a:hover { color: var(--accent); }
+  .divider { height: 1px; background: var(--line); margin: 8px 0 0; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img class="logo" src="logo.png" alt="SDRLoggerPlus logo">
+      <div class="wordmark">SDRLOGGER<span class="plus">+</span></div>
+      <p class="tagline">Modern, cross-platform amateur radio logging.</p>
+      <div><span class="badge">Alpha — under active development</span></div>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/N8SDR1/SDRLoggerPlus/releases">⬇ Download</a>
+        <a class="btn btn-ghost" href="https://discord.gg/r3Cuj5NA9p">💬 Join the Discord</a>
+        <a class="btn btn-ghost" href="https://github.com/N8SDR1/SDRLoggerPlus">★ GitHub</a>
+      </div>
+      <p class="platforms">Windows · macOS · Linux</p>
+    </header>
+
+    <section class="showcase">
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="frame-title">SDRLoggerPlus</span>
+        </div>
+        <img src="app-hero.jpg" alt="SDRLoggerPlus dashboard — logbook, DX cluster, 3D globe, panadapter, meters and QRZ profile updating in real time" loading="lazy">
+      </div>
+    </section>
+
+    <section>
+      <h2>What it does</h2>
+      <div class="grid">
+        <div class="card"><h3><span class="ico">📓</span> Logging</h3><p>Dockable, drag-and-drop panels with saved workspaces, live callsign lookup, a searchable logbook, ADIF import/export, and an ADIF file monitor that auto-imports QSOs from other programs.</p></div>
+        <div class="card"><h3><span class="ico">📡</span> DX spotting & alerts</h3><p>Real-time DX cluster with new-DXCC / band status, Reverse Beacon Network band-opening alerts with voice, spothole.app, DXpeditions, and a Hot List with text-to-speech.</p></div>
+        <div class="card"><h3><span class="ico">🗺️</span> Maps & visualization</h3><p>An interactive 2D map and a 3D globe with great-circle beam headings to the focused DX, plus a TCI-driven panadapter and meter panels.</p></div>
+        <div class="card"><h3><span class="ico">🏆</span> Awards & statistics</h3><p>Tracking for DXCC, WAS, WAZ, WPX, WAC, 5BWAS, 5BDXCC, VUCC, POTA and IOTA, with per-band / per-mode detail and filtering.</p></div>
+        <div class="card"><h3><span class="ico">🎛️</span> Radio & station control</h3><p>CAT via bundled Hamlib, TCI (Lyra / Thetis / SunSDR) with live panadapter and meters.</p></div>
+        <div class="card"><h3><span class="ico">🔗</span> Lyra Combo Link</h3><p>A two-way link with the <strong style="color:var(--head)">Lyra</strong> SDR console over TCI — band, mode and frequency stay in sync, DX spots push across for click-to-tune, and CW contacts log straight from Lyra's CW console with call and RST.</p></div>
+        <div class="card"><h3><span class="ico">🔌</span> Digital & online</h3><p>FT8 / FT4 decode monitoring, smart alerts and grid tracking (below), WSJT-X / JTDX auto-logging over UDP (two sources at once), plus LoTW, Club Log, HRDLog and PSK Reporter uploads.</p></div>
+        <div class="card"><h3><span class="ico">🛰️</span> Satellite & propagation</h3><p>CSN S.A.T. controller integration and satellite tracking, with propagation, solar, aurora and space-weather panels.</p></div>
+        <div class="card"><h3><span class="ico">⛈️</span> Station weather</h3><p>Severe-weather alerts from NWS plus your own Ambient Weather or Ecowitt station — pull the antenna before the storm.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Smart assistants</h2>
+      <div class="grid">
+        <div class="card"><h3><span class="ico">🎯</span> DX Coach</h3><p>Turns the DX cluster into a ranked to-do list: it surfaces only the spots that would <strong style="color:var(--head)">fill an award gap</strong> — a new DXCC entity, a new CQ zone, or a new band-slot — each with a coarse propagation read (open / marginal / closed plus gray-line timing) from your grid and the live solar numbers. Click one to tune. Optional spoken nudges when a fresh one lands, and band-class filters so an HF-only op never sees 2m.</p></div>
+        <div class="card"><h3><span class="ico">🤖</span> AI Chat</h3><p>Point it at a callsign and get instant, <strong style="color:var(--head)">grounded</strong> talk points — your own past QSOs with them, their QRZ profile, and ready conversation starters — then ask follow-ups. Bring your own key for Anthropic, OpenAI, Groq or OpenRouter, or run it fully <strong>local and free with Ollama</strong>. Your key stays on your machine; calls go straight to the provider.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Digital Mode Alerts &amp; Grid Tracking</h2>
+      <div class="grid">
+        <div class="card"><h3><span class="ico">📶</span> Digital Decodes</h3><p>Reads the live FT8 / FT4 decode stream from <strong style="color:var(--head)">your WSJT-X, JTDX or MSHV</strong> over UDP — no separate decoder needed — and shows it right inside SDRLogger+. Every decode is <strong>coloured by what it would give you</strong> — a new DXCC entity, band-slot, CQ zone or grid — with Needed-only and CQ-only filters. <strong>Double-click a decode</strong> and your decoder answers that CQ. No JTAlert needed.</p></div>
+        <div class="card"><h3><span class="ico">🔔</span> Digital Decode Alerts</h3><p>Geo-scoped rules that sound, speak or pop <strong>only for what you're chasing</strong>: an award need (DXCC / band / zone / grid) × a region (continent, DXCC entity, US call area, prefix, grid field) × band and mode. So <em>"needed grids, North America only, 20m"</em> is a single rule. Quick-add presets, and voice shares the app's announcement voice.</p></div>
+        <div class="card"><h3><span class="ico">🗺️</span> Grid Tracker</h3><p>A Maidenhead grid map that fills in as you work the world — <strong>worked grids in green</strong> (brighter once confirmed), <strong>needed in red</strong>, and stations decoding <strong>right now</strong> ringed in cyan (a needed-and-live grid pulses <em>chase it</em>). Country outlines, pan / zoom, VUCC progress, and <strong>Follow Digital Decodes</strong> to lock the map to your session. No GridTracker needed.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Companion app</h2>
+      <div class="companion">
+        <img src="https://n8sdr1.github.io/Lyra-SDR-cpp/logo.png" alt="Lyra logo">
+        <div>
+          <h3>🔗 Lyra — the SDR that speaks SDRLogger+</h3>
+          <p>Running a <strong style="color:var(--head)">Hermes Lite 2 / 2+</strong>? <strong style="color:var(--head)">Lyra</strong> is SDRLogger+'s sister application — a native SDR transceiver by the same team. Link the two over <strong>TCI</strong> and switch on <strong>Combo</strong>: grab a call in Lyra's CW console and it lands here with a callbook lookup, the operator's name flows back to your macros, RST auto-fills from Lyra's calibrated S-meter, and one macro logs the QSO as you send 73.</p>
+          <div class="companion-cta">
+            <a class="btn btn-primary" href="https://n8sdr1.github.io/Lyra-SDR-cpp/">Visit Lyra</a>
+            <a class="btn btn-ghost" href="https://github.com/N8SDR1/Lyra-SDR-cpp">★ GitHub</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Credits & lineage</h2>
+      <div class="credits">
+        <p><span class="name">Rick Langford (N8SDR)</span> — lead developer, creator of SDRLogger+.</p>
+        <p><span class="name">Brent Crier (N9BC)</span> — cross-platform .NET / React / Electron edition.</p>
+        <div class="divider"></div>
+        <p style="margin-top:14px; color: var(--muted);">Builds on <a href="https://github.com/brianbruff/Log4YM">Log4YM</a> by Brian Keating (EI6LF), released into the public domain, and continues the original SDRLogger+ project. MIT licensed; bundled Hamlib and libusb are LGPL-2.1.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <p>© 2026 Rick Langford (N8SDR) and contributors · MIT License</p>
+    <p style="margin-top:6px;"><a href="https://github.com/N8SDR1/SDRLoggerPlus">GitHub</a> · <a href="https://github.com/N8SDR1/SDRLoggerPlus/releases">Releases</a> · <a href="https://discord.gg/r3Cuj5NA9p">Discord</a></p>
+  </footer>
+</body>
+</html>

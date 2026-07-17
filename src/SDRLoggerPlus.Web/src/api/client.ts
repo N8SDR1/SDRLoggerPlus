@@ -1,4 +1,4 @@
-import type { SatState, ContestStateEvent } from './signalr';
+import type { SatState, ContestStateEvent, WsjtxDecodeEvent } from './signalr';
 export type { SatState } from './signalr';
 
 const API_BASE = '/api';
@@ -22,6 +22,10 @@ export interface QsoResponse {
   createdAt: string;
   // Contest this QSO was logged under (ContestDefinition id), null for casual QSOs.
   contestId?: string;
+  confirmedLotw?: boolean;
+  confirmedEqsl?: boolean;
+  confirmedQrz?: boolean;
+  confirmedCard?: boolean;
 }
 
 export interface StationInfo {
@@ -241,6 +245,17 @@ export interface PskReceptionReport {
   flowStartSeconds: number;
 }
 
+export interface RbnHeardMeReport {
+  skimmer: string;
+  lat: number;
+  lon: number;
+  freqKhz: number;
+  band: string;
+  mode: string;
+  snr: number;
+  ageSeconds: number;
+}
+
 export interface AuroraPoint {
   lat: number;
   lon: number;
@@ -402,6 +417,12 @@ class ApiClient {
     return this.fetch(`/rbn/spots?minutes=${minutes}`);
   }
 
+  async getRbnHeardMe(callsign: string, band: string | null, minutes = 30): Promise<RbnHeardMeReport[]> {
+    const bandParam = band ? `&band=${encodeURIComponent(band)}` : '';
+    return this.fetch<RbnHeardMeReport[]>(
+      `/rbn/heardme?callsign=${encodeURIComponent(callsign)}${bandParam}&minutes=${minutes}`);
+  }
+
   async getRbnSkimmerLocation(callsign: string): Promise<{
     callsign: string;
     grid: string;
@@ -549,8 +570,39 @@ class ApiClient {
   }
 
   // WSJT-X
-  async getWsjtxStatus(): Promise<WsjtxStatus> {
+  async getWsjtxStatus(): Promise<WsjtxStatus[]> {
     return this.fetch('/wsjtx/status');
+  }
+
+  async getWsjtxDecodes(): Promise<WsjtxDecodeEvent[]> {
+    return this.fetch('/wsjtx/decodes');
+  }
+
+  /** Worked grids (all bands, or a band/mode) for the Grid Tracker panel. */
+  async getGridMap(band?: string, mode?: string): Promise<GridMapStatistics> {
+    const p = new URLSearchParams();
+    if (band) p.set('band', band);
+    if (mode) p.set('mode', mode);
+    const q = p.toString();
+    return this.fetch(`/statistics/gridmap${q ? `?${q}` : ''}`);
+  }
+
+  /** Answer a decoded CQ ("call this station") via a WSJT-X Reply message. */
+  async sendWsjtxReply(d: WsjtxDecodeEvent): Promise<{ sent: boolean }> {
+    return this.fetch('/wsjtx/reply', {
+      method: 'POST',
+      body: JSON.stringify({
+        source: d.source,
+        clientId: d.clientId,
+        time: d.timeMsSinceMidnight ?? 0,
+        snr: d.snr,
+        deltaTime: d.deltaTimeSeconds,
+        deltaFreq: d.audioOffsetHz,
+        mode: d.mode,
+        message: d.rawMessage,
+        lowConfidence: d.lowConfidence ?? false,
+      }),
+    });
   }
 
   // S.A.T. controller
@@ -597,8 +649,9 @@ class ApiClient {
   }
 
   // PSK Reporter — stations currently hearing the given callsign (last hour).
-  async getPskReports(callsign: string): Promise<PskReceptionReport[]> {
-    return this.fetch<PskReceptionReport[]>(`/pskreporter/reports?callsign=${encodeURIComponent(callsign)}`);
+  async getPskReports(callsign: string, minutes = 60): Promise<PskReceptionReport[]> {
+    return this.fetch<PskReceptionReport[]>(
+      `/pskreporter/reports?callsign=${encodeURIComponent(callsign)}&minutes=${minutes}`);
   }
 
   // Aurora — latest NOAA OVATION auroral-oval forecast (sparse grid).
@@ -645,6 +698,59 @@ class ApiClient {
     return this.fetch('/adif/import/cancel', {
       method: 'POST',
     });
+  }
+
+  /**
+   * Merge a confirmation report (LoTW / eQSL / card ADIF) into the log — marks
+   * matching QSOs Confirmed without creating duplicates.
+   */
+  async mergeConfirmations(file: File, source: ConfirmationSource): Promise<ConfirmationMergeResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    // Enum binds by name on the server: Lotw / Eqsl / Card.
+    const srcName =
+      source === 'lotw' ? 'Lotw' : source === 'eqsl' ? 'Eqsl' : source === 'qrz' ? 'Qrz' : 'Card';
+    const response = await fetch(`${API_BASE}/adif/merge-confirmations?source=${srcName}`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Download the LoTW confirmation report (using the stored LoTW website login)
+   * and merge it into the log. One-click "sync from LoTW".
+   */
+  async downloadLotwConfirmations(): Promise<ConfirmationMergeResponse> {
+    const response = await fetch(`${API_BASE}/lotw/download-confirmations`, { method: 'POST' });
+    if (!response.ok) {
+      const msg = await response.text();
+      throw new Error(msg || `API error: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /** Download the eQSL inbox (received QSLs) and merge into the log. */
+  async downloadEqslConfirmations(): Promise<ConfirmationMergeResponse> {
+    const response = await fetch(`${API_BASE}/eqsl/download-confirmations`, { method: 'POST' });
+    if (!response.ok) {
+      const msg = await response.text();
+      throw new Error(msg || `API error: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /** Fetch the QRZ logbook and merge its confirmations into the log. */
+  async downloadQrzConfirmations(): Promise<ConfirmationMergeResponse> {
+    const response = await fetch(`${API_BASE}/qrz/download-confirmations`, { method: 'POST' });
+    if (!response.ok) {
+      const msg = await response.text();
+      throw new Error(msg || `API error: ${response.status}`);
+    }
+    return response.json();
   }
 
   async exportAdif(request?: AdifExportRequest): Promise<Blob> {
@@ -950,6 +1056,16 @@ export interface AdifImportResponse {
   skippedDuplicates: number;
   errorCount: number;
   errors: string[];
+}
+
+export type ConfirmationSource = 'lotw' | 'eqsl' | 'qrz' | 'card';
+
+export interface ConfirmationMergeResponse {
+  totalRecords: number;
+  matched: number;
+  updated: number;
+  alreadyConfirmed: number;
+  unmatched: number;
 }
 
 export interface AdifExportRequest {
@@ -1361,6 +1477,18 @@ export interface FiveBandStatistics {
   bands: FiveBandBandStatus[];
 }
 
+export interface WorkedGrid {
+  grid: string;
+  confirmed: boolean;
+  qsoCount: number;
+}
+
+export interface GridMapStatistics {
+  totalGrids: number;
+  confirmedGrids: number;
+  grids: WorkedGrid[];
+}
+
 export interface WsjtxClientInfo {
   id: string;
   version?: string | null;
@@ -1368,6 +1496,7 @@ export interface WsjtxClientInfo {
 }
 
 export interface WsjtxStatus {
+  source: number; // 1 = primary, 2 = secondary
   listening: boolean;
   port: number;
   multicastAddress?: string | null;

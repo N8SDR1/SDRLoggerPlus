@@ -33,6 +33,77 @@ public class QrzService : IQrzService
         _logger = logger;
     }
 
+    public async Task<string> FetchLogbookAdifAsync(CancellationToken cancellationToken = default)
+    {
+        var qrz = (await _settingsRepository.GetAsync() ?? new UserSettings()).Qrz;
+        if (string.IsNullOrWhiteSpace(qrz.ApiKey))
+            throw new InvalidOperationException("Set your QRZ Logbook API key in Settings → QRZ first.");
+
+        var all = new System.Text.StringBuilder();
+        long afterLogId = 0;
+        const int maxPages = 250; // safety valve against a runaway paging loop
+
+        for (var page = 0; page < maxPages; page++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var form = new List<KeyValuePair<string, string>>
+            {
+                new("KEY", qrz.ApiKey!),
+                new("ACTION", "FETCH"),
+            };
+            if (afterLogId > 0)
+                form.Add(new("OPTION", $"AFTERLOGID:{afterLogId}"));
+
+            var response = await _httpClient.PostAsync(
+                QrzLogbookApiUrl, new FormUrlEncodedContent(form), cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            // The ADIF payload is the last field; everything after "ADIF=" is the
+            // ADIF — but QRZ HTML-encodes it (&lt; &gt; &amp;), so we decode below.
+            var adifIdx = body.IndexOf("ADIF=", StringComparison.OrdinalIgnoreCase);
+            if (adifIdx < 0)
+            {
+                if (page == 0)
+                {
+                    if (body.Contains("invalid", StringComparison.OrdinalIgnoreCase) ||
+                        body.Contains("AUTH", StringComparison.OrdinalIgnoreCase) ||
+                        body.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+                        body.Contains("wrong", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException(
+                            "QRZ rejected the API key — check your QRZ Logbook API key in Settings → QRZ.");
+                    return ""; // RESULT=OK with no records
+                }
+                break; // later pages with no ADIF = we've read everything
+            }
+
+            var meta = body.Substring(0, adifIdx);
+            // QRZ HTML-encodes the ADIF payload (&lt; &gt; &amp;) — decode to real ADIF.
+            var adif = System.Net.WebUtility.HtmlDecode(body[(adifIdx + "ADIF=".Length)..]);
+
+            var countMatch = System.Text.RegularExpressions.Regex.Match(
+                meta, @"COUNT=(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var count = countMatch.Success ? int.Parse(countMatch.Groups[1].Value) : 0;
+            if (count == 0 || string.IsNullOrWhiteSpace(adif))
+                break;
+
+            all.Append(adif);
+            if (!adif.EndsWith('\n')) all.Append('\n');
+
+            // Page forward past the highest QRZ log id we saw.
+            var maxId = afterLogId;
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+                         adif, @"<app_qrzlog_logid:\d+>(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                if (long.TryParse(m.Groups[1].Value, out var id) && id > maxId) maxId = id;
+            }
+            if (maxId <= afterLogId) break; // no progress → stop (single-page or done)
+            afterLogId = maxId;
+        }
+
+        return all.ToString();
+    }
+
     public async Task<QrzSubscriptionStatus> CheckSubscriptionAsync()
     {
         var settings = await _settingsRepository.GetAsync() ?? new UserSettings();

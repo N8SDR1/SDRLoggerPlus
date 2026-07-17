@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Settings, Wind } from 'lucide-react';
 import { useSettingsStore } from '../store/settingsStore';
+import { formatSpeed, formatTemperature, resolveSpeedUnit } from '../utils/units';
 import { api, SpaceWeatherData } from '../api/client';
 
 export function Header() {
@@ -191,14 +192,14 @@ export function Header() {
                 className="font-bold text-gray-200"
                 style={{ fontSize: `${baseFontSize * 0.875}px` }}
               >
-                {weather.temperature}°F ({weather.temperatureC}°C)
+                {formatTemperature(weather.temperature, settings.appearance.unitSystem)}
               </div>
               <div
                 className="text-gray-400 flex items-center gap-1"
                 style={{ fontSize: `${baseFontSize * 0.625}px` }}
               >
                 <Wind className="w-3 h-3" />
-                {weather.windSpeed} mph
+                {formatSpeed(weather.windSpeed, resolveSpeedUnit(settings.weather.wind.displayUnit, settings.appearance.unitSystem))}
               </div>
             </div>
           </div>

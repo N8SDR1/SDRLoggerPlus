@@ -87,7 +87,63 @@ public record SpotReceivedEvent(
     string? SpotterGrid = null,
     string? SpotterContinent = null,
     string? SpotStatus = null,
-    bool IsHot = false
+    bool IsHot = false,
+    // Approximate DX-station location (cty.dat country centroid). Coarse — good
+    // enough for the DX Coach propagation gate (great-circle path + gray-line
+    // timing), never presented as a precise QTH.
+    double? DxLat = null,
+    double? DxLon = null,
+    // CQ zone (WAZ) for the DX station, and whether it's a new zone / new
+    // zone-on-band vs the operator's log ("newZone" | "newZoneBand" | null).
+    int? CqZone = null,
+    string? ZoneStatus = null
+);
+
+/// <summary>
+/// One decoded FT8/FT4 transmission from WSJT-X/JTDX/MSHV, enriched with the
+/// operator's needed-status so the Decodes panel can colour it. FrequencyHz is
+/// the reconstructed RF frequency (dial + audio offset); it is 0 until a Status
+/// message has supplied the dial frequency, in which case Band/SpotStatus are
+/// best-effort. SpotStatus / ZoneStatus reuse the DX-cluster verdict strings
+/// ("newDxcc" | "newBand" | "worked" | null / "newZone" | "newZoneBand" | null).
+/// </summary>
+public record WsjtxDecodeEvent(
+    int Source,
+    string ClientId,
+    string Callsign,
+    string? DxCall,
+    string? Grid,
+    string? Mode,
+    int Snr,
+    double DeltaTimeSeconds,
+    uint AudioOffsetHz,
+    ulong FrequencyHz,
+    string? Band,
+    string? Country,
+    string? Continent,
+    int? CqZone,
+    bool IsCq,
+    string? SpotStatus,
+    string? ZoneStatus,
+    string? GridStatus,
+    DateTime DecodedAtUtc,
+    // Raw decode fields echoed back in a Reply ("call this station"): the
+    // decoder needs Time/message/low-confidence to identify the transmission.
+    uint TimeMsSinceMidnight = 0,
+    string? RawMessage = null,
+    bool LowConfidence = false
+);
+
+/// <summary>
+/// A background confirmation sync (LoTW / eQSL) finished — the UI refreshes the
+/// log + statistics and shows a toast.
+/// </summary>
+public record ConfirmationSyncCompletedEvent(
+    string Source,
+    int Matched,
+    int Updated,
+    int Unmatched,
+    string? Error = null
 );
 
 /// <summary>

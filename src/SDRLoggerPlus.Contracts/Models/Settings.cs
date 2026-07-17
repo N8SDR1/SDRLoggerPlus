@@ -54,8 +54,14 @@ public class UserSettings
     [BsonElement("eqsl")]
     public EqslSettings Eqsl { get; set; } = new();
 
+    public ConfirmationSyncSettings ConfirmationSync { get; set; } = new();
+
     [BsonElement("pota")]
     public PotaSettings Pota { get; set; } = new();
+
+    public DxCoachSettings DxCoach { get; set; } = new();
+
+    public VoiceSettings Voice { get; set; } = new();
 
     [BsonElement("adifMonitor")]
     public AdifMonitorSettings AdifMonitor { get; set; } = new();
@@ -74,6 +80,9 @@ public class UserSettings
 
     [BsonElement("wsjtx")]
     public WsjtxSettings Wsjtx { get; set; } = new();
+
+    [BsonElement("decodeAlerts")]
+    public DecodeAlertsSettings DecodeAlerts { get; set; } = new();
 
     [BsonElement("weather")]
     public WeatherSettings Weather { get; set; } = new();
@@ -232,8 +241,20 @@ public class LotwSettings
     [BsonElement("enabled")]
     public bool Enabled { get; set; }
 
+    // LoTW *website* login (separate from the TQSL certificate) — used to
+    // download the confirmation report. Same credentials you use at lotw.arrl.org.
+    [BsonElement("username")]
+    public string? Username { get; set; } = string.Empty;
+
+    [BsonElement("password")]
+    public string? Password { get; set; } = string.Empty;
+
     [BsonElement("lastUploadAt")]
     public DateTime? LastUploadAt { get; set; }
+
+    // Last time confirmations were downloaded — drives the incremental qslsince pull.
+    [BsonElement("lastConfirmationSync")]
+    public DateTime? LastConfirmationSync { get; set; }
 }
 
 [BsonIgnoreExtraElements]
@@ -353,6 +374,78 @@ public class PotaSettings
 
     [BsonElement("password")]
     public string? Password { get; set; } = string.Empty;
+
+    // POTA Activators panel: follow the rig's band / mode (persisted, like the cluster).
+    [BsonElement("followRigBand")]
+    public bool FollowRigBand { get; set; }
+
+    [BsonElement("followRigMode")]
+    public bool FollowRigMode { get; set; }
+}
+
+/// <summary>
+/// DX Coach panel preferences. The Coach is a frontend feature; this only
+/// persists the operator's tuning of it.
+/// </summary>
+public class DxCoachSettings
+{
+    /// <summary>
+    /// Minimum predicted path reliability (0–99%) an opportunity must clear to
+    /// appear in the DX Coach. Opportunities with no propagation data (no QTH,
+    /// or unresolved DX location) are always shown. 0 = show every opportunity.
+    /// </summary>
+    [BsonElement("minReliability")]
+    public int MinReliability { get; set; } = 30;
+
+    /// <summary>Speak newly-arriving high-value opportunities (new DXCC / new zone) aloud.</summary>
+    [BsonElement("voice")]
+    public bool Voice { get; set; } = false;
+
+    /// <summary>Coach DXCC opportunities (new entity / new band-slot).</summary>
+    [BsonElement("showDxcc")]
+    public bool ShowDxcc { get; set; } = true;
+
+    /// <summary>Coach WAZ opportunities (new CQ zone / new zone-band).</summary>
+    [BsonElement("showWaz")]
+    public bool ShowWaz { get; set; } = true;
+
+    /// <summary>Show MF/LF low-band opportunities (2200m, 630m).</summary>
+    [BsonElement("showLowBand")]
+    public bool ShowLowBand { get; set; } = true;
+
+    /// <summary>Show HF opportunities (160m–10m).</summary>
+    [BsonElement("showHf")]
+    public bool ShowHf { get; set; } = true;
+
+    /// <summary>Show 6m opportunities (its own toggle — HF+6m rigs are common).</summary>
+    [BsonElement("show6m")]
+    public bool Show6m { get; set; } = true;
+
+    /// <summary>Show VHF opportunities (2m, 1.25m).</summary>
+    [BsonElement("showVhf")]
+    public bool ShowVhf { get; set; } = true;
+
+    /// <summary>Show UHF opportunities (70cm, 33cm, 23cm and up).</summary>
+    [BsonElement("showUhf")]
+    public bool ShowUhf { get; set; } = true;
+}
+
+/// <summary>
+/// Shared voice used for every spoken announcement (band-opening, Hot List, RBN…).
+/// </summary>
+public class VoiceSettings
+{
+    /// <summary>SpeechSynthesisVoice.voiceURI to speak with. Empty = browser default.</summary>
+    [BsonElement("voiceUri")]
+    public string VoiceUri { get; set; } = string.Empty;
+
+    /// <summary>Speaking rate, 0.5 (slow) – 1.5 (fast).</summary>
+    [BsonElement("rate")]
+    public double Rate { get; set; } = 0.95;
+
+    /// <summary>Announcement volume, 0–1. Shared by every spoken alert.</summary>
+    [BsonElement("volume")]
+    public double Volume { get; set; } = 0.8;
 }
 
 /// <summary>
@@ -377,6 +470,37 @@ public class EqslSettings
     // Empty = eQSL uses the account's default QTH.
     [BsonElement("qthNickname")]
     public string? QthNickname { get; set; } = string.Empty;
+
+    // Last time the eQSL inbox was downloaded — drives the incremental RcvdSince pull.
+    [BsonElement("lastConfirmationSync")]
+    public DateTime? LastConfirmationSync { get; set; }
+}
+
+/// <summary>
+/// Hands-off background confirmation sync (Log4OM style) — periodically pull
+/// LoTW / eQSL confirmations and merge them into the log.
+/// </summary>
+public class ConfirmationSyncSettings
+{
+    [BsonElement("autoSync")]
+    public bool AutoSync { get; set; }
+
+    // How often to run, in hours.
+    [BsonElement("intervalHours")]
+    public int IntervalHours { get; set; } = 6;
+
+    // Run a sync shortly after the app starts.
+    [BsonElement("syncOnStartup")]
+    public bool SyncOnStartup { get; set; } = true;
+
+    [BsonElement("lotw")]
+    public bool Lotw { get; set; } = true;
+
+    [BsonElement("eqsl")]
+    public bool Eqsl { get; set; } = true;
+
+    [BsonElement("qrz")]
+    public bool Qrz { get; set; } = true;
 }
 
 public class AppearanceSettings
@@ -390,6 +514,13 @@ public class AppearanceSettings
     // Hex colors for theme == "custom": accent, background, panel, text
     [BsonElement("customColors")]
     public Dictionary<string, string>? CustomColors { get; set; }
+
+    // Master unit system driving all physical readouts app-wide.
+    [BsonElement("unitSystem")]
+    public string? UnitSystem { get; set; } = "metric"; // imperial | metric
+
+    [BsonElement("distanceUnit")]
+    public string? DistanceUnit { get; set; } = "km"; // km | mi (kept in sync with unitSystem)
 }
 
 [BsonIgnoreExtraElements]
@@ -546,6 +677,10 @@ public class MapSettings
     [BsonElement("showLightning")]
     public bool ShowLightning { get; set; }
 
+    // Slow auto-spin of the 2D Map's embedded globe circle.
+    [BsonElement("rotateGlobe")]
+    public bool RotateGlobe { get; set; }
+
     [BsonElement("showDayNightOverlay")]
     public bool ShowDayNightOverlay { get; set; }
 
@@ -572,6 +707,44 @@ public class MapSettings
 
     [BsonElement("showDxNewsTicker")]
     public bool ShowDxNewsTicker { get; set; } = true;
+
+    [BsonElement("dxPathStyle")]
+    public string? DxPathStyle { get; set; } = "sine"; // sine | dash
+
+    [BsonElement("dxPathColor")]
+    public string? DxPathColor { get; set; } = "#39ff14";
+
+    [BsonElement("showIonosphereHops")]
+    public bool ShowIonosphereHops { get; set; }
+
+    [BsonElement("showLongPath")]
+    public bool ShowLongPath { get; set; }
+
+    [BsonElement("showGlobeHeardMePsk")]
+    public bool ShowGlobeHeardMePsk { get; set; }
+
+    [BsonElement("showGlobeHeardMeRbn")]
+    public bool ShowGlobeHeardMeRbn { get; set; }
+
+    [BsonElement("heardMeBand")]
+    public string HeardMeBand { get; set; } = "20m";
+
+    [BsonElement("heardMePskWindowMinutes")]
+    public int HeardMePskWindowMinutes { get; set; } = 60;
+
+    [BsonElement("heardMeRbnWindowMinutes")]
+    public int HeardMeRbnWindowMinutes { get; set; } = 15;
+
+    // 2D-map "who heard me" overlays. showPskOverlay/pskCallsign were previously
+    // frontend-only (silently dropped on save) — now backed here.
+    [BsonElement("showPskOverlay")]
+    public bool ShowPskOverlay { get; set; }
+
+    [BsonElement("pskCallsign")]
+    public string? PskCallsign { get; set; } = string.Empty;
+
+    [BsonElement("show2dHeardMeRbn")]
+    public bool Show2dHeardMeRbn { get; set; }
 }
 
 [BsonIgnoreExtraElements]
@@ -705,6 +878,13 @@ public class ClusterSettings
     // linger just because no new spot arrived to trigger a render.
     [BsonElement("spotAgeMinutes")]
     public int SpotAgeMinutes { get; set; } = 10;
+
+    // "Follow rig" — the spot list tracks the connected rig's band/mode
+    // instead of the manual Band/Mode dropdowns. The frontend always sent
+    // this; without a matching property here it was silently dropped on
+    // every save, so the toggle reset on every settings load.
+    [BsonElement("trackRig")]
+    public bool TrackRig { get; set; }
 }
 
 [BsonIgnoreExtraElements]
@@ -758,13 +938,21 @@ public class HeaderSettings
 public class AiSettings
 {
     [BsonElement("provider")]
-    public string? Provider { get; set; } = "anthropic"; // "anthropic" | "openai"
+    // Preset id: "anthropic" uses the native Claude API; everything else
+    // ("openai" | "groq" | "openrouter" | "ollama" | "custom") speaks
+    // the OpenAI chat-completions format against BaseUrl.
+    public string? Provider { get; set; } = "anthropic";
 
     [BsonElement("apiKey")]
-    public string? ApiKey { get; set; } = string.Empty; // Stored obfuscated
+    public string? ApiKey { get; set; } = string.Empty; // Stored obfuscated; optional for local providers (Ollama)
 
     [BsonElement("model")]
     public string? Model { get; set; } = "claude-sonnet-4-5-20250929"; // Provider-specific model name
+
+    [BsonElement("baseUrl")]
+    // OpenAI-compatible API base, e.g. https://api.groq.com/openai/v1. Blank = the
+    // provider preset's default endpoint (see AiService.ResolveOpenAiBaseUrl).
+    public string? BaseUrl { get; set; } = string.Empty;
 
     [BsonElement("autoGenerateTalkPoints")]
     public bool AutoGenerateTalkPoints { get; set; } = true;
@@ -875,9 +1063,9 @@ public class WindSettings
     [BsonElement("threshGustMph")]
     public double ThreshGustMph { get; set; } = 45;
 
-    /// <summary>"mph" | "kph"</summary>
+    /// <summary>"auto" (follow master unit system) | "mph" | "kph". Display-only.</summary>
     [BsonElement("displayUnit")]
-    public string DisplayUnit { get; set; } = "mph";
+    public string DisplayUnit { get; set; } = "auto";
 
     [BsonElement("cooldownMinutes")]
     public int CooldownMinutes { get; set; } = 20;
@@ -901,8 +1089,23 @@ public class WeatherCredentials
     public string? EcowittMac { get; set; }
 }
 
+/// <summary>One WSJT-X/JTDX UDP listener (a decoder app reporting to a host:port).</summary>
+public class WsjtxSource
+{
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; }
+
+    [BsonElement("port")]
+    public int Port { get; set; } = 2333;
+
+    /// <summary>Empty = unicast; set to e.g. 224.0.0.1 to join a multicast group</summary>
+    [BsonElement("multicastAddress")]
+    public string? MulticastAddress { get; set; }
+}
+
 public class WsjtxSettings
 {
+    // Source 1 (primary) — flat fields, unchanged for backward compatibility.
     [BsonElement("enabled")]
     public bool Enabled { get; set; }
 
@@ -912,6 +1115,62 @@ public class WsjtxSettings
     /// <summary>Empty = unicast; set to e.g. 224.0.0.1 to join a multicast group</summary>
     [BsonElement("multicastAddress")]
     public string? MulticastAddress { get; set; }
+
+    /// <summary>Source 2 (secondary) — a second decoder on its own port. Disabled by default.</summary>
+    [BsonElement("source2")]
+    public WsjtxSource Source2 { get; set; } = new();
+}
+
+/// <summary>
+/// One geo-scoped needed-status alert rule evaluated against the WSJT-X/JTDX/MSHV
+/// decode stream. A decode fires the rule when it matches any enabled award-need
+/// AND every non-empty scope + band/mode filter. Empty lists mean "no constraint".
+/// Evaluation and the alert actions (sound/voice/popup) live in the frontend; this
+/// is just the persisted rule.
+/// </summary>
+public class DecodeAlertRule
+{
+    [BsonElement("id")]
+    public string Id { get; set; } = "";
+
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; } = true;
+
+    [BsonElement("name")]
+    public string Name { get; set; } = "";
+
+    // Award needs — alert when the decode is any of the enabled kinds.
+    [BsonElement("newDxcc")] public bool NewDxcc { get; set; }
+    [BsonElement("newBand")] public bool NewBand { get; set; }
+    [BsonElement("newZone")] public bool NewZone { get; set; }
+    [BsonElement("newGrid")] public bool NewGrid { get; set; }
+
+    // Scope filters — each, if non-empty, must match the decode.
+    [BsonElement("continents")] public List<string> Continents { get; set; } = new();
+    [BsonElement("dxccEntities")] public List<string> DxccEntities { get; set; } = new();
+    [BsonElement("callAreas")] public List<int> CallAreas { get; set; } = new();     // US districts 0-9
+    [BsonElement("prefixes")] public List<string> Prefixes { get; set; } = new();    // e.g. W, K, VE3
+    [BsonElement("gridFields")] public List<string> GridFields { get; set; } = new(); // 2-char fields, e.g. EM
+    [BsonElement("bands")] public List<string> Bands { get; set; } = new();
+    [BsonElement("modes")] public List<string> Modes { get; set; } = new();
+
+    // Actions.
+    [BsonElement("sound")] public bool Sound { get; set; } = true;
+    [BsonElement("voice")] public bool Voice { get; set; }
+    [BsonElement("popup")] public bool Popup { get; set; } = true;
+
+    /// <summary>Per-call+rule cooldown so a station decoded every cycle only alerts once in a while.</summary>
+    [BsonElement("cooldownMinutes")] public int CooldownMinutes { get; set; } = 10;
+}
+
+public class DecodeAlertsSettings
+{
+    /// <summary>Master switch for all decode alerts.</summary>
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; }
+
+    [BsonElement("rules")]
+    public List<DecodeAlertRule> Rules { get; set; } = new();
 }
 
 public class HotListSettings

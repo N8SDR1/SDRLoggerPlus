@@ -12,56 +12,106 @@
     }
 
     body {
-      background: #0a0e14;
+      /* Dark base with a soft cyan glow behind the logo for depth. */
+      background:
+        radial-gradient(circle at 32% 45%, rgba(0, 229, 255, 0.14), transparent 58%),
+        #0a0e14;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
       height: 100vh;
       overflow: hidden;
       -webkit-app-region: drag;
       user-select: none;
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     }
 
-    .splash-image {
-      max-width: 80%;
-      max-height: 60%;
+    /* Horizontal brand lockup: logo left, wordmark + tagline right. */
+    .card {
+      display: flex;
+      align-items: center;
+      gap: 30px;
+      padding: 0 40px;
+      animation: rise 0.5s ease-out both;
+    }
+
+    .logo {
+      width: 128px;
+      height: 128px;
+      border-radius: 22px;
       object-fit: contain;
+      flex-shrink: 0;
+      box-shadow: 0 10px 44px rgba(0, 229, 255, 0.28);
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .wordmark {
+      font-size: 40px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      line-height: 1;
+      color: #e6edf3;
+      white-space: nowrap;
+    }
+
+    .wordmark .plus {
+      color: #00e5ff;
+      text-shadow: 0 0 20px rgba(0, 229, 255, 0.65);
+    }
+
+    .tagline {
+      margin-top: 10px;
+      font-size: 12px;
+      letter-spacing: 3.5px;
+      text-transform: uppercase;
+      color: #6b7a8d;
     }
 
     .version {
-      font-family: 'JetBrains Mono', 'Consolas', monospace;
-      color: #4a5568;
-      font-size: 13px;
       margin-top: 16px;
+      font-family: 'JetBrains Mono', 'Consolas', monospace;
+      font-size: 12px;
       letter-spacing: 0.5px;
-    }
-
-    .spinner-container {
-      position: absolute;
-      bottom: 32px;
+      color: #4a5568;
     }
 
     .spinner {
-      width: 24px;
-      height: 24px;
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 22px;
+      height: 22px;
       border: 2px solid rgba(255, 255, 255, 0.08);
-      border-top-color: rgba(255, 255, 255, 0.3);
+      border-top-color: rgba(0, 229, 255, 0.55);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
 
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      to { transform: translateX(-50%) rotate(360deg); }
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
 <body>
-  <img class="splash-image" id="splashImg" alt="SDRLoggerPlus" />
-  <div class="version" id="version"></div>
-  <div class="spinner-container">
-    <div class="spinner"></div>
+  <div class="card">
+    <img class="logo" id="splashImg" alt="SDRLoggerPlus" />
+    <div class="brand">
+      <div class="wordmark">SDRLOGGER<span class="plus">+</span></div>
+      <div class="tagline">Amateur Radio Logging</div>
+      <div class="version" id="version"></div>
+    </div>
   </div>
+  <div class="spinner"></div>
   <script>
     const params = new URLSearchParams(window.location.search);
     const imgPath = params.get('img');

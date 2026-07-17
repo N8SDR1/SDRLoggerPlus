@@ -5,6 +5,7 @@ import { api, SatState } from '../api/client';
 import { GlassPanel } from '../components/GlassPanel';
 import { signalRService } from '../api/signalr';
 import { useSettingsStore } from '../store/settingsStore';
+import { formatDistance, distanceUnitFor } from '../utils/units';
 
 const STATUS_LABELS: Record<string, { text: string; cls: string }> = {
   idle: { text: 'Idle', cls: 'text-dark-200' },
@@ -39,6 +40,7 @@ const StatRow = ({ label, value, valueClass }: { label: string; value: React.Rea
  */
 export function SatPlugin() {
   const satEnabled = useSettingsStore(state => state.settings.sat.enabled);
+  const distUnit = distanceUnitFor(useSettingsStore(state => state.settings.appearance.unitSystem));
   const queryClient = useQueryClient();
   const [liveState, setLiveState] = useState<SatState | null>(null);
 
@@ -150,7 +152,7 @@ export function SatPlugin() {
                   {state.rangeKm != null && (
                     <StatRow
                       label="Range"
-                      value={`${state.rangeKm.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`}
+                      value={formatDistance(state.rangeKm, distUnit)}
                     />
                   )}
                   {state.aosAzimuth && <StatRow label="AOS Az" value={`${state.aosAzimuth}°`} />}
@@ -193,7 +195,7 @@ export function SatPlugin() {
                 {state.map && (
                   <p className="text-xs text-dark-100 pt-1">
                     Sub-point {state.map.lat.toFixed(1)}°, {state.map.lon.toFixed(1)}° ·
-                    alt {Math.round(state.map.altKm)} km · footprint r={Math.round(state.map.footprintRadiusKm)} km
+                    alt {formatDistance(state.map.altKm, distUnit)} · footprint r={formatDistance(state.map.footprintRadiusKm, distUnit)}
                   </p>
                 )}
               </div>

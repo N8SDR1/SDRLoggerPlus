@@ -195,9 +195,11 @@ const HELP_SECTIONS = [
   { id: 'combo',    title: 'The Lyra Combo Link' },
   { id: 'logging',  title: 'Logging QSOs' },
   { id: 'spots',    title: 'DX Spots & the Map' },
+  { id: 'decodes',  title: 'Digital Decodes & Grid' },
   { id: 'weather',  title: 'Weather & Alerts' },
   { id: 'meters',   title: 'Meters & Panadapter' },
   { id: 'callbook', title: 'Callbook, Uploads & Import' },
+  { id: 'ai',       title: 'AI Talk Points' },
   { id: 'awards',   title: 'Awards & Statistics' },
   { id: 'settings', title: 'Settings & Shortcuts' },
   { id: 'updates',  title: 'Updates & Support' },
@@ -283,6 +285,8 @@ function HelpTab() {
             <li><B>Hamlib</B> — universal (Icom / Yaesu / Kenwood / …) via rigctld. Tunes + reads the rig; no panadapter.</li>
             <li><B>flrig</B> — XML-RPC bridge to flrig's rig database (auto-detects data-mode names). Tunes + reads the rig; no panadapter.</li>
           </ul>
+          <p className="text-xs text-dark-300">Adding a TCI rig runs a quick <B>connection check</B> first — a wrong port tells you right away instead of leaving a rig that never connects. Use <B>Test</B> to probe it, or <B>Add anyway</B> to skip the check. Saved rigs have an <B>Edit</B> button to change the name, host, or port.</p>
+          <p className="text-xs text-dark-300">The <B>rig selector</B> in the status bar (bottom-right) shows your connected radio at a glance: <B>left-click</B> it to switch or connect any configured rig, and <B>right-click</B> it (or use <B>Add / manage radios</B> in the popover) to jump straight to the Rig panel.</p>
         </Section>
 
         <Section id="combo" title="The Lyra Combo Link">
@@ -319,9 +323,21 @@ function HelpTab() {
             <li><B>RBN band openings</B> — separate VHF/UHF opening alerts (10/6/2m, 70cm) with distance + optional voice announce: <P>Settings → Band Openings</P>.</li>
           </ul>
           <p><B>Filters</B> (Cluster panel + <P>Settings</P>): max age (1–60 min), capacity (50–300), band/mode multi-select, <B>Track Rig</B> (show only the rig's current band+mode), and status colors — new DXCC (orange), new band (green), worked (gray, dimmable).</p>
+          <p><B>POTA Activators</B> panel — live park activations, now with the same filter toolbar as the Cluster: <B>Follow rig</B> (Band/Mode), Band, Mode, a <B>Region</B> filter (by park location), and search.</p>
           <p><B>Click a spot</B> to tune the radio and prefill the Log Entry. Spots can also be <B>pushed to a TCI radio's panadapter</B> (Lyra / Thetis) as click-to-tune markers.</p>
           <p><B>DXpeditions & Hot List (auto hot spots).</B> The <B>DXpeditions</B> panel lists current and upcoming operations (NG3K feed). Click any callsign to drop it on your <B>Hot List</B> — a watchlist that makes matching DX spots light up as <B>hot spots</B> the instant they appear, and, with the announce mode on, calls them out by <B>voice</B>. Cycle the pill Off → Visual → Visual + Voice; the counter shows how many you're watching, and Clear All empties the list. Manage watched calls + text-to-speech under <P>Settings → Alerts → Hot List</P>.</p>
           <p><B>The 3D globe</B> shows spots + spotter→DX arcs, lightning strikes, POTA parks, your station, satellite tracks + footprints, the day/night terminator, gray line, aurora, PSK-Reporter coverage, and cached QRZ profile photos. Click a point to focus that call. Overlays are all in <P>Settings → Map</P>.</p>
+          <p><B>"Heard Me" — who's hearing you.</B> Switch on the <B>PSK</B> and <B>RBN</B> layers (on the 3D globe and the 2D map) to draw arcs from your station out to every receiver that recently spotted <em>you</em> — <B>PSK Reporter</B> for digital, <B>RBN skimmers</B> for CW/RTTY. The band follows your connected rig (or pick a band, or <B>All bands</B>), each layer with its own look-back window; click a receiver dot to see its report — frequency, mode, SNR, and how long ago.</p>
+        </Section>
+
+        <Section id="decodes" title="Digital Decodes & Grid Tracker">
+          <p>Native FT8/FT4 tools that read your decoder's UDP stream — no JTAlert or GridTracker needed. Point <B>WSJT-X</B>, <B>JTDX</B>, or <B>MSHV</B> at SDRLoggerPlus: set its <B>UDP Server</B> to <span className="font-mono text-[11px] text-dark-100">127.0.0.1 : 2237</span>, turn on <B>decoded-text</B> output, then enable the source in <P>Settings → Decoder Link (UDP)</P>.</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>Digital Decodes</B> panel — every decode live, coloured by what it would give you: <B>new DXCC</B>, <B>new band</B>, <B>new zone</B>, <B>new grid</B> (already worked = dim). Filter to <B>Needed only</B>, <B>CQ only</B>, or <B>Match Alerts</B> — which narrows the list to just the decodes that match your <em>Digital Decode Alert</em> rules (so a "needed grids, North America" rule finally filters the list too, not only the alerts). <B>Double-click</B> a decode and your decoder answers that CQ — WSJT-X / JTDX only, and they need <B>"Accept UDP requests"</B> turned on (MSHV doesn't accept it).</li>
+            <li><B>Digital Decode Alerts</B> (<P>Settings → Digital Decode Alerts</P>) — rules that beep / speak / pop only for what you care about: an <B>award need</B> (DXCC / band / zone / grid) <em>and</em> a <B>region</B> (continent, DXCC entity, US call area, prefix, or grid field) <em>and</em> band/mode. So "needed grids, North America only, 20m" is one rule. Quick-add presets get you started in a click; voice uses your shared <P>Settings → Voice</P>.</li>
+            <li><B>Grid Tracker</B> panel — a Maidenhead grid map: <span className="text-accent-success">green</span> = worked (brighter = confirmed), and with the <B>Needed</B> toggle on, un-worked land tints <span className="text-red-400">red</span>. A <B>cyan ring</B> marks a grid active <em>right now</em> from the decode stream; a needed grid that's live pulses — "chase it this cycle". Drag to pan, scroll to zoom, hover for the grid + status. <B>FDD (Follow Digital Decodes)</B> locks the map's band to what you're decoding and mirrors the Digital Decodes filters.</li>
+          </ul>
+          <p>It all ties together: work a station and your decoder's <B>DX Call</B> flows into the <B>Log Entry</B> and fires the callbook lookup (<B>QRZ Profile</B> + the map); the finished FT8 QSO <B>auto-logs to Log History</B>; and the grid turns green on the tracker.</p>
         </Section>
 
         <Section id="weather" title="Weather & Alerts">
@@ -330,19 +346,41 @@ function HelpTab() {
             <li><B>Lightning detection</B> — aggregates Blitzortung, NWS warnings, and your own Ambient or Ecowitt station; alerts within a range you set, with strike count + direction.</li>
             <li><B>High-wind alerts</B> — NWS warnings, METAR (airport) observations, and Ambient / Ecowitt data, with low / moderate / high tiers and separate sustained + gust thresholds.</li>
           </ul>
-          <p>All under <P>Settings → Alerts → Weather</P> — per-source toggles, units (mph / kph), range, cooldown, and a METAR station code, plus Preview buttons to see the alert banner without waiting for real weather. Alerts appear as an animated banner above the status bar. (Header-bar space-weather indices — SFI / K-index / SSN — live in <P>Settings → Header Bar</P>.)</p>
+          <p>All under <P>Settings → Alerts → Weather</P> — per-source toggles, a wind-speed unit override (<B>Auto / mph / kph</B>, where Auto follows your app-wide <P>Settings → Appearance → Units</P> choice), range, cooldown, and a METAR station code, plus Preview buttons to see the alert banner without waiting for real weather. Alerts appear as an animated banner above the status bar. (Header-bar space-weather indices — SFI / K-index / SSN — live in <P>Settings → Header Bar</P>.)</p>
         </Section>
 
         <Section id="meters" title="Meters & Panadapter">
           <p><B>Meter</B> panel — an analog or round S-meter (switch in the panel), with mode + frequency on one line: <span className="text-white">white on receive</span>, <span className="text-red-400">red on transmit</span>. Fed by the connected radio's meter stream (TCI). S-meter calibration lives in the panel's gear menu.</p>
           <p><B>Panadapter</B> — live spectrum + waterfall, drawn from a <B>TCI</B> radio's IQ stream (TCI-only). Mouse-wheel over it to tune by the STEP you pick; Ctrl/Shift + wheel to zoom around the VFO; click to tune.</p>
+          <p>Header controls tune the display (each is also mouse-wheel adjustable): <B>SM</B> spectrum smoothing, <B>SPC</B> spectrum height — turn it down if the trace rides too high in the pane — and <B>INT / FLR / CEL / WF</B> for waterfall intensity, floor, ceiling and speed. The <B>colour gear</B> holds the waterfall <B>palette</B> and the <B>spectrum line colour</B>; <B>Grid</B> toggles the overlay. On a narrow panel the sliders fold into a controls popover so nothing clips. All of these are remembered per machine.</p>
         </Section>
 
         <Section id="callbook" title="Callbook, Uploads & Import">
           <p><B>Callbook lookups</B>: QRZ then HamQTH (<P>Settings → Web Logbooks</P>), falling back to the bundled AD1C <B>cty.dat</B> for country + approximate coords. Keep cty.dat current with the update button under <P>Settings → Web Logbooks → Country Files</P>.</p>
           <p><B>Upload logbooks</B> (per-QSO or on demand), each in <P>Settings → Web Logbooks</P>: <B>LoTW</B> (signs via TQSL), <B>eQSL</B>, <B>Club Log</B>, <B>HRDLog</B>, and <B>QRZ Logbook</B>.</p>
-          <p><B>Import</B> — <P>Settings → ADIF Monitor</P> watches external <span className="font-mono text-[11px] text-dark-100">.adi</span> files (VarAC, MSHV, …) and listens for ADIF-over-UDP from N1MM / Logger32 / DXKeeper; <B>WSJT-X</B> auto-log is under <P>Settings → Web Logbooks → WSJT-X</P>.</p>
+          <p><B>Import</B> — <P>Settings → ADIF Monitor</P> watches external <span className="font-mono text-[11px] text-dark-100">.adi</span> files (VarAC, MSHV, … — <B>Browse</B> to each file or paste its path) and listens for ADIF-over-UDP from N1MM / Logger32 / DXKeeper; <B>WSJT-X / JTDX / MSHV</B> auto-log has its own section — <P>Settings → Decoder Link (UDP)</P> — with two independent UDP sources so you can run two decoders (say WSJT-X and JTDX) on separate ports at once.</p>
           <p><B>Backup &amp; Restore</B> (<P>Settings → Backup &amp; Restore</P>) — turn on <B>Scheduled Backups</B> to save your logbook automatically (daily, weekly, or on exit) to a folder you choose, keeping the last N copies. You can also <B>Export / Import all app settings</B> to a single file — ideal for moving your whole setup to another PC or keeping a safe copy off-machine.</p>
+        </Section>
+
+        <Section id="ai" title="AI Talk Points">
+          <p><B>AI talk points</B> suggest a few friendly conversation starters for the callsign you're working — drawn from their QRZ profile and your past QSOs — so you always have something to say. Focus a callsign in the Log Entry (with auto-generate on) and they appear; the <B>Chat AI</B> panel also lets you ask follow-up questions. Your API key is stored locally and calls go straight to the provider — nothing routes through SDRLoggerPlus.</p>
+          <p>Set it up in <P>Settings → Chat AI</P>: pick a <B>provider</B>, paste a key (if needed), choose a model, and hit <B>Test connection</B>. Providers:</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>Ollama</B> — a model running <B>locally on your PC</B>: free, private, offline, <B>no API key</B>. Setup below.</li>
+            <li><B>Groq</B> — free cloud key, very fast (Llama 3.3); generous free limits — plenty for talk points.</li>
+            <li><B>OpenRouter</B> — one key, many models including free ones.</li>
+            <li><B>OpenAI</B> / <B>Anthropic</B> — paid, top-tier. <B>Custom</B> — any other OpenAI-compatible endpoint (enter its Base URL).</li>
+          </ul>
+          <p className="pt-1"><B>Set up Ollama (free, local, no key):</B></p>
+          <ol className="ml-4 list-decimal space-y-1.5">
+            <li>Install Ollama from{' '}
+              <button onClick={() => openLink('https://ollama.com')} className="font-bold text-accent-primary hover:underline" title="Download Ollama">ollama.com</button>{' '}
+              (Windows / macOS / Linux).</li>
+            <li>Pull a model — in a terminal run <span className="font-mono text-[11px] text-dark-100">ollama pull llama3.2</span> (a good small default; <span className="font-mono text-[11px] text-dark-100">phi3</span>, <span className="font-mono text-[11px] text-dark-100">gemma2</span>, <span className="font-mono text-[11px] text-dark-100">mistral</span> also work).</li>
+            <li>Ollama then serves it locally at <span className="font-mono text-[11px] text-dark-100">http://localhost:11434</span> (started automatically).</li>
+            <li>In <P>Settings → Chat AI</P> set <B>Provider → Ollama</B> — no key needed, model defaults to <span className="font-mono text-[11px] text-dark-100">llama3.2</span> — then <B>Test connection</B>.</li>
+          </ol>
+          <p className="text-xs text-dark-300">A mid-range PC handles small models (a few GB) fine; larger models want more RAM/VRAM. It runs on your machine, so there are no usage limits or costs.</p>
         </Section>
 
         <Section id="awards" title="Awards & Statistics">
@@ -356,6 +394,7 @@ function HelpTab() {
         <Section id="settings" title="Settings & Shortcuts">
           <p><B>Arrange your workspace.</B> Every panel <B>docks and drags</B> — grab a panel's title bar to move it, split the view, or tab panels together however you like, and the arrangement is remembered across sessions. Once you've built an operating position you like, save it: <P>Settings → Appearance → Layout Presets</P> holds up to <B>3 named layouts</B> to switch between (say, one for casual logging and one for a DX pileup).</p>
           <p>Every panel has its own <B>gear</B> (top-right of the header) for panel-specific tuning. The main <P>Settings</P> sections: Station · Web Logbooks · Alerts · ADIF Monitor · Band Openings · Rotator · Backup &amp; Restore · S.A.T. · Appearance · Map · Header Bar · Chat AI · About.</p>
+          <p><B>Units (imperial / metric).</B> One master switch — <P>Settings → Appearance → Units</P> — sets how every physical value is shown app-wide: distance to DX, satellite range / altitude / footprint, header temperature &amp; wind, and lightning proximity. A few features can override it: the Weather <B>wind</B> switch defaults to <B>Auto</B> (follow the master) but can be pinned to mph or kph on its own, and the RBN Band-Openings and lightning-range settings keep their own mi / km pickers.</p>
           <p className="text-xs text-dark-300">Tip: the <B>Appearance</B> section has the theme picker (dark, night-ops, midnight, and more).</p>
           <p className="pt-1"><B>Keyboard &amp; mouse:</B></p>
           <ul className="ml-4 list-disc space-y-1 text-xs">

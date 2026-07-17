@@ -4,6 +4,9 @@ import { signalRService, type HamlibRigConfigDto, type SignalRConnectionState } 
 import { useAppStore, type ConnectionState } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLayoutStore } from '../store/layoutStore';
+import { useToastStore } from '../store/toastStore';
+import { useWsjtxDecodeStore } from '../store/wsjtxDecodeStore';
+import { runDecodeAlerts } from '../utils/decodeAlertEngine';
 import { announceHotSpot, shouldAnnounce } from '../utils/hotSpotAnnouncer';
 
 /**
@@ -157,6 +160,20 @@ export function useSignalRConnection() {
             // Invalidate QSO queries to refetch
             queryClient.invalidateQueries({ queryKey: ['qsos'] });
             queryClient.invalidateQueries({ queryKey: ['statistics'] });
+            // Refresh the Grid Tracker's worked layer so a just-worked grid
+            // turns green immediately instead of on the next timed refetch.
+            queryClient.invalidateQueries({ queryKey: ['gridmap'] });
+          },
+          onConfirmationSyncCompleted: (evt) => {
+            if (evt.error) {
+              useToastStore.getState().push(`${evt.source} auto-sync failed: ${evt.error}`, 'error');
+              return;
+            }
+            queryClient.invalidateQueries({ queryKey: ['qsos'] });
+            queryClient.invalidateQueries({ queryKey: ['statistics'] });
+            useToastStore
+              .getState()
+              .push(`${evt.source}: ${evt.updated} QSO${evt.updated === 1 ? '' : 's'} newly confirmed`, 'success');
           },
           onContestState: (evt) => {
             useAppStore.getState().setContestState(evt);
@@ -174,11 +191,15 @@ export function useSignalRConnection() {
               timestamp: evt.timestamp,
               country: evt.country,
               status: evt.spotStatus,
+              cqZone: evt.cqZone,
+              zoneStatus: evt.zoneStatus,
               isHot: evt.isHot,
-              dxStation: (evt.country || evt.dxcc || evt.grid) ? {
+              dxStation: (evt.country || evt.dxcc || evt.grid || evt.dxLat != null) ? {
                 country: evt.country,
                 dxcc: evt.dxcc,
                 grid: evt.grid,
+                lat: evt.dxLat,
+                lon: evt.dxLon,
               } : undefined,
               spotterStation: (evt.spotterCountry || evt.spotterDxcc || evt.spotterGrid) ? {
                 country: evt.spotterCountry,
@@ -198,6 +219,10 @@ export function useSignalRConnection() {
                 announceHotSpot(evt.dxCall, freqMhz.toFixed(3), evt.mode);
               }
             }
+          },
+          onWsjtxDecode: (evt) => {
+            useWsjtxDecodeStore.getState().addDecode(evt);
+            runDecodeAlerts(evt);
           },
           onSpotSelected: (evt) => {
             console.log('Spot selected:', evt.dxCall, evt.frequency, evt.mode);

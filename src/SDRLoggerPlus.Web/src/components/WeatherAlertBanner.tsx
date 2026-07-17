@@ -3,6 +3,7 @@ import { Zap, Wind, X } from 'lucide-react';
 import { api, LightningStatus, WindStatus } from '../api/client';
 import { useSettingsStore } from '../store/settingsStore';
 import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
+import { formatSpeed, resolveSpeedUnit } from '../utils/units';
 
 const SEVERITY_STYLES: Record<string, string> = {
   elevated: 'bg-yellow-900/60 border-yellow-600/60 text-yellow-200',
@@ -17,6 +18,9 @@ const SEVERITY_STYLES: Record<string, string> = {
 export function WeatherAlertBanner() {
   const weatherEnabled = useSettingsStore(
     state => state.settings.weather.lightning.enabled || state.settings.weather.wind.enabled);
+  // Master unit system + the wind switch (which may be 'auto' → follow master).
+  const unitSystem = useSettingsStore(state => state.settings.appearance.unitSystem);
+  const windPref = useSettingsStore(state => state.settings.weather.wind.displayUnit);
   const [lightning, setLightning] = useState<LightningStatus | null>(null);
   const [wind, setWind] = useState<WindStatus | null>(null);
   const [dismissedKey, setDismissedKey] = useState('');
@@ -57,16 +61,23 @@ export function WeatherAlertBanner() {
   const key = `${lightningActive ? `L${effectiveLightning?.strikesLastHour}${effectiveLightning?.closestKm}` : ''}|${windActive ? `W${effectiveWind?.severity}${effectiveWind?.gustMph}` : ''}`;
   if (key === dismissedKey) return null;
 
-  const useKph = effectiveWind?.unit === 'kph';
+  // Resolve the display unit from the master system (the event's echoed `unit`
+  // is ignored). Compute from the always-present mph values so it works whether
+  // or not the backend populated the kph fields.
+  const windUnit = resolveSpeedUnit(windPref, unitSystem);
   // Local aliases the JSX still references — kept as `lightning` and
   // `wind` so the rendering block below doesn't need touching.
   const l = effectiveLightning;
   const w = effectiveWind;
   const windText = windActive
-    ? (useKph
-        ? `G${Math.round(w!.gustKph ?? 0)}kph ${Math.round(w!.sustainedKph ?? 0)}kph ${w!.direction}`
-        : `G${Math.round(w!.gustMph ?? 0)} ${Math.round(w!.sustainedMph ?? 0)}mph ${w!.direction}`)
+    ? `G${formatSpeed(w!.gustMph ?? 0, windUnit)} / ${formatSpeed(w!.sustainedMph ?? 0, windUnit)} ${w!.direction}`
     : '';
+  // Lightning proximity follows the master system (event carries both mi + km).
+  const lightningDistText = l?.closestMi == null
+    ? ''
+    : unitSystem === 'imperial'
+      ? `${l.closestMi} mi`
+      : `${l.closestKm ?? Math.round(l.closestMi * 1.609344)} km`;
 
   const severityStyle = SEVERITY_STYLES[w?.severity ?? ''] ?? SEVERITY_STYLES.high;
   const style = lightningActive ? SEVERITY_STYLES.extreme : severityStyle;
@@ -81,7 +92,7 @@ export function WeatherAlertBanner() {
       {lightningActive && (
         <span className="flex items-center gap-1.5" title={l?.nwsWarning ?? 'Lightning detected'}>
           <Zap className="w-3.5 h-3.5" />
-          Lightning{l?.closestMi != null && ` ${l.closestMi} mi ${l.direction}`}
+          Lightning{lightningDistText && ` ${lightningDistText} ${l!.direction}`}
           {l != null && l.strikesLastHour > 0 && ` · ${l.strikesLastHour}/hr`}
           {l?.nwsWarning && ` · ${l.nwsWarning}`}
         </span>

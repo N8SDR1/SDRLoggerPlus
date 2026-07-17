@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SDRLoggerPlus.Contracts.Events;
 using SDRLoggerPlus.Server.Services.Wsjtx;
 
 namespace SDRLoggerPlus.Server.Controllers;
@@ -12,5 +13,19 @@ public class WsjtxController : ControllerBase
     public WsjtxController(WsjtxService wsjtxService) => _wsjtxService = wsjtxService;
 
     [HttpGet("status")]
-    public ActionResult<WsjtxStatus> GetStatus() => Ok(_wsjtxService.GetStatus());
+    public ActionResult<IReadOnlyList<WsjtxStatus>> GetStatus() => Ok(_wsjtxService.GetStatuses());
+
+    /// <summary>Recent decodes for the Decodes panel to backfill on open.</summary>
+    [HttpGet("decodes")]
+    public ActionResult<IReadOnlyList<WsjtxDecodeEvent>> GetDecodes() => Ok(_wsjtxService.GetRecentDecodes());
+
+    /// <summary>Answer a decoded CQ ("call this station") via a WSJT-X Reply message.</summary>
+    [HttpPost("reply")]
+    public async Task<ActionResult> Reply([FromBody] WsjtxReplyRequest req)
+    {
+        var sent = await _wsjtxService.SendReplyAsync(req);
+        return sent
+            ? Ok(new { sent = true })
+            : StatusCode(StatusCodes.Status409Conflict, new { sent = false, error = "The decoder isn't reachable yet (no datagrams seen, or the source is off)." });
+    }
 }

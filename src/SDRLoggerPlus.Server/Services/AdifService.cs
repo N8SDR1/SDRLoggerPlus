@@ -268,6 +268,177 @@ public partial class AdifService : IAdifService
         return $"{callsign.ToUpperInvariant()}|{qsoDate.Date:yyyyMMdd}|{timeOn}|{band}|{mode}";
     }
 
+    /// <summary>
+    /// Loose match key for confirmation merge — call + band + normalized mode,
+    /// deliberately WITHOUT the date/time. The date is matched separately with a
+    /// ±1-day tolerance (see PickNearestByDate) because ADIF dates are UTC while
+    /// the log stores local wall-clock, so an evening QSO can land on a different
+    /// calendar day. Standard confirmation-matching behaviour.
+    /// </summary>
+    private static string MergeKey(string callsign, string band, string mode)
+    {
+        return $"{callsign.ToUpperInvariant()}|{band.ToUpperInvariant()}|{NormalizeModeForMatch(mode)}";
+    }
+
+    /// <summary>Collapse sideband/sub-mode variants so a report matches the log.</summary>
+    private static string NormalizeModeForMatch(string? mode)
+    {
+        if (string.IsNullOrEmpty(mode)) return "";
+        var m = mode.ToUpperInvariant();
+        return m switch
+        {
+            "USB" or "LSB" => "SSB",
+            "PSK31" or "PSK63" or "PSK125" => "PSK",
+            _ => m
+        };
+    }
+
+    public async Task<ConfirmationMergeResponse> MergeConfirmationsAsync(
+        Stream stream, ConfirmationSource source, CancellationToken cancellationToken = default)
+    {
+        var records = ParseAdif(stream).ToList();
+        var existing = (await _qsoRepository.GetAllAsync()).ToList();
+
+        _logger.LogInformation("Merging {Count} {Source} confirmation records against {Existing} logged QSOs",
+            records.Count, source, existing.Count);
+
+        // Index the log by call+band+mode; a key can hold many QSOs (worked the
+        // same station repeatedly), so we keep a list and pick the nearest date.
+        var index = new Dictionary<string, List<Qso>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var q in existing)
+        {
+            if (string.IsNullOrEmpty(q.Callsign) || string.IsNullOrEmpty(q.Band) || string.IsNullOrEmpty(q.Mode))
+                continue;
+            var key = MergeKey(q.Callsign, q.Band, q.Mode);
+            if (!index.TryGetValue(key, out var list))
+            {
+                list = new List<Qso>();
+                index[key] = list;
+            }
+            list.Add(q);
+        }
+
+        int matched = 0, updated = 0, alreadyConfirmed = 0, unmatched = 0;
+        var toUpdate = new List<Qso>();
+
+        foreach (var rec in records)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrEmpty(rec.Callsign) || string.IsNullOrEmpty(rec.Band) || string.IsNullOrEmpty(rec.Mode))
+            {
+                unmatched++;
+                continue;
+            }
+
+            // A QRZ logbook export lists unconfirmed QSOs too — skip anything QRZ
+            // doesn't mark confirmed. LoTW / eQSL downloads are confirmed-only, so
+            // every matched record counts for those.
+            if (source == ConfirmationSource.Qrz &&
+                !string.Equals(rec.Qsl?.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var key = MergeKey(rec.Callsign, rec.Band, rec.Mode);
+            var target = index.TryGetValue(key, out var candidates)
+                ? PickNearestByDate(candidates, rec.QsoDate)
+                : null;
+            if (target is null)
+            {
+                unmatched++;
+                continue;
+            }
+
+            matched++;
+            if (ApplyConfirmation(target, source, rec))
+            {
+                toUpdate.Add(target);
+            }
+            else
+            {
+                alreadyConfirmed++;
+            }
+        }
+
+        // Persist only the records we actually changed.
+        foreach (var q in toUpdate)
+        {
+            if (string.IsNullOrEmpty(q.Id)) continue;
+            q.UpdatedAt = DateTime.UtcNow;
+            await _qsoRepository.UpdateAsync(q.Id, q);
+            updated++;
+        }
+
+        _logger.LogInformation(
+            "{Source} merge complete: {Matched} matched, {Updated} newly confirmed, {Already} already, {Unmatched} unmatched",
+            source, matched, updated, alreadyConfirmed, unmatched);
+
+        return new ConfirmationMergeResponse(records.Count, matched, updated, alreadyConfirmed, unmatched);
+    }
+
+    /// <summary>
+    /// Pick the logged QSO closest in time to the report record, within ~1 day.
+    /// The window absorbs the UTC-vs-local calendar-day rollover (ADIF dates are
+    /// UTC; the log stores local wall-clock), which otherwise drops evening QSOs.
+    /// Returns null when no candidate is close enough — a genuinely different QSO.
+    /// </summary>
+    private static Qso? PickNearestByDate(List<Qso> candidates, DateTime reportDate)
+    {
+        Qso? best = null;
+        var bestHours = double.MaxValue;
+        foreach (var c in candidates)
+        {
+            var hours = Math.Abs((c.QsoDate - reportDate).TotalHours);
+            if (hours < bestHours)
+            {
+                bestHours = hours;
+                best = c;
+            }
+        }
+        return bestHours <= 26 ? best : null;
+    }
+
+    /// <summary>
+    /// Stamp the confirmation channel on a matched QSO. Returns true if it was a
+    /// new confirmation, false if the QSO was already confirmed by that channel.
+    /// </summary>
+    private static bool ApplyConfirmation(Qso qso, ConfirmationSource source, Qso report)
+    {
+        qso.Qsl ??= new QslStatus();
+        switch (source)
+        {
+            case ConfirmationSource.Lotw:
+                qso.Qsl.Lotw ??= new LotwStatus();
+                if (string.Equals(qso.Qsl.Lotw.Rcvd, "Y", StringComparison.OrdinalIgnoreCase)) return false;
+                qso.Qsl.Lotw.Rcvd = "Y";
+                qso.Qsl.Lotw.RcvdDate = report.Qsl?.Lotw?.RcvdDate ?? report.Qsl?.RcvdDate ?? DateTime.UtcNow;
+                qso.LotwSyncStatus = SyncStatus.Synced;
+                return true;
+
+            case ConfirmationSource.Eqsl:
+                qso.Qsl.Eqsl ??= new EqslStatus();
+                if (string.Equals(qso.Qsl.Eqsl.Rcvd, "Y", StringComparison.OrdinalIgnoreCase)) return false;
+                qso.Qsl.Eqsl.Rcvd = "Y";
+                return true;
+
+            case ConfirmationSource.Qrz:
+                qso.Qsl.Qrz ??= new QrzStatus();
+                if (string.Equals(qso.Qsl.Qrz.Rcvd, "Y", StringComparison.OrdinalIgnoreCase)) return false;
+                qso.Qsl.Qrz.Rcvd = "Y";
+                return true;
+
+            case ConfirmationSource.Card:
+                if (string.Equals(qso.Qsl.Rcvd, "Y", StringComparison.OrdinalIgnoreCase)) return false;
+                qso.Qsl.Rcvd = "Y";
+                qso.Qsl.RcvdDate = report.Qsl?.RcvdDate ?? DateTime.UtcNow;
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
     public async Task<string> ExportQsosAsync(AdifExportRequest? request = null)
     {
         var searchRequest = new QsoSearchRequest(
@@ -441,6 +612,11 @@ public partial class AdifService : IAdifService
                 {
                     Sent = GetStringField(fields, "eqsl_qsl_sent"),
                     Rcvd = GetStringField(fields, "eqsl_qsl_rcvd")
+                },
+                // QRZ Logbook exposes its confirmation as app_qrzlog_status = C.
+                Qrz = new QrzStatus
+                {
+                    Rcvd = string.Equals(GetStringField(fields, "app_qrzlog_status"), "C", StringComparison.OrdinalIgnoreCase) ? "Y" : null
                 }
             },
             Contest = fields.ContainsKey("contest_id") ? new ContestInfo

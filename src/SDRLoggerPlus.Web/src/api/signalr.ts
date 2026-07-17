@@ -69,6 +69,40 @@ export interface SpotReceivedEvent {
   spotterContinent?: string;
   spotStatus?: 'newDxcc' | 'newBand' | 'worked';
   isHot?: boolean;
+  /** Approximate DX location (cty.dat country centroid) for the DX Coach prop gate. */
+  dxLat?: number;
+  dxLon?: number;
+  /** CQ zone (WAZ) of the DX station + whether it's new vs the log. */
+  cqZone?: number;
+  zoneStatus?: 'newZone' | 'newZoneBand';
+}
+
+/** One decoded FT8/FT4 transmission from WSJT-X/JTDX/MSHV, needed-status stamped. */
+export interface WsjtxDecodeEvent {
+  source: number;
+  clientId: string;
+  callsign: string;
+  dxCall?: string;
+  grid?: string;
+  mode?: string;
+  snr: number;
+  deltaTimeSeconds: number;
+  audioOffsetHz: number;
+  /** Reconstructed RF frequency (dial + audio offset); 0 until a Status message arrives. */
+  frequencyHz: number;
+  band?: string;
+  country?: string;
+  continent?: string;
+  cqZone?: number;
+  isCq: boolean;
+  spotStatus?: 'newDxcc' | 'newBand' | 'worked';
+  zoneStatus?: 'newZone' | 'newZoneBand';
+  gridStatus?: 'newGrid' | 'newGridBand';
+  decodedAtUtc: string;
+  // Raw decode fields echoed back to answer this CQ (Reply / "call this station").
+  timeMsSinceMidnight?: number;
+  rawMessage?: string;
+  lowConfidence?: boolean;
 }
 
 export interface SatPassQso {
@@ -699,11 +733,21 @@ export type SignalRConnectionState = 'disconnected' | 'connecting' | 'connected'
 
 type ConnectionStateCallback = (state: SignalRConnectionState, attempt: number) => void;
 
+export interface ConfirmationSyncCompletedEvent {
+  source: string;
+  matched: number;
+  updated: number;
+  unmatched: number;
+  error?: string;
+}
+
 type EventHandlers = {
   onCallsignFocused?: (evt: CallsignFocusedEvent) => void;
   onCallsignLookedUp?: (evt: CallsignLookedUpEvent) => void;
   onQsoLogged?: (evt: QsoLoggedEvent) => void;
+  onConfirmationSyncCompleted?: (evt: ConfirmationSyncCompletedEvent) => void;
   onSpotReceived?: (evt: SpotReceivedEvent) => void;
+  onWsjtxDecode?: (evt: WsjtxDecodeEvent) => void;
   onHotListChanged?: (evt: HotListChangedEvent) => void;
   onSatState?: (state: SatState) => void;
   onSpotSelected?: (evt: SpotSelectedEvent) => void;
@@ -963,7 +1007,8 @@ class SignalRService {
         'success',
         15000
       );
-      if (useSettingsStore.getState().settings.rbnAlerts.voice) {
+      const rbn = useSettingsStore.getState().settings.rbnAlerts;
+      if (rbn.voice) {
         announceBandOpening(evt.band, evt.dxCall, evt.mode, evt.distance, evt.unit, evt.snr);
       }
     });
@@ -981,12 +1026,20 @@ class SignalRService {
       this.handlers.onHotListChanged?.(evt);
     });
 
+    this.connection.on('OnConfirmationSyncCompleted', (evt: ConfirmationSyncCompletedEvent) => {
+      this.handlers.onConfirmationSyncCompleted?.(evt);
+    });
+
     this.connection.on('OnSatState', (state: SatState) => {
       this.handlers.onSatState?.(state);
     });
 
     this.connection.on('OnSpotReceived', (evt: SpotReceivedEvent) => {
       this.handlers.onSpotReceived?.(evt);
+    });
+
+    this.connection.on('OnWsjtxDecode', (evt: WsjtxDecodeEvent) => {
+      this.handlers.onWsjtxDecode?.(evt);
     });
 
     this.connection.on('OnSpotSelected', (evt: SpotSelectedEvent) => {

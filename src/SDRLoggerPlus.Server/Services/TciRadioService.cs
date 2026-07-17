@@ -590,6 +590,14 @@ public class TciRadioService : BackgroundService
                 UpdatedAt = DateTime.UtcNow,
             };
             await repo.UpsertByRadioIdAsync(entity);
+            // Keep the in-memory device's name in sync so a rename shows up
+            // immediately. GetDiscoveredRadiosAsync prefers the in-memory entry
+            // over the saved config, so without this a stale name would shadow
+            // the updated DisplayName for an already-known/connected rig.
+            if (_discoveredRadios.TryGetValue(radioId, out var device))
+            {
+                device.Model = entity.DisplayName;
+            }
             _logger.LogInformation("Saved TCI config: {Host}:{Port}", host, port);
         }
         catch (Exception ex)

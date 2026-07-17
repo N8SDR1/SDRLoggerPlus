@@ -15,7 +15,10 @@ public class LotwService : ILotwService
     private readonly IAdifService _adifService;
     private readonly ITqslRunner _tqsl;
     private readonly IHubContext<LogHub, ILogHubClient> _hub;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<LotwService> _logger;
+
+    private const string LotwReportUrl = "https://lotw.arrl.org/lotwuser/lotwreport.adi";
 
     // Preview sample cap — UI shows first N entries in the confirm dialog.
     private const int PreviewSampleSize = 50;
@@ -26,6 +29,7 @@ public class LotwService : ILotwService
         IAdifService adifService,
         ITqslRunner tqsl,
         IHubContext<LogHub, ILogHubClient> hub,
+        IHttpClientFactory httpClientFactory,
         ILogger<LotwService> logger)
     {
         _settingsRepository = settingsRepository;
@@ -33,7 +37,71 @@ public class LotwService : ILotwService
         _adifService = adifService;
         _tqsl = tqsl;
         _hub = hub;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
+    }
+
+    public async Task<ConfirmationMergeResponse> DownloadConfirmationsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
+        var lotw = settings.Lotw;
+
+        if (string.IsNullOrWhiteSpace(lotw.Username) || string.IsNullOrWhiteSpace(lotw.Password))
+            throw new InvalidOperationException("Set your LoTW website login (username + password) in Settings → LoTW first.");
+
+        // Incremental: only pull confirmations newer than the last sync. LoTW's
+        // qslsince filters on the QSL *received* date. First run pulls everything.
+        var query = new List<string>
+        {
+            "qso_query=1",
+            "qso_qsl=yes",
+            "qso_qsldetail=yes",
+            $"login={Uri.EscapeDataString(lotw.Username!)}",
+            $"password={Uri.EscapeDataString(lotw.Password!)}"
+        };
+        if (lotw.LastConfirmationSync is { } since)
+            query.Add($"qso_qslsince={since:yyyy-MM-dd}");
+
+        var url = $"{LotwReportUrl}?{string.Join("&", query)}";
+
+        _logger.LogInformation("Downloading LoTW confirmations (since {Since})",
+            lotw.LastConfirmationSync?.ToString("yyyy-MM-dd") ?? "beginning");
+
+        var client = _httpClientFactory.CreateClient();
+        client.Timeout = TimeSpan.FromMinutes(5);
+
+        string adif;
+        try
+        {
+            adif = await client.GetStringAsync(url, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new InvalidOperationException($"Could not reach LoTW: {ex.Message}", ex);
+        }
+
+        // A valid report always carries an ADIF header; a bad login returns an
+        // HTML/error page instead. Fail loudly rather than reporting "0 confirmed".
+        if (adif.IndexOf("<eoh>", StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            if (adif.Contains("Username/password", StringComparison.OrdinalIgnoreCase) ||
+                adif.Contains("invalid", StringComparison.OrdinalIgnoreCase) ||
+                adif.Contains("incorrect", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("LoTW rejected the login — check your LoTW website username and password.");
+            throw new InvalidOperationException("LoTW did not return a valid report (unexpected response).");
+        }
+
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(adif));
+        var result = await _adifService.MergeConfirmationsAsync(stream, ConfirmationSource.Lotw, cancellationToken);
+
+        // Stamp the sync time so the next pull is incremental.
+        settings.Lotw.LastConfirmationSync = DateTime.UtcNow;
+        await _settingsRepository.UpsertAsync(settings);
+
+        _logger.LogInformation("LoTW confirmation download merged: {Updated} newly confirmed, {Unmatched} unmatched",
+            result.Updated, result.Unmatched);
+
+        return result;
     }
 
     public async Task<LotwPreviewResponse> PreviewAsync(LotwUploadFilter filter)
