@@ -11,6 +11,7 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { ContestEditor } from '../components/ContestEditor';
+import { isValidStateProv, isKnownCounty, matchCounties, type County } from '../contest/locations';
 
 // Only used before the active definition has loaded; the live dropdowns come from
 // the contest definition's own bands/modes so we never offer a band or mode the
@@ -121,6 +122,10 @@ function SetupView() {
 
   const start = async () => {
     if (!selected) return;
+    if (myEx.state && !isValidStateProv(myEx.state)) {
+      setError(`"${myEx.state}" isn't a valid state/province`);
+      return;
+    }
     setStarting(true);
     setError(null);
     try {
@@ -295,14 +300,18 @@ function EntryView() {
   // The bands/modes the operator may pick come from the contest itself — never a
   // hardcoded list — so a contest that forbids FT8 or WARC bands simply won't
   // offer them. Fall back to a generic set only until the definition loads.
+  // Bands are normalized to the app's lowercase convention ("20m") so they match
+  // the rig-follow (bandFromHz) and the logged band; modes are uppercased ("SSB").
   const bands = useMemo(
-    () => (definition?.bands?.length ? definition.bands : FALLBACK_BANDS),
+    () => (definition?.bands?.length ? definition.bands : FALLBACK_BANDS).map((b) => b.toLowerCase()),
     [definition]
   );
   const modes = useMemo(
-    () => (definition?.modes?.length ? definition.modes : FALLBACK_MODES),
+    () => (definition?.modes?.length ? definition.modes : FALLBACK_MODES).map((m) => m.toUpperCase()),
     [definition]
   );
+  // Home state(s) of a role-split QSO party, for county autocomplete/validation.
+  const homeStates = useMemo(() => definition?.homeArea?.states ?? [], [definition]);
 
   // Super Check Partial: load the call set once, match locally as we type.
   const { data: scpCalls } = useQuery({
@@ -401,6 +410,18 @@ function EntryView() {
 
   const logQso = useCallback(async () => {
     if (!call.trim() || logging) return;
+
+    // Strict state/province check: a 2-char location must be a real S/P (or DX).
+    // A 3+ char county is only assisted (warned in the field), never blocked.
+    const locField = definition?.rcvdExchange.find((f) => isType(f.type, 'state'));
+    if (locField) {
+      const v = (exchange[locField.key] ?? '').trim().toUpperCase();
+      if (v.length > 0 && v.length <= 2 && !isValidStateProv(v)) {
+        setLastLog(`"${v}" isn't a valid state/province — fix before logging`);
+        return;
+      }
+    }
+
     setLogging(true);
     try {
       const result = await api.logContestQso({
@@ -425,7 +446,7 @@ function EntryView() {
     } finally {
       setLogging(false);
     }
-  }, [call, band, mode, exchange, rigStatus, rstDefault, logging, setContestState, queryClient, wipe]);
+  }, [call, band, mode, exchange, definition, rigStatus, rstDefault, logging, setContestState, queryClient, wipe]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -541,9 +562,20 @@ function EntryView() {
             </div>
           </div>
 
-          {/* Dynamic exchange fields from the definition (RST included, prefilled) */}
-          {definition?.rcvdExchange
-            .map((f) => (
+          {/* Dynamic exchange fields from the definition (RST included, prefilled).
+              The location (state-typed) field gets S/P validation + county
+              autocomplete for QSO parties. */}
+          {definition?.rcvdExchange.map((f) =>
+            isType(f.type, 'state') ? (
+              <LocationField
+                key={f.key}
+                label={f.label}
+                width={f.width}
+                homeStates={homeStates}
+                value={exchange[f.key] ?? ''}
+                onChange={(v) => setExchange((p) => ({ ...p, [f.key]: v }))}
+              />
+            ) : (
               <div key={f.key} style={{ width: `${Math.max(f.width, 4)}rem` }}>
                 <input
                   type="text"
@@ -555,7 +587,8 @@ function EntryView() {
                 />
                 <div className="h-4" />
               </div>
-            ))}
+            )
+          )}
         </div>
 
         {/* Super Check Partial — click a match to fill the call */}
@@ -629,6 +662,70 @@ function InteropConfig() {
             <input className="glass-input text-xs px-2 py-1 w-full ml-0" value={settings.onlineScoreUrl}
               onChange={(e) => commit({ onlineScoreUrl: e.target.value })} placeholder="score post URL" />
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The received S/P/C field: a 2-letter state/province (validated strictly, red on
+// bad input) or a home-state county code (autocompleted, amber when unknown but
+// still loggable). For non-QSO-party contests homeStates is empty → plain S/P box.
+function LocationField({
+  value, onChange, label, width, homeStates,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  width: number;
+  homeStates: string[];
+}) {
+  const [focused, setFocused] = useState(false);
+  const v = value.trim().toUpperCase();
+  const matches = useMemo(
+    () => (homeStates.length ? matchCounties(v, homeStates) : []),
+    [v, homeStates]
+  );
+  const badStateProv = v.length > 0 && v.length <= 2 && !isValidStateProv(v);
+  const unknownCounty = v.length >= 3 && homeStates.length > 0 && !isKnownCounty(v, homeStates);
+  const showMenu = focused && matches.length > 0 && v.length >= 1;
+
+  const pick = (c: County) => { onChange(c.code); setFocused(false); };
+
+  return (
+    <div className="relative" style={{ width: `${Math.max(width, 4)}rem` }}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 120)}
+        placeholder={label}
+        spellCheck={false}
+        title={
+          badStateProv ? 'Not a valid state/province'
+            : unknownCounty ? 'Unknown county code for this contest — check it'
+            : undefined
+        }
+        className={`glass-input w-full font-mono text-lg px-2 py-2 uppercase ${
+          badStateProv ? 'border-red-500/70 text-red-400'
+            : unknownCounty ? 'border-amber-500/70 text-amber-300'
+            : ''
+        }`}
+      />
+      <div className="h-4" />
+      {showMenu && (
+        <div className="absolute z-20 top-full left-0 mt-0.5 w-48 max-h-48 overflow-y-auto rounded-lg bg-dark-800 border border-glass-100 shadow-lg">
+          {matches.map((c) => (
+            <button
+              key={c.code}
+              onMouseDown={(e) => { e.preventDefault(); pick(c); }}
+              className="flex w-full items-center justify-between px-2 py-1 text-left text-xs hover:bg-dark-600/60"
+            >
+              <span className="font-mono text-accent-primary">{c.code}</span>
+              <span className="text-gray-400 truncate ml-2">{c.name}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>
