@@ -6,6 +6,7 @@ import {
   ContestDefinition,
   ContestMyExchange,
   ContestCheckResponse,
+  ContestQso,
 } from '../api/client';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -343,8 +344,17 @@ function EntryView() {
   const [check, setCheck] = useState<ContestCheckResponse | null>(null);
   const [lastLog, setLastLog] = useState<string | null>(null);
   const [logging, setLogging] = useState(false);
+  // Set while correcting an already-logged QSO (busted call); Enter saves instead
+  // of logging a new QSO.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const callRef = useRef<HTMLInputElement>(null);
   const followRig = useRef(true);
+
+  // Recent QSOs of this session for the edit strip; refreshed after each log/edit.
+  const { data: recentQsos } = useQuery({
+    queryKey: ['contest-qsos', contestState.sessionId],
+    queryFn: () => api.getContestQsos(6),
+  });
 
   // Follow the rig band/mode while the operator hasn't overridden manually, but
   // only when the rig's band/mode is actually valid for this contest (the rig may
@@ -382,9 +392,10 @@ function EntryView() {
     return scpCalls.filter((c) => c.includes(q) && c !== q).slice(0, 10);
   }, [call, scpCalls]);
 
-  // Debounced dupe/mult check + exchange prefill while typing the call.
+  // Debounced dupe/mult check + exchange prefill while typing the call. Skipped
+  // while editing an existing QSO (it's already in the log, so it'd read as a dupe).
   useEffect(() => {
-    if (call.trim().length < 3) {
+    if (editingId || call.trim().length < 3) {
       setCheck(null);
       return;
     }
@@ -406,7 +417,7 @@ function EntryView() {
         .catch(() => setCheck(null));
     }, 250);
     return () => clearTimeout(t);
-  }, [call, band, mode]);
+  }, [call, band, mode, editingId]);
 
   const rstDefault = mode === 'CW' ? '599' : '59';
   const hasRstField = definition?.rcvdExchange.some((f) => isType(f.type, 'rst')) ?? false;
@@ -415,8 +426,18 @@ function EntryView() {
     setCall('');
     setExchange(hasRstField ? { rst: rstDefault } : {});
     setCheck(null);
+    setEditingId(null);
     callRef.current?.focus();
   }, [hasRstField, rstDefault]);
+
+  // Load a logged QSO back into the fields to correct it.
+  const startEdit = useCallback((q: ContestQso) => {
+    setEditingId(q.id);
+    setCall(q.callsign);
+    setExchange(q.exchange ?? {});
+    setCheck(null);
+    callRef.current?.focus();
+  }, []);
 
   // Prefill RST once the definition (or mode) is known, without clobbering a
   // value the operator already typed.
@@ -440,29 +461,37 @@ function EntryView() {
 
     setLogging(true);
     try {
-      const result = await api.logContestQso({
-        callsign: call.trim(),
-        band,
-        mode,
-        // Qso.Frequency is stored in kHz (ADIF export divides by 1000 → MHz).
-        frequency: rigStatus ? rigStatus.frequency / 1000 : undefined,
-        rstSent: rstDefault,
-        exchange,
-      });
-      setContestState(result.state);
-      setLastLog(
-        `${call.trim().toUpperCase()} — ${result.isDupe ? 'DUPE' : `${result.points} pts`}${
-          result.newMults.length > 0 ? ` +${result.newMults.length} mult` : ''
-        }`
-      );
+      if (editingId) {
+        // Correcting a logged QSO — save the fix and take the recomputed state.
+        const state = await api.updateContestQso(editingId, { callsign: call.trim(), exchange });
+        setContestState(state);
+        setLastLog(`Edited ${call.trim().toUpperCase()}`);
+      } else {
+        const result = await api.logContestQso({
+          callsign: call.trim(),
+          band,
+          mode,
+          // Qso.Frequency is stored in kHz (ADIF export divides by 1000 → MHz).
+          frequency: rigStatus ? rigStatus.frequency / 1000 : undefined,
+          rstSent: rstDefault,
+          exchange,
+        });
+        setContestState(result.state);
+        setLastLog(
+          `${call.trim().toUpperCase()} — ${result.isDupe ? 'DUPE' : `${result.points} pts`}${
+            result.newMults.length > 0 ? ` +${result.newMults.length} mult` : ''
+          }`
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ['qsos'] });
+      queryClient.invalidateQueries({ queryKey: ['contest-qsos'] });
       wipe();
     } catch {
-      setLastLog('Log failed — check backend');
+      setLastLog(editingId ? 'Edit failed — check backend' : 'Log failed — check backend');
     } finally {
       setLogging(false);
     }
-  }, [call, band, mode, exchange, definition, rigStatus, rstDefault, logging, setContestState, queryClient, wipe]);
+  }, [call, band, mode, exchange, editingId, definition, rigStatus, rstDefault, logging, setContestState, queryClient, wipe]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -622,7 +651,36 @@ function EntryView() {
           </div>
         )}
 
-        {lastLog && <div className="text-xs text-gray-400">Last: {lastLog}</div>}
+        {editingId ? (
+          <div className="flex items-center justify-between text-xs text-amber-300">
+            <span className="flex items-center gap-1"><Pencil className="w-3 h-3" /> Editing — Enter to save, Esc to cancel</span>
+            <button onClick={wipe} className="text-gray-400 hover:text-gray-200">Cancel</button>
+          </div>
+        ) : (
+          lastLog && <div className="text-xs text-gray-400">Last: {lastLog}</div>
+        )}
+
+        {/* Recent QSOs — click one to correct a busted call/exchange. */}
+        {recentQsos && recentQsos.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {recentQsos.map((q) => (
+              <button
+                key={q.id}
+                onClick={() => startEdit(q)}
+                title={`Edit — ${q.band} ${q.mode}${q.isDupe ? ' (dupe)' : ` · ${q.points} pts`}`}
+                className={`px-1.5 py-0.5 rounded border text-xs font-mono transition-colors ${
+                  editingId === q.id
+                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                    : q.isDupe
+                    ? 'bg-dark-700/70 border-glass-100 text-red-400/80 hover:border-amber-500/50'
+                    : 'bg-dark-700/70 border-glass-100 text-gray-300 hover:border-amber-500/50 hover:text-amber-300'
+                }`}
+              >
+                {q.callsign}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Score strip */}

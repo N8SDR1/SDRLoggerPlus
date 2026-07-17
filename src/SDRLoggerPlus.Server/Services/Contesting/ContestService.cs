@@ -210,6 +210,87 @@ public class ContestService
         return new ContestLogResult(created.Id, eval.IsDupe, eval.Points, eval.Mults, state);
     }
 
+    /// <summary>Most-recent QSOs of the active session, for the entry window's edit strip.</summary>
+    public async Task<List<ContestQsoDto>> GetSessionQsosAsync(int limit = 8)
+    {
+        var session = await _sessions.GetActiveAsync();
+        if (session == null) return new();
+        var log = await _qsos.GetByContestSessionAsync(session.Id);
+        return log.AsEnumerable().Reverse().Take(limit).Select(q => new ContestQsoDto(
+            q.Id, q.Callsign ?? string.Empty, q.Band ?? string.Empty, q.Mode ?? string.Empty,
+            q.TimeOn ?? string.Empty, q.Contest?.QsoPoints ?? 0, q.Contest?.IsDupe ?? false,
+            q.Contest?.RcvdFields)).ToList();
+    }
+
+    /// <summary>
+    /// Correct a busted call / exchange on a logged QSO of the active session, then
+    /// replay the whole session so dupe/points/mults (which depend on order and the
+    /// other QSOs) stay consistent, and broadcast the refreshed state.
+    /// </summary>
+    public async Task<ContestStateDto> UpdateQsoAsync(string id, UpdateContestQsoRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Callsign))
+            throw new ContestDefinitionException("Callsign is required.");
+
+        var session = await _sessions.GetActiveAsync()
+            ?? throw new ContestDefinitionException("No active contest session.");
+        var def = _definitions.Get(session.DefinitionId)
+            ?? throw new ContestDefinitionException($"Unknown contest '{session.DefinitionId}'.");
+
+        var qso = await _qsos.GetByIdAsync(id)
+            ?? throw new ContestDefinitionException("QSO not found.");
+        if (qso.Contest?.SessionId != session.Id)
+            throw new ContestDefinitionException("QSO is not part of the active session.");
+
+        var exchange = request.Exchange ?? new Dictionary<string, string>();
+        string? Ex(string key) => exchange.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v) ? v.Trim() : null;
+
+        qso.Callsign = request.Callsign.Trim().ToUpperInvariant();
+        var (country, continent, cqZone) = CtyService.GetEntityFromCallsign(qso.Callsign);
+        qso.Country = country;
+        qso.Continent = continent;
+        qso.Station ??= new StationInfo();
+        qso.Station.Country = country;
+        qso.Station.Continent = continent;
+
+        if (request.Exchange != null)
+        {
+            qso.RstRcvd = Ex("rst") ?? qso.RstRcvd;
+            qso.Contest!.SerialRcvd = Ex("serial") ?? qso.Contest.SerialRcvd;
+            qso.Contest.RcvdZone = Ex("zone");
+            qso.Contest.RcvdState = Ex("state");
+            qso.Contest.RcvdSection = Ex("section");
+            qso.Contest.RcvdName = Ex("name");
+            qso.Contest.RcvdPower = Ex("power");
+            qso.Contest.RcvdGrid = Ex("grid")?.ToUpperInvariant();
+            qso.Contest.RcvdFields = exchange.Count > 0
+                ? exchange.Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+                    .ToDictionary(kv => kv.Key, kv => kv.Value.Trim(), StringComparer.OrdinalIgnoreCase)
+                : null;
+            qso.Station.CqZone = int.TryParse(Ex("zone"), out var z) ? z : cqZone;
+            if (Ex("state") != null) qso.Station.State = Ex("state")!.ToUpperInvariant();
+        }
+        await _qsos.UpdateAsync(id, qso);
+
+        // Replay the session in order, re-snapshotting each QSO's evaluation so the
+        // edit's ripple (e.g. a fixed call is no longer a dupe) is reflected.
+        var log = await _qsos.GetByContestSessionAsync(session.Id);
+        for (var i = 0; i < log.Count; i++)
+        {
+            var eval = ContestScoringEngine.Evaluate(def, session.MyExchange, log.Take(i).ToList(), log[i]);
+            if (log[i].Contest is not { } c) continue;
+            c.QsoPoints = eval.Points;
+            c.IsDupe = eval.IsDupe;
+            c.Mults = eval.Mults.Count > 0 ? eval.Mults : null;
+            await _qsos.UpdateAsync(log[i].Id, log[i]);
+        }
+
+        var state = BuildState(session, def, log);
+        await _hub.BroadcastContestState(state);
+        _logger.LogInformation("Edited contest QSO {Id} -> {Call}", id, qso.Callsign);
+        return state;
+    }
+
     /// <summary>Generate the Cabrillo log for a session. Returns (filename, content).</summary>
     public async Task<(string FileName, string Content)> GenerateCabrilloAsync(string sessionId)
     {

@@ -38,6 +38,24 @@ public record ContestBatchCheckRequest(List<BatchCheckItem> Items);
 public record BatchCheckItem(string Call, string Band, string Mode);
 public record BatchCheckEntry(string Call, bool IsDupe, bool IsNewMult);
 
+/// <summary>Correct a busted call / exchange on an already-logged contest QSO.</summary>
+public record UpdateContestQsoRequest(
+    string Callsign,
+    Dictionary<string, string>? Exchange = null
+);
+
+/// <summary>A logged contest QSO for the recent-QSO strip (edit affordance).</summary>
+public record ContestQsoDto(
+    string Id,
+    string Callsign,
+    string Band,
+    string Mode,
+    string TimeOn,
+    int Points,
+    bool IsDupe,
+    Dictionary<string, string>? Exchange
+);
+
 /// <summary>Result of logging a contest QSO: per-QSO evaluation + fresh state.</summary>
 public record ContestLogResult(
     string QsoId,

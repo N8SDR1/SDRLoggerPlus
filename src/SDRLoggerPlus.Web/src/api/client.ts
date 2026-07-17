@@ -958,6 +958,19 @@ class ApiClient {
     });
   }
 
+  // Recent QSOs of the active session (for the entry window's edit strip).
+  async getContestQsos(limit = 8): Promise<ContestQso[]> {
+    return this.fetch<ContestQso[]>(`/contest/qsos?limit=${limit}`);
+  }
+
+  // Correct a busted call / exchange; returns the recomputed session state.
+  async updateContestQso(id: string, req: UpdateContestQsoRequest): Promise<ContestStateEvent> {
+    return this.fetch<ContestStateEvent>(`/contest/qso/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    });
+  }
+
   // DX News
   async getDXNews(): Promise<DXNewsItem[]> {
     return this.fetch<DXNewsItem[]>('/dxnews');
@@ -1217,6 +1230,22 @@ export interface ContestLogResult {
   points: number;
   newMults: string[];
   state: ContestStateEvent;
+}
+
+export interface ContestQso {
+  id: string;
+  callsign: string;
+  band: string;
+  mode: string;
+  timeOn: string;
+  points: number;
+  isDupe: boolean;
+  exchange?: Record<string, string> | null;
+}
+
+export interface UpdateContestQsoRequest {
+  callsign: string;
+  exchange?: Record<string, string>;
 }
 
 export interface BatchCheckEntry {

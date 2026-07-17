@@ -192,4 +192,21 @@ public class ContestSuiteController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    [HttpGet("qsos")]
+    public async Task<ActionResult<List<ContestQsoDto>>> GetSessionQsos([FromQuery] int limit = 8)
+        => Ok(await _contest.GetSessionQsosAsync(limit));
+
+    [HttpPut("qso/{id}")]
+    public async Task<ActionResult<ContestStateDto>> UpdateQso(string id, [FromBody] UpdateContestQsoRequest request)
+    {
+        try
+        {
+            return Ok(await _contest.UpdateQsoAsync(id, request));
+        }
+        catch (ContestDefinitionException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
 }
