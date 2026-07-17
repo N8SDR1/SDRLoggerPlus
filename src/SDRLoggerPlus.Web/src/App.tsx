@@ -16,6 +16,7 @@ import { useSetupStore } from './store/setupStore';
 import { useAppStore } from './store/appStore';
 import { useTheme } from './hooks/useTheme';
 import { useOutOfBandAlert } from './hooks/useOutOfBandAlert';
+import { clampPanelScale, PANEL_STEP_PERCENT } from './utils/zoomScale';
 
 import 'flexlayout-react/style/dark.css';
 
@@ -375,9 +376,6 @@ export function App() {
     };
   }, [saveLayoutImmediately]);
 
-  // PROTOTYPE: per-panel scale (tabId -> percent). Not persisted — demo only.
-  const [panelScales, setPanelScales] = useState<Record<string, number>>({});
-
   // Factory function to render components
   const factory = useCallback((node: TabNode) => {
     const component = node.getComponent();
@@ -394,7 +392,11 @@ export function App() {
           </PluginErrorBoundary>
         );
       }
-      const scale = panelScales[node.getId()] ?? 100;
+      // Per-panel scale: CSS zoom on the content wrapper, percentage persisted
+      // in the tab's FlexLayout config (rides the layout save). Canvas/WebGL
+      // panels (scalable: false) render unwrapped — zoom breaks their geometry.
+      const rawScale = (node.getConfig() as { scale?: unknown } | undefined)?.scale;
+      const scale = clampPanelScale(typeof rawScale === 'number' ? rawScale : 100);
       return (
         <PluginErrorBoundary pluginId={component || 'unknown'}>
           <div style={{ zoom: scale / 100, height: '100%' }}>
@@ -409,7 +411,7 @@ export function App() {
         Unknown component: {component}
       </div>
     );
-  }, [panelScales]);
+  }, []);
 
   // Add a new panel to a specific tabset
   const handleAddPanel = useCallback((pluginId: string) => {
@@ -521,22 +523,26 @@ export function App() {
   // Custom tabset rendering - add + button to each tabset
   const onRenderTabSet = useCallback((node: TabSetNode | BorderNode, renderValues: ITabSetRenderValues) => {
     if (node instanceof TabSetNode) {
-      // PROTOTYPE: per-panel scale stepper for the active tab (demo only).
-      // Hidden for canvas/WebGL panels that can't scale (map, globe, panadapter).
+      // Per-panel scale stepper for the active tab. Hidden for canvas/WebGL
+      // panels that can't scale (map, globe, panadapter). The percentage lives
+      // in the tab's config so it persists with the layout.
       const selected = node.getSelectedNode();
       const selectedPlugin =
         selected instanceof TabNode ? PLUGINS[selected.getComponent() || ''] : undefined;
-      if (selected && selectedPlugin && selectedPlugin.scalable !== false) {
+      if (selected instanceof TabNode && selectedPlugin && selectedPlugin.scalable !== false) {
         const tabId = selected.getId();
-        const scale = panelScales[tabId] ?? 100;
-        const setScale = (pct: number) =>
-          setPanelScales((s) => ({ ...s, [tabId]: Math.min(100, Math.max(70, pct)) }));
+        const rawScale = (selected.getConfig() as { scale?: unknown } | undefined)?.scale;
+        const scale = clampPanelScale(typeof rawScale === 'number' ? rawScale : 100);
+        const setScale = (pct: number) => {
+          const config = { ...((selected.getConfig() as object | undefined) ?? {}), scale: clampPanelScale(pct) };
+          model.doAction(Actions.updateNodeAttributes(tabId, { config }));
+        };
         renderValues.buttons.push(
           <div key="panel-scale" className="flex items-center gap-0.5 mr-1 text-[10px] font-mono text-dark-300">
             <button
               title="Shrink this panel's content"
               className="flexlayout__tab_toolbar_button"
-              onClick={() => setScale(scale - 10)}
+              onClick={() => setScale(scale - PANEL_STEP_PERCENT)}
             >
               −
             </button>
@@ -550,7 +556,7 @@ export function App() {
             <button
               title="Grow this panel's content (max 100%)"
               className="flexlayout__tab_toolbar_button"
-              onClick={() => setScale(scale + 10)}
+              onClick={() => setScale(scale + PANEL_STEP_PERCENT)}
             >
               +
             </button>
@@ -571,7 +577,7 @@ export function App() {
         </button>
       );
     }
-  }, [panelScales]);
+  }, [model]);
 
   // Re-apply the default FlexLayout model whenever a reset is requested from
   // anywhere (the store's resetLayout() bumps resetToken). This is what the
