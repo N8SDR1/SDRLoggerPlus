@@ -3,8 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Trophy, ExternalLink, Radio } from 'lucide-react';
 import { api, Contest } from '../api/client';
 import { GlassPanel } from '../components/GlassPanel';
-import { usePanelCompact } from '../hooks/usePanelCompact';
-import { CompactToggle } from '../components/CompactToggle';
 
 // Format time remaining as human-readable string
 const formatTimeRemaining = (endTime: string): string => {
@@ -77,7 +75,6 @@ const getModeClass = (mode: string): string => {
 export function ContestsPlugin() {
   const [selectedDays, setSelectedDays] = useState(7);
   const [, setCurrentTime] = useState(new Date());
-  const [compact, toggleCompact] = usePanelCompact('contests');
 
   // Update current time every minute to refresh time remaining
   useEffect(() => {
@@ -136,13 +133,12 @@ export function ContestsPlugin() {
             <option value={14}>14 days</option>
             <option value={30}>30 days</option>
           </select>
-          <CompactToggle compact={compact} onToggle={toggleCompact} />
         </div>
       }
     >
       <div className="flex flex-col h-full">
         {/* Scrollable contest list */}
-        <div className={`flex-1 overflow-y-auto ${compact ? 'p-2 space-y-1.5' : 'p-4 space-y-3'}`}>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {isLoading ? (
             <div className="flex items-center justify-center py-8 text-gray-500">
               <Radio className="w-4 h-4 animate-spin mr-2" />
@@ -164,7 +160,6 @@ export function ContestsPlugin() {
                     <ContestCard
                       key={`live-${index}`}
                       contest={contest}
-                      compact={compact}
                     />
                   ))}
                 </div>
@@ -182,7 +177,6 @@ export function ContestsPlugin() {
                     <ContestCard
                       key={`upcoming-${index}`}
                       contest={contest}
-                      compact={compact}
                     />
                   ))}
                 </div>
@@ -209,14 +203,14 @@ export function ContestsPlugin() {
 }
 
 // Contest Card Component
-function ContestCard({ contest, compact = false }: { contest: Contest; compact?: boolean }) {
+function ContestCard({ contest }: { contest: Contest }) {
   const isLive = contest.isLive;
   const isStartingSoon = contest.isStartingSoon;
 
   return (
     <div
       className={`
-        ${compact ? 'p-2' : 'p-3'} rounded-lg border transition-all
+        p-3 rounded-lg border transition-all
         ${isLive
           ? 'bg-red-500/10 border-red-500/30 shadow-[0_0_10px_rgba(239,68,68,0.3)]'
           : isStartingSoon
@@ -228,7 +222,7 @@ function ContestCard({ contest, compact = false }: { contest: Contest; compact?:
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           {/* Contest Name */}
-          <div className={`flex items-center gap-2 ${compact ? 'mb-0.5' : 'mb-1'}`}>
+          <div className="flex items-center gap-2 mb-1">
             {isLive && (
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
@@ -241,7 +235,7 @@ function ContestCard({ contest, compact = false }: { contest: Contest; compact?:
           </div>
 
           {/* Mode Badge */}
-          <div className={`flex items-center gap-2 ${compact ? 'mb-1' : 'mb-2'}`}>
+          <div className="flex items-center gap-2 mb-2">
             <span className={`badge text-xs ${getModeClass(contest.mode)}`}>
               {contest.mode.toUpperCase()}
             </span>

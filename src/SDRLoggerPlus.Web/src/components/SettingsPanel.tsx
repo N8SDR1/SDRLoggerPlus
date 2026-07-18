@@ -65,6 +65,7 @@ import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
 import { Model } from 'flexlayout-react';
 import { gridToLatLon } from '../utils/maidenhead';
 import { distanceUnitFor, resolveSpeedUnit } from '../utils/units';
+import { clampPercent, percentToZoomLevel, zoomLevelToPercent, MIN_PERCENT, MAX_PERCENT, STEP_PERCENT } from '../utils/zoomScale';
 import { APP_VERSION } from '../version';
 
 // Settings navigation items
@@ -2411,6 +2412,67 @@ function PotaSettingsSection() {
   );
 }
 
+/**
+ * Global UI Scale (Electron whole-app zoom, down-only 70–100%). Renders
+ * nothing in a plain browser — native browser zoom covers that case.
+ */
+function UiScaleRow() {
+  const electronApi = window.electronAPI;
+  const supported = !!electronApi?.getZoomLevel && !!electronApi?.setZoomLevel;
+  const [percent, setPercent] = useState(100);
+
+  useEffect(() => {
+    if (!supported) return;
+    electronApi!.getZoomLevel!().then((lvl) => setPercent(zoomLevelToPercent(lvl))).catch(() => {});
+    electronApi!.onZoomLevelChanged?.((lvl) => setPercent(zoomLevelToPercent(lvl)));
+    return () => electronApi!.removeZoomLevelChangedListener?.();
+  }, [supported]);
+
+  if (!supported) return null;
+
+  const apply = (pct: number) => {
+    const clamped = clampPercent(pct);
+    setPercent(clamped);
+    void electronApi!.setZoomLevel!(percentToZoomLevel(clamped));
+  };
+
+  return (
+    <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+      <div>
+        <p className="font-medium font-ui text-dark-200">UI Scale</p>
+        <p className="text-sm text-dark-300">
+          Shrink the whole app to fit more on screen. Ctrl + = / − / 0 also work anywhere.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => apply(percent - STEP_PERCENT)}
+          disabled={percent <= MIN_PERCENT}
+          className="glass-button px-2.5 py-1 disabled:opacity-40"
+          title="Smaller"
+        >
+          −
+        </button>
+        <button
+          onClick={() => apply(100)}
+          className="min-w-[52px] text-center font-mono text-sm text-dark-200 hover:text-accent-primary"
+          title="Reset to 100%"
+        >
+          {percent}%
+        </button>
+        <button
+          onClick={() => apply(percent + STEP_PERCENT)}
+          disabled={percent >= MAX_PERCENT}
+          className="glass-button px-2.5 py-1 disabled:opacity-40"
+          title="Larger (max 100%)"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Appearance Settings Section
 function AppearanceSettingsSection() {
   const { settings, updateAppearanceSettings } = useSettingsStore();
@@ -2597,25 +2659,8 @@ function AppearanceSettingsSection() {
         </div>
       )}
 
-      {/* Compact mode toggle */}
-      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
-        <div>
-          <p className="font-medium font-ui text-dark-200">Compact Mode</p>
-          <p className="text-sm text-dark-300">Use smaller spacing and fonts</p>
-        </div>
-        <button
-          onClick={() => updateAppearanceSettings({ compactMode: !appearance.compactMode })}
-          className={`relative w-11 h-6 rounded-full transition-colors ${
-            appearance.compactMode ? 'bg-accent-success' : 'bg-dark-600 border border-dark-400'
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
-              appearance.compactMode ? 'translate-x-5' : 'translate-x-0'
-            }`}
-          />
-        </button>
-      </div>
+      {/* Global UI scale (Electron only) — replaced the dead Compact Mode toggle */}
+      <UiScaleRow />
 
       {/* Units — master imperial/metric preference driving every physical readout.
           Keeps distanceUnit in sync so distance consumers read it directly. */}

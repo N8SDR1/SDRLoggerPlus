@@ -122,8 +122,7 @@ public class StartupProviderTests
                 "enabled": false
             },
             "appearance": {
-                "theme": "dark",
-                "compactMode": false
+                "theme": "dark"
             },
             "rotator": {
                 "enabled": false,
