@@ -15,10 +15,7 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { ContestEditor } from '../components/ContestEditor';
-import {
-  isValidStateProv, isKnownCounty, matchCounties, hasOfficialCounties,
-  countiesForContest, type County,
-} from '../contest/locations';
+import { isValidStateProv } from '../contest/locations';
 
 // Only used before the active definition has loaded; the live dropdowns come from
 // the contest definition's own bands/modes so we never offer a band or mode the
@@ -635,11 +632,10 @@ function EntryView() {
   const logQso = useCallback(async () => {
     if (!call.trim() || logging) return;
 
-    // Location check: a 2-char value must be a real state/province (or DX). A 3+
-    // char county is blocked only when the contest has an official county table
-    // (an unknown code is then genuinely wrong); with the generic fallback it's
-    // assisted, not blocked. Only when the state field actually applies to this
-    // worked station (a DX station in e.g. RTTY Roundup sends a serial, not a state).
+    // Location check: a 2-char value must be a real state/province (or DX). Longer
+    // values pass through — no built-in contest exchanges a county code any more.
+    // Only when the state field actually applies to this worked station (a DX
+    // station in e.g. RTTY Roundup sends a serial, not a state).
     const locField = definition?.rcvdExchange.find(
       (f) => isType(f.type, 'state') && fieldApplies(f, workedClass)
     );
@@ -649,10 +645,6 @@ function EntryView() {
       const v = (exchange[locField.key] ?? '').trim().toUpperCase();
       if (v.length > 0 && v.length <= 2 && !isValidStateProv(v)) {
         setLastLog(`"${v}" isn't a valid state/province — fix before logging`);
-        return;
-      }
-      if (v.length >= 3 && hasOfficialCounties(definition?.id) && !isKnownCounty(v, definition?.id)) {
-        setLastLog(`"${v}" isn't a valid county code for this contest — fix before logging`);
         return;
       }
     }
@@ -817,15 +809,13 @@ function EntryView() {
           </div>
 
           {/* Dynamic exchange fields from the definition (RST included, prefilled).
-              The location (state-typed) field gets S/P validation + county
-              autocomplete for QSO parties. */}
+              The location (state-typed) field gets strict S/P validation. */}
           {definition?.rcvdExchange.filter((f) => fieldApplies(f, workedClass)).map((f) =>
             isType(f.type, 'state') ? (
               <LocationField
                 key={f.key}
                 label={f.label}
                 width={f.width}
-                defId={definition?.id}
                 value={exchange[f.key] ?? ''}
                 onChange={(v) => setExchange((p) => ({ ...p, [f.key]: v }))}
               />
@@ -1209,29 +1199,19 @@ function InteropConfig() {
   );
 }
 
-// The received S/P/C field: a 2-letter state/province (validated strictly, red on
-// bad input) or a home-state county code (autocompleted, amber when unknown but
-// still loggable). For non-QSO-party contests homeStates is empty → plain S/P box.
+// The received S/P/C field: a 2-letter state/province, validated strictly (red on
+// bad input). Longer values are left alone — the built-in catalog no longer has
+// QSO parties, so nothing exchanges a county code.
 function LocationField({
-  value, onChange, label, width, defId,
+  value, onChange, label, width,
 }: {
   value: string;
   onChange: (v: string) => void;
   label: string;
   width: number;
-  defId: string | undefined;
 }) {
-  const [focused, setFocused] = useState(false);
   const v = value.trim().toUpperCase();
-  const matches = useMemo(() => matchCounties(v, defId), [v, defId]);
-  const hasCounties = countiesForContest(defId).length > 0;
-  const official = hasOfficialCounties(defId);
   const badStateProv = v.length > 0 && v.length <= 2 && !isValidStateProv(v);
-  // Unknown 3+ char code: an error for an official table, just a warning otherwise.
-  const unknownCounty = v.length >= 3 && hasCounties && !isKnownCounty(v, defId);
-  const showMenu = focused && matches.length > 0 && v.length >= 1;
-
-  const pick = (c: County) => { onChange(c.code); setFocused(false); };
 
   return (
     <div className="relative" style={{ width: `${Math.max(width, 4)}rem` }}>
@@ -1239,36 +1219,14 @@ function LocationField({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setTimeout(() => setFocused(false), 120)}
         placeholder={label}
         spellCheck={false}
-        title={
-          badStateProv ? 'Not a valid state/province'
-            : unknownCounty ? (official ? 'Not a valid county code for this contest' : 'Unknown county code — check it')
-            : undefined
-        }
+        title={badStateProv ? 'Not a valid state/province' : undefined}
         className={`glass-input w-full font-mono text-lg px-2 py-2 uppercase ${
-          badStateProv || (unknownCounty && official) ? 'border-red-500/70 text-red-400'
-            : unknownCounty ? 'border-amber-500/70 text-amber-300'
-            : ''
+          badStateProv ? 'border-red-500/70 text-red-400' : ''
         }`}
       />
       <div className="h-4" />
-      {showMenu && (
-        <div className="absolute z-20 top-full left-0 mt-0.5 w-48 max-h-48 overflow-y-auto rounded-lg bg-dark-800 border border-glass-100 shadow-lg">
-          {matches.map((c) => (
-            <button
-              key={c.code}
-              onMouseDown={(e) => { e.preventDefault(); pick(c); }}
-              className="flex w-full items-center justify-between px-2 py-1 text-left text-xs hover:bg-dark-600/60"
-            >
-              <span className="font-mono text-accent-primary">{c.code}</span>
-              <span className="text-gray-400 truncate ml-2">{c.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

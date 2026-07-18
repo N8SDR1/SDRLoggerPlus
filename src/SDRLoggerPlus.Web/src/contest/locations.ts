@@ -1,28 +1,13 @@
 // Location reference data + validators for contest exchange fields.
 //
-// Received S/P/C fields accept one of: a US state / DC, a Canadian province, "DX",
-// or (for QSO parties) a county code of the contest's home area. States/provinces
-// are validated strictly against the authoritative 2-letter lists. County codes
-// come from countyData.json — the OFFICIAL per-party abbreviation tables gathered
-// from each sponsor's rules (built by scripts/build-county-data.mjs, keyed by
-// contest definition id), with a generic first-3-letter fallback for any party
-// whose official list wasn't reachable. When a party's table is official, unknown
-// county codes are treated as invalid; for a generic-fallback party they only warn.
-
-import countyDataRaw from './countyData.json';
-
-export interface County {
-  name: string;
-  code: string;
-}
-
-interface PartyCounties {
-  official: boolean;
-  source: string;
-  counties: County[];
-}
-
-const countyData = countyDataRaw as Record<string, PartyCounties>;
+// Received S/P/C fields accept a US state / DC, a Canadian province, or "DX",
+// validated strictly against the authoritative 2-letter lists.
+//
+// County-code data and validation used to live here too, keyed by QSO-party
+// definition id. The built-in catalog no longer ships any QSO parties, so those
+// tables were unreachable and have been pruned; the researched per-party
+// abbreviation tables are preserved under
+// docs/design/contest-research/counties/ if that catalog ever returns.
 
 // 50 US states + DC.
 export const US_STATES = new Set([
@@ -51,38 +36,3 @@ export const STATE_PROV_UNIVERSE: string[] = [
   ...[...CA_PROVINCES].sort(),
 ];
 
-/** The county table for a contest (by definition id), or null when it has none. */
-function partyCounties(defId: string | undefined): PartyCounties | null {
-  return (defId && countyData[defId]) || null;
-}
-
-/** County list for a contest's home area (empty for non-QSO-party contests). */
-export function countiesForContest(defId: string | undefined): County[] {
-  return partyCounties(defId)?.counties ?? [];
-}
-
-/** Whether this contest's county codes come from the official sponsor table. */
-export function hasOfficialCounties(defId: string | undefined): boolean {
-  return partyCounties(defId)?.official ?? false;
-}
-
-/** Whether a code is a known county code for the contest. */
-export function isKnownCounty(code: string, defId: string | undefined): boolean {
-  const c = code.trim().toUpperCase();
-  return countiesForContest(defId).some((x) => x.code.toUpperCase() === c);
-}
-
-/**
- * Autocomplete matches for a partial county entry, by code prefix or name
- * substring, from the contest's county table.
- */
-export function matchCounties(prefix: string, defId: string | undefined, limit = 8): County[] {
-  const q = prefix.trim().toUpperCase();
-  if (!q) return [];
-  const all = countiesForContest(defId);
-  const byCode = all.filter((c) => c.code.toUpperCase().startsWith(q));
-  const byName = all.filter(
-    (c) => !c.code.toUpperCase().startsWith(q) && c.name.toUpperCase().includes(q)
-  );
-  return [...byCode, ...byName].slice(0, limit);
-}
