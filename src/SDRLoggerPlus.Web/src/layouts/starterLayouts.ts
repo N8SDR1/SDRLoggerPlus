@@ -73,7 +73,7 @@ export const STARTER_LAYOUTS: StarterLayout[] = [
     description: 'Everyday logging — entry, history, cluster and callbook',
     layout: build([
       { weight: 30, tabs: [['log-entry', 'Log Entry'], ['qrz-profile', 'QRZ Profile']] },
-      { weight: 42, tabs: [['log-history', 'Log History'], ['rig', 'Rig']] },
+      { weight: 42, tabs: [['log-history', 'Log History'], ['meters', 'Meters']] },
       { weight: 28, tabs: [['cluster', 'DX Cluster'], ['propagation', 'Propagation']] },
     ]),
   },

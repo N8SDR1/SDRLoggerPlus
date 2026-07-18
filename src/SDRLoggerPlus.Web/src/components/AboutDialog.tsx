@@ -286,7 +286,7 @@ function HelpTab() {
             <li><B>flrig</B> — XML-RPC bridge to flrig's rig database (auto-detects data-mode names). Tunes + reads the rig; no panadapter.</li>
           </ul>
           <p className="text-xs text-dark-300">Adding a TCI rig runs a quick <B>connection check</B> first — a wrong port tells you right away instead of leaving a rig that never connects. Use <B>Test</B> to probe it, or <B>Add anyway</B> to skip the check. Saved rigs have an <B>Edit</B> button to change the name, host, or port.</p>
-          <p className="text-xs text-dark-300">The <B>rig selector</B> in the status bar (bottom-right) shows your connected radio at a glance: <B>left-click</B> it to switch or connect any configured rig, and <B>right-click</B> it (or use <B>Add / manage radios</B> in the popover) to jump straight to the Rig panel.</p>
+          <p className="text-xs text-dark-300">The <B>rig selector</B> in the status bar (bottom-right) shows your connected radio at a glance: <B>left-click</B> it to switch or connect any configured rig, and <B>right-click</B> it (or use <B>Add / manage radios</B> in the popover) to jump straight to radio setup in <B>Settings → Station</B>.</p>
         </Section>
 
         <Section id="combo" title="The Lyra Combo Link">

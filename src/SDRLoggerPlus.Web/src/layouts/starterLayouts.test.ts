@@ -6,7 +6,7 @@ import { STARTER_LAYOUTS, findStarterLayout } from './starterLayouts';
 // that isn't registered renders an empty tab, so keep this in sync.
 const KNOWN_PANELS = new Set([
   'log-entry', 'log-history', 'cluster', 'wsjtx-decodes', 'grid-tracker', 'rotator',
-  'globe-3d', 'rig', 'qrz-profile', 'contests', 'contest-entry', 'contest-mults',
+  'globe-3d', 'qrz-profile', 'contests', 'contest-entry', 'contest-mults',
   'contest-bandmap', 'contest-score', 'header-bar', 'sat-controller', 'dxpeditions',
   'chat-ai', 'pota', 'dx-coach', 'propagation', 'meters', 'panadapter',
   'statistics', 'map',

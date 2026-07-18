@@ -8,7 +8,7 @@ import { AboutDialog, type TabId } from './AboutDialog';
 
 export function StatusBar() {
   const { stationCallsign, stationGrid, rigStatus } = useAppStore();
-  const { openSettings } = useSettingsStore();
+  const { openSettings, setActiveSection } = useSettingsStore();
   const { rigs, switchTo, disconnect, pillRigName, pillConnected } = useRigConnection();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showAbout, setShowAbout] = useState(false);
@@ -61,11 +61,11 @@ export function StatusBar() {
   const rigConnected = pillConnected;
   const rigName = pillRigName || 'Rig';
 
-  // Open the Rig panel (add/edit/remove radios) — the panel already owns all rig
-  // setup, so the selector just needs to surface it. App.tsx handles the event.
-  const openRigPanel = () => {
+  // Radio setup lives in Settings > Station (it used to be its own Rig panel).
+  const openRigSettings = () => {
     setRigMenuOpen(false);
-    window.dispatchEvent(new CustomEvent('open-panel', { detail: 'rig' }));
+    setActiveSection('station');
+    openSettings();
   };
 
   return (
@@ -127,9 +127,9 @@ export function StatusBar() {
         <div className="relative" ref={rigMenuRef}>
           <button
             onClick={() => setRigMenuOpen((o) => !o)}
-            onContextMenu={(e) => { e.preventDefault(); openRigPanel(); }}
+            onContextMenu={(e) => { e.preventDefault(); openRigSettings(); }}
             className="flex items-center gap-2 hover:bg-dark-600 rounded px-1.5 py-0.5 transition-colors"
-            title="Left-click: choose radio · Right-click: open the Rig panel (add / edit radios)"
+            title="Left-click: choose radio · Right-click: radio setup in Settings > Station"
           >
             <Radio className={`w-4 h-4 ${rigConnected ? 'text-accent-success' : 'text-accent-danger'}`} />
             <span className={`text-xs font-mono ${rigConnected ? 'text-accent-success' : 'text-accent-danger'}`}>
@@ -146,7 +146,7 @@ export function StatusBar() {
 
               {rigs.length === 0 && (
                 <div className="px-1.5 py-2 text-xs text-dark-300 leading-relaxed">
-                  No rigs configured. Add one in the Rig panel below.
+                  No rigs configured. Add one with the button below.
                 </div>
               )}
 
@@ -214,9 +214,9 @@ export function StatusBar() {
               </div>
 
               <button
-                onClick={openRigPanel}
+                onClick={openRigSettings}
                 className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-glass-100/60 text-[11px] font-ui text-dark-200 hover:text-accent-primary hover:border-accent-primary/50 transition-colors"
-                title="Open the Rig panel to add, edit or remove radios"
+                title="Open Settings > Station to add, edit or remove radios"
               >
                 <Settings className="w-3 h-3" /> Add / manage radios
               </button>

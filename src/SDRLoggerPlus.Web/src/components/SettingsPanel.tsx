@@ -63,6 +63,7 @@ import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '
 import { useLayoutStore } from '../store/layoutStore';
 import { useAppStore } from '../store/appStore';
 import { notifyLayoutsChanged } from '../hooks/useLayoutMenu';
+import { RigConfig } from './RigConfig';
 import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
 import { Model } from 'flexlayout-react';
 import { gridToLatLon } from '../utils/maidenhead';
@@ -338,6 +339,17 @@ function StationSettingsSection() {
             />
           </div>
         </div>
+      </div>
+
+      {/* Radio setup — moved here from the standalone Rig panel so all station
+          configuration lives in one place. */}
+      <div className="pt-6 mt-6 border-t border-glass-100">
+        <h4 className="text-sm font-semibold font-ui text-dark-200">Radio</h4>
+        <p className="text-xs text-dark-300 mt-0.5 mb-3">
+          Add and configure radios (Hamlib, flrig or TCI). Connect and switch between
+          them from the rig selector in the status bar.
+        </p>
+        <RigConfig />
       </div>
     </div>
   );

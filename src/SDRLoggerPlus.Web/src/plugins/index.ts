@@ -7,7 +7,6 @@ export { GlobePlugin } from './GlobePlugin';
 export { AntennaGeniusPlugin } from './AntennaGeniusPlugin';
 export { PgxlPlugin } from './PgxlPlugin';
 export { TunerGeniusPlugin } from './TunerGeniusPlugin';
-export { RigPlugin } from './RigPlugin';
 export { QrzProfilePlugin } from './QrzProfilePlugin';
 export { ContestsPlugin } from './ContestsPlugin';
 export { ContestEntryPlugin } from './ContestEntryPlugin';

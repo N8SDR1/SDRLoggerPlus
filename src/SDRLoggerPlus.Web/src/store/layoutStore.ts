@@ -70,8 +70,8 @@ export const defaultLayout: IJsonModel = {
                       },
                       {
                         type: 'tab',
-                        name: 'Rig',
-                        component: 'rig',
+                        name: 'Meters',
+                        component: 'meters',
                       },
                     ],
                   },

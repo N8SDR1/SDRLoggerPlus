@@ -1,13 +1,10 @@
-import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, type ReactNode } from "react";
-import { Radio, RadioReceiver, Wifi, WifiOff, Power, PowerOff, Plus, Pencil, Settings, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { Radio, Wifi, WifiOff, Power, PowerOff, Plus, Pencil, Settings, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { useSignalR } from "../hooks/useSignalR";
-import { useRigConnection } from "../hooks/useRigConnection";
-import { GlassPanel } from "../components/GlassPanel";
 import { signalRService } from "../api/signalr";
 import type {
-  RadioConnectionState,
   HamlibRigModelInfo,
   HamlibRigCapabilities,
   HamlibRigConfigDto,
@@ -19,116 +16,6 @@ import type {
 } from "../api/signalr";
 import { HAMLIB_BAUD_RATES } from "../api/signalr";
 
-// Natural size of the connected view; below this the content scales down to fit
-const CONNECTED_VIEW_BASE_WIDTH = 320;
-const CONNECTED_VIEW_BASE_HEIGHT = 150;
-
-
-// Scroll-wheel VFO tuning — renders the frequency as individually hoverable digit spans.
-// A non-passive wheel listener is attached via a ref (React onWheel is passive by default
-// in some setups). Hovering a digit sets its Hz place value as the active step; scrolling
-// anywhere else in the connected-view panel uses scrollTuneStepHz (configurable).
-interface FrequencyReadoutProps {
-  frequencyHz: number;
-  scrollTuneStepHz: number;
-  onTune: (newHz: number) => void;
-}
-
-function FrequencyReadout({ frequencyHz, scrollTuneStepHz, onTune }: FrequencyReadoutProps) {
-  const containerRef = useRef<HTMLSpanElement>(null);
-
-  // Accumulate pending delta so rapid wheel ticks coalesce into one SignalR call (~30 ms)
-  const pendingHz = useRef(frequencyHz);
-  const throttleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hoveredStep = useRef<number | null>(null);
-
-  // Keep pendingHz in sync with live frequency when no scroll is in flight
-  useEffect(() => {
-    if (!throttleTimer.current) {
-      pendingHz.current = frequencyHz;
-    }
-  }, [frequencyHz]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const step = hoveredStep.current ?? scrollTuneStepHz;
-      const delta = e.deltaY < 0 ? step : -step; // wheel up = increase frequency
-      pendingHz.current = Math.round(
-        Math.min(500_000_000, Math.max(100_000, pendingHz.current + delta))
-      );
-      if (throttleTimer.current) clearTimeout(throttleTimer.current);
-      throttleTimer.current = setTimeout(() => {
-        onTune(pendingHz.current);
-        throttleTimer.current = null;
-      }, 30);
-    };
-
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleWheel);
-  }, [onTune, scrollTuneStepHz]);
-
-  // Format MHz to 6 decimal places, e.g. "14.074000"
-  const formatted = (frequencyHz / 1_000_000).toFixed(6);
-  const dotIdx = formatted.indexOf('.');
-  const chars = formatted.split('');
-
-  const digitSpans: ReactNode[] = [];
-  for (let i = 0; i < chars.length; i++) {
-    const ch = chars[i];
-    if (ch === '.') {
-      digitSpans.push(
-        <span key={"dot"} className="text-dark-400" style={{ userSelect: 'none', pointerEvents: 'none' }}>.</span>
-      );
-      continue;
-    }
-    // Compute Hz step for this character position relative to the decimal point.
-    // e.g. "14.074000": charPos 0,1 = 10MHz,1MHz; 3,4,5,6,7,8 = 100kHz,10kHz,1kHz,100Hz,10Hz,1Hz
-    const charPos = i < dotIdx ? i : i - 1;
-    const mhzPow = dotIdx - 1 - charPos; // positive for int digits, negative for fractional
-    const stepHz = Math.pow(10, mhzPow) * 1_000_000;
-
-    digitSpans.push(
-      <span
-        key={"d" + i}
-        className="digit-tunable"
-        onMouseEnter={() => { hoveredStep.current = stepHz; }}
-        onMouseLeave={() => { hoveredStep.current = null; }}
-        style={{
-          cursor: 'ns-resize',
-          userSelect: 'none',
-          padding: '0 0.5px',
-          borderRadius: '2px',
-          transition: 'background 0.12s',
-        }}
-        onMouseOver={(e) => {
-          (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.18)';
-        }}
-        onMouseOut={(e) => {
-          (e.currentTarget as HTMLElement).style.background = '';
-        }}
-      >
-        {ch}
-      </span>
-    );
-  }
-
-  return (
-    <span
-      ref={containerRef}
-      style={{ display: 'inline-flex', alignItems: 'baseline', cursor: 'ns-resize' }}
-      title="Scroll to tune"
-    >
-      {digitSpans}
-    </span>
-  );
-}
-
-// Default Hamlib config
 const defaultHamlibConfig: HamlibRigConfigDto = {
   modelId: 0,
   modelName: "",
@@ -152,7 +39,16 @@ const defaultHamlibConfig: HamlibRigConfigDto = {
   pollIntervalMs: 250,
 };
 
-export function RigPlugin() {
+/**
+ * Radio setup: pick a radio type, configure Hamlib / flrig / TCI, and manage
+ * saved rigs. Lives in Settings > Station.
+ *
+ * Deliberately config-only — the live frequency readout, TX/RX state and
+ * scroll-tuning that used to sit alongside this in the Rig panel are all
+ * covered by the Meters and Panadapter panels, and per-radio connect/disconnect
+ * is on the status-bar rig selector.
+ */
+export function RigConfig() {
   const {
     discoveredRadios,
     radioConnectionStates,
@@ -177,14 +73,12 @@ export function RigPlugin() {
     deleteTciConfig,
     saveFlrigConfig,
   } = useSignalR();
-  // Shared rig teardown (type-specific) — same logic the status-bar switcher uses.
-  const { disconnect: disconnectRig } = useRigConnection();
 
   // Radio settings from store (persisted to database)
   const { settings, updateRadioSettings, updateTciSettings, updateFlrigSettings, saveSettings } = useSettingsStore();
   const tciSettings = settings.radio.tci;
   const flrigSettings = settings.radio.flrig;
-  const { autoReconnect, autoConnectRigId, reconnectLastOnStartup, scrollTuneStepHz } = settings.radio;
+  const { autoReconnect, autoConnectRigId, reconnectLastOnStartup } = settings.radio;
 
   // TCI form state
   const [showTciForm, setShowTciForm] = useState(false);
@@ -280,9 +174,6 @@ export function RigPlugin() {
 
   // Convert Map to array for rendering
   const radios = Array.from(discoveredRadios.values());
-  const selectedRadio = selectedRadioId
-    ? discoveredRadios.get(selectedRadioId)
-    : null;
   const selectedConnectionState = selectedRadioId
     ? radioConnectionStates.get(selectedRadioId)
     : null;
@@ -362,30 +253,7 @@ export function RigPlugin() {
     }
   }, [radios, selectedRadioId, radioConnectionStates, setSelectedRadio]);
 
-  const handleDisconnect = async () => {
-    if (selectedRadioId) {
-      await disconnectRig(selectedRadioId);
-      // Disable auto-reconnect when manually disconnecting
-      updateRadioSettings({ autoReconnect: false });
-      saveSettings();
-      setSelectedRadio(null);
-    }
-  };
 
-  const handleToggleAutoReconnect = async () => {
-    if (!autoReconnect && selectedRadioId) {
-      // Enabling: target the currently selected rig
-      handleToggleAutoReconnectForRig(selectedRadioId);
-      return;
-    }
-    // Disabling: clear targeting
-    updateRadioSettings({
-      autoReconnect: false,
-      autoConnectRigId: null,
-      activeRigType: null,
-    });
-    await saveSettings();
-  };
 
   const handleToggleAutoReconnectForRig = async (radioId: string) => {
     if (autoConnectRigId === radioId && autoReconnect) {
@@ -581,231 +449,15 @@ export function RigPlugin() {
     setShowRigDropdown(false);
   };
 
-  const getConnectionStateColor = (state?: RadioConnectionState): string => {
-    switch (state) {
-      case "Connected":
-      case "Monitoring":
-        return "text-accent-success";
-      case "Connecting":
-      case "Discovering":
-        return "text-accent-primary";
-      case "Error":
-        return "text-accent-danger";
-      default:
-        return "text-dark-300";
-    }
-  };
 
-  const getConnectionStateText = (state?: RadioConnectionState): string => {
-    return state || "Disconnected";
-  };
 
-  const isConnecting = selectedConnectionState === "Connecting";
-  const isConnected = (selectedConnectionState && ["Connected", "Monitoring"].includes(selectedConnectionState))
-    || !!selectedRadioState;
-  const isLocallyConnecting = isConnectingTci || isConnectingHamlib;
-  const effectiveConnectionState: RadioConnectionState | undefined =
-    selectedConnectionState ?? (selectedRadioState ? "Connected" : undefined);
 
-  const getRadioInfoFromId = (radioId: string) => {
-    if (radioId.startsWith("tci-")) {
-      const hostPort = radioId.substring(4);
-      return { model: "TCI Radio", ipAddress: hostPort, type: "Tci" as const };
-    }
-    if (radioId.startsWith("hamlib-")) {
-      const modelId = radioId.substring(7);
-      const rig = hamlibRigs.find(r => r.modelId.toString() === modelId);
-      return { model: rig?.displayName || "Hamlib Radio", ipAddress: hamlibConfig.connectionType === "Network" ? `${hamlibConfig.hostname}:${hamlibConfig.networkPort}` : hamlibConfig.serialPort || "", type: "Hamlib" as const };
-    }
-    return null;
-  };
 
-  const radioInfo = selectedRadio || (selectedRadioId ? getRadioInfoFromId(selectedRadioId) : null);
-
-  const showConnectedView = !!(selectedRadioId && radioInfo && (isConnecting || isConnected || isLocallyConnecting));
-
-  // Scale the connected view down when the panel shrinks below its natural size
-  const connectedViewRef = useRef<HTMLDivElement>(null);
-  const [connectedScale, setConnectedScale] = useState(1);
-
-  useLayoutEffect(() => {
-    const el = connectedViewRef.current;
-    if (!el) return;
-
-    const baseHeight = CONNECTED_VIEW_BASE_HEIGHT;
-    const updateScale = () => {
-      setConnectedScale(Math.min(
-        1,
-        el.clientWidth / CONNECTED_VIEW_BASE_WIDTH,
-        el.clientHeight / baseHeight,
-      ));
-    };
-
-    updateScale();
-    const observer = new ResizeObserver(updateScale);
-    observer.observe(el);
-
-    return () => observer.disconnect();
-  }, [showConnectedView]);
-
-  // Panel-level wheel handler — fires when the user scrolls outside a specific digit span.
-  // FrequencyReadout.stopPropagation() means digit-hover scrolls never reach here.
-  const panelWheelPendingHz = useRef<number | null>(null);
-  const panelWheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    const el = connectedViewRef.current;
-    if (!el || !selectedRadioState) return;
-    const handlePanelWheel = (e: WheelEvent) => {
-      // If the event was stopped by FrequencyReadout it won't reach here; this
-      // handler covers scrolls on the radio-info row, TX/RX bar, etc.
-      e.preventDefault();
-      const currentHz = panelWheelPendingHz.current ?? selectedRadioState.frequencyHz;
-      const delta = e.deltaY < 0 ? scrollTuneStepHz : -scrollTuneStepHz;
-      panelWheelPendingHz.current = Math.round(
-        Math.min(500_000_000, Math.max(100_000, currentHz + delta))
-      );
-      if (panelWheelTimer.current) clearTimeout(panelWheelTimer.current);
-      panelWheelTimer.current = setTimeout(() => {
-        if (panelWheelPendingHz.current !== null) {
-          signalRService.tuneToFrequency(panelWheelPendingHz.current);
-          panelWheelPendingHz.current = null;
-        }
-        panelWheelTimer.current = null;
-      }, 30);
-    };
-    el.addEventListener('wheel', handlePanelWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handlePanelWheel);
-  }, [selectedRadioState, scrollTuneStepHz]);
-
-  // Show connected view
-  if (showConnectedView && radioInfo) {
-    return (
-      <GlassPanel
-        title="Rig"
-        icon={<RadioReceiver className="w-5 h-5" />}
-        actions={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleToggleAutoReconnect}
-              title={autoReconnect ? "Auto-reconnect enabled" : "Auto-reconnect disabled"}
-              className={`p-1.5 rounded transition-all ${
-                autoReconnect
-                  ? "bg-accent-primary/20 text-accent-primary"
-                  : "bg-dark-700 text-dark-300 hover:text-dark-200"
-              }`}
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${autoReconnect ? "" : "opacity-50"}`} />
-            </button>
-            <span
-              className={`flex items-center gap-1.5 text-xs font-mono ${getConnectionStateColor(
-                effectiveConnectionState
-              )}`}
-            >
-              <Wifi className="w-3.5 h-3.5" />
-              {getConnectionStateText(effectiveConnectionState)}
-            </span>
-          </div>
-        }
-      >
-        <div ref={connectedViewRef} className="h-full overflow-hidden">
-        <div
-          className="p-3 space-y-2"
-          style={connectedScale < 1 ? {
-            width: `${100 / connectedScale}%`,
-            transform: `scale(${connectedScale})`,
-            transformOrigin: "top left",
-          } : undefined}
-        >
-          {/* Radio Info */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-xs text-dark-300 font-ui truncate">
-              <span className="font-medium text-dark-200">
-                {radioInfo.model}
-              </span>
-              <span className="mx-1.5">|</span>
-              <span className="font-mono">
-                {radioInfo.ipAddress}
-              </span>
-            </div>
-            {(isConnecting || isLocallyConnecting) && !isConnected ? (
-              <div className="px-2 py-1 text-xs font-medium font-ui flex items-center gap-1.5 bg-accent-primary/20 text-accent-primary rounded-lg shrink-0">
-                <Wifi className="w-3.5 h-3.5 animate-pulse" />
-                Connecting...
-              </div>
-            ) : (
-              <button
-                onClick={handleDisconnect}
-                className="px-2 py-1 text-xs font-medium font-ui flex items-center gap-1.5 bg-accent-danger/20 text-accent-danger rounded-lg hover:bg-accent-danger/30 transition-all shrink-0"
-              >
-                <PowerOff className="w-3.5 h-3.5" />
-                Disconnect
-              </button>
-            )}
-          </div>
-
-          {/* Frequency with inline Mode / Band — scroll any digit to tune that place value */}
-          <div className="bg-dark-700/50 rounded-lg px-3 py-2 border border-glass-100 flex items-baseline justify-between gap-3">
-            <div className="text-2xl font-bold text-accent-primary font-display leading-none">
-              {selectedRadioState
-                ? (
-                  <FrequencyReadout
-                    frequencyHz={selectedRadioState.frequencyHz}
-                    scrollTuneStepHz={scrollTuneStepHz}
-                    onTune={(hz) => signalRService.tuneToFrequency(hz)}
-                  />
-                )
-                : (isConnecting || isLocallyConnecting) && !isConnected
-                ? <span className="text-dark-300 text-base animate-pulse font-ui">Waiting…</span>
-                : "---"}
-              {selectedRadioState && (
-                <span className="text-sm font-normal text-dark-300 ml-1.5 font-ui">
-                  MHz
-                </span>
-              )}
-            </div>
-            <div className="flex items-baseline gap-2 font-mono text-sm shrink-0">
-              <span className="font-bold text-accent-secondary">
-                {selectedRadioState?.mode || "---"}
-              </span>
-              <span className="text-dark-500">·</span>
-              <span className="font-bold text-accent-primary">
-                {selectedRadioState?.band || "---"}
-              </span>
-            </div>
-          </div>
-
-          {/* TX/RX Status */}
-          <div className="flex items-center gap-3">
-            <TxRxIndicator
-              isTransmitting={selectedRadioState?.isTransmitting ?? false}
-            />
-            {/* TCI receiver instance: "0" on every single-RX setup — pure
-                noise, so hide it and only surface "RX: 1" when the second
-                TCI receiver is actually selected. */}
-            {selectedRadioState?.sliceOrInstance &&
-              !(selectedRadioId?.startsWith('tci-') && selectedRadioState.sliceOrInstance === '0') && (
-              <span className="text-sm text-dark-300 font-ui">
-                {selectedRadioId?.startsWith('tci-') ? 'RX' : 'Slice'}:{" "}
-                <span className="text-dark-200 font-mono">
-                  {selectedRadioState.sliceOrInstance}
-                </span>
-              </span>
-            )}
-          </div>
-
-        </div>
-        </div>
-      </GlassPanel>
-    );
-  }
-
-  // Discovery / Connection UI
+  // Radio discovery + connection setup. Rendered inside Settings > Station, so
+  // no panel chrome of its own.
   return (
-    <GlassPanel
-      title="Rig"
-      icon={<RadioReceiver className="w-5 h-5" />}
-    >
-      <div className="p-4 space-y-4">
+    <div>
+      <div className="space-y-4">
         {/* Radio Type Selection */}
         <div>
           <div className="text-xs text-dark-300 uppercase tracking-wider mb-2 font-ui">
@@ -1484,7 +1136,7 @@ export function RigPlugin() {
           </div>
         ) : null}
       </div>
-    </GlassPanel>
+    </div>
   );
 }
 
@@ -1510,31 +1162,3 @@ function FeatureToggle({ label, checked, onChange, disabled }: FeatureToggleProp
   );
 }
 
-interface TxRxIndicatorProps {
-  isTransmitting: boolean;
-}
-
-function TxRxIndicator({ isTransmitting }: TxRxIndicatorProps) {
-  return (
-    <div className="flex rounded-lg overflow-hidden border border-glass-100">
-      <div
-        className={`px-3 py-1.5 text-xs font-bold font-mono transition-all ${
-          !isTransmitting
-            ? "bg-accent-success/30 text-accent-success border-r border-accent-success/30"
-            : "bg-dark-700 text-dark-600 border-r border-glass-100"
-        }`}
-      >
-        RX
-      </div>
-      <div
-        className={`px-3 py-1.5 text-xs font-bold font-mono transition-all ${
-          isTransmitting
-            ? "bg-accent-danger/30 text-accent-danger animate-pulse"
-            : "bg-dark-700 text-dark-600"
-        }`}
-      >
-        TX
-      </div>
-    </div>
-  );
-}

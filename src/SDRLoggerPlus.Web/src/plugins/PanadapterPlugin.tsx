@@ -315,7 +315,7 @@ export function PanadapterPlugin() {
     waterfallBufRef.current = null;
   }, [zoom]);
 
-  // Scroll-tune step (shared with the Rig panel — a change here also
+  // Scroll-tune step (shared with the meters panel — a change here also
   // affects the Rig VFO's wheel step and vice versa).
   const scrollTuneStepHz = useSettingsStore((s) => s.settings.radio.scrollTuneStepHz);
   const updateRadioSettings = useSettingsStore((s) => s.updateRadioSettings);
@@ -767,7 +767,7 @@ export function PanadapterPlugin() {
         return;
       }
 
-      // Plain wheel = tune the VFO by the configured step (like the Rig panel).
+      // Plain wheel = tune the VFO by the configured step (like the meters panel).
       const vfo = currentVfoHz();
       if (vfo === null) return;
       if (pendingHz === null) pendingHz = vfo;
@@ -987,9 +987,9 @@ export function PanadapterPlugin() {
           />
         </div>
         {/* Scroll-tune step picker — mouse-wheel tunes the VFO by this
-            amount per notch. Shared with the Rig panel: a change here
+            amount per notch. Shared with the meters panel: a change here
             also affects the Rig VFO's wheel step. */}
-        <div className={row} title="Mouse-wheel tuning step (shared with Rig panel)">
+        <div className={row} title="Mouse-wheel tuning step (shared with the meters panel)">
           <span className={label}>STEP</span>
           <select
             value={scrollTuneStepHz}
