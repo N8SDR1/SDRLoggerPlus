@@ -322,20 +322,28 @@ export function LogEntryPlugin() {
     }
   }, [nameLocked, focusedCallsignInfo?.name]);
 
-  // Auto-populate QTH from the callbook as "City, State" (whichever parts came
-  // back). Unlike the name field there's no lock toggle here, so this is keyed
-  // on the looked-up callsign: it fires once when a lookup lands and never
-  // again for that call, leaving any manual correction the operator types
-  // afterwards intact.
-  const qthFilledFor = useRef<string | null>(null);
+  // Auto-populate QTH ("City, State") and grid from the callbook. Unlike the
+  // name field there's no lock toggle here, so this is keyed on the looked-up
+  // callsign: it fires once when a lookup lands and never again for that call,
+  // leaving any manual correction the operator types afterwards intact.
+  //
+  // The submit path already falls back to focusedCallsignInfo.grid, so this
+  // doesn't change what gets logged — it makes the value visible in the form so
+  // it can be checked or corrected before the QSO goes in.
+  const filledFor = useRef<string | null>(null);
   useEffect(() => {
     const info = focusedCallsignInfo;
-    if (!info?.callsign) { qthFilledFor.current = null; return; }
-    if (qthFilledFor.current === info.callsign) return;
+    if (!info?.callsign) { filledFor.current = null; return; }
+    if (filledFor.current === info.callsign) return;
     const qth = [info.city, info.state].filter(Boolean).join(', ');
-    if (!qth) return;
-    qthFilledFor.current = info.callsign;
-    setFormData(prev => ({ ...prev, qth }));
+    const grid = (info.grid ?? '').toUpperCase();
+    if (!qth && !grid) return;
+    filledFor.current = info.callsign;
+    setFormData(prev => ({
+      ...prev,
+      ...(qth ? { qth } : {}),
+      ...(grid ? { grid } : {}),
+    }));
   }, [focusedCallsignInfo]);
 
   // Auto-populate from DX cluster spot selection. selectedSpot.frequency
@@ -1159,19 +1167,35 @@ export function LogEntryPlugin() {
           </div>
         </div>
 
-        {/* QTH/Location — v1.x General field, worked-station location */}
-        <div>
-          <label className="text-xs font-ui text-dark-200 mb-1 block flex items-center gap-1">
-            <MapPin className="w-3 h-3" />
-            QTH / Location
-          </label>
-          <input
-            type="text"
-            value={formData.qth}
-            onChange={(e) => setFormData(prev => ({ ...prev, qth: e.target.value }))}
-            placeholder="City, State"
-            className="glass-input w-full text-sm"
-          />
+        {/* QTH/Location + grid — v1.x General fields, worked-station location.
+            Both auto-fill from the callbook lookup. The grid was always logged
+            (the submit path falls back to the lookup value) but had no box, so
+            it couldn't be seen or corrected before logging. */}
+        <div className="flex gap-2">
+          <div className="flex-1 min-w-0">
+            <label className="text-xs font-ui text-dark-200 mb-1 block flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              QTH / Location
+            </label>
+            <input
+              type="text"
+              value={formData.qth}
+              onChange={(e) => setFormData(prev => ({ ...prev, qth: e.target.value }))}
+              placeholder="City, State"
+              className="glass-input w-full text-sm"
+            />
+          </div>
+          <div className="w-28 shrink-0">
+            <label className="text-xs font-ui text-dark-200 mb-1 block">Grid</label>
+            <input
+              type="text"
+              value={formData.grid}
+              onChange={(e) => setFormData(prev => ({ ...prev, grid: e.target.value.toUpperCase() }))}
+              placeholder="EN54"
+              spellCheck={false}
+              className="glass-input w-full text-sm uppercase"
+            />
+          </div>
         </div>
 
         {/* Frequency, RST Sent, RST Rcvd on one line */}
