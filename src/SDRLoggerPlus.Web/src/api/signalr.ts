@@ -719,6 +719,11 @@ export interface ContestStateEvent {
   rateLastHour: number;
   rateLast10: number;
   multsBySource: Record<string, string[]>;
+  // Active session that's been idle a long time (e.g. left over from a past
+  // contest). The entry plugin shows a resume prompt instead of auto-opening.
+  isStale: boolean;
+  // ISO-8601 (UTC) session start, shown in the resume prompt.
+  startedAt: string;
 }
 
 let lightningStrikesCallback: ((evt: LightningStrikesEvent) => void) | null = null;

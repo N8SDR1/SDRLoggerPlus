@@ -8,6 +8,7 @@ import {
   ContestCheckResponse,
   ContestQso,
   ContestSession,
+  ContestStateEvent,
 } from '../api/client';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -53,15 +54,44 @@ const contestModeFromRig = (mode: string): string => {
 export function ContestEntryPlugin() {
   const contestState = useAppStore((s) => s.contestState);
   const setContestState = useAppStore((s) => s.setContestState);
+  // A stale active session (idle a long time — e.g. left over from a past
+  // contest) is NOT auto-opened. We keep it in the store (so SignalR updates
+  // still land) but gate the entry view on staleness + an explicit resume, so
+  // last year's calls don't silently reappear. Deriving the gate from
+  // contestState.isStale (rather than nulling the store) means a broadcast
+  // can't race past the guard.
+  const [resumed, setResumed] = useState(false);
 
   // Seed state from the API on mount (covers reload while a session is live).
   useEffect(() => {
-    api.getContestState().then((s) => setContestState(s)).catch(() => {});
+    api.getContestState().then(setContestState).catch(() => {});
   }, [setContestState]);
+
+  const showStale = !!contestState?.isStale && !resumed;
+
+  // End the leftover session server-side so it stops prompting, then clear it.
+  const endStale = async () => {
+    if (!contestState) return;
+    try {
+      await api.stopContestSession(contestState.sessionId);
+    } catch {
+      /* ignore — worst case it prompts again next open */
+    }
+    setResumed(false);
+    setContestState(null);
+  };
 
   return (
     <GlassPanel title="Contest" icon={<Swords className="w-5 h-5" />}>
-      {contestState ? <EntryView /> : <SetupView />}
+      {contestState && !showStale ? (
+        <EntryView />
+      ) : (
+        <SetupView
+          staleSession={showStale ? contestState : null}
+          onResumeStale={() => setResumed(true)}
+          onEndStale={endStale}
+        />
+      )}
     </GlassPanel>
   );
 }
@@ -70,9 +100,27 @@ export function ContestEntryPlugin() {
 // Setup: search + pick a contest definition, my exchange, start session
 // ---------------------------------------------------------------------------
 
-function SetupView() {
+function SetupView({
+  staleSession,
+  onResumeStale,
+  onEndStale,
+}: {
+  staleSession?: ContestStateEvent | null;
+  onResumeStale?: () => void;
+  onEndStale?: () => Promise<void> | void;
+}) {
   const setContestState = useAppStore((s) => s.setContestState);
   const queryClient = useQueryClient();
+  const [endingStale, setEndingStale] = useState(false);
+
+  const endStale = async () => {
+    setEndingStale(true);
+    try {
+      await onEndStale?.();
+    } finally {
+      setEndingStale(false);
+    }
+  };
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [label, setLabel] = useState('');
@@ -167,6 +215,39 @@ function SetupView() {
 
   return (
     <div className="flex flex-col h-full p-4 gap-3 overflow-y-auto">
+      {/* Resume prompt for a stale leftover session (idle a long time). Shown
+          instead of auto-opening it, so last year's calls don't reappear. */}
+      {staleSession && (
+        <div className="flex flex-col gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <div className="text-sm text-gray-200 leading-snug">
+              You have an unfinished session:{' '}
+              <span className="font-medium">{staleSession.label}</span>
+              <div className="text-xs text-gray-400 mt-0.5">
+                {staleSession.qsos} QSO{staleSession.qsos === 1 ? '' : 's'} · started{' '}
+                {new Date(staleSession.startedAt).toLocaleDateString()}. Resume it, or
+                start a new contest below.
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onResumeStale?.()}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-sm bg-amber-500/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30"
+            >
+              <Play className="w-3.5 h-3.5" /> Resume
+            </button>
+            <button
+              onClick={endStale}
+              disabled={endingStale}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-sm bg-dark-700/50 border border-glass-100 text-gray-300 hover:bg-dark-600/50 disabled:opacity-50"
+            >
+              <X className="w-3.5 h-3.5" /> {endingStale ? 'Ending…' : 'End it'}
+            </button>
+          </div>
+        </div>
+      )}
       {/* Search + new */}
       <div className="flex gap-2">
         <div className="relative flex-1">

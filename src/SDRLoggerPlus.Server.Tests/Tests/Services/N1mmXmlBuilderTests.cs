@@ -53,7 +53,8 @@ public class N1mmXmlBuilderTests
     {
         var state = new ContestStateDto("s", "cq-ww-cw", "CQ WW DX CW", "L", ContestRole.All, false, 0,
             Qsos: 4, Dupes: 1, Points: 12, Multipliers: 7, Score: 84,
-            RateLastHour: 40, RateLast10: 0, MultsBySource: new());
+            RateLastHour: 40, RateLast10: 0, MultsBySource: new(),
+            IsStale: false, StartedAt: "2026-05-30T12:00:00Z");
 
         var xml = XElement.Parse(N1mmXmlBuilder.DynamicResults(Def(), state, "N9BC"));
 

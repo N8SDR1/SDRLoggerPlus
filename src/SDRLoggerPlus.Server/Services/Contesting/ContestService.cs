@@ -427,6 +427,23 @@ public class ContestService
         return qso;
     }
 
+    // An active session with no activity for this long is treated as stale: the
+    // client shows a resume prompt rather than dropping straight into the entry
+    // window. 72h clears the longest contests (48h) so a real run in progress is
+    // never interrupted, yet catches a session left over from a past event.
+    internal static readonly TimeSpan StaleAfter = TimeSpan.FromHours(72);
+
+    /// <summary>
+    /// Whether an active session should be treated as stale (idle beyond
+    /// <see cref="StaleAfter"/>). Last activity is the most recent QSO, or the
+    /// session start when it has none. Pure so it can be unit-tested directly.
+    /// </summary>
+    internal static bool IsSessionStale(DateTime startedAt, IReadOnlyCollection<DateTime> qsoTimesUtc, DateTime nowUtc)
+    {
+        var lastActivity = qsoTimesUtc.Count > 0 ? qsoTimesUtc.Max() : startedAt;
+        return nowUtc - lastActivity > StaleAfter;
+    }
+
     private ContestStateDto BuildState(ContestSession session, ContestDefinition def, List<Qso> log)
     {
         var summary = ContestScoringEngine.Recompute(def, session.MyExchange, log);
@@ -434,6 +451,8 @@ public class ContestService
         // Rates from wall-clock timestamps (CreatedAt is set at log time).
         var now = DateTime.UtcNow;
         var lastHour = log.Count(q => q.CreatedAt >= now.AddHours(-1));
+
+        var isStale = IsSessionStale(session.StartedAt, log.Select(q => q.CreatedAt).ToList(), now);
         double rate10 = 0;
         var recent = log.Count >= 2 ? log.Skip(Math.Max(0, log.Count - 10)).ToList() : null;
         if (recent is { Count: >= 2 })
@@ -457,6 +476,8 @@ public class ContestService
             Score: summary.Score,
             RateLastHour: lastHour,
             RateLast10: Math.Round(rate10, 1),
-            MultsBySource: summary.MultsBySource);
+            MultsBySource: summary.MultsBySource,
+            IsStale: isStale,
+            StartedAt: session.StartedAt.ToString("o"));
     }
 }

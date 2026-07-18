@@ -84,5 +84,12 @@ public record ContestStateDto(
     int Score,
     double RateLastHour,
     double RateLast10,
-    Dictionary<string, List<string>> MultsBySource
+    Dictionary<string, List<string>> MultsBySource,
+    // True when this active session has had no activity for a long time (see
+    // ContestService.StaleAfter) — the client shows a "resume?" prompt instead of
+    // auto-opening the entry window, so a contest you forgot to end last year
+    // doesn't silently reappear with all its calls.
+    bool IsStale,
+    // ISO-8601 (UTC) session start, for the resume prompt.
+    string StartedAt
 );
