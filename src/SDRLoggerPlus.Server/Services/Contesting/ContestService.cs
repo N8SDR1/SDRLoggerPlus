@@ -449,16 +449,22 @@ public class ContestService
     {
         var summary = ContestScoringEngine.Recompute(def, session.MyExchange, log);
 
-        // Rates from wall-clock timestamps (CreatedAt is set at log time).
-        var now = DateTime.UtcNow;
-        var lastHour = log.Count(q => q.CreatedAt >= now.AddHours(-1));
+        // Rates from wall-clock timestamps. CreatedAt/StartedAt come back from LiteDB
+        // as *local* time (Kind=Local), so compare in the same frame — using UtcNow
+        // here made every QSO read ~(UTC offset) hours old, so the last-hour count
+        // (and the rate) was permanently 0.
+        var now = DateTime.Now;
+        var lastHour = log.Count(q => q.CreatedAt.ToLocalTime() >= now.AddHours(-1));
 
-        var isStale = IsSessionStale(session.StartedAt, log.Select(q => q.CreatedAt).ToList(), now);
+        var isStale = IsSessionStale(
+            session.StartedAt.ToLocalTime(),
+            log.Select(q => q.CreatedAt.ToLocalTime()).ToList(),
+            now);
         double rate10 = 0;
         var recent = log.Count >= 2 ? log.Skip(Math.Max(0, log.Count - 10)).ToList() : null;
         if (recent is { Count: >= 2 })
         {
-            var span = (now - recent[0].CreatedAt).TotalHours;
+            var span = (now - recent[0].CreatedAt.ToLocalTime()).TotalHours;
             if (span > 0.0005) rate10 = recent.Count / span;
         }
 
