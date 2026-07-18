@@ -30,14 +30,15 @@ const FALLBACK_MODES = ['CW', 'SSB', 'FT8', 'FT4', 'RTTY'];
 const isType = (fieldType: string, t: string) => fieldType.toLowerCase() === t;
 
 // Whether a received field applies to the current worked-station class. Fields
-// with no appliesTo (or 'All') always show; 'InArea' shows for domestic (W/VE)
-// stations, 'OutArea'/'Dx' for DX. This is how a contest like RTTY Roundup shows
-// a state box for a US call and a serial box for a DX call.
+// with no appliesTo (or 'All') always show; otherwise the field's class must match
+// the worked station's exactly (InArea / OutArea / Dx). This is how a contest like
+// RTTY Roundup shows a state box for a US call and a serial box for a DX call —
+// and keeps OutArea and Dx distinct for any contest that exchanges different
+// fields with each.
 const fieldApplies = (f: { appliesTo?: string }, workedClass: string): boolean => {
   const a = f.appliesTo;
   if (!a || a === 'All') return true;
-  const inArea = workedClass === 'InArea';
-  return a === 'InArea' ? inArea : !inArea;
+  return a === workedClass;
 };
 
 // Human label for a power class, hinting the wattage — the default 100 W is the
@@ -421,23 +422,23 @@ function SetupView({
           )}
           {/* My-exchange fields relevant to the sent exchange */}
           <div className="grid grid-cols-2 gap-2">
-            {selected.sentExchange.some((f) => f.type === 'zone') && (
+            {selected.sentExchange.some((f) => isType(f.type, 'zone')) && (
               <input type="text" placeholder="My CQ zone" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, cqZone: parseInt(e.target.value) || undefined }))} />
             )}
-            {selected.sentExchange.some((f) => f.type === 'state') && selected.homeArea?.kind !== 'StateCounty' && (
+            {selected.sentExchange.some((f) => isType(f.type, 'state')) && selected.homeArea?.kind !== 'StateCounty' && (
               <input type="text" placeholder="My state" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, state: e.target.value.toUpperCase() || undefined }))} />
             )}
-            {selected.sentExchange.some((f) => f.type === 'section') && (
+            {selected.sentExchange.some((f) => isType(f.type, 'section')) && (
               <input type="text" placeholder="My section" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, section: e.target.value.toUpperCase() || undefined }))} />
             )}
-            {selected.sentExchange.some((f) => f.type === 'name') && (
+            {selected.sentExchange.some((f) => isType(f.type, 'name')) && (
               <input type="text" placeholder="My name" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, name: e.target.value || undefined }))} />
             )}
-            {selected.sentExchange.some((f) => f.type === 'grid') && (
+            {selected.sentExchange.some((f) => isType(f.type, 'grid')) && (
               <input type="text" placeholder="My grid" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, grid: e.target.value.toUpperCase() || undefined }))} />
             )}
@@ -642,7 +643,9 @@ function EntryView() {
     const locField = definition?.rcvdExchange.find(
       (f) => isType(f.type, 'state') && fieldApplies(f, workedClass)
     );
-    if (locField && !editingId) {
+    // Validate on both new-log and edit: a busted state/county fix must not save an
+    // invalid value either.
+    if (locField) {
       const v = (exchange[locField.key] ?? '').trim().toUpperCase();
       if (v.length > 0 && v.length <= 2 && !isValidStateProv(v)) {
         setLastLog(`"${v}" isn't a valid state/province — fix before logging`);

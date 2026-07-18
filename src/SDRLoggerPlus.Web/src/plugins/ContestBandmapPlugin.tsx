@@ -79,12 +79,18 @@ export function ContestBandmapPlugin() {
       .sort((a, b) => a.frequency - b.frequency);
   }, [spots, lo, hi]);
 
+  // Mode for a spot's dupe/mult check: the spot's own mode, else the rig's current
+  // mode, else CW. Hardcoding CW mislabels SSB/RTTY spots as dupes/new-mults on a
+  // mixed-mode contest whose dupe rule is per-band-mode (e.g. Field Day, IARU).
+  const rigMode = rigStatus?.mode;
+  const spotMode = (s: { mode?: string }) => s.mode || rigMode || 'CW';
+
   // Batch dupe/mult check for the visible spots; refresh on spots/state change.
-  const callsKey = bandSpots.map((s) => s.dxCall).join(',');
+  const callsKey = bandSpots.map((s) => `${s.dxCall}:${spotMode(s)}`).join(',');
   const { data: checks } = useQuery({
     queryKey: ['contest-bandmap-check', band, callsKey, contestState?.qsos, contestState?.multipliers],
     queryFn: () =>
-      api.checkContestBatch(bandSpots.map((s) => ({ call: s.dxCall, band, mode: 'CW' }))),
+      api.checkContestBatch(bandSpots.map((s) => ({ call: s.dxCall, band, mode: spotMode(s) }))),
     enabled: !!contestState && bandSpots.length > 0,
   });
   const checkByCall = useMemo(() => {
