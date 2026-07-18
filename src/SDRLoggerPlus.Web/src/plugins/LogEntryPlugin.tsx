@@ -322,6 +322,22 @@ export function LogEntryPlugin() {
     }
   }, [nameLocked, focusedCallsignInfo?.name]);
 
+  // Auto-populate QTH from the callbook as "City, State" (whichever parts came
+  // back). Unlike the name field there's no lock toggle here, so this is keyed
+  // on the looked-up callsign: it fires once when a lookup lands and never
+  // again for that call, leaving any manual correction the operator types
+  // afterwards intact.
+  const qthFilledFor = useRef<string | null>(null);
+  useEffect(() => {
+    const info = focusedCallsignInfo;
+    if (!info?.callsign) { qthFilledFor.current = null; return; }
+    if (qthFilledFor.current === info.callsign) return;
+    const qth = [info.city, info.state].filter(Boolean).join(', ');
+    if (!qth) return;
+    qthFilledFor.current = info.callsign;
+    setFormData(prev => ({ ...prev, qth }));
+  }, [focusedCallsignInfo]);
+
   // Auto-populate from DX cluster spot selection. selectedSpot.frequency
   // arrives in kHz (the app-wide spot unit — see utils/frequency.ts); we
   // display MHz throughout the form (v1.x parity) and band-match in Hz.

@@ -23,6 +23,9 @@ export interface CallsignLookedUpEvent {
   cqZone?: number;
   ituZone?: number;
   state?: string;
+  // Town/city from the callbook (QRZ addr2 / HamQTH adr_city); pairs with
+  // state to auto-fill the log-entry QTH box.
+  city?: string;
   imageUrl?: string;
   bearing?: number;
   distance?: number;
