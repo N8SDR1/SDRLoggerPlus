@@ -56,6 +56,7 @@ import {
   Activity,
   Target,
   Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type AiProvider } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
@@ -2196,12 +2197,22 @@ function VoiceSettingsSection() {
             Turn the volume down so a band opening won't blast over a weak signal you're working.
           </p>
 
-          <button
-            onClick={testVoice}
-            className="px-4 py-2 rounded-lg bg-accent-primary/20 text-accent-primary border border-accent-primary/40 hover:bg-accent-primary/30 transition-colors text-sm font-medium"
-          >
-            🔊 Test voice
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={testVoice}
+              className="px-4 py-2 rounded-lg bg-accent-primary/20 text-accent-primary border border-accent-primary/40 hover:bg-accent-primary/30 transition-colors text-sm font-medium"
+            >
+              🔊 Test voice
+            </button>
+            {/* Test deliberately bypasses the status-bar mute so a voice can be
+                auditioned while muted — say so, or it looks like the mute failed. */}
+            {voice.muted && (
+              <span className="flex items-center gap-1.5 text-xs text-accent-warning">
+                <VolumeX className="w-3.5 h-3.5" />
+                Announcements are muted — Test still plays.
+              </span>
+            )}
+          </div>
 
           <p className="text-xs text-dark-400 border-t border-glass-100 pt-3 leading-relaxed">
             <span className="text-accent-warning font-medium">Heads up:</span> this list comes from
