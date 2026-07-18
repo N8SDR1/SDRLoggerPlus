@@ -40,6 +40,17 @@ const fieldApplies = (f: { appliesTo?: string }, workedClass: string): boolean =
   return a === 'InArea' ? inArea : !inArea;
 };
 
+// Human label for a power class, hinting the wattage — the default 100 W is the
+// Low-power class.
+const powerLabel = (cls: string): string => {
+  switch (cls.toUpperCase()) {
+    case 'QRP': return 'QRP (5 W)';
+    case 'LOW': return 'Low (100 W)';
+    case 'HIGH': return 'High';
+    default: return cls;
+  }
+};
+
 // Band from rig frequency (Hz) — same table LogEntryPlugin uses.
 const bandFromHz = (hz: number): string | null => {
   const k = hz / 1000;
@@ -136,7 +147,10 @@ function SetupView({
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [label, setLabel] = useState('');
-  const [myEx, setMyEx] = useState<ContestMyExchange>({});
+  // Default to a 100 W station, which is the Low-power class in every standard
+  // contest tier (QRP ≤5 W, LOW ≤100–150 W, HIGH above). Pre-selecting it means the
+  // correct power level/multiplier and Cabrillo CATEGORY-POWER are right by default.
+  const [myEx, setMyEx] = useState<ContestMyExchange>({ power: 'LOW' });
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   // { open } drives the editor modal; initial is the draft to edit (null = new).
@@ -399,7 +413,7 @@ function SetupView({
               <option value="">Power class…</option>
               {Object.entries(selected.powerMultipliers).map(([cls, mult]) => (
                 <option key={cls} value={cls}>
-                  {cls === 'QRP' ? 'QRP' : cls === 'LOW' ? 'Low' : cls === 'HIGH' ? 'High' : cls}
+                  {powerLabel(cls)}
                   {mult !== 1 ? ` (×${mult})` : ''}
                 </option>
               ))}
@@ -1018,7 +1032,7 @@ function SessionConfig({ definition, session }: { definition: ContestDefinition;
               <option value="">Power class…</option>
               {Object.entries(definition.powerMultipliers).map(([cls, mult]) => (
                 <option key={cls} value={cls}>
-                  {cls === 'QRP' ? 'QRP' : cls === 'LOW' ? 'Low' : cls === 'HIGH' ? 'High' : cls}
+                  {powerLabel(cls)}
                   {mult !== 1 ? ` (×${mult})` : ''}
                 </option>
               ))}
