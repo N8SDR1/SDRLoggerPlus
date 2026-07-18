@@ -384,10 +384,10 @@ function SetupView({
             placeholder={`${selected.name} ${new Date().getUTCFullYear()}`}
             className="glass-input w-full text-sm px-2 py-1.5"
           />
-          {/* Role-split contests (QSO parties, ARRL DX): the operator declares
-              whether they're operating in- or out-of-area. This drives which
-              exchange is sent and the whole scoring role — chosen explicitly rather
-              than only inferred from the typed state. */}
+          {/* Role-split contests: the operator declares which side they're on —
+              In-state/Out-of-state for a QSO party, W/VE or DX for ARRL DX & co.
+              This drives which exchange is sent and the whole scoring role —
+              chosen explicitly rather than only inferred from the typed state. */}
           {roleLabels(selected) && (
             <div className="space-y-1">
               <div className="text-[10px] uppercase tracking-wider text-gray-500">Operating as</div>
@@ -926,8 +926,9 @@ function EntryView() {
 // Labels (and the role value they set) for a role-split contest, or null when the
 // contest has no split (global contests — no selector shown). StateCounty parties
 // split In-state/Out-of-state (role 'OutArea': another US/VE station outside the
-// host state); WVE-kind contests (ARRL DX, 10m, 160m, RTTY Roundup) split
-// In-area/DX (role 'Dx'), matching the "DX" vocabulary ARRL's own rules use.
+// host state); WVE-kind contests (ARRL DX, 10m, 160m, RTTY Roundup) split W/VE vs
+// DX (role 'Dx') — both sides named the way ARRL's own rules and other contest
+// loggers (N1MM, DXLog) name them, never "in/out of area".
 function roleLabels(
   def: ContestDefinition,
 ): { inArea: string; other: string; otherRole: 'OutArea' | 'Dx' } | null {
@@ -935,7 +936,7 @@ function roleLabels(
   if (!kind || kind === 'None') return null;
   return kind === 'StateCounty'
     ? { inArea: 'In-state', other: 'Out-of-state', otherRole: 'OutArea' }
-    : { inArea: 'In-area', other: 'DX', otherRole: 'Dx' };
+    : { inArea: 'W/VE', other: 'DX', otherRole: 'Dx' };
 }
 
 // Frontend guess of the role from the typed state, matching the backend's
