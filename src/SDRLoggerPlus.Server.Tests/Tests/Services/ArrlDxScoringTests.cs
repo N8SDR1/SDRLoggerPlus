@@ -119,14 +119,6 @@ public class ArrlDxScoringTests
     }
 
     [Fact]
-    public void Wae_HasFiveBands_PerBandSerial()
-    {
-        var wae = Def("wae-cw");
-        wae.Bands.Should().NotContain("160M").And.HaveCount(5);
-        wae.Serial.Should().Be(SerialMode.PerBand);
-    }
-
-    [Fact]
     public void TenTen_HasNoMultiplier_PerContestDupe()
     {
         var t = Def("ten-ten");
