@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Radio as RadioIcon, Pencil, Megaphone, ArrowUp, ArrowDown } from 'lucide-react';
+import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Swords, Radio as RadioIcon, Pencil, Megaphone, ArrowUp, ArrowDown } from 'lucide-react';
 import { api, CreateQsoRequest, SatState } from '../api/client';
 import { signalRService, setTciMetersCallback, clearTciMetersCallback, type TciMetersEvent } from '../api/signalr';
 import { S9_DBM, DB_PER_S_UNIT } from '../utils/smeter';
@@ -17,6 +17,10 @@ import { getCountryFlag } from '../core/countryFlags';
 // satellite name + uplink/downlink freq+mode from the live S.A.T.
 // controller state and writes ADIF-standard sat_name / prop_mode=SAT /
 // freq_rx / down_mode so LoTW satellite credit survives ADIF export.
+//
+// Contest is intentionally NOT a mode here — it sits beside these tabs as a
+// jump to the Contest Entry panel, which owns serials, dupe checking and
+// scoring. Adding it to this union would persist an empty mode to localStorage.
 type LogMode = 'general' | 'pota' | 'sat';
 
 // Modes typical for satellite passes — SSB birds use USB, FM/CW birds
@@ -732,6 +736,20 @@ export function LogEntryPlugin() {
         <ModeTab id="general" label="General" icon={<RadioIcon className="w-3.5 h-3.5" />} />
         <ModeTab id="pota"    label="POTA"    icon={<Trees className="w-3.5 h-3.5" />} />
         <ModeTab id="sat"     label="SAT"     icon={<Satellite className="w-3.5 h-3.5" />} />
+        {/* Contest is a jump, not a log mode: contest QSOs need serials, dupe
+            checking and live scoring, which all live in the Contest Entry panel.
+            Deliberately does NOT set logMode — otherwise the empty "contest"
+            mode would persist to localStorage and reopen on restart. */}
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('open-panel', { detail: 'contest-entry' }))}
+          title="Open the Contest Entry panel — contest QSOs are logged there, with serials, dupe checking and scoring"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-t border-b-2 border-transparent font-ui text-xs font-semibold text-dark-300 transition-colors hover:text-accent-primary hover:bg-dark-700/20"
+        >
+          <Swords className="w-3.5 h-3.5" />
+          <span>Contest</span>
+          <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+        </button>
       </div>
 
       <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); handleClear(); } }} className="p-3 space-y-3">
