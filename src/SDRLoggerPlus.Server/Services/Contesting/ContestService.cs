@@ -89,7 +89,8 @@ public class ContestService
         var call = callsign.Trim().ToUpperInvariant();
         var workedCount = log.Count(q => string.Equals(q.Callsign, call, StringComparison.OrdinalIgnoreCase));
         var prefill = await BuildPrefillAsync(def, call);
-        return new ContestCheckResponse(eval.IsDupe, workedCount, eval.Mults, prefill);
+        var workedClass = ContestScoringEngine.ClassifyWorked(def, candidate);
+        return new ContestCheckResponse(eval.IsDupe, workedCount, eval.Mults, prefill, workedClass);
     }
 
     /// <summary>

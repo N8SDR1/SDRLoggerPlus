@@ -10,6 +10,20 @@ const FIELD_TYPES = ['Rst', 'Serial', 'Zone', 'State', 'Section', 'Grid', 'Name'
 const MULT_SOURCES = ['Dxcc', 'CqZone', 'ItuZone', 'State', 'Section', 'WpxPrefix', 'Grid', 'Continent'];
 const DUPE_RULES = ['PerBand', 'PerBandMode', 'PerContest'];
 const SERIAL_MODES = ['None', 'PerBand', 'AllBand'];
+// Per-QSO exchange branching: a field can apply always, only to in-area (W/VE)
+// stations, or only to DX. Stored as the server's ContestRole ('InArea'/'Dx');
+// 'Always' serializes to undefined.
+const APPLIES_TO: { value: string; label: string }[] = [
+  { value: 'Always', label: 'Always' },
+  { value: 'InArea', label: 'In-area (W/VE)' },
+  { value: 'Dx', label: 'DX only' },
+];
+// Mode classes the engine recognizes for per-mode QSO points.
+const POINT_MODES: { key: string; label: string }[] = [
+  { key: 'CW', label: 'CW' },
+  { key: 'PH', label: 'Phone' },
+  { key: 'RTTY', label: 'RTTY' },
+];
 
 function blankDefinition(): ContestDefinition {
   return {
@@ -28,6 +42,21 @@ function blankDefinition(): ContestDefinition {
   };
 }
 
+// Set (or clear, when value is undefined) a per-mode base-points entry. Setting
+// RTTY also sets DIGI so FT8/FT4 QSOs (mode class "DIGI") score like RTTY, matching
+// the built-in definitions' behavior.
+function setByMode(
+  points: ContestDefinition['qsoPoints'],
+  key: string,
+  value: number | undefined
+): ContestDefinition['qsoPoints'] {
+  const byMode: Record<string, number> = { ...(points.byMode ?? {}) };
+  const apply = (k: string) => { if (value === undefined) delete byMode[k]; else byMode[k] = value; };
+  apply(key);
+  if (key === 'RTTY') apply('DIGI');
+  return { ...points, byMode: Object.keys(byMode).length ? byMode : undefined };
+}
+
 interface Props {
   /** A draft to edit (clone/edit), or null for a fresh contest. */
   initial: ContestDefinition | null;
@@ -39,6 +68,11 @@ export function ContestEditor({ initial, onClose, onSaved }: Props) {
   const [def, setDef] = useState<ContestDefinition>(initial ?? blankDefinition());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Power multipliers edited as ordered rows (class → factor); serialized to the
+  // definition's powerMultipliers object on save. Empty ⇒ no power multiplier.
+  const [powerRows, setPowerRows] = useState<{ cls: string; factor: number }[]>(
+    () => Object.entries(initial?.powerMultipliers ?? {}).map(([cls, factor]) => ({ cls, factor }))
+  );
 
   const set = (patch: Partial<ContestDefinition>) => setDef((d) => ({ ...d, ...patch }));
 
@@ -56,7 +90,9 @@ export function ContestEditor({ initial, onClose, onSaved }: Props) {
   const addField = (which: 'sentExchange' | 'rcvdExchange') =>
     setDef((d) => ({
       ...d,
-      [which]: [...d[which], { key: 'text', label: 'Field', type: 'Text', width: 6 }],
+      // Blank key ⇒ derived from type on save (with collision dedupe); the author
+      // can override it in the key box.
+      [which]: [...d[which], { key: '', label: 'Field', type: 'Text', width: 6, required: false }],
     }));
 
   const removeField = (which: 'sentExchange' | 'rcvdExchange', idx: number) =>
@@ -66,14 +102,32 @@ export function ContestEditor({ initial, onClose, onSaved }: Props) {
     setSaving(true);
     setError(null);
     try {
-      // Derive a sensible field key from the chosen type (the engine reads by key).
-      const withKeys = (fields: ContestField[]) =>
-        fields.map((f) => ({ ...f, key: f.type.toLowerCase(), label: f.label || f.type }));
+      // Use the author's explicit key when set, else derive from the type; dedupe
+      // collisions so two same-type fields (e.g. two Text fields, or a state + a
+      // serial branch) don't clobber each other when the engine reads by key.
+      const withKeys = (fields: ContestField[]) => {
+        const seen = new Map<string, number>();
+        return fields.map((f) => {
+          let key = (f.key || '').trim() || f.type.toLowerCase();
+          const n = seen.get(key) ?? 0;
+          seen.set(key, n + 1);
+          if (n > 0) key = `${key}${n + 1}`;
+          return { ...f, key, label: f.label || f.type };
+        });
+      };
+      const powerMultipliers = powerRows.length
+        ? Object.fromEntries(
+            powerRows
+              .filter((r) => r.cls.trim())
+              .map((r) => [r.cls.trim().toUpperCase(), r.factor])
+          )
+        : undefined;
       await api.saveContestDefinition({
         ...def,
         builtin: false,
         sentExchange: withKeys(def.sentExchange),
         rcvdExchange: withKeys(def.rcvdExchange),
+        powerMultipliers: powerMultipliers && Object.keys(powerMultipliers).length ? powerMultipliers : undefined,
       });
       onSaved();
     } catch (e) {
@@ -158,14 +212,26 @@ export function ContestEditor({ initial, onClose, onSaved }: Props) {
               <PointInput label="Other cont." value={def.qsoPoints.otherContinent}
                 onChange={(v) => set({ qsoPoints: { ...def.qsoPoints, otherContinent: v } })} />
             </div>
+            {/* Per-mode base points (used when no relation override matches) —
+                leave blank to fall through to Default. */}
+            <div className="grid grid-cols-3 gap-2 mt-2">
+              {POINT_MODES.map((m) => (
+                <PointInput
+                  key={m.key}
+                  label={`${m.label} pts`}
+                  value={def.qsoPoints.byMode?.[m.key]}
+                  onChange={(v) => set({ qsoPoints: setByMode(def.qsoPoints, m.key, v) })}
+                />
+              ))}
+            </div>
           </Section>
 
           {/* Exchange fields */}
-          <ExchangeEditor title="Received exchange" fields={def.rcvdExchange}
+          <ExchangeEditor title="Received exchange" fields={def.rcvdExchange} showAppliesTo
             onAdd={() => addField('rcvdExchange')}
             onRemove={(i) => removeField('rcvdExchange', i)}
             onChange={(i, p) => updateField('rcvdExchange', i, p)} />
-          <ExchangeEditor title="Sent exchange" fields={def.sentExchange}
+          <ExchangeEditor title="Sent exchange" fields={def.sentExchange} showAppliesTo={false}
             onAdd={() => addField('sentExchange')}
             onRemove={(i) => removeField('sentExchange', i)}
             onChange={(i, p) => updateField('sentExchange', i, p)} />
@@ -192,6 +258,15 @@ export function ContestEditor({ initial, onClose, onSaved }: Props) {
                       })} />
                     per band
                   </label>
+                  <label className="text-xs text-gray-400 flex items-center gap-1">
+                    <input type="checkbox" checked={rule.perMode ?? false}
+                      onChange={(e) => setDef((d) => {
+                        const rules = d.multiplierRules.slice();
+                        rules[i] = { ...rules[i], perMode: e.target.checked };
+                        return { ...d, multiplierRules: rules };
+                      })} />
+                    per mode
+                  </label>
                   <button className="text-gray-500 hover:text-red-400"
                     onClick={() => setDef((d) => ({ ...d, multiplierRules: d.multiplierRules.filter((_, x) => x !== i) }))}>
                     <Trash2 className="w-4 h-4" />
@@ -202,6 +277,43 @@ export function ContestEditor({ initial, onClose, onSaved }: Props) {
                 onClick={() => setDef((d) => ({ ...d, multiplierRules: [...d.multiplierRules, { source: 'Dxcc', perBand: true }] }))}>
                 <Plus className="w-3 h-3" /> Add multiplier
               </button>
+            </div>
+          </Section>
+
+          {/* Power multipliers — scale the final score by the operator's power class
+              (e.g. Field Day QRP ×5, many QSO parties QRP ×2). Class names are matched
+              case-insensitively against the operator's declared power class. */}
+          <Section title="Power multiplier">
+            <div className="space-y-1.5">
+              {powerRows.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input className="glass-input text-sm px-2 py-1.5 w-28" value={row.cls}
+                    placeholder="Class (QRP)"
+                    onChange={(e) => setPowerRows((rows) => {
+                      const next = rows.slice();
+                      next[i] = { ...next[i], cls: e.target.value };
+                      return next;
+                    })} />
+                  <span className="text-xs text-gray-500">×</span>
+                  <input type="number" step="0.5" className="glass-input text-sm px-2 py-1.5 w-20" value={row.factor}
+                    onChange={(e) => setPowerRows((rows) => {
+                      const next = rows.slice();
+                      next[i] = { ...next[i], factor: Number(e.target.value) || 0 };
+                      return next;
+                    })} />
+                  <button className="text-gray-500 hover:text-red-400"
+                    onClick={() => setPowerRows((rows) => rows.filter((_, x) => x !== i))}>
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <button className="text-xs text-accent-primary flex items-center gap-1 hover:underline"
+                onClick={() => setPowerRows((rows) => [...rows, { cls: '', factor: 1 }])}>
+                <Plus className="w-3 h-3" /> Add power class
+              </button>
+              {powerRows.length === 0 && (
+                <div className="text-xs text-gray-500">No power multiplier — final score = points × mults.</div>
+              )}
             </div>
           </Section>
 
@@ -255,28 +367,61 @@ function PointInput({ label, value, onChange }: { label: string; value?: number;
   );
 }
 
-function ExchangeEditor({ title, fields, onAdd, onRemove, onChange }: {
+function ExchangeEditor({ title, fields, showAppliesTo, onAdd, onRemove, onChange }: {
   title: string;
   fields: ContestField[];
+  // Only the received exchange branches per worked station, so the "Applies to"
+  // control is hidden for the sent exchange.
+  showAppliesTo: boolean;
   onAdd: () => void;
   onRemove: (i: number) => void;
   onChange: (i: number, patch: Partial<ContestField>) => void;
 }) {
   return (
     <Section title={title}>
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {fields.map((f, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <select className="glass-input text-sm px-2 py-1.5 w-28" value={f.type}
-              onChange={(e) => onChange(i, { type: e.target.value })}>
-              {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <input className="glass-input text-sm px-2 py-1.5 flex-1" value={f.label}
-              placeholder="Label" onChange={(e) => onChange(i, { label: e.target.value })} />
-            <button className="text-gray-500 hover:text-red-400" onClick={() => onRemove(i)}
-              disabled={fields.length <= 1} title="Remove field">
-              <Trash2 className="w-4 h-4" />
-            </button>
+          <div key={i} className="rounded-lg border border-glass-100 bg-dark-700/30 p-2 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <select className="glass-input text-sm px-2 py-1.5 w-28" value={f.type}
+                onChange={(e) => onChange(i, { type: e.target.value })}>
+                {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <input className="glass-input text-sm px-2 py-1.5 flex-1" value={f.label}
+                placeholder="Label" onChange={(e) => onChange(i, { label: e.target.value })} />
+              <button className="text-gray-500 hover:text-red-400" onClick={() => onRemove(i)}
+                disabled={fields.length <= 1} title="Remove field">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input className="glass-input text-xs px-2 py-1 w-24 font-mono" value={f.key}
+                placeholder="key" title="Machine key (auto from type if blank)"
+                onChange={(e) => onChange(i, { key: e.target.value })} />
+              <label className="text-xs text-gray-400 flex items-center gap-1" title="Field width (rem)">
+                w
+                <input type="number" className="glass-input text-xs px-1.5 py-1 w-14" value={f.width}
+                  onChange={(e) => onChange(i, { width: Number(e.target.value) || 0 })} />
+              </label>
+              <label className="text-xs text-gray-400 flex items-center gap-1">
+                <input type="checkbox" checked={f.required ?? false}
+                  onChange={(e) => onChange(i, { required: e.target.checked })} />
+                required
+              </label>
+              {showAppliesTo && (
+                <label className="text-xs text-gray-400 flex items-center gap-1 ml-auto" title="Show this field only for this worked-station class">
+                  shows for
+                  <select className="glass-input text-xs px-1.5 py-1"
+                    value={!f.appliesTo || f.appliesTo === 'All' ? 'Always' : f.appliesTo === 'InArea' ? 'InArea' : 'Dx'}
+                    onChange={(e) => onChange(i, {
+                      appliesTo: e.target.value === 'Always' ? undefined
+                        : (e.target.value as ContestField['appliesTo']),
+                    })}>
+                    {APPLIES_TO.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
           </div>
         ))}
         <button className="text-xs text-accent-primary flex items-center gap-1 hover:underline" onClick={onAdd}>

@@ -29,6 +29,17 @@ const FALLBACK_MODES = ['CW', 'SSB', 'FT8', 'FT4', 'RTTY'];
 // Server enums serialize PascalCase ("Rst") — compare case-insensitively.
 const isType = (fieldType: string, t: string) => fieldType.toLowerCase() === t;
 
+// Whether a received field applies to the current worked-station class. Fields
+// with no appliesTo (or 'All') always show; 'InArea' shows for domestic (W/VE)
+// stations, 'OutArea'/'Dx' for DX. This is how a contest like RTTY Roundup shows
+// a state box for a US call and a serial box for a DX call.
+const fieldApplies = (f: { appliesTo?: string }, workedClass: string): boolean => {
+  const a = f.appliesTo;
+  if (!a || a === 'All') return true;
+  const inArea = workedClass === 'InArea';
+  return a === 'InArea' ? inArea : !inArea;
+};
+
 // Band from rig frequency (Hz) — same table LogEntryPlugin uses.
 const bandFromHz = (hz: number): string | null => {
   const k = hz / 1000;
@@ -557,6 +568,10 @@ function EntryView() {
 
   const rstDefault = mode === 'CW' ? '599' : '59';
   const hasRstField = definition?.rcvdExchange.some((f) => isType(f.type, 'rst')) ?? false;
+  // Worked-station class from the live check (state box vs serial box). Defaults to
+  // InArea until a call resolves — domestic contests are mostly domestic. While
+  // editing a logged QSO the check is suppressed, so we keep the loaded exchange.
+  const workedClass = check?.workedClass ?? 'InArea';
 
   const wipe = useCallback(() => {
     setCall('');
@@ -608,8 +623,11 @@ function EntryView() {
     // Location check: a 2-char value must be a real state/province (or DX). A 3+
     // char county is blocked only when the contest has an official county table
     // (an unknown code is then genuinely wrong); with the generic fallback it's
-    // assisted, not blocked.
-    const locField = definition?.rcvdExchange.find((f) => isType(f.type, 'state'));
+    // assisted, not blocked. Only when the state field actually applies to this
+    // worked station (a DX station in e.g. RTTY Roundup sends a serial, not a state).
+    const locField = definition?.rcvdExchange.find(
+      (f) => isType(f.type, 'state') && fieldApplies(f, workedClass)
+    );
     if (locField && !editingId) {
       const v = (exchange[locField.key] ?? '').trim().toUpperCase();
       if (v.length > 0 && v.length <= 2 && !isValidStateProv(v)) {
@@ -630,6 +648,17 @@ function EntryView() {
         setContestState(state);
         setLastLog(`Edited ${call.trim().toUpperCase()}`);
       } else {
+        // Only send values for fields that apply to this worked station, so a stale
+        // value from a hidden field (e.g. a state typed before the call resolved to
+        // DX) can't be logged and wrongly claim a mult.
+        const applicable = new Set(
+          (definition?.rcvdExchange ?? [])
+            .filter((f) => fieldApplies(f, workedClass))
+            .map((f) => f.key)
+        );
+        const exchangeToSend = applicable.size === 0
+          ? exchange
+          : Object.fromEntries(Object.entries(exchange).filter(([k]) => applicable.has(k)));
         const result = await api.logContestQso({
           callsign: call.trim(),
           band,
@@ -637,7 +666,7 @@ function EntryView() {
           // Qso.Frequency is stored in kHz (ADIF export divides by 1000 → MHz).
           frequency: rigStatus ? rigStatus.frequency / 1000 : undefined,
           rstSent: rstDefault,
-          exchange,
+          exchange: exchangeToSend,
         });
         setContestState(result.state);
         setLastLog(
@@ -654,7 +683,7 @@ function EntryView() {
     } finally {
       setLogging(false);
     }
-  }, [call, band, mode, exchange, editingId, definition, rigStatus, rstDefault, logging, setContestState, queryClient, wipe]);
+  }, [call, band, mode, exchange, editingId, definition, workedClass, rigStatus, rstDefault, logging, setContestState, queryClient, wipe]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -773,7 +802,7 @@ function EntryView() {
           {/* Dynamic exchange fields from the definition (RST included, prefilled).
               The location (state-typed) field gets S/P validation + county
               autocomplete for QSO parties. */}
-          {definition?.rcvdExchange.map((f) =>
+          {definition?.rcvdExchange.filter((f) => fieldApplies(f, workedClass)).map((f) =>
             isType(f.type, 'state') ? (
               <LocationField
                 key={f.key}

@@ -30,7 +30,11 @@ public record ContestCheckResponse(
     List<string> NewMults,
     // Prefill values for the received-exchange fields (by field key), from the
     // call-history file or the most recent prior QSO with this call. Empty if unknown.
-    Dictionary<string, string>? Prefill = null
+    Dictionary<string, string>? Prefill = null,
+    // How the engine classifies the worked station (InArea = W/VE, Dx/OutArea = DX,
+    // All = the contest has no home-area split). Drives per-QSO exchange branching
+    // in the entry window (state box vs serial box).
+    ContestRole WorkedClass = ContestRole.All
 );
 
 /// <summary>Batch dupe/new-mult check for a bandmap's spots.</summary>

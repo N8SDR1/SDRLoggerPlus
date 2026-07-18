@@ -38,6 +38,11 @@ public static class SeedContests
     private static ContestField Txt(string key, string label, int width = 6, bool required = true)
         => new() { Key = key, Label = label, Type = ContestFieldType.Text, Width = width, Required = required, PrefillFrom = key };
 
+    // Tag a field so it's only shown/collected for a given worked-station class
+    // (per-QSO exchange branching): e.g. in RTTY Roundup a W/VE station sends a
+    // state (InArea) while a DX station sends a serial (Dx).
+    private static ContestField When(ContestField f, ContestRole role) { f.AppliesTo = role; return f; }
+
     // Per-mode QSO points (Phone / CW / digital). Digital maps to both the RTTY and
     // DIGI mode classes; unset modes fall through to the phone value.
     private static PointsRule Pm(int ph, int cw, int? dig = null)
@@ -141,26 +146,43 @@ public static class SeedContests
             yield return def;
         }
 
-        // Single band (28 MHz). Phone = 2, CW = 4. Mults counted once per mode.
-        yield return D("arrl-10m", "ARRL 10 Meter", "ARRL-10", new() { "10M" }, new[] { "CW", "SSB" },
-            new[] { Rst(), StateF("S/P/C") }, new[] { Rst(), StateF("S/P/C") },
+        // Single band (28 MHz). Phone = 2, CW = 4. W/VE + Mexican stations send a
+        // state; DX stations send a serial (per-QSO branching). (Mexican-state
+        // multipliers are approximated as states — a documented simplification.)
+        var tenM = D("arrl-10m", "ARRL 10 Meter", "ARRL-10", new() { "10M" }, new[] { "CW", "SSB" },
+            new[] { Rst(), StateF("S/P/C") },
+            new[] { Rst(), When(StateF("S/P/C"), ContestRole.InArea), When(Serial(), ContestRole.Dx) },
             Pm(2, 4), new[] { M(MultSource.State), M(MultSource.Dxcc) }, serial: SerialMode.AllBand);
+        tenM.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
+        yield return tenM;
 
-        // W/VE-to-W/VE = 2, QSO with DX = 5. W/VE also count DXCC as a mult.
-        yield return D("arrl-160m", "ARRL 160 Meter", "ARRL-160", new() { "160M" }, new[] { "CW" },
-            new[] { Rst(), Section() }, new[] { Rst(), Section() },
+        // W/VE-to-W/VE = 2, QSO with DX = 5. W/VE also count DXCC as a mult. W/VE
+        // stations send an ARRL/RAC section; DX stations send a signal report only.
+        var oneSixty = D("arrl-160m", "ARRL 160 Meter", "ARRL-160", new() { "160M" }, new[] { "CW" },
+            new[] { Rst(), Section() }, new[] { Rst(), When(Section(), ContestRole.InArea) },
             Pts(2, otherCont: 5), new[] { M(MultSource.Section), M(MultSource.Dxcc) },
             dupe: DupeRule.PerContest);
+        oneSixty.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
+        yield return oneSixty;
 
-        // Multipliers counted once for the whole contest (not per band).
-        yield return D("arrl-rtty-roundup", "ARRL RTTY Roundup", "ARRL-RTTY", HfNo160, new[] { "RTTY" },
-            new[] { Rst(), StateF("S/P/#") }, new[] { Rst(), StateF("S/P/#") },
+        // Multipliers (states + provinces + DXCC entities) counted once for the whole
+        // contest (not per band). US/VE stations send a state/province; DX stations
+        // send a serial (per-QSO branching).
+        var rttyRu = D("arrl-rtty-roundup", "ARRL RTTY Roundup", "ARRL-RTTY", HfNo160, new[] { "RTTY" },
+            new[] { Rst(), StateF("S/P/#") },
+            new[] { Rst(), When(StateF("St"), ContestRole.InArea), When(Serial(), ContestRole.Dx) },
             Pts(1), new[] { M(MultSource.State), M(MultSource.Dxcc) }, dupe: DupeRule.PerBand);
+        rttyRu.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
+        yield return rttyRu;
 
         // Exchange is class + section (not a scored multiplier). Phone 1 / CW & digital 2.
-        yield return D("arrl-field-day", "ARRL Field Day", "ARRL-FD", Hf6, new[] { "CW", "SSB", "RTTY", "FT8" },
+        // Final score is scaled by a transmitter power multiplier (§7.1): >150 W = ×1,
+        // ≤150 W = ×2, and QRP (≤5 W on non-commercial power) = ×5.
+        var fieldDay = D("arrl-field-day", "ARRL Field Day", "ARRL-FD", Hf6, new[] { "CW", "SSB", "RTTY", "FT8" },
             new[] { Txt("class", "Cls", 4), Section() }, new[] { Txt("class", "Cls", 4), Section() },
             Pm(1, 2, 2), Array.Empty<MultRule>());
+        fieldDay.PowerMultipliers = new() { ["HIGH"] = 1, ["LOW"] = 2, ["QRP"] = 5 };
+        yield return fieldDay;
 
         // WFDA: Category + Class + ARRL/RAC Section (or MX/DX). Phone 1 / CW & digital 2.
         yield return D("winter-field-day", "Winter Field Day", "WFD", Hf6, new[] { "CW", "SSB", "RTTY", "FT8" },

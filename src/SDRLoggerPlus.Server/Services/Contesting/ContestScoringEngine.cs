@@ -194,6 +194,26 @@ public static class ContestScoringEngine
         };
     }
 
+    /// <summary>
+    /// Classify a worked station relative to the definition's home area, as a
+    /// <see cref="ContestRole"/> the client can act on: <see cref="ContestRole.InArea"/>
+    /// (W/VE / in-state), <see cref="ContestRole.OutArea"/>, or <see cref="ContestRole.Dx"/>.
+    /// <see cref="ContestRole.All"/> when the contest has no home-area split. Used by
+    /// the entry window to switch the received-exchange field per QSO (state vs serial).
+    /// </summary>
+    public static ContestRole ClassifyWorked(ContestDefinition def, Qso qso)
+    {
+        var home = def.HomeArea;
+        if (home is null || home.Kind == HomeAreaKind.None)
+            return ContestRole.All;
+        return ClassifyStation(home, qso) switch
+        {
+            StationClass.InArea => ContestRole.InArea,
+            StationClass.Dx => ContestRole.Dx,
+            _ => ContestRole.OutArea,
+        };
+    }
+
     private enum StationClass { InArea, OutArea, Dx }
 
     // Classify a worked station relative to the contest's home area. For QSO

@@ -1170,6 +1170,9 @@ export interface ContestField {
   required?: boolean;
   validate?: string;
   prefillFrom?: string;
+  // Show/collect only when the worked station is in this class ('InArea' = W/VE,
+  // 'OutArea'/'Dx' = DX). Absent/'All' ⇒ always. Drives per-QSO exchange branching.
+  appliesTo?: 'All' | 'InArea' | 'OutArea' | 'Dx';
 }
 
 export interface ContestDefinition {
@@ -1187,6 +1190,9 @@ export interface ContestDefinition {
     otherContinent?: number;
     sameZone?: number;
     default: number;
+    // Base points per mode class ("CW", "PH", "RTTY", "DIGI") when no relation
+    // override matches; falls back to `default` for an unlisted mode.
+    byMode?: Record<string, number>;
   };
   multiplierRules: { source: string; perBand: boolean; perMode?: boolean }[];
   dupeRule: 'PerBand' | 'PerBandMode' | 'PerContest';
@@ -1249,6 +1255,10 @@ export interface ContestCheckResponse {
   newMults: string[];
   // Prefill for received-exchange fields (by field key), from call-history / prior QSO.
   prefill?: Record<string, string> | null;
+  // How the engine classified the worked station: 'InArea' (W/VE), 'OutArea'/'Dx'
+  // (DX), or 'All' (no home-area split). Drives which received field the entry
+  // window shows (state vs serial).
+  workedClass?: 'All' | 'InArea' | 'OutArea' | 'Dx';
 }
 
 export interface ContestLogResult {

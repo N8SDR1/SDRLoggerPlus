@@ -90,6 +90,16 @@ public class ContestField
 
     /// <summary>Optional call-history key to prefill from, e.g. "state".</summary>
     public string? PrefillFrom { get; set; }
+
+    /// <summary>
+    /// Show/collect this field only when the worked station falls in this class
+    /// (<see cref="ContestRole.InArea"/> = W/VE; <see cref="ContestRole.OutArea"/>
+    /// or <see cref="ContestRole.Dx"/> = DX). Null (or <see cref="ContestRole.All"/>)
+    /// ⇒ always. Drives per-QSO exchange branching in the entry window (e.g. RTTY
+    /// Roundup: a US station sends a state, a DX station sends a serial); scoring is
+    /// unaffected since the engine reads whatever value lands on the QSO.
+    /// </summary>
+    public ContestRole? AppliesTo { get; set; }
 }
 
 /// <summary>
