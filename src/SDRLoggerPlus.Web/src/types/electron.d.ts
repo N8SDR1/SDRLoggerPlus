@@ -12,8 +12,10 @@ interface ElectronAPI {
   removeZoomLevelChangedListener?: () => void;
   // View > Layouts menu. Optional because they're absent in a browser (and in
   // an older desktop build), so every call site must guard.
-  notifyLayouts?: (names: string[], active: string | null) => Promise<void>;
-  onApplyLayout?: (callback: (name: string) => void) => void;
+  notifyLayouts?: (names: string[], starters: string[], active: string | null) => Promise<void>;
+  onApplyLayout?: (
+    callback: (target: { kind: 'starter' | 'saved'; name: string }) => void,
+  ) => void;
   onSaveLayout?: (callback: () => void) => void;
   onResetLayout?: (callback: () => void) => void;
   removeLayoutMenuListeners?: () => void;

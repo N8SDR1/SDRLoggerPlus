@@ -2756,7 +2756,7 @@ function LayoutPresetsSubsection() {
       setNaming(false);
       setDraftName('');
       // Refresh the native Layouts menu and mark this preset as the loaded one.
-      notifyLayoutsChanged(name);
+      notifyLayoutsChanged(`saved:${name}`);
       flash('ok', `Saved as "${name}"`);
     } catch (e) {
       flash('err', e instanceof Error ? e.message : String(e));
@@ -2771,7 +2771,7 @@ function LayoutPresetsSubsection() {
       // Sanity: FlexLayout throws if the JSON isn't a valid model.
       Model.fromJson(json);
       setLayout(json);
-      notifyLayoutsChanged(slot.name);
+      notifyLayoutsChanged(`saved:${slot.name}`);
       flash('ok', `Loaded "${slot.name}"`);
     } catch (e) {
       flash('err', `Failed to apply "${slot.name}": ${e instanceof Error ? e.message : String(e)}`);

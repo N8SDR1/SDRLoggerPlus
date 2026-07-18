@@ -453,6 +453,7 @@ function createWindow() {
 // so the renderer pushes an update whenever a preset is saved, renamed or
 // deleted and we rebuild — see the 'layouts-changed' IPC handler.
 let savedLayouts = [];
+let starterLayouts = [];
 let activeLayoutName = null;
 
 /**
@@ -463,15 +464,20 @@ let activeLayoutName = null;
  * prompt() — so it asks the renderer to open its own inline name input.
  */
 function buildLayoutsSubmenu() {
-  const items = savedLayouts.map((name) => ({
+  // Built-in starters first, then the operator's own presets. A starter and a
+  // preset can share a name, so the click carries which list it came from.
+  const entry = (name, kind) => ({
     label: name,
     type: 'radio',
-    checked: name === activeLayoutName,
-    click: () => mainWindow?.webContents.send('apply-layout', name)
-  }));
+    checked: activeLayoutName === `${kind}:${name}`,
+    click: () => mainWindow?.webContents.send('apply-layout', { kind, name })
+  });
 
-  if (items.length === 0) {
-    items.push({ label: 'No saved layouts', enabled: false });
+  const items = starterLayouts.map((name) => entry(name, 'starter'));
+
+  if (savedLayouts.length > 0) {
+    items.push({ type: 'separator' });
+    items.push(...savedLayouts.map((name) => entry(name, 'saved')));
   }
 
   items.push(
@@ -685,9 +691,13 @@ app.whenReady().then(async () => {
   // menu template is static once built, so rebuild it to reflect the change.
   ipcMain.handle('layouts-changed', (_event, payload = {}) => {
     savedLayouts = Array.isArray(payload.names) ? payload.names : [];
+    starterLayouts = Array.isArray(payload.starters) ? payload.starters : [];
     activeLayoutName = payload.active ?? null;
     createMenu();
-    log.debug(`Layouts menu rebuilt: [${savedLayouts.join(', ')}] active=${activeLayoutName ?? 'none'}`);
+    log.debug(
+      `Layouts menu rebuilt: starters=[${starterLayouts.join(', ')}] ` +
+      `saved=[${savedLayouts.join(', ')}] active=${activeLayoutName ?? 'none'}`
+    );
   });
 
   // Handle zoom level IPC

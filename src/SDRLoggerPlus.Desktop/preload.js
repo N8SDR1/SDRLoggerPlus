@@ -34,9 +34,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // View > Layouts. The renderer owns the presets and pushes the list up so the
   // native menu can show them; the menu sends the chosen action back down.
-  notifyLayouts: (names, active) => ipcRenderer.invoke('layouts-changed', { names, active }),
+  notifyLayouts: (names, starters, active) =>
+    ipcRenderer.invoke('layouts-changed', { names, starters, active }),
   onApplyLayout: (callback) => {
-    ipcRenderer.on('apply-layout', (_event, name) => callback(name));
+    ipcRenderer.on('apply-layout', (_event, target) => callback(target));
   },
   onSaveLayout: (callback) => {
     ipcRenderer.on('save-layout', () => callback());
