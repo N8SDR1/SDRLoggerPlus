@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Layout, Model, TabNode, TabSetNode, BorderNode, ITabSetRenderValues, Actions, DockLocation } from 'flexlayout-react';
-import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, Activity, TrendingUp, Gauge, Map, Swords, Grid3x3, Target } from 'lucide-react';
+import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, Activity, TrendingUp, Gauge, Map, Swords, Grid3x3, Target, Settings } from 'lucide-react';
 import { StatusBar } from './components/StatusBar';
 import { WeatherAlertBanner } from './components/WeatherAlertBanner';
 import { Toasts } from './components/Toasts';
@@ -16,6 +16,7 @@ import { useSetupStore } from './store/setupStore';
 import { useAppStore } from './store/appStore';
 import { useTheme } from './hooks/useTheme';
 import { useOutOfBandAlert } from './hooks/useOutOfBandAlert';
+import { clampPanelScale, PANEL_STEP_PERCENT } from './utils/zoomScale';
 
 import 'flexlayout-react/style/dark.css';
 
@@ -30,6 +31,8 @@ interface PluginDef {
   component: React.ComponentType;
   category: PluginCategory;
   tags?: string[];
+  /** false = canvas/WebGL panel whose geometry breaks under CSS zoom — no per-panel scale. */
+  scalable?: boolean;
 }
 
 const PLUGINS: Record<string, PluginDef> = {
@@ -79,6 +82,7 @@ const PLUGINS: Record<string, PluginDef> = {
     component: GlobePlugin,
     category: 'Maps & Navigation',
     tags: ['map', 'earth'],
+    scalable: false,
   },
   'rig': {
     name: 'Rig',
@@ -183,6 +187,7 @@ const PLUGINS: Record<string, PluginDef> = {
     component: PanadapterPlugin,
     category: 'Radio & Equipment',
     tags: ['spectrum', 'waterfall', 'fft', 'sdr', 'panadapter'],
+    scalable: false,
   },
   'statistics': {
     name: 'Statistics',
@@ -197,11 +202,12 @@ const PLUGINS: Record<string, PluginDef> = {
     component: MapPlugin,
     category: 'Maps & Navigation',
     tags: ['map', '2d', 'leaflet', 'spots'],
+    scalable: false,
   },
 };
 
-// Panels whose settings live in a dedicated Settings section get a "?" on their
-// tab that jumps straight to that section. Only panels with a real section.
+// Panels whose settings live in a dedicated Settings section get a gear icon on
+// their tab that jumps straight to that section. Only panels with a real section.
 const PANEL_SETTINGS_SECTION: Partial<Record<string, SettingsSection>> = {
   'rotator': 'rotator',
   'map': 'map',
@@ -398,9 +404,25 @@ export function App() {
 
     if (plugin) {
       const Component = plugin.component;
+      // Canvas/WebGL panels (map, globe, panadapter) measure their containers in
+      // real pixels — CSS zoom breaks their geometry, so they render unwrapped.
+      if (plugin.scalable === false) {
+        return (
+          <PluginErrorBoundary pluginId={component || 'unknown'}>
+            <Component />
+          </PluginErrorBoundary>
+        );
+      }
+      // Per-panel scale: CSS zoom on the content wrapper, percentage persisted
+      // in the tab's FlexLayout config (rides the layout save). Canvas/WebGL
+      // panels (scalable: false) render unwrapped — zoom breaks their geometry.
+      const rawScale = (node.getConfig() as { scale?: unknown } | undefined)?.scale;
+      const scale = clampPanelScale(typeof rawScale === 'number' ? rawScale : 100);
       return (
         <PluginErrorBoundary pluginId={component || 'unknown'}>
-          <Component />
+          <div style={{ zoom: scale / 100, height: '100%' }}>
+            <Component />
+          </div>
         </PluginErrorBoundary>
       );
     }
@@ -493,7 +515,7 @@ export function App() {
       );
     }
 
-    // "?" shortcut → open this panel's Settings section directly.
+    // Gear shortcut → open this panel's Settings section directly.
     const section = PANEL_SETTINGS_SECTION[component || ''];
     if (section) {
       renderValues.content = (
@@ -510,9 +532,9 @@ export function App() {
               useSettingsStore.getState().setActiveSection(section);
               useSettingsStore.getState().openSettings();
             }}
-            className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-glass-200 text-[10px] font-bold text-dark-300 hover:text-accent-primary hover:border-accent-primary/50 cursor-pointer transition-colors"
+            className="inline-flex items-center justify-center w-4 h-4 text-dark-300 hover:text-accent-primary cursor-pointer transition-colors"
           >
-            ?
+            <Settings className="w-3.5 h-3.5" />
           </span>
         </span>
       );
@@ -522,6 +544,46 @@ export function App() {
   // Custom tabset rendering - add + button to each tabset
   const onRenderTabSet = useCallback((node: TabSetNode | BorderNode, renderValues: ITabSetRenderValues) => {
     if (node instanceof TabSetNode) {
+      // Per-panel scale stepper for the active tab. Hidden for canvas/WebGL
+      // panels that can't scale (map, globe, panadapter). The percentage lives
+      // in the tab's config so it persists with the layout.
+      const selected = node.getSelectedNode();
+      const selectedPlugin =
+        selected instanceof TabNode ? PLUGINS[selected.getComponent() || ''] : undefined;
+      if (selected instanceof TabNode && selectedPlugin && selectedPlugin.scalable !== false) {
+        const tabId = selected.getId();
+        const rawScale = (selected.getConfig() as { scale?: unknown } | undefined)?.scale;
+        const scale = clampPanelScale(typeof rawScale === 'number' ? rawScale : 100);
+        const setScale = (pct: number) => {
+          const config = { ...((selected.getConfig() as object | undefined) ?? {}), scale: clampPanelScale(pct) };
+          model.doAction(Actions.updateNodeAttributes(tabId, { config }));
+        };
+        renderValues.buttons.push(
+          <div key="panel-scale" className="flex items-center gap-0.5 mr-1 text-[10px] font-mono text-dark-300">
+            <button
+              title="Shrink this panel's content"
+              className="flexlayout__tab_toolbar_button"
+              onClick={() => setScale(scale - PANEL_STEP_PERCENT)}
+            >
+              −
+            </button>
+            <span
+              title="Panel content scale — click to reset to 100%"
+              className="cursor-pointer min-w-[30px] text-center"
+              onClick={() => setScale(100)}
+            >
+              {scale}%
+            </span>
+            <button
+              title="Grow this panel's content (max 100%)"
+              className="flexlayout__tab_toolbar_button"
+              onClick={() => setScale(scale + PANEL_STEP_PERCENT)}
+            >
+              +
+            </button>
+          </div>
+        );
+      }
       renderValues.stickyButtons.push(
         <button
           key="add-panel"
@@ -536,7 +598,7 @@ export function App() {
         </button>
       );
     }
-  }, []);
+  }, [model]);
 
   // Re-apply the default FlexLayout model whenever a reset is requested from
   // anywhere (the store's resetLayout() bumps resetToken). This is what the

@@ -43,6 +43,27 @@ function saveZoomLevel(level) {
   }
 }
 
+// Global UI scale is DOWN-ONLY (operator decision): level 0 = 100%,
+// -2.0 ~= 69%. Every zoom entry point funnels through applyZoomLevel so the
+// clamp, persistence and renderer notification can't drift apart.
+const MIN_ZOOM_LEVEL = -2.0;
+const MAX_ZOOM_LEVEL = 0;
+
+function clampZoomLevel(level) {
+  const n = Number(level);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(MAX_ZOOM_LEVEL, Math.max(MIN_ZOOM_LEVEL, n));
+}
+
+function applyZoomLevel(level) {
+  if (!mainWindow) return;
+  const clamped = clampZoomLevel(level);
+  mainWindow.webContents.setZoomLevel(clamped);
+  saveZoomLevel(clamped);
+  // Keep the Settings -> Appearance UI Scale control in sync.
+  mainWindow.webContents.send('zoom-level-changed', clamped);
+}
+
 // Window geometry persistence (size + position + maximized). The local file is
 // the fast/offline restore cache; the same geometry is mirrored to the backend
 // settings so it rides along in the settings export/import.
@@ -504,6 +525,26 @@ function createMenu() {
         { role: 'forceReload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
+        {
+          label: 'Zoom Out',
+          accelerator: 'CommandOrControl+-',
+          click: () => {
+            if (mainWindow) applyZoomLevel(mainWindow.webContents.getZoomLevel() - 0.5);
+          }
+        },
+        {
+          label: 'Zoom In',
+          accelerator: 'CommandOrControl+=',
+          click: () => {
+            if (mainWindow) applyZoomLevel(mainWindow.webContents.getZoomLevel() + 0.5);
+          }
+        },
+        {
+          label: 'Reset Zoom',
+          accelerator: 'CommandOrControl+0',
+          click: () => applyZoomLevel(0)
+        },
+        { type: 'separator' },
         { role: 'togglefullscreen' }
       ]
     },
@@ -603,9 +644,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('set-zoom-level', (event, level) => {
     if (mainWindow) {
-      mainWindow.webContents.setZoomLevel(level);
-      saveZoomLevel(level);
-      log.debug(`Zoom level set to ${level}`);
+      applyZoomLevel(level);
+      log.debug(`Zoom level set to ${clampZoomLevel(level)}`);
     }
   });
 
@@ -639,8 +679,8 @@ app.whenReady().then(async () => {
       }
       mainWindow.show();
 
-      // Restore saved zoom level
-      const savedZoomLevel = getStoredZoomLevel();
+      // Restore saved zoom level (clamped — a corrupt value must not stick)
+      const savedZoomLevel = clampZoomLevel(getStoredZoomLevel());
       if (savedZoomLevel !== 0) {
         mainWindow.webContents.setZoomLevel(savedZoomLevel);
         log.info(`Restored zoom level: ${savedZoomLevel}`);

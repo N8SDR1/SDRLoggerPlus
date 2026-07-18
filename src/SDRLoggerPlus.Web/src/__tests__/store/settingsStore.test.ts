@@ -21,7 +21,7 @@ describe('settingsStore', () => {
       settings: {
         station: { callsign: '', operatorName: '', gridSquare: '', latitude: null, longitude: null, city: '', country: '' },
         qrz: { username: '', password: '', apiKey: '', enabled: false },
-        appearance: { theme: 'dark', compactMode: false },
+        appearance: { theme: 'dark' },
         rotator: { enabled: false, ipAddress: '127.0.0.1', port: 4533, pollingIntervalMs: 500, rotatorId: 'default', presets: [] },
         radio: { followRadio: true, activeRigType: null, autoReconnect: false, autoConnectRigId: null, reconnectLastOnStartup: true, scrollTuneStepHz: 100, tci: { host: '', port: 50001, name: '', autoConnect: false } },
         map: { tileLayer: 'dark' },
