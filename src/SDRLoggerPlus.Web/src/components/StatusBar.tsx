@@ -1,4 +1,4 @@
-import { Radio, MapPin, Clock, Settings, ChevronDown, Power, Volume2, VolumeX } from 'lucide-react';
+import { Radio, MapPin, Settings, ChevronDown, Power, Volume2, VolumeX } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRigConnection } from '../hooks/useRigConnection';
@@ -11,16 +11,10 @@ export function StatusBar() {
   const { openSettings, setActiveSection, updateVoiceSettings, saveSettings } = useSettingsStore();
   const voiceMuted = useSettingsStore((s) => s.settings.voice.muted);
   const { rigs, switchTo, disconnect, pillRigName, pillConnected } = useRigConnection();
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [showAbout, setShowAbout] = useState(false);
   const [aboutTab, setAboutTab] = useState<TabId>('about');
   const [rigMenuOpen, setRigMenuOpen] = useState(false);
   const rigMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Close the rig switcher on any outside click.
   useEffect(() => {
@@ -48,10 +42,6 @@ export function StatusBar() {
     window.addEventListener('open-help-guide', openHelp);
     return () => window.removeEventListener('open-help-guide', openHelp);
   }, []);
-
-  const formatUtcTime = (date: Date) => {
-    return date.toISOString().slice(11, 19);
-  };
 
   const formatFrequency = (freq: number) => {
     return (freq / 1000000).toFixed(3);
@@ -120,11 +110,6 @@ export function StatusBar() {
 
       {/* Right side - Time and connection */}
       <div className="flex items-center gap-6">
-        <div className="flex items-center gap-2 text-dark-300">
-          <Clock className="w-3 h-3" />
-          <span className="font-mono">{formatUtcTime(currentTime)} UTC</span>
-        </div>
-
         {/* Quick mute for spoken announcements — one click, no digging through
             Settings. Gates every automatic announcement without disturbing each
             feature's own voice setting. */}
