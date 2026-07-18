@@ -166,8 +166,15 @@ public class LiteQsoRepository : IQsoRepository
     {
         var all = _context.Qsos.FindAll().ToList();
 
-        var today = DateTime.UtcNow.Date;
-        var qsosToday = all.Count(q => q.QsoDate >= today);
+        // "Today" = the operator's LOCAL calendar day. In-app QSOs (manual, FT8
+        // auto-log, SAT) store a local QsoDate, so the old DateTime.UtcNow.Date
+        // comparison under-counted evening QSOs once UTC had already rolled past
+        // midnight — a 21:33 local QSO on the 17th read as "before" 00:00 UTC on
+        // the 18th and dropped to 0. Normalise every QsoDate to local time (a
+        // no-op for the local rows, a proper conversion for UTC-imported rows)
+        // and match today's local date.
+        var today = DateTime.Now.Date;
+        var qsosToday = all.Count(q => q.QsoDate.ToLocalTime().Date == today);
 
         // Qso stores DXCC / Country / Grid on the nested StationInfo (v2
         // schema) and ALSO carries legacy top-level columns for older rows —
