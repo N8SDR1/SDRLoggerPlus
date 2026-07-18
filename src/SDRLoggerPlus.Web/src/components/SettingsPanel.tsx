@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DecodeAlertsSection } from './settings/DecodeAlertsSection';
 import {
   loadAnnouncementVoices,
-  applyAnnouncementVoice,
+  speakAnnouncement,
   guessVoiceGender,
   formatAccent,
 } from '../utils/announcementVoice';
@@ -1598,9 +1598,8 @@ function RbnAlertsSettingsSection() {
               onClick={() => {
                 if (typeof speechSynthesis !== 'undefined') {
                   const u = new SpeechSynthesisUtterance('Band opening! 10 meters. Test.');
-                  applyAnnouncementVoice(u);
-                  speechSynthesis.cancel();
-                  speechSynthesis.speak(u);
+                  // force: pressing Test is explicit, so it plays even when muted.
+                  speakAnnouncement(u, { force: true });
                 }
               }}
               className="glass-button px-3 py-1.5 text-sm whitespace-nowrap"
@@ -2087,9 +2086,8 @@ function VoiceSettingsSection() {
   const testVoice = () => {
     if (typeof speechSynthesis === 'undefined') return;
     const u = new SpeechSynthesisUtterance('DX Coach. New D X C C. Bravo Juliet. Benin. 17 meters.');
-    applyAnnouncementVoice(u);
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
+    // force: pressing Test is explicit, so it plays even when muted.
+    speakAnnouncement(u, { force: true });
   };
 
   return (

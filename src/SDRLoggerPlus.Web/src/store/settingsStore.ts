@@ -116,6 +116,13 @@ export interface VoiceSettings {
   rate: number;
   /** Announcement volume, 0–1. Shared by every spoken alert. */
   volume: number;
+  /**
+   * Global mute for spoken announcements, toggled from the status bar. Gates
+   * every automatic announcement (band-opening, Hot List, RBN, decode alerts,
+   * DX Coach) without touching each feature's own voice setting, so unmuting
+   * restores exactly what was enabled before.
+   */
+  muted: boolean;
 }
 
 export interface DxCoachSettings {
@@ -639,6 +646,7 @@ const defaultSettings: Settings = {
     voiceUri: '',
     rate: 0.95,
     volume: 0.8,
+    muted: false,
   },
   adifMonitor: {
     enabled: false,

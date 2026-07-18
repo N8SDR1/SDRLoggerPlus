@@ -1,4 +1,4 @@
-import { Radio, MapPin, Clock, Settings, ChevronDown, Power } from 'lucide-react';
+import { Radio, MapPin, Clock, Settings, ChevronDown, Power, Volume2, VolumeX } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRigConnection } from '../hooks/useRigConnection';
@@ -8,7 +8,8 @@ import { AboutDialog, type TabId } from './AboutDialog';
 
 export function StatusBar() {
   const { stationCallsign, stationGrid, rigStatus } = useAppStore();
-  const { openSettings, setActiveSection } = useSettingsStore();
+  const { openSettings, setActiveSection, updateVoiceSettings, saveSettings } = useSettingsStore();
+  const voiceMuted = useSettingsStore((s) => s.settings.voice.muted);
   const { rigs, switchTo, disconnect, pillRigName, pillConnected } = useRigConnection();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showAbout, setShowAbout] = useState(false);
@@ -60,6 +61,14 @@ export function StatusBar() {
   // hook — the same rig (and name) the popover lists, so the pill and menu match.
   const rigConnected = pillConnected;
   const rigName = pillRigName || 'Rig';
+
+  // Mute is a one-click control, so persist it straight away — the update*
+  // actions only touch local state, and waiting for a Settings "Save Changes"
+  // would silently drop the toggle on restart.
+  const toggleMute = () => {
+    updateVoiceSettings({ muted: !voiceMuted });
+    saveSettings().catch((e) => console.warn('[status-bar] mute save failed', e));
+  };
 
   // Radio setup lives in Settings > Station (it used to be its own Rig panel).
   const openRigSettings = () => {
@@ -115,6 +124,25 @@ export function StatusBar() {
           <Clock className="w-3 h-3" />
           <span className="font-mono">{formatUtcTime(currentTime)} UTC</span>
         </div>
+
+        {/* Quick mute for spoken announcements — one click, no digging through
+            Settings. Gates every automatic announcement without disturbing each
+            feature's own voice setting. */}
+        <button
+          onClick={toggleMute}
+          className={`p-1 rounded transition-colors hover:bg-dark-600 ${
+            voiceMuted ? 'text-accent-danger' : 'text-gray-400 hover:text-accent-secondary'
+          }`}
+          title={
+            voiceMuted
+              ? 'Announcements muted — click to unmute'
+              : 'Mute spoken announcements'
+          }
+          aria-label={voiceMuted ? 'Unmute announcements' : 'Mute announcements'}
+          aria-pressed={voiceMuted}
+        >
+          {voiceMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
 
         <button
           onClick={openSettings}

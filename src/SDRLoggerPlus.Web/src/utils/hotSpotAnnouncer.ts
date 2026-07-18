@@ -3,7 +3,7 @@
  * built-in speech synthesis with a per-callsign cooldown so a busy pileup
  * doesn't repeat the same call every few seconds.
  */
-import { applyAnnouncementVoice } from './announcementVoice';
+import { speakAnnouncement } from './announcementVoice';
 
 const lastAnnounced = new Map<string, number>();
 
@@ -31,8 +31,5 @@ export function announceHotSpot(call: string, band?: string | null, mode?: strin
   if (band) parts.push(band);
   if (mode) parts.push(mode);
   const utterance = new SpeechSynthesisUtterance(parts.join(' '));
-  applyAnnouncementVoice(utterance); // operator's chosen voice/accent + rate
-  // Chromium requires cancel() before speak() or it silently drops the request
-  speechSynthesis.cancel();
-  speechSynthesis.speak(utterance);
+  speakAnnouncement(utterance); // shared voice/accent/rate + global mute
 }

@@ -50,6 +50,36 @@ export function applyAnnouncementVoice(utterance: SpeechSynthesisUtterance): voi
   if (typeof volume === 'number') utterance.volume = Math.max(0, Math.min(1, volume));
 }
 
+/** Whether spoken announcements are currently muted (status-bar toggle). */
+export function isAnnouncementsMuted(): boolean {
+  return useSettingsStore.getState().settings.voice.muted === true;
+}
+
+/**
+ * Speak an announcement, honouring the operator's voice settings and the global
+ * mute. Every automatic spoken alert goes through here so one toggle silences
+ * all of them.
+ *
+ * `force` bypasses the mute for the Settings voice-test buttons — pressing Test
+ * is an explicit request to hear the voice, so it should work while muted.
+ * `queue` skips the cancel() so consecutive announcements don't cut each other
+ * off (the DX Coach wants this); otherwise we cancel first, which Chromium
+ * requires or it silently drops the request.
+ *
+ * Returns false when the announcement was suppressed.
+ */
+export function speakAnnouncement(
+  utterance: SpeechSynthesisUtterance,
+  { force = false, queue = false }: { force?: boolean; queue?: boolean } = {},
+): boolean {
+  if (typeof speechSynthesis === 'undefined') return false;
+  if (!force && isAnnouncementsMuted()) return false;
+  applyAnnouncementVoice(utterance);
+  if (!queue) speechSynthesis.cancel();
+  speechSynthesis.speak(utterance);
+  return true;
+}
+
 /** Best-effort gender guess from a voice name, for the Settings voice filter. */
 export function guessVoiceGender(name: string): 'male' | 'female' | null {
   const n = name.toLowerCase();

@@ -452,6 +452,14 @@ public class VoiceSettings
     /// <summary>Announcement volume, 0–1. Shared by every spoken alert.</summary>
     [BsonElement("volume")]
     public double Volume { get; set; } = 0.8;
+
+    /// <summary>
+    /// Global mute for spoken announcements, toggled from the status bar. Gates
+    /// every automatic announcement without touching each feature's own voice
+    /// setting, so unmuting restores exactly what was enabled before.
+    /// </summary>
+    [BsonElement("muted")]
+    public bool Muted { get; set; }
 }
 
 /// <summary>

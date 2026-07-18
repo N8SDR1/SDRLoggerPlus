@@ -9,7 +9,7 @@ import { getBandFromFrequency, bandClassForFrequency } from '../utils/spotBands'
 import { gridToLatLon } from '../utils/maidenhead';
 import { assessPropagation, PropAssessment, BandOpenState } from '../utils/propagationGate';
 import { spellCallsign } from '../utils/hotSpotAnnouncer';
-import { applyAnnouncementVoice } from '../utils/announcementVoice';
+import { speakAnnouncement } from '../utils/announcementVoice';
 import { api } from '../api/client';
 
 /**
@@ -82,9 +82,8 @@ function speakOpportunity(
       ? `New D X C C. ${spellCallsign(dxCall)}.${country ? ` ${country}.` : ''}`
       : `New zone ${zone ?? ''}. ${spellCallsign(dxCall)}.`;
   const u = new SpeechSynthesisUtterance(`${lead} ${bandSpoken}.`);
-  applyAnnouncementVoice(u); // shared voice / accent / rate / volume
-  // No cancel() — queue so several fresh opportunities don't cut each other off.
-  speechSynthesis.speak(u);
+  // queue: no cancel(), so several fresh opportunities don't cut each other off.
+  speakAnnouncement(u, { queue: true });
 }
 
 /** Build the ordered reason list for a spot from its DXCC + WAZ status. */

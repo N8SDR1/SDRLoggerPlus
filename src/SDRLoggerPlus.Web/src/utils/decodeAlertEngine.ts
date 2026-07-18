@@ -2,7 +2,7 @@ import type { WsjtxDecodeEvent } from '../api/signalr';
 import type { DecodeAlertRule } from '../store/settingsStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useToastStore } from '../store/toastStore';
-import { applyAnnouncementVoice } from './announcementVoice';
+import { speakAnnouncement } from './announcementVoice';
 import { spellCallsign } from './hotSpotAnnouncer';
 
 /**
@@ -124,9 +124,7 @@ function fireActions(evt: WsjtxDecodeEvent, rule: DecodeAlertRule): void {
 
   if (rule.voice && typeof speechSynthesis !== 'undefined') {
     const u = new SpeechSynthesisUtterance(`${label}. ${spellCallsign(evt.callsign)}.`);
-    applyAnnouncementVoice(u);
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
+    speakAnnouncement(u);
   }
 }
 
