@@ -2703,6 +2703,11 @@ function LayoutPresetsSubsection() {
   const [savedLayouts, setSavedLayouts] = useState<SavedLayoutSlot[]>([]);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  // Naming a preset uses an inline input, NOT window.prompt(): Electron does not
+  // implement prompt() (it throws "prompt() is and will not be supported"), so the
+  // save button silently did nothing in the desktop app while working in a browser.
+  const [naming, setNaming] = useState(false);
+  const [draftName, setDraftName] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -2720,21 +2725,22 @@ function LayoutPresetsSubsection() {
     setTimeout(() => setMessage(null), 4000);
   };
 
+  const startNaming = () => {
+    setDraftName(savedLayouts.length === 0 ? 'Default' : `Layout ${savedLayouts.length + 1}`);
+    setNaming(true);
+  };
+
   const handleSaveCurrent = async () => {
-    const suggested = savedLayouts.length === 0 ? 'Default' : `Layout ${savedLayouts.length + 1}`;
-    const name = window.prompt(
-      savedLayouts.length >= 3
-        ? 'You have 3 saved layouts (the max). Enter one of the existing names to overwrite it:'
-        : 'Name for this layout:',
-      suggested,
-    );
-    if (!name || !name.trim()) return;
+    const name = draftName.trim();
+    if (!name) return;
     setLoading(true);
     try {
       const json = JSON.stringify(layout);
-      const list = await api.saveNamedLayout(name.trim(), json);
+      const list = await api.saveNamedLayout(name, json);
       setSavedLayouts(list);
-      flash('ok', `Saved as "${name.trim()}"`);
+      setNaming(false);
+      setDraftName('');
+      flash('ok', `Saved as "${name}"`);
     } catch (e) {
       flash('err', e instanceof Error ? e.message : String(e));
     } finally {
@@ -2777,15 +2783,52 @@ function LayoutPresetsSubsection() {
             Save up to 3 named panel arrangements (POTA, Contest, DXpedition, etc.) and swap between them with one click. The one you loaded last also comes back automatically on the next restart.
           </p>
         </div>
-        <button
-          onClick={handleSaveCurrent}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-ui border border-accent-success/40 text-accent-success hover:bg-accent-success/10 transition-colors disabled:opacity-50 whitespace-nowrap"
-          title="Save the current panel arrangement as a named preset"
-        >
-          <Save className="w-3.5 h-3.5" /> Save Current
-        </button>
+        {!naming && (
+          <button
+            onClick={startNaming}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-ui border border-accent-success/40 text-accent-success hover:bg-accent-success/10 transition-colors disabled:opacity-50 whitespace-nowrap"
+            title="Save the current panel arrangement as a named preset"
+          >
+            <Save className="w-3.5 h-3.5" /> Save Current
+          </button>
+        )}
       </div>
+
+      {naming && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded bg-dark-700/40 border border-glass-100 mb-1">
+          <input
+            autoFocus
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveCurrent();
+              if (e.key === 'Escape') { setNaming(false); setDraftName(''); }
+            }}
+            placeholder="Layout name"
+            maxLength={40}
+            className="glass-input flex-1 min-w-0 text-xs px-2 py-1.5"
+          />
+          <button
+            onClick={handleSaveCurrent}
+            disabled={loading || !draftName.trim()}
+            className="px-3 py-1.5 rounded text-xs font-ui border border-accent-success/40 text-accent-success hover:bg-accent-success/10 transition-colors disabled:opacity-40 whitespace-nowrap"
+          >
+            Save
+          </button>
+          <button
+            onClick={() => { setNaming(false); setDraftName(''); }}
+            className="px-3 py-1.5 rounded text-xs font-ui border border-glass-100 text-dark-300 hover:bg-dark-600/50 transition-colors whitespace-nowrap"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {naming && savedLayouts.length >= 3 && (
+        <p className="text-xs text-accent-warning font-ui mb-1 px-1">
+          You have 3 saved layouts (the max) — enter an existing name to overwrite it.
+        </p>
+      )}
 
       <div className="flex items-center justify-between gap-3 px-3 py-2 rounded bg-dark-700/40 border border-glass-100 mb-1">
         <p className="text-xs text-dark-300">Restore the original panel arrangement.</p>

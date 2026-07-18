@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Swords, Play, Square, Search, AlertTriangle, Sparkles, Download, Plus, Copy, Pencil, Trash2, ChevronDown, ChevronRight, EyeOff, Eye, X, Settings2 } from 'lucide-react';
+import { Swords, Play, Square, Search, AlertTriangle, Sparkles, Download, Plus, Pencil, Trash2, ChevronDown, ChevronRight, EyeOff, Eye, X, Settings2 } from 'lucide-react';
 import {
   api,
   ContestDefinition,
@@ -177,16 +177,6 @@ function SetupView({
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['contest-definitions'] });
 
-  const clone = async (id: string) => {
-    setError(null);
-    try {
-      const draft = await api.cloneContestDefinition(id, `${definitions?.find((d) => d.id === id)?.name ?? 'Contest'} copy`);
-      setEditor({ initial: draft });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Clone failed');
-    }
-  };
-
   const remove = async (id: string, name: string) => {
     if (!window.confirm(`Delete your contest "${name}"? This cannot be undone.`)) return;
     setError(null);
@@ -330,19 +320,14 @@ function SetupView({
                 Exchange: {d.rcvdExchange.map((f) => f.label).join(' + ') || '—'}
               </div>
             </button>
-            <div className="flex items-center gap-0.5 pr-1.5 shrink-0">
-              {d.builtin ? (
-                <>
-                  <IconBtn title="Clone this contest" onClick={() => clone(d.id)}><Copy className="w-3.5 h-3.5" /></IconBtn>
-                  <IconBtn title="Remove from list" onClick={() => hideContest(d.id)}><EyeOff className="w-3.5 h-3.5" /></IconBtn>
-                </>
-              ) : (
-                <>
-                  <IconBtn title="Edit this contest" onClick={() => setEditor({ initial: d })}><Pencil className="w-3.5 h-3.5" /></IconBtn>
-                  <IconBtn title="Delete this contest" danger onClick={() => remove(d.id, d.name)}><Trash2 className="w-3.5 h-3.5" /></IconBtn>
-                </>
-              )}
-            </div>
+            {/* Built-ins carry no row actions: hiding lives in the Manage
+                contests modal, and cloning was dropped in favour of +New. */}
+            {!d.builtin && (
+              <div className="flex items-center gap-0.5 pr-1.5 shrink-0">
+                <IconBtn title="Edit this contest" onClick={() => setEditor({ initial: d })}><Pencil className="w-3.5 h-3.5" /></IconBtn>
+                <IconBtn title="Delete this contest" danger onClick={() => remove(d.id, d.name)}><Trash2 className="w-3.5 h-3.5" /></IconBtn>
+              </div>
+            )}
           </div>
         ))}
         {filtered.length === 0 && (
