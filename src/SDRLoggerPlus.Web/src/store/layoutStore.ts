@@ -18,10 +18,13 @@ export const defaultLayout: IJsonModel = {
         type: 'row',
         weight: 100,
         children: [
-          // Header bar across the top (thin strip)
+          // Header bar across the top (thin strip). 10, not 6 — at 6% the strip
+          // is too short to read its contents, which is what operators end up
+          // dragging it out of. Kept in step with HEADER_WEIGHT in
+          // src/layouts/starterLayouts.ts.
           {
             type: 'tabset',
-            weight: 6,
+            weight: 10,
             children: [
               {
                 type: 'tab',
@@ -34,7 +37,7 @@ export const defaultLayout: IJsonModel = {
           // Main content area below
           {
             type: 'row',
-            weight: 94,
+            weight: 90,
             children: [
               {
                 type: 'tabset',

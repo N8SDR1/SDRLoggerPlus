@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useLayoutStore, defaultLayout } from '../../store/layoutStore';
+import { STARTER_LAYOUTS } from '../../layouts/starterLayouts';
 import type { IJsonModel } from 'flexlayout-react';
+
+// Height share of the top tabset (the header strip) in a layout model.
+function headerWeight(model: IJsonModel): number | undefined {
+  const outer = (model.layout as { children?: { children?: { weight?: number }[] }[] }).children?.[0];
+  return outer?.children?.[0]?.weight;
+}
 
 // Mock fetch for settings API
 const mockFetch = vi.fn();
@@ -16,6 +23,17 @@ describe('layoutStore', () => {
     useLayoutStore.setState({
       layout: defaultLayout,
       isLoaded: false,
+    });
+  });
+
+  describe('defaultLayout header strip', () => {
+    it('gives the header enough height to read (6 was too short)', () => {
+      expect(headerWeight(defaultLayout)).toBeGreaterThanOrEqual(10);
+    });
+
+    it('matches the starter layouts, so Reset does not shrink the header', () => {
+      const starters = STARTER_LAYOUTS.map((s) => headerWeight(s.layout));
+      for (const w of starters) expect(w).toBe(headerWeight(defaultLayout));
     });
   });
 
