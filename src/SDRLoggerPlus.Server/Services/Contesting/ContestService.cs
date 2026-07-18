@@ -393,7 +393,12 @@ public class ContestService
                 SessionId = session.Id,
                 SerialRcvd = Ex("serial"),
                 RcvdZone = Ex("zone"),
-                RcvdState = Ex("state"),
+                // Uppercased like RcvdGrid below: state/province codes are canonically
+                // upper ("OH"), and the entry field's "uppercase" styling is CSS-only —
+                // it doesn't touch the stored value, so an unshifted keystroke would
+                // otherwise persist lowercase and silently miss exact-match lookups
+                // (e.g. the Multipliers panel's needed-state grid).
+                RcvdState = Ex("state")?.ToUpperInvariant(),
                 RcvdSection = Ex("section"),
                 RcvdName = Ex("name"),
                 RcvdPower = Ex("power"),
