@@ -463,6 +463,8 @@ export interface ContestSettings {
   n1mmUdpPort: number;
   onlineScoreEnabled: boolean;
   onlineScoreUrl: string;
+  // Definition ids hidden from the contest picker (reversible "remove").
+  hiddenContestIds: string[];
 }
 
 export interface Settings {
@@ -851,6 +853,7 @@ const defaultSettings: Settings = {
     n1mmUdpPort: 12060,
     onlineScoreEnabled: false,
     onlineScoreUrl: 'https://contestonlinescore.com/post/',
+    hiddenContestIds: [],
   },
   gridStates: {},
 };

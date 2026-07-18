@@ -157,6 +157,12 @@ public class ContestSettings
 
     [BsonElement("onlineScoreUrl")]
     public string OnlineScoreUrl { get; set; } = "https://contestonlinescore.com/post/";
+
+    // Definition ids the operator has hidden from the contest picker. Built-in
+    // contests are re-seeded every startup, so "removing" one is a reversible hide
+    // rather than a delete; the picker filters these out and offers a restore list.
+    [BsonElement("hiddenContestIds")]
+    public List<string> HiddenContestIds { get; set; } = new();
 }
 
 [BsonIgnoreExtraElements]

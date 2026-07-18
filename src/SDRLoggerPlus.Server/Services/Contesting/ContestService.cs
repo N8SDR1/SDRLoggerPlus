@@ -272,8 +272,58 @@ public class ContestService
         }
         await _qsos.UpdateAsync(id, qso);
 
-        // Replay the session in order, re-snapshotting each QSO's evaluation so the
-        // edit's ripple (e.g. a fixed call is no longer a dupe) is reflected.
+        var state = await ReplayAndBroadcastAsync(session, def);
+        _logger.LogInformation("Edited contest QSO {Id} -> {Call}", id, qso.Callsign);
+        return state;
+    }
+
+    /// <summary>
+    /// Delete a logged QSO of the active session (busted entry from the entry
+    /// window), then replay so dupe/points/mults on the remaining QSOs stay
+    /// consistent (a later QSO that was a dupe only because of the deleted one is no
+    /// longer a dupe), and broadcast the refreshed state.
+    /// </summary>
+    public async Task<ContestStateDto> DeleteQsoAsync(string id)
+    {
+        var session = await _sessions.GetActiveAsync()
+            ?? throw new ContestDefinitionException("No active contest session.");
+        var def = _definitions.Get(session.DefinitionId)
+            ?? throw new ContestDefinitionException($"Unknown contest '{session.DefinitionId}'.");
+
+        var qso = await _qsos.GetByIdAsync(id)
+            ?? throw new ContestDefinitionException("QSO not found.");
+        if (qso.Contest?.SessionId != session.Id)
+            throw new ContestDefinitionException("QSO is not part of the active session.");
+
+        await _qsos.DeleteAsync(id);
+        var state = await ReplayAndBroadcastAsync(session, def);
+        _logger.LogInformation("Deleted contest QSO {Id} ({Call})", id, qso.Callsign);
+        return state;
+    }
+
+    /// <summary>
+    /// Recompute and rebroadcast the active session, keeping the per-QSO snapshots
+    /// and score state in sync after a change made outside the contest entry window
+    /// (a QSO deleted or edited in the logbook, or the operator's own exchange
+    /// changed mid-session). No-op when no session is active. Returns the refreshed
+    /// state, or null.
+    /// </summary>
+    public async Task<ContestStateDto?> RefreshActiveSessionAsync()
+    {
+        var session = await _sessions.GetActiveAsync();
+        if (session == null) return null;
+        var def = _definitions.Get(session.DefinitionId);
+        if (def == null) return null;
+        return await ReplayAndBroadcastAsync(session, def);
+    }
+
+    /// <summary>
+    /// Replay the active session's QSOs in order, re-snapshotting each one's
+    /// evaluation (points/dupe/mults depend on the QSOs before it), persist the
+    /// refreshed snapshots, then build and broadcast the state.
+    /// </summary>
+    private async Task<ContestStateDto> ReplayAndBroadcastAsync(ContestSession session, ContestDefinition def)
+    {
         var log = await _qsos.GetByContestSessionAsync(session.Id);
         for (var i = 0; i < log.Count; i++)
         {
@@ -287,7 +337,6 @@ public class ContestService
 
         var state = BuildState(session, def, log);
         await _hub.BroadcastContestState(state);
-        _logger.LogInformation("Edited contest QSO {Id} -> {Call}", id, qso.Callsign);
         return state;
     }
 

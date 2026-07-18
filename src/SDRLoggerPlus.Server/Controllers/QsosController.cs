@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SDRLoggerPlus.Contracts.Api;
 using SDRLoggerPlus.Server.Services;
+using SDRLoggerPlus.Server.Services.Contesting;
 
 namespace SDRLoggerPlus.Server.Controllers;
 
@@ -10,10 +11,12 @@ namespace SDRLoggerPlus.Server.Controllers;
 public class QsosController : ControllerBase
 {
     private readonly IQsoService _qsoService;
+    private readonly ContestService _contest;
 
-    public QsosController(IQsoService qsoService)
+    public QsosController(IQsoService qsoService, ContestService contest)
     {
         _qsoService = qsoService;
+        _contest = contest;
     }
 
     /// <summary>
@@ -86,6 +89,9 @@ public class QsosController : ControllerBase
         if (updated is null)
             return NotFound();
 
+        // A contest QSO edited from the logbook must re-sync the live entry panel's
+        // score and recent-QSO strip (recompute keeps the per-QSO snapshots honest).
+        await _contest.RefreshActiveSessionAsync();
         return Ok(updated);
     }
 
@@ -101,6 +107,10 @@ public class QsosController : ControllerBase
         if (!deleted)
             return NotFound();
 
+        // Deleting a contest QSO from the logbook must re-sync the live entry panel
+        // (score strip + recent-QSO strip) — recompute the active session and
+        // broadcast, so a QSO that was only a dupe because of this one un-dupes.
+        await _contest.RefreshActiveSessionAsync();
         return NoContent();
     }
 

@@ -150,6 +150,10 @@ public static class ContestScoringEngine
         if (home is null || home.Kind == HomeAreaKind.None)
             return ContestRole.All;
 
+        // An explicit operator choice wins over the location-based guess.
+        if (me.RoleOverride is { } r && r != ContestRole.All)
+            return r;
+
         return home.Kind switch
         {
             HomeAreaKind.StateCounty =>

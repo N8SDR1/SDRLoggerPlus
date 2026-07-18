@@ -896,6 +896,14 @@ class ApiClient {
     return this.fetch<ContestSession[]>('/contest/sessions');
   }
 
+  // The active session (with the operator's own MyExchange), or null when none.
+  async getActiveContestSession(): Promise<ContestSession | null> {
+    const response = await fetch(`${API_BASE}/contest/sessions/active`);
+    if (response.status === 204) return null;
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    return response.json();
+  }
+
   async startContestSession(req: StartContestSessionRequest): Promise<ContestSession> {
     return this.fetch<ContestSession>('/contest/sessions', {
       method: 'POST',
@@ -968,6 +976,22 @@ class ApiClient {
     return this.fetch<ContestStateEvent>(`/contest/qso/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(req),
+    });
+  }
+
+  // Delete a busted QSO from the active session; returns the recomputed state.
+  async deleteContestQso(id: string): Promise<ContestStateEvent> {
+    return this.fetch<ContestStateEvent>(`/contest/qso/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Change the operator's own exchange (county / power class / state…) on a running
+  // session; re-derives role and returns the recomputed state.
+  async updateContestExchange(sessionId: string, exchange: ContestMyExchange): Promise<ContestStateEvent | null> {
+    return this.fetch<ContestStateEvent | null>(`/contest/sessions/${encodeURIComponent(sessionId)}/exchange`, {
+      method: 'PUT',
+      body: JSON.stringify(exchange),
     });
   }
 
@@ -1189,6 +1213,9 @@ export interface ContestMyExchange {
   category?: string;
   power?: string;
   name?: string;
+  // Operator-declared in/out-of-area role ("InArea" | "OutArea"), overriding the
+  // location-based guess. Undefined = auto-derive from state.
+  roleOverride?: string;
 }
 
 export interface ContestSession {

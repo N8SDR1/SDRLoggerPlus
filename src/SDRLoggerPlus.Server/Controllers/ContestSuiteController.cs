@@ -143,6 +143,25 @@ public class ContestSuiteController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Update the operator's own exchange on a running session (e.g. fix the county
+    /// or power class mid-contest). Re-derives the in/out-of-area role, replays the
+    /// session so power/role changes are reflected in the score, and broadcasts.
+    /// </summary>
+    [HttpPut("sessions/{id}/exchange")]
+    public async Task<ActionResult<ContestStateDto?>> UpdateExchange(string id, [FromBody] MyExchange exchange)
+    {
+        try
+        {
+            await _sessions.UpdateExchangeAsync(id, exchange);
+            return Ok(await _contest.RefreshActiveSessionAsync());
+        }
+        catch (ContestDefinitionException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpDelete("sessions/{id}")]
     public async Task<IActionResult> DeleteSession(string id)
     {
@@ -203,6 +222,19 @@ public class ContestSuiteController : ControllerBase
         try
         {
             return Ok(await _contest.UpdateQsoAsync(id, request));
+        }
+        catch (ContestDefinitionException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("qso/{id}")]
+    public async Task<ActionResult<ContestStateDto>> DeleteQso(string id)
+    {
+        try
+        {
+            return Ok(await _contest.DeleteQsoAsync(id));
         }
         catch (ContestDefinitionException ex)
         {

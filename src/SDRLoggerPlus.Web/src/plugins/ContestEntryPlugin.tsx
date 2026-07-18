@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Swords, Play, Square, Search, AlertTriangle, Sparkles, Download, Plus, Copy, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Swords, Play, Square, Search, AlertTriangle, Sparkles, Download, Plus, Copy, Pencil, Trash2, ChevronDown, ChevronRight, EyeOff, Eye, X, Settings2 } from 'lucide-react';
 import {
   api,
   ContestDefinition,
   ContestMyExchange,
   ContestCheckResponse,
   ContestQso,
+  ContestSession,
 } from '../api/client';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -80,6 +81,22 @@ function SetupView() {
   const [starting, setStarting] = useState(false);
   // { open } drives the editor modal; initial is the draft to edit (null = new).
   const [editor, setEditor] = useState<{ initial: ContestDefinition | null } | null>(null);
+  const [managing, setManaging] = useState(false);
+
+  // Contests the operator has removed from the picker (persisted). Built-ins get
+  // re-seeded on startup, so this is a reversible hide rather than a real delete.
+  const contestSettings = useSettingsStore((s) => s.settings.contest);
+  const updateContestSettings = useSettingsStore((s) => s.updateContestSettings);
+  const saveSettings = useSettingsStore((s) => s.saveSettings);
+  const hidden = contestSettings.hiddenContestIds ?? [];
+
+  const commitHidden = (ids: string[]) => {
+    updateContestSettings({ hiddenContestIds: ids });
+    void saveSettings();
+    if (selectedId && ids.includes(selectedId)) setSelectedId(null);
+  };
+  const hideContest = (id: string) => commitHidden(Array.from(new Set([...hidden, id])));
+  const showContest = (id: string) => commitHidden(hidden.filter((h) => h !== id));
 
   const { data: definitions } = useQuery({
     queryKey: ['contest-definitions'],
@@ -112,15 +129,16 @@ function SetupView() {
 
   const filtered = useMemo(() => {
     if (!definitions) return [];
+    const visible = definitions.filter((d) => !hidden.includes(d.id));
     const q = search.trim().toLowerCase();
-    if (!q) return definitions;
-    return definitions.filter(
+    if (!q) return visible;
+    return visible.filter(
       (d) =>
         d.name.toLowerCase().includes(q) ||
         d.cabrilloName.toLowerCase().includes(q) ||
         d.modes.some((m) => m.toLowerCase().includes(q))
     );
-  }, [definitions, search]);
+  }, [definitions, search, hidden]);
 
   const selected = definitions?.find((d) => d.id === selectedId) ?? null;
 
@@ -168,6 +186,18 @@ function SetupView() {
         >
           <Plus className="w-4 h-4" /> New
         </button>
+        <button
+          onClick={() => setManaging(true)}
+          title="Manage / restore removed contests"
+          className="relative flex items-center px-2.5 py-1.5 rounded-lg text-sm bg-dark-700/50 border border-glass-100 text-gray-300 hover:bg-dark-600/50 whitespace-nowrap"
+        >
+          <Settings2 className="w-4 h-4" />
+          {hidden.length > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[1rem] px-1 rounded-full bg-accent-primary/80 text-[10px] leading-4 text-white text-center">
+              {hidden.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Definition list */}
@@ -197,7 +227,10 @@ function SetupView() {
             </button>
             <div className="flex items-center gap-0.5 pr-1.5 shrink-0">
               {d.builtin ? (
-                <IconBtn title="Clone this contest" onClick={() => clone(d.id)}><Copy className="w-3.5 h-3.5" /></IconBtn>
+                <>
+                  <IconBtn title="Clone this contest" onClick={() => clone(d.id)}><Copy className="w-3.5 h-3.5" /></IconBtn>
+                  <IconBtn title="Remove from list" onClick={() => hideContest(d.id)}><EyeOff className="w-3.5 h-3.5" /></IconBtn>
+                </>
               ) : (
                 <>
                   <IconBtn title="Edit this contest" onClick={() => setEditor({ initial: d })}><Pencil className="w-3.5 h-3.5" /></IconBtn>
@@ -222,6 +255,16 @@ function SetupView() {
         />
       )}
 
+      {managing && definitions && (
+        <ManageContestsModal
+          definitions={definitions}
+          hidden={hidden}
+          onHide={hideContest}
+          onShow={showContest}
+          onClose={() => setManaging(false)}
+        />
+      )}
+
       {/* Session setup for the selected contest */}
       {selected && (
         <div className="space-y-2 border-t border-glass-100 pt-3">
@@ -232,9 +275,18 @@ function SetupView() {
             placeholder={`${selected.name} ${new Date().getUTCFullYear()}`}
             className="glass-input w-full text-sm px-2 py-1.5"
           />
-          {/* Role-split (QSO party) contests: the operator declares where they're
-              operating from. State decides in-state vs out-of-state; county is the
-              in-area sent exchange. */}
+          {/* Role-split contests (QSO parties, ARRL DX): the operator declares
+              whether they're operating in- or out-of-area. This drives which
+              exchange is sent and the whole scoring role — chosen explicitly rather
+              than only inferred from the typed state. */}
+          {roleLabels(selected) && (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wider text-gray-500">Operating as</div>
+              <RoleSelector def={selected}
+                value={myEx.roleOverride ?? derivedRole(selected, myEx.state)}
+                onChange={(r) => setMyEx((p) => ({ ...p, roleOverride: r }))} />
+            </div>
+          )}
           {selected.homeArea?.kind === 'StateCounty' && (
             <div className="grid grid-cols-2 gap-2">
               <input type="text" placeholder="My state" className="glass-input text-sm px-2 py-1.5"
@@ -439,6 +491,27 @@ function EntryView() {
     setCheck(null);
     callRef.current?.focus();
   }, []);
+
+  // Remove a busted QSO from the log; the server recomputes and rebroadcasts state.
+  const removeQso = useCallback(async (q: ContestQso) => {
+    if (!window.confirm(`Delete ${q.callsign} from the log?`)) return;
+    try {
+      const state = await api.deleteContestQso(q.id);
+      if (state) setContestState(state);
+      if (editingId === q.id) wipe();
+      queryClient.invalidateQueries({ queryKey: ['qsos'] });
+      queryClient.invalidateQueries({ queryKey: ['contest-qsos'] });
+      setLastLog(`Deleted ${q.callsign}`);
+    } catch {
+      setLastLog('Delete failed — check backend');
+    }
+  }, [editingId, wipe, setContestState, queryClient]);
+
+  // The active session (for the mid-contest My-exchange / class editor).
+  const { data: activeSession } = useQuery({
+    queryKey: ['contest-active-session', contestState.sessionId],
+    queryFn: () => api.getActiveContestSession(),
+  });
 
   // Prefill RST once the definition (or mode) is known, without clobbering a
   // value the operator already typed.
@@ -667,26 +740,45 @@ function EntryView() {
           lastLog && <div className="text-xs text-gray-400">Last: {lastLog}</div>
         )}
 
-        {/* Recent QSOs — click one to correct a busted call/exchange. */}
+        {/* Recent QSOs — click the call to correct a busted entry, × to delete. */}
         {recentQsos && recentQsos.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {recentQsos.map((q) => (
-              <button
+              <div
                 key={q.id}
-                onClick={() => startEdit(q)}
-                title={`Edit — ${q.band} ${q.mode}${q.isDupe ? ' (dupe)' : ` · ${q.points} pts`}`}
-                className={`px-1.5 py-0.5 rounded border text-xs font-mono transition-colors ${
+                className={`flex items-stretch rounded border text-xs font-mono overflow-hidden transition-colors ${
                   editingId === q.id
-                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
-                    : q.isDupe
-                    ? 'bg-dark-700/70 border-glass-100 text-red-400/80 hover:border-amber-500/50'
-                    : 'bg-dark-700/70 border-glass-100 text-gray-300 hover:border-amber-500/50 hover:text-amber-300'
+                    ? 'bg-amber-500/20 border-amber-500/50'
+                    : 'bg-dark-700/70 border-glass-100 hover:border-amber-500/50'
                 }`}
               >
-                {q.callsign}
-              </button>
+                <button
+                  onClick={() => startEdit(q)}
+                  title={`Edit — ${q.band} ${q.mode}${q.isDupe ? ' (dupe)' : ` · ${q.points} pts`}`}
+                  className={`px-1.5 py-0.5 ${
+                    editingId === q.id ? 'text-amber-300'
+                      : q.isDupe ? 'text-red-400/80 hover:text-amber-300'
+                      : 'text-gray-300 hover:text-amber-300'
+                  }`}
+                >
+                  {q.callsign}
+                </button>
+                <button
+                  onClick={() => removeQso(q)}
+                  title={`Delete ${q.callsign}`}
+                  className="px-1 border-l border-glass-100 text-gray-500 hover:text-red-400 hover:bg-red-500/10"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
             ))}
           </div>
+        )}
+
+        {/* Mid-contest config: change your county / power class / state without
+            stopping the session (recomputes role + score on save). */}
+        {definition && activeSession && (
+          <SessionConfig definition={definition} session={activeSession} />
         )}
       </div>
 
@@ -697,6 +789,216 @@ function EntryView() {
         <ScoreCell label="Mults" value={contestState.multipliers} />
         <ScoreCell label="Score" value={contestState.score.toLocaleString()} accent />
         <ScoreCell label="Rate/hr" value={contestState.rateLastHour} />
+      </div>
+    </div>
+  );
+}
+
+// In/out-of-area labels for a role-split contest, or null when the contest has no
+// split (global contests — no selector shown).
+function roleLabels(def: ContestDefinition): { inArea: string; outArea: string } | null {
+  const kind = def.homeArea?.kind;
+  if (!kind || kind === 'None') return null;
+  return kind === 'StateCounty'
+    ? { inArea: 'In-state', outArea: 'Out-of-state' }
+    : { inArea: 'In-area', outArea: 'Out-of-area' };
+}
+
+// Frontend guess of the role from the typed state, matching the backend's
+// location-based derivation for StateCounty parties (WVE defaults to in-area).
+function derivedRole(def: ContestDefinition, state: string | undefined): string {
+  if (def.homeArea?.kind === 'StateCounty') {
+    const st = (state ?? '').trim().toUpperCase();
+    return st && def.homeArea.states?.some((s) => s.toUpperCase() === st) ? 'InArea' : 'OutArea';
+  }
+  return 'InArea';
+}
+
+// Segmented control letting the operator declare in/out-of-area explicitly rather
+// than relying on the state-based guess. Returns null for non-split contests.
+function RoleSelector({ def, value, onChange }: {
+  def: ContestDefinition; value: string; onChange: (role: string) => void;
+}) {
+  const labels = roleLabels(def);
+  if (!labels) return null;
+  return (
+    <div className="flex rounded-lg overflow-hidden border border-glass-100 text-sm">
+      {(['InArea', 'OutArea'] as const).map((r) => (
+        <button
+          key={r}
+          type="button"
+          onClick={() => onChange(r)}
+          className={`flex-1 px-2 py-1.5 transition-colors ${
+            value === r
+              ? 'bg-accent-primary/25 text-accent-primary font-medium'
+              : 'bg-dark-700/40 text-gray-400 hover:text-gray-200'
+          }`}
+        >
+          {r === 'InArea' ? labels.inArea : labels.outArea}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Mid-contest editor for the operator's own exchange (county, power class, state,
+// …). Saving re-derives the in/out-of-area role and recomputes the score, so a
+// wrong county or power class can be corrected without restarting the session.
+function SessionConfig({ definition, session }: { definition: ContestDefinition; session: ContestSession }) {
+  const setContestState = useAppStore((s) => s.setContestState);
+  const currentRole = useAppStore((s) => s.contestState?.role);
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [ex, setEx] = useState<ContestMyExchange>(session.myExchange ?? {});
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const labels = roleLabels(definition);
+
+  // Re-seed local edits if the stored exchange changes underneath us.
+  useEffect(() => { setEx(session.myExchange ?? {}); }, [session.myExchange]);
+
+  const set = (patch: Partial<ContestMyExchange>) => { setEx((p) => ({ ...p, ...patch })); setStatus(null); };
+  const homeCounty = definition.homeArea?.kind === 'StateCounty';
+  const has = (t: string) => definition.sentExchange.some((f) => isType(f.type, t));
+
+  const save = async () => {
+    if (ex.state && !isValidStateProv(ex.state)) { setStatus(`"${ex.state}" isn't a valid state/province`); return; }
+    setSaving(true);
+    try {
+      const state = await api.updateContestExchange(session.id, ex);
+      if (state) setContestState(state);
+      queryClient.invalidateQueries({ queryKey: ['contest-active-session'] });
+      queryClient.invalidateQueries({ queryKey: ['contest-qsos'] });
+      setStatus('Saved');
+    } catch {
+      setStatus('Save failed — check backend');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="border-t border-glass-100 pt-2">
+      <button onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200">
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <Settings2 className="w-3 h-3" /> My exchange / class
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {labels && (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wider text-gray-500">Operating as</div>
+              <RoleSelector def={definition}
+                value={ex.roleOverride ?? currentRole ?? derivedRole(definition, ex.state)}
+                onChange={(r) => set({ roleOverride: r })} />
+            </div>
+          )}
+          {homeCounty && (
+            <div className="grid grid-cols-2 gap-2">
+              <input type="text" placeholder="My state" value={ex.state ?? ''} className="glass-input text-sm px-2 py-1.5"
+                onChange={(e) => set({ state: e.target.value.toUpperCase() || undefined })} />
+              <input type="text" placeholder="My county" value={ex.county ?? ''} className="glass-input text-sm px-2 py-1.5"
+                onChange={(e) => set({ county: e.target.value.toUpperCase() || undefined })} />
+            </div>
+          )}
+          {definition.powerMultipliers && (
+            <select className="glass-input w-full text-sm px-2 py-1.5" value={ex.power ?? ''}
+              onChange={(e) => set({ power: e.target.value || undefined })}>
+              <option value="">Power class…</option>
+              {Object.entries(definition.powerMultipliers).map(([cls, mult]) => (
+                <option key={cls} value={cls}>
+                  {cls === 'QRP' ? 'QRP' : cls === 'LOW' ? 'Low' : cls === 'HIGH' ? 'High' : cls}
+                  {mult !== 1 ? ` (×${mult})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            {has('zone') && (
+              <input type="text" placeholder="My CQ zone" value={ex.cqZone ?? ''} className="glass-input text-sm px-2 py-1.5"
+                onChange={(e) => set({ cqZone: parseInt(e.target.value) || undefined })} />
+            )}
+            {has('state') && !homeCounty && (
+              <input type="text" placeholder="My state" value={ex.state ?? ''} className="glass-input text-sm px-2 py-1.5"
+                onChange={(e) => set({ state: e.target.value.toUpperCase() || undefined })} />
+            )}
+            {has('section') && (
+              <input type="text" placeholder="My section" value={ex.section ?? ''} className="glass-input text-sm px-2 py-1.5"
+                onChange={(e) => set({ section: e.target.value.toUpperCase() || undefined })} />
+            )}
+            {has('name') && (
+              <input type="text" placeholder="My name" value={ex.name ?? ''} className="glass-input text-sm px-2 py-1.5"
+                onChange={(e) => set({ name: e.target.value || undefined })} />
+            )}
+            {has('grid') && (
+              <input type="text" placeholder="My grid" value={ex.grid ?? ''} className="glass-input text-sm px-2 py-1.5"
+                onChange={(e) => set({ grid: e.target.value.toUpperCase() || undefined })} />
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className={`text-xs ${status === 'Saved' ? 'text-emerald-400' : status ? 'text-red-400' : 'text-gray-600'}`}>
+              {status ?? 'Applies to the whole session'}
+            </span>
+            <button onClick={save} disabled={saving}
+              className="px-3 py-1 rounded text-xs bg-accent-primary/20 border border-accent-primary/50 text-accent-primary hover:bg-accent-primary/30 disabled:opacity-50">
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A selectable list of every contest — uncheck to remove it from the picker,
+// re-check to restore. The removal is persisted (hiddenContestIds) so it survives
+// the built-in re-seed on every startup.
+function ManageContestsModal({
+  definitions, hidden, onHide, onShow, onClose,
+}: {
+  definitions: ContestDefinition[];
+  hidden: string[];
+  onHide: (id: string) => void;
+  onShow: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState('');
+  const list = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return definitions.filter((d) => !s || d.name.toLowerCase().includes(s));
+  }, [definitions, q]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="w-full max-w-md max-h-[80vh] flex flex-col rounded-xl bg-dark-800 border border-glass-100 shadow-xl"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-glass-100">
+          <div className="text-sm font-medium text-gray-200">Manage contests</div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-200"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-3 border-b border-glass-100">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…"
+            className="glass-input w-full text-sm px-2 py-1.5" />
+          <div className="text-xs text-gray-500 mt-1">
+            Uncheck to remove a contest from the picker; re-check to restore.
+            {hidden.length > 0 && <span className="text-gray-400"> {hidden.length} removed.</span>}
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+          {list.map((d) => {
+            const shown = !hidden.includes(d.id);
+            return (
+              <label key={d.id}
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-dark-700/50 cursor-pointer">
+                <input type="checkbox" checked={shown}
+                  onChange={() => (shown ? onHide(d.id) : onShow(d.id))} />
+                {shown ? <Eye className="w-3.5 h-3.5 text-gray-500" /> : <EyeOff className="w-3.5 h-3.5 text-gray-600" />}
+                <span className={`text-sm truncate ${shown ? 'text-gray-200' : 'text-gray-500 line-through'}`}>{d.name}</span>
+                {!d.builtin && <span className="text-[10px] text-gray-500 ml-auto shrink-0">custom</span>}
+              </label>
+            );
+          })}
+          {list.length === 0 && <div className="text-center text-sm text-gray-500 py-6">No contests match</div>}
+        </div>
       </div>
     </div>
   );

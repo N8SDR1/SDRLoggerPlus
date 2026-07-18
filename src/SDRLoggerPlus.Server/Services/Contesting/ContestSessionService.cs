@@ -72,6 +72,38 @@ public class ContestSessionService
         return session;
     }
 
+    /// <summary>
+    /// Update the operator's own exchange on an existing session (e.g. correcting
+    /// the county or power class mid-contest). Re-enriches country/continent/zone
+    /// from the station callsign when missing and re-derives the in/out-of-area role
+    /// (changing your state flips who counts as in-area), then persists.
+    /// </summary>
+    public async Task<ContestSession> UpdateExchangeAsync(string id, MyExchange me)
+    {
+        var session = await _repo.GetByIdAsync(id)
+            ?? throw new ContestDefinitionException($"No session '{id}'.");
+        var def = _definitions.Get(session.DefinitionId)
+            ?? throw new ContestDefinitionException($"Unknown contest '{session.DefinitionId}'.");
+
+        if (me.Country is null && me.Dxcc is null)
+        {
+            var call = (await _settings.GetSettingsAsync()).Station?.Callsign;
+            if (!string.IsNullOrWhiteSpace(call))
+            {
+                var (country, continent, cqZone) = CtyService.GetEntityFromCallsign(call!);
+                me.Country ??= country;
+                me.Continent ??= continent;
+                me.CqZone ??= cqZone;
+            }
+        }
+
+        session.MyExchange = me;
+        session.Role = ContestScoringEngine.DetermineRole(def, me);
+        await _repo.UpsertAsync(session);
+        _logger.LogInformation("Updated exchange for contest session {Id} (role {Role})", session.Id, session.Role);
+        return session;
+    }
+
     /// <summary>Make an existing session the active one (deactivates the rest).</summary>
     public async Task<ContestSession> ActivateAsync(string id)
     {
