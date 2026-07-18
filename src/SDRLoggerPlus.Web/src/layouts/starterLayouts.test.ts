@@ -45,6 +45,18 @@ describe('starter layouts', () => {
     },
   );
 
+  it.each(STARTER_LAYOUTS.map((l) => [l.name, l] as const))(
+    '"%s" gives the header bar enough height to be readable',
+    (_name, starter) => {
+      // The header sits in the first tabset of the outer row. At the 6 the app's
+      // defaultLayout uses it renders too short to read, so starters use 10.
+      const outer = (starter.layout.layout as { children?: { children?: { weight?: number }[] }[] })
+        .children?.[0];
+      const headerWeight = outer?.children?.[0]?.weight;
+      expect(headerWeight).toBeGreaterThanOrEqual(10);
+    },
+  );
+
   it('finds a starter by name and misses cleanly', () => {
     expect(findStarterLayout('Contest')?.name).toBe('Contest');
     expect(findStarterLayout('Nope')).toBeUndefined();

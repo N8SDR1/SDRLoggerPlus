@@ -12,6 +12,11 @@ interface Column {
   tabs: Tab[];
 }
 
+// Share of the window height given to the header strip. Matches what operators
+// actually drag it to; the app's defaultLayout still uses 6, which renders the
+// bar too short to read.
+const HEADER_WEIGHT = 10;
+
 // Every starter shares the same skeleton: the header strip across the top, then
 // a row of tabsets beneath it. Keeps them consistent and easy to tweak.
 function build(columns: Column[]): IJsonModel {
@@ -32,15 +37,17 @@ function build(columns: Column[]): IJsonModel {
           weight: 100,
           children: [
             {
+              // 10/90, not the 6/94 the app's defaultLayout uses — at 6% the
+              // header strip is too short to read its contents.
               type: 'tabset',
-              weight: 6,
+              weight: HEADER_WEIGHT,
               children: [
                 { type: 'tab', name: 'Header Bar', component: 'header-bar', enableClose: false },
               ],
             },
             {
               type: 'row',
-              weight: 94,
+              weight: 100 - HEADER_WEIGHT,
               children: columns.map((col) => ({
                 type: 'tabset',
                 weight: col.weight,
