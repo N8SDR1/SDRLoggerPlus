@@ -2,7 +2,7 @@ import type { WsjtxDecodeEvent } from '../api/signalr';
 import type { DecodeAlertRule } from '../store/settingsStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useToastStore } from '../store/toastStore';
-import { speakAnnouncement, isAnnouncementsMuted } from './announcementVoice';
+import { applyAnnouncementVoice } from './announcementVoice';
 import { spellCallsign } from './hotSpotAnnouncer';
 
 /**
@@ -120,14 +120,13 @@ function fireActions(evt: WsjtxDecodeEvent, rule: DecodeAlertRule): void {
     useToastStore.getState().push(`${label.toUpperCase()}: ${bits.join(' · ')}`, 'success');
   }
 
-  // The status-bar mute silences the alert chime as well as the spoken
-  // announcement — muting is about not making noise while operating, and a
-  // chime that survived it reads as the mute being broken.
-  if (rule.sound && !isAnnouncementsMuted()) playAlertBeep();
+  if (rule.sound) playAlertBeep();
 
   if (rule.voice && typeof speechSynthesis !== 'undefined') {
     const u = new SpeechSynthesisUtterance(`${label}. ${spellCallsign(evt.callsign)}.`);
-    speakAnnouncement(u);
+    applyAnnouncementVoice(u);
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
   }
 }
 

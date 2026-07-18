@@ -6,10 +6,14 @@ import { useEffect, useRef, useState } from 'react';
 import { APP_VERSION } from '../version';
 import { AboutDialog, type TabId } from './AboutDialog';
 
+// Announcement volume to restore when unmuting.
+const VOLUME_BEFORE_MUTE = 'sdrl_volume_before_mute';
+
 export function StatusBar() {
   const { stationCallsign, stationGrid, rigStatus } = useAppStore();
   const { openSettings, setActiveSection, updateVoiceSettings, saveSettings } = useSettingsStore();
-  const voiceMuted = useSettingsStore((s) => s.settings.voice.muted);
+  const voiceVolume = useSettingsStore((s) => s.settings.voice.volume);
+  const muted = voiceVolume === 0;
   const { rigs, switchTo, disconnect, pillRigName, pillConnected } = useRigConnection();
   const [showAbout, setShowAbout] = useState(false);
   const [aboutTab, setAboutTab] = useState<TabId>('about');
@@ -52,11 +56,19 @@ export function StatusBar() {
   const rigConnected = pillConnected;
   const rigName = pillRigName || 'Rig';
 
-  // Mute is a one-click control, so persist it straight away — the update*
-  // actions only touch local state, and waiting for a Settings "Save Changes"
-  // would silently drop the toggle on restart.
+  // Mute by zeroing the shared announcement volume — the same thing as dragging
+  // the Settings > Voice slider to 0, so every spoken alert (including the Test
+  // buttons) goes quiet with no separate mute flag to keep in sync. The pre-mute
+  // level is remembered so unmuting restores it rather than guessing.
   const toggleMute = () => {
-    updateVoiceSettings({ muted: !voiceMuted });
+    if (muted) {
+      const prev = Number(localStorage.getItem(VOLUME_BEFORE_MUTE) ?? '');
+      updateVoiceSettings({ volume: prev > 0 ? prev : 0.8 });
+    } else {
+      localStorage.setItem(VOLUME_BEFORE_MUTE, String(voiceVolume));
+      updateVoiceSettings({ volume: 0 });
+    }
+    // update* only touches local state; persist so the toggle survives a restart.
     saveSettings().catch((e) => console.warn('[status-bar] mute save failed', e));
   };
 
@@ -110,23 +122,19 @@ export function StatusBar() {
 
       {/* Right side - Time and connection */}
       <div className="flex items-center gap-6">
-        {/* Quick mute for spoken announcements — one click, no digging through
-            Settings. Gates every automatic announcement without disturbing each
-            feature's own voice setting. */}
+        {/* Mute = announcement volume 0, exactly as if the Settings > Voice
+            volume slider were dragged to zero. Everything spoken already honours
+            that volume, so there's nothing else to gate. */}
         <button
           onClick={toggleMute}
           className={`p-1 rounded transition-colors hover:bg-dark-600 ${
-            voiceMuted ? 'text-accent-danger' : 'text-gray-400 hover:text-accent-secondary'
+            muted ? 'text-accent-danger' : 'text-gray-400 hover:text-accent-secondary'
           }`}
-          title={
-            voiceMuted
-              ? 'Announcements muted — click to unmute'
-              : 'Mute spoken announcements'
-          }
-          aria-label={voiceMuted ? 'Unmute announcements' : 'Mute announcements'}
-          aria-pressed={voiceMuted}
+          title={muted ? 'Announcements muted — click to unmute' : 'Mute announcements'}
+          aria-label={muted ? 'Unmute announcements' : 'Mute announcements'}
+          aria-pressed={muted}
         >
-          {voiceMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
         </button>
 
         <button

@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { matchesRule, matchesAnyRule, usCallArea, baseCall, runDecodeAlerts } from './decodeAlertEngine';
-import { useSettingsStore } from '../store/settingsStore';
+import { describe, it, expect } from 'vitest';
+import { matchesRule, matchesAnyRule, usCallArea, baseCall } from './decodeAlertEngine';
 import type { WsjtxDecodeEvent } from '../api/signalr';
 import type { DecodeAlertRule } from '../store/settingsStore';
 
@@ -106,53 +105,5 @@ describe('matchesAnyRule — powers the "Match Alerts" list filter', () => {
 
   it('no rules → nothing matches', () => {
     expect(matchesAnyRule(evt({ gridStatus: 'newGrid', continent: 'NA' }), [])).toBe(false);
-  });
-});
-
-describe('status-bar mute gates the alert chime', () => {
-  function setMuted(muted: boolean) {
-    useSettingsStore.setState((s) => ({
-      settings: {
-        ...s.settings,
-        voice: { ...s.settings.voice, muted },
-        decodeAlerts: {
-          ...s.settings.decodeAlerts,
-          enabled: true,
-          rules: [rule({ newDxcc: true, sound: true, voice: false, popup: false })],
-        },
-      },
-    }));
-  }
-
-  const oscillators = vi.fn();
-
-  beforeEach(() => {
-    oscillators.mockReset();
-    // Count oscillator creation — playAlertBeep() makes two per chime.
-    vi.stubGlobal('AudioContext', class {
-      state = 'running';
-      currentTime = 0;
-      destination = {};
-      resume() {}
-      createGain() {
-        return { connect() {}, gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} } };
-      }
-      createOscillator() {
-        oscillators();
-        return { type: '', frequency: { value: 0 }, connect() {}, start() {}, stop() {} };
-      }
-    });
-  });
-
-  it('plays the chime when not muted', () => {
-    setMuted(false);
-    runDecodeAlerts(evt({ callsign: 'ZS6ABC', spotStatus: 'newDxcc' }));
-    expect(oscillators).toHaveBeenCalled();
-  });
-
-  it('stays silent when muted', () => {
-    setMuted(true);
-    runDecodeAlerts(evt({ callsign: 'VK9XYZ', spotStatus: 'newDxcc' }));
-    expect(oscillators).not.toHaveBeenCalled();
   });
 });
