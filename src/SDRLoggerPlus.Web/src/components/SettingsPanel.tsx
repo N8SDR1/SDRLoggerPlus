@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DecodeAlertsSection } from './settings/DecodeAlertsSection';
 import {
   loadAnnouncementVoices,
@@ -61,6 +61,8 @@ import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type A
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
 import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
 import { useLayoutStore } from '../store/layoutStore';
+import { useAppStore } from '../store/appStore';
+import { notifyLayoutsChanged } from '../hooks/useLayoutMenu';
 import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
 import { Model } from 'flexlayout-react';
 import { gridToLatLon } from '../utils/maidenhead';
@@ -2725,10 +2727,23 @@ function LayoutPresetsSubsection() {
     setTimeout(() => setMessage(null), 4000);
   };
 
-  const startNaming = () => {
-    setDraftName(savedLayouts.length === 0 ? 'Default' : `Layout ${savedLayouts.length + 1}`);
+  const startNaming = useCallback(() => {
+    setSavedLayouts((current) => {
+      setDraftName(current.length === 0 ? 'Default' : `Layout ${current.length + 1}`);
+      return current;
+    });
     setNaming(true);
-  };
+  }, []);
+
+  // The View > Layouts > "Save current layout…" menu item routes here, since
+  // Electron can't prompt for the name itself.
+  const pendingLayoutSave = useAppStore((s) => s.pendingLayoutSave);
+  const clearPendingLayoutSave = useAppStore((s) => s.clearPendingLayoutSave);
+  useEffect(() => {
+    if (!pendingLayoutSave) return;
+    startNaming();
+    clearPendingLayoutSave();
+  }, [pendingLayoutSave, startNaming, clearPendingLayoutSave]);
 
   const handleSaveCurrent = async () => {
     const name = draftName.trim();
@@ -2740,6 +2755,8 @@ function LayoutPresetsSubsection() {
       setSavedLayouts(list);
       setNaming(false);
       setDraftName('');
+      // Refresh the native Layouts menu and mark this preset as the loaded one.
+      notifyLayoutsChanged(name);
       flash('ok', `Saved as "${name}"`);
     } catch (e) {
       flash('err', e instanceof Error ? e.message : String(e));
@@ -2754,6 +2771,7 @@ function LayoutPresetsSubsection() {
       // Sanity: FlexLayout throws if the JSON isn't a valid model.
       Model.fromJson(json);
       setLayout(json);
+      notifyLayoutsChanged(slot.name);
       flash('ok', `Loaded "${slot.name}"`);
     } catch (e) {
       flash('err', `Failed to apply "${slot.name}": ${e instanceof Error ? e.message : String(e)}`);
@@ -2766,6 +2784,7 @@ function LayoutPresetsSubsection() {
     try {
       const list = await api.deleteNamedLayout(name);
       setSavedLayouts(list);
+      notifyLayoutsChanged();
       flash('ok', `Deleted "${name}"`);
     } catch (e) {
       flash('err', e instanceof Error ? e.message : String(e));

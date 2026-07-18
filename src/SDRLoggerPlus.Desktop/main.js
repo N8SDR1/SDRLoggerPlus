@@ -448,6 +448,47 @@ function createWindow() {
   });
 }
 
+// Saved layout presets, mirrored from the renderer (which owns them via the
+// backend) so the native menu can list them. The menu template is built once,
+// so the renderer pushes an update whenever a preset is saved, renamed or
+// deleted and we rebuild — see the 'layouts-changed' IPC handler.
+let savedLayouts = [];
+let activeLayoutName = null;
+
+/**
+ * Build the View > Layouts submenu: one radio item per saved preset (checked
+ * for the one currently loaded), then save/reset actions.
+ *
+ * "Save current layout…" can't collect a name here — Electron implements no
+ * prompt() — so it asks the renderer to open its own inline name input.
+ */
+function buildLayoutsSubmenu() {
+  const items = savedLayouts.map((name) => ({
+    label: name,
+    type: 'radio',
+    checked: name === activeLayoutName,
+    click: () => mainWindow?.webContents.send('apply-layout', name)
+  }));
+
+  if (items.length === 0) {
+    items.push({ label: 'No saved layouts', enabled: false });
+  }
+
+  items.push(
+    { type: 'separator' },
+    {
+      label: 'Save current layout…',
+      click: () => mainWindow?.webContents.send('save-layout')
+    },
+    {
+      label: 'Reset to default layout',
+      click: () => mainWindow?.webContents.send('reset-layout')
+    }
+  );
+
+  return items;
+}
+
 /**
  * Create the application menu
  */
@@ -545,7 +586,12 @@ function createMenu() {
           click: () => applyZoomLevel(0)
         },
         { type: 'separator' },
-        { role: 'togglefullscreen' }
+        { role: 'togglefullscreen' },
+        { type: 'separator' },
+        {
+          label: 'Layouts',
+          submenu: buildLayoutsSubmenu()
+        }
       ]
     },
     // Help menu
@@ -632,6 +678,16 @@ app.whenReady().then(async () => {
     await shutdownBackend();
     app.relaunch();
     app.exit(0);
+  });
+
+  // The renderer owns the layout presets (they live in the backend), so it
+  // pushes the current list + which one is loaded whenever that changes. The
+  // menu template is static once built, so rebuild it to reflect the change.
+  ipcMain.handle('layouts-changed', (_event, payload = {}) => {
+    savedLayouts = Array.isArray(payload.names) ? payload.names : [];
+    activeLayoutName = payload.active ?? null;
+    createMenu();
+    log.debug(`Layouts menu rebuilt: [${savedLayouts.join(', ')}] active=${activeLayoutName ?? 'none'}`);
   });
 
   // Handle zoom level IPC

@@ -16,6 +16,7 @@ import { useSetupStore } from './store/setupStore';
 import { useAppStore } from './store/appStore';
 import { useTheme } from './hooks/useTheme';
 import { useOutOfBandAlert } from './hooks/useOutOfBandAlert';
+import { useLayoutMenu } from './hooks/useLayoutMenu';
 import { clampPanelScale, PANEL_STEP_PERCENT } from './utils/zoomScale';
 
 import 'flexlayout-react/style/dark.css';
@@ -265,6 +266,8 @@ export function App() {
 
   // Out-of-band VFO warnings (ITU band plan for the configured region)
   useOutOfBandAlert();
+  // Electron View > Layouts menu (no-op in a browser).
+  useLayoutMenu();
 
   // Check setup status on mount (for status display, not blocking)
   useEffect(() => {

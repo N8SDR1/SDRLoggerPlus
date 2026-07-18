@@ -61,6 +61,13 @@ interface AppState {
   contestSpotCall: { call: string; at: number } | null;
   setContestSpotCall: (call: string) => void;
 
+  // Set by the Electron View > Layouts > "Save current layout…" menu item to ask
+  // the Layout Presets panel to open its name input (Electron has no prompt()).
+  // The panel clears it once consumed.
+  pendingLayoutSave: number | null;
+  requestLayoutSave: () => void;
+  clearPendingLayoutSave: () => void;
+
   // Station info
   stationCallsign: string;
   stationGrid: string;
@@ -287,6 +294,10 @@ export const useAppStore = create<AppState>((set) => ({
   contestSpotCall: null,
   // `at` timestamp makes repeated clicks of the same call still trigger the effect.
   setContestSpotCall: (call) => set({ contestSpotCall: { call, at: Date.now() } }),
+
+  pendingLayoutSave: null,
+  requestLayoutSave: () => set({ pendingLayoutSave: Date.now() }),
+  clearPendingLayoutSave: () => set({ pendingLayoutSave: null }),
 
   // Station
   stationCallsign: '',

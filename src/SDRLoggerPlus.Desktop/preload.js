@@ -30,5 +30,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // Native file picker — returns the selected absolute path, or null if cancelled.
   // Used by the LOTW settings section to locate the TQSL binary.
-  selectFile: (options) => ipcRenderer.invoke('select-file', options)
+  selectFile: (options) => ipcRenderer.invoke('select-file', options),
+
+  // View > Layouts. The renderer owns the presets and pushes the list up so the
+  // native menu can show them; the menu sends the chosen action back down.
+  notifyLayouts: (names, active) => ipcRenderer.invoke('layouts-changed', { names, active }),
+  onApplyLayout: (callback) => {
+    ipcRenderer.on('apply-layout', (_event, name) => callback(name));
+  },
+  onSaveLayout: (callback) => {
+    ipcRenderer.on('save-layout', () => callback());
+  },
+  onResetLayout: (callback) => {
+    ipcRenderer.on('reset-layout', () => callback());
+  },
+  removeLayoutMenuListeners: () => {
+    ipcRenderer.removeAllListeners('apply-layout');
+    ipcRenderer.removeAllListeners('save-layout');
+    ipcRenderer.removeAllListeners('reset-layout');
+  }
 });
