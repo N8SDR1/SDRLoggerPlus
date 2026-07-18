@@ -5,10 +5,13 @@ namespace SDRLoggerPlus.Server.Services.Contesting;
 /// <summary>
 /// Built-in contest definitions shipped with the app (read-only, clone-only) —
 /// the ARRL/CQ majors (CQ WW/WPX/160, ARRL DX/SS/10/160/VHF/Field Day/Digital),
-/// NAQP and NA Sprint, plus a few small events and generic fallbacks. Authored as
-/// objects (no packaging step); the engine consumes them generically. User
-/// contests live as JSON under %APPDATA%\SDRLoggerPlus\contests\ and are merged
-/// in by <see cref="ContestDefinitionService"/>.
+/// NAQP and NA Sprint, plus a few small events. Every definition models a real,
+/// named contest — there are deliberately no generic "RST + serial" placeholders;
+/// an unlisted contest is served by cloning the closest match or authoring a user
+/// contest. Authored as objects (no packaging step); the engine consumes them
+/// generically. User contests live as JSON under
+/// %APPDATA%\SDRLoggerPlus\contests\ and are merged in by
+/// <see cref="ContestDefinitionService"/>.
 ///
 /// Fidelity note: every definition's <b>exchange fields, dupe rule, serial mode,
 /// and Cabrillo name</b> are correct so logging and submission work. QSO points
@@ -77,7 +80,6 @@ public static class SeedContests
         defs.AddRange(ArrlContests());
         defs.AddRange(DxRegional());
         defs.AddRange(SprintsClubsDigital());
-        defs.AddRange(Generic());
         return defs;
     }
 
@@ -241,21 +243,6 @@ public static class SeedContests
         yield return D("ten-ten", "10-10 QSO Party", "TEN-TEN", new() { "10M" }, new[] { "CW", "SSB" },
             new[] { Name(), Txt("nr", "10-10#", 6, false), StateF("S/P/C") }, new[] { Name(), Txt("nr", "10-10#", 6, false), StateF("S/P/C") },
             Pts(1), Array.Empty<MultRule>(), dupe: DupeRule.PerContest);
-    }
-
-    // ---- generic fallbacks -------------------------------------------------
-    private static IEnumerable<ContestDefinition> Generic()
-    {
-        yield return D("generic-serial", "Generic (RST + Serial)", "OTHER", Hf6, new[] { "CW", "SSB", "FT8" },
-            new[] { Rst(), Serial() }, new[] { Rst(), Serial() }, Pts(1), Array.Empty<MultRule>(), serial: SerialMode.AllBand);
-
-        yield return D("generic-grid", "Generic (RST + Grid)", "OTHER", Hf6, new[] { "CW", "SSB", "FT8" },
-            new[] { Rst(), Grid() }, new[] { Rst(), Grid() }, Pts(1), new[] { M(MultSource.Grid, true) });
-
-        yield return D("generic-state-qso-party", "Generic State QSO Party", "STATE-QSO-PARTY",
-            new() { "160M", "80M", "40M", "20M", "15M", "10M", "6M" }, new[] { "CW", "SSB" },
-            new[] { Rst(), StateF("S/P/C") }, new[] { Rst(), StateF("S/P/C") },
-            Pts(2), new[] { M(MultSource.State, true) });
     }
 
     // -- mode-variant expansion --------------------------------------------

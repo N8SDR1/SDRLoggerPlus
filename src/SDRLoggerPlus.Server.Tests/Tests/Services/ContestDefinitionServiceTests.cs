@@ -34,7 +34,10 @@ public class ContestDefinitionServiceTests : IDisposable
     {
         var all = _service.GetAll();
         all.Should().Contain(d => d.Id == "cq-ww-cw" && d.Builtin);
-        all.Should().Contain(d => d.Id == "generic-serial" && d.Builtin);
+        all.Should().Contain(d => d.Id == "arrl-dx-cw" && d.Builtin);
+        // Generic "RST + serial"-style placeholders were removed deliberately —
+        // every seed models a real contest.
+        all.Should().NotContain(d => d.Id.StartsWith("generic-"));
     }
 
     [Fact]
