@@ -423,9 +423,50 @@ public class ContestService
             qso.Station.Continent = continent;
             qso.Station.CqZone = int.TryParse(Ex("zone"), out var z) ? z : cqZone;
             if (Ex("state") != null) qso.Station.State = Ex("state")!.ToUpperInvariant();
+
+            // Now that CTY enrichment has resolved the worked station's country, we
+            // know its class, so drop any received field that doesn't apply to it.
+            SanitizeReceivedExchange(def, qso);
         }
 
         return qso;
+    }
+
+    /// <summary>
+    /// Strip received-exchange values that don't apply to the worked station's class
+    /// on per-QSO-branching contests (ARRL 10 m / 160 m / RTTY Roundup). The client
+    /// prunes too, but its classification comes from a debounced check that can lag a
+    /// fast log entry — so a DX station could arrive carrying a stale in-area
+    /// state/section. Left in, scoring would claim both that state/section mult and a
+    /// DXCC mult for one QSO. The server is authoritative and re-derives the class
+    /// from enriched country data. Only meaningful once <see cref="Qso.Country"/> is
+    /// resolved, so callers invoke this after enrichment.
+    /// </summary>
+    internal static void SanitizeReceivedExchange(ContestDefinition def, Qso qso)
+    {
+        var workedClass = ContestScoringEngine.ClassifyWorked(def, qso);
+        if (workedClass == ContestRole.All) return; // no per-QSO field branching
+
+        var c = qso.Contest;
+        if (c is null) return;
+
+        static bool Applies(ContestField f, ContestRole cls) =>
+            f.AppliesTo is null or ContestRole.All || f.AppliesTo == cls;
+
+        foreach (var f in def.RcvdExchange.Where(f => !Applies(f, workedClass)))
+        {
+            switch (f.Type)
+            {
+                case ContestFieldType.Serial: c.SerialRcvd = null; break;
+                case ContestFieldType.Zone: c.RcvdZone = null; break;
+                case ContestFieldType.State: c.RcvdState = null; break;
+                case ContestFieldType.Section: c.RcvdSection = null; break;
+                case ContestFieldType.Name: c.RcvdName = null; break;
+                case ContestFieldType.Power: c.RcvdPower = null; break;
+                case ContestFieldType.Grid: c.RcvdGrid = null; break;
+            }
+            c.RcvdFields?.Remove(f.Key);
+        }
     }
 
     // An active session with no activity for this long is treated as stale: the

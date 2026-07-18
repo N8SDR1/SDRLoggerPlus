@@ -88,10 +88,24 @@ public static class CabrilloExporter
             ContestFieldType.Section => me.Section ?? "",
             ContestFieldType.Name => me.Name ?? "",
             ContestFieldType.Grid => me.Grid ?? "",
-            ContestFieldType.Power => me.Power ?? "",
+            ContestFieldType.Power => PowerExchangeToken(me.Power),
             _ => "",
         };
     }
+
+    // A *sent* Power field (ARRL DX, DX side) is a literal transmitter power in the
+    // QSO line — not the CATEGORY-POWER class. me.Power holds a class (QRP/LOW/HIGH),
+    // so translate it to a representative watts token; a value that's already numeric
+    // (an operator-entered wattage) passes through unchanged.
+    private static string PowerExchangeToken(string? power) =>
+        (power ?? "").Trim().ToUpperInvariant() switch
+        {
+            "" => "",
+            "QRP" => "5",
+            "LOW" => "100",
+            "HIGH" => "KW",
+            var p => p,
+        };
 
     private static string RcvdValue(ContestField f, Qso qso)
     {

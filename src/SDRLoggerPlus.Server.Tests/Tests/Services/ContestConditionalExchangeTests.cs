@@ -100,6 +100,51 @@ public class ContestConditionalExchangeTests
         eval.Mults.Should().Contain(m => m.StartsWith("Dxcc:"));
     }
 
+    // -- Server-side sanitization of a stale in-area exchange on a DX QSO ----
+
+    // A DX station logged before the debounced check reclassifies it can arrive
+    // carrying an in-area state (the client defaulted to InArea). The server must
+    // strip it so scoring doesn't claim both a State and a DXCC multiplier.
+    [Fact]
+    public void SanitizeReceivedExchange_DropsStaleStateOnDxStation()
+    {
+        var rr = Def("arrl-rtty-roundup");
+        var dx = Dx("DL1ABC");
+        dx.Dxcc = 230;
+        dx.Contest = new ContestInfo
+        {
+            RcvdState = "OH", // stale in-area value that should not survive
+            RcvdFields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["state"] = "OH",
+            },
+        };
+
+        ContestService.SanitizeReceivedExchange(rr, dx);
+
+        dx.Contest.RcvdState.Should().BeNull();
+        dx.Contest.RcvdFields.Should().NotContainKey("state");
+
+        // With the stale state gone, the DX QSO claims only the DXCC multiplier.
+        var me = new MyExchange { Country = "United States", Continent = "NA", State = "OH" };
+        var eval = ContestScoringEngine.Evaluate(rr, me, Array.Empty<Qso>(), dx);
+        eval.Mults.Should().ContainSingle().Which.Should().StartWith("Dxcc:");
+    }
+
+    // An in-area station keeps its state; the DX-only serial is dropped.
+    [Fact]
+    public void SanitizeReceivedExchange_KeepsStateForInAreaStation()
+    {
+        var rr = Def("arrl-rtty-roundup");
+        var us = Us("W1AW");
+        us.Contest = new ContestInfo { RcvdState = "MA", SerialRcvd = "007" };
+
+        ContestService.SanitizeReceivedExchange(rr, us);
+
+        us.Contest.RcvdState.Should().Be("MA");
+        us.Contest.SerialRcvd.Should().BeNull(); // serial applies only to DX
+    }
+
     // -- Field Day power multiplier ----------------------------------------
 
     private static Qso Fd(string call) => new()

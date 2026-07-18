@@ -172,4 +172,36 @@ public class CabrilloExporterTests
         // OutArea has no role override, so it falls back to the top-level state field.
         t[7].Should().Be("TX");
     }
+
+    // -- ARRL DX literal sent power (DX side) --------------------------------
+
+    // For a DX-side ARRL DX op the sent exchange is a literal transmitter power, not
+    // the CATEGORY-POWER class. A "LOW" power class must emit representative watts
+    // (100), never the invalid token "LOW".
+    [Fact]
+    public void Generate_ArrlDxDxSide_SendsWatts_NotPowerClass()
+    {
+        var def = SeedContests.All.First(d => d.Id == "arrl-dx-cw");
+        var session = new ContestSession
+        {
+            DefinitionId = "arrl-dx-cw", Role = ContestRole.OutArea, // DX side sends power
+            MyExchange = new MyExchange { Continent = "EU", Dxcc = 230, Power = "LOW" },
+        };
+        var qso = new Qso
+        {
+            Callsign = "N9BC", Band = "20m", Mode = "CW", Frequency = 14042.0,
+            QsoDate = new DateTime(2026, 2, 21, 0, 0, 0, DateTimeKind.Utc), TimeOn = "120130",
+            RstSent = "599", RstRcvd = "599",
+            Contest = new ContestInfo { RcvdState = "OH" },
+        };
+
+        var cbr = CabrilloExporter.Generate(def, session, new[] { qso }, "DL1ABC", null);
+        var t = cbr.Split('\n').Select(l => l.TrimEnd('\r')).First(l => l.StartsWith("QSO:"))
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        t[7].Should().Be("100");     // sent power token, not "LOW"
+        t[7].Should().NotBe("LOW");
+        // Category header still carries the class label.
+        cbr.Split('\n').Select(l => l.TrimEnd('\r')).Should().Contain("CATEGORY-POWER: LOW");
+    }
 }
