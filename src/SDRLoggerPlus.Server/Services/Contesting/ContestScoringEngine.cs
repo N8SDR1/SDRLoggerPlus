@@ -160,8 +160,13 @@ public static class ContestScoringEngine
                 !string.IsNullOrWhiteSpace(me.State)
                 && home.States.Any(s => s.Equals(me.State, StringComparison.OrdinalIgnoreCase))
                     ? ContestRole.InArea : ContestRole.OutArea,
+            // W/VE vs DX (ARRL DX, 10m, 160m, RTTY Roundup): the non-local side is
+            // "Dx", matching ClassifyWorked and the "DX"/"W-VE" vocabulary every other
+            // contest logger (N1MM, DXLog, the ARRL rules themselves) uses — never
+            // "OutArea", which is reserved for the StateCounty case above (another
+            // US/VE station outside the host state, not necessarily DX).
             HomeAreaKind.WVE => IsUsOrCanada(me.Country, me.Continent)
-                ? ContestRole.InArea : ContestRole.OutArea,
+                ? ContestRole.InArea : ContestRole.Dx,
             _ => ContestRole.All,
         };
     }
@@ -197,9 +202,11 @@ public static class ContestScoringEngine
     /// <summary>
     /// Classify a worked station relative to the definition's home area, as a
     /// <see cref="ContestRole"/> the client can act on: <see cref="ContestRole.InArea"/>
-    /// (W/VE / in-state), <see cref="ContestRole.OutArea"/>, or <see cref="ContestRole.Dx"/>.
-    /// <see cref="ContestRole.All"/> when the contest has no home-area split. Used by
-    /// the entry window to switch the received-exchange field per QSO (state vs serial).
+    /// (W/VE / in-state), <see cref="ContestRole.Dx"/> (WVE-kind: the non-W/VE side), or
+    /// <see cref="ContestRole.OutArea"/> (StateCounty-kind: another US/VE station outside
+    /// the host state). <see cref="ContestRole.All"/> when the contest has no home-area
+    /// split. Used by the entry window to switch the received-exchange field per QSO
+    /// (state vs serial).
     /// </summary>
     public static ContestRole ClassifyWorked(ContestDefinition def, Qso qso)
     {

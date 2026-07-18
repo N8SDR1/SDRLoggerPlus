@@ -1170,8 +1170,9 @@ export interface ContestField {
   required?: boolean;
   validate?: string;
   prefillFrom?: string;
-  // Show/collect only when the worked station is in this class ('InArea' = W/VE,
-  // 'OutArea'/'Dx' = DX). Absent/'All' ⇒ always. Drives per-QSO exchange branching.
+  // Show/collect only when the worked station is in this class ('InArea' = W/VE
+  // or in-state; 'Dx' = DX, for a WVE-kind contest). Absent/'All' ⇒ always. Drives
+  // per-QSO exchange branching.
   appliesTo?: 'All' | 'InArea' | 'OutArea' | 'Dx';
 }
 
@@ -1219,8 +1220,9 @@ export interface ContestMyExchange {
   category?: string;
   power?: string;
   name?: string;
-  // Operator-declared in/out-of-area role ("InArea" | "OutArea"), overriding the
-  // location-based guess. Undefined = auto-derive from state.
+  // Operator-declared role, overriding the location-based guess: "InArea"/"OutArea"
+  // for a StateCounty-kind contest, "InArea"/"Dx" for a WVE-kind one. Undefined =
+  // auto-derive from state.
   roleOverride?: string;
 }
 
@@ -1255,9 +1257,10 @@ export interface ContestCheckResponse {
   newMults: string[];
   // Prefill for received-exchange fields (by field key), from call-history / prior QSO.
   prefill?: Record<string, string> | null;
-  // How the engine classified the worked station: 'InArea' (W/VE), 'OutArea'/'Dx'
-  // (DX), or 'All' (no home-area split). Drives which received field the entry
-  // window shows (state vs serial).
+  // How the engine classified the worked station: 'InArea' (W/VE / in-state),
+  // 'Dx' (WVE-kind: DX), 'OutArea' (StateCounty-kind: another US/VE station), or
+  // 'All' (no home-area split). Drives which received field the entry window
+  // shows (state vs serial).
   workedClass?: 'All' | 'InArea' | 'OutArea' | 'Dx';
 }
 

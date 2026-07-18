@@ -135,7 +135,7 @@ public static class SeedContests
                     MultiplierRules = new[] { M(MultSource.Dxcc, true) }.ToList(),
                     WorksForPoints = WorkTarget.OutAreaOnly,
                 },
-                [ContestRole.OutArea] = new RoleRules // DX
+                [ContestRole.Dx] = new RoleRules // DX
                 {
                     SentExchange = new[] { Rst(), Power() }.ToList(),
                     RcvdExchange = new[] { Rst(), StateF() }.ToList(),

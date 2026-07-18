@@ -184,7 +184,7 @@ public class CabrilloExporterTests
         var def = SeedContests.All.First(d => d.Id == "arrl-dx-cw");
         var session = new ContestSession
         {
-            DefinitionId = "arrl-dx-cw", Role = ContestRole.OutArea, // DX side sends power
+            DefinitionId = "arrl-dx-cw", Role = ContestRole.Dx, // DX side sends power
             MyExchange = new MyExchange { Continent = "EU", Dxcc = 230, Power = "LOW" },
         };
         var qso = new Qso

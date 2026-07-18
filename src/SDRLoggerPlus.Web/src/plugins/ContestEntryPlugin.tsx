@@ -742,7 +742,7 @@ function EntryView() {
           <div className="text-sm font-medium text-gray-200 truncate">{contestState.label}</div>
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-gray-500 truncate">{contestState.definitionName}</span>
-            <RoleBadge role={contestState.role} />
+            <RoleBadge role={contestState.role} def={definition} />
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -923,14 +923,19 @@ function EntryView() {
   );
 }
 
-// In/out-of-area labels for a role-split contest, or null when the contest has no
-// split (global contests — no selector shown).
-function roleLabels(def: ContestDefinition): { inArea: string; outArea: string } | null {
+// Labels (and the role value they set) for a role-split contest, or null when the
+// contest has no split (global contests — no selector shown). StateCounty parties
+// split In-state/Out-of-state (role 'OutArea': another US/VE station outside the
+// host state); WVE-kind contests (ARRL DX, 10m, 160m, RTTY Roundup) split
+// In-area/DX (role 'Dx'), matching the "DX" vocabulary ARRL's own rules use.
+function roleLabels(
+  def: ContestDefinition,
+): { inArea: string; other: string; otherRole: 'OutArea' | 'Dx' } | null {
   const kind = def.homeArea?.kind;
   if (!kind || kind === 'None') return null;
   return kind === 'StateCounty'
-    ? { inArea: 'In-state', outArea: 'Out-of-state' }
-    : { inArea: 'In-area', outArea: 'Out-of-area' };
+    ? { inArea: 'In-state', other: 'Out-of-state', otherRole: 'OutArea' }
+    : { inArea: 'In-area', other: 'DX', otherRole: 'Dx' };
 }
 
 // Frontend guess of the role from the typed state, matching the backend's
@@ -952,7 +957,7 @@ function RoleSelector({ def, value, onChange }: {
   if (!labels) return null;
   return (
     <div className="flex rounded-lg overflow-hidden border border-glass-100 text-sm">
-      {(['InArea', 'OutArea'] as const).map((r) => (
+      {(['InArea', labels.otherRole] as const).map((r) => (
         <button
           key={r}
           type="button"
@@ -963,7 +968,7 @@ function RoleSelector({ def, value, onChange }: {
               : 'bg-dark-700/40 text-gray-400 hover:text-gray-200'
           }`}
         >
-          {r === 'InArea' ? labels.inArea : labels.outArea}
+          {r === 'InArea' ? labels.inArea : labels.other}
         </button>
       ))}
     </div>
@@ -1269,9 +1274,13 @@ function LocationField({
 
 // Shows how the engine classified the operator for role-split contests (QSO
 // parties, ARRL DX). Hidden for 'All' (global contests with no location split).
-function RoleBadge({ role }: { role: string }) {
+// 'InArea' means "in the host state" for a QSO party but "W/VE" for a WVE-kind
+// contest (ARRL DX/10m/160m/RTTY Roundup) — label accordingly rather than always
+// saying "In-State", which is meaningless for a contest that isn't state-scoped.
+function RoleBadge({ role, def }: { role: string; def?: ContestDefinition }) {
+  const wve = def?.homeArea?.kind === 'WVE';
   const map: Record<string, { label: string; cls: string }> = {
-    InArea: { label: 'In-State', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' },
+    InArea: { label: wve ? 'W/VE' : 'In-State', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' },
     OutArea: { label: 'Out-of-State', cls: 'bg-sky-500/15 text-sky-300 border-sky-500/40' },
     Dx: { label: 'DX', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/40' },
   };

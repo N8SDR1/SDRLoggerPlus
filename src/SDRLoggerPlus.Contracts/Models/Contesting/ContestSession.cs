@@ -68,11 +68,11 @@ public class MyExchange
     public string? Name { get; set; }
 
     /// <summary>
-    /// Operator-declared in/out-of-area role, overriding the location-based guess.
-    /// When set (InArea/OutArea), <see cref="ContestScoringEngine.DetermineRole"/>
-    /// uses it instead of inferring from <see cref="State"/> vs the contest's home
-    /// area — so a station operating portable, or on a border, can pick correctly.
-    /// Null (or All) means auto-derive.
+    /// Operator-declared role, overriding the location-based guess: InArea/OutArea
+    /// for a StateCounty-kind contest, InArea/Dx for a WVE-kind one. When set,
+    /// <c>ContestScoringEngine.DetermineRole</c> uses it instead of inferring from
+    /// <see cref="State"/> vs the contest's home area — so a station operating
+    /// portable, or on a border, can pick correctly. Null (or All) means auto-derive.
     /// </summary>
     public ContestRole? RoleOverride { get; set; }
 }

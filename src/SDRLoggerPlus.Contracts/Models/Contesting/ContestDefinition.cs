@@ -93,11 +93,11 @@ public class ContestField
 
     /// <summary>
     /// Show/collect this field only when the worked station falls in this class
-    /// (<see cref="ContestRole.InArea"/> = W/VE; <see cref="ContestRole.OutArea"/>
-    /// or <see cref="ContestRole.Dx"/> = DX). Null (or <see cref="ContestRole.All"/>)
-    /// ⇒ always. Drives per-QSO exchange branching in the entry window (e.g. RTTY
-    /// Roundup: a US station sends a state, a DX station sends a serial); scoring is
-    /// unaffected since the engine reads whatever value lands on the QSO.
+    /// (<see cref="ContestRole.InArea"/> = W/VE or in-state; <see cref="ContestRole.Dx"/>
+    /// = DX for a WVE-kind contest). Null (or <see cref="ContestRole.All"/>) ⇒ always.
+    /// Drives per-QSO exchange branching in the entry window (e.g. RTTY Roundup: a US
+    /// station sends a state, a DX station sends a serial); scoring is unaffected
+    /// since the engine reads whatever value lands on the QSO.
     /// </summary>
     public ContestRole? AppliesTo { get; set; }
 }
@@ -194,9 +194,15 @@ public enum ContestRole
     All,
     /// <summary>Operator is inside the contest's home area (in-state; W/VE).</summary>
     InArea,
-    /// <summary>Operator is outside the home area (rest of W/VE, and DX unless split).</summary>
+    /// <summary>
+    /// StateCounty-kind only: operator is another US/VE station outside the host
+    /// state (a QSO party's "rest of the country" side, not necessarily DX).
+    /// </summary>
     OutArea,
-    /// <summary>Operator is DX, where a contest treats DX distinctly from OutArea.</summary>
+    /// <summary>
+    /// WVE-kind only: operator is DX (not W/VE) — matches the "DX" vocabulary ARRL's
+    /// own rules and other contest loggers (N1MM, DXLog) use for this split.
+    /// </summary>
     Dx,
 }
 
