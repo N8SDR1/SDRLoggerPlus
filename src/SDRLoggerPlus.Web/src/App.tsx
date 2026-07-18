@@ -9,7 +9,7 @@ import { ConnectionOverlay } from './components/ConnectionOverlay';
 import { SetupWizard } from './components/SetupWizard';
 import { PluginErrorBoundary } from './components/PluginErrorBoundary';
 import { useSignalRConnection } from './hooks/useSignalR';
-import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, ContestEntryPlugin, MultNeededPlugin, ContestBandmapPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin, DecodesPlugin, GridTrackerPlugin } from './plugins';
+import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, ContestEntryPlugin, MultNeededPlugin, ContestBandmapPlugin, ContestScorePlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin, DecodesPlugin, GridTrackerPlugin } from './plugins';
 import { useLayoutStore, defaultLayout } from './store/layoutStore';
 import { useSettingsStore, type SettingsSection } from './store/settingsStore';
 import { useSetupStore } from './store/setupStore';
@@ -124,6 +124,13 @@ const PLUGINS: Record<string, PluginDef> = {
     component: ContestBandmapPlugin,
     category: 'Logging',
     tags: ['contest', 'bandmap', 'spots', 'dupe', 'mult'],
+  },
+  'contest-score': {
+    name: 'Contest Score',
+    icon: <Gauge className="w-4 h-4" />,
+    component: ContestScorePlugin,
+    category: 'Logging',
+    tags: ['contest', 'score', 'rate', 'qsos', 'mults'],
   },
   'header-bar': {
     name: 'Header Bar',

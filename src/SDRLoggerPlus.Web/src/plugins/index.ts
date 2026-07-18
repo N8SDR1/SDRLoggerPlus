@@ -13,6 +13,7 @@ export { ContestsPlugin } from './ContestsPlugin';
 export { ContestEntryPlugin } from './ContestEntryPlugin';
 export { MultNeededPlugin } from './MultNeededPlugin';
 export { ContestBandmapPlugin } from './ContestBandmapPlugin';
+export { ContestScorePlugin } from './ContestScorePlugin';
 export { SolarPanelPlugin } from './SolarPanelPlugin';
 export { AnalogClockPlugin } from './AnalogClockPlugin';
 export { HeaderPlugin } from './HeaderPlugin';

@@ -43,6 +43,14 @@ export function isValidStateProv(value: string): boolean {
   return v === 'DX' || US_STATES.has(v) || CA_PROVINCES.has(v);
 }
 
+// The full W/VE state+province universe (US states/DC alpha, then Canadian
+// provinces alpha), for a "needed" multiplier display where unworked entries read
+// as gaps. Used by the Multipliers panel the way CQ zones show a fixed 1–40 grid.
+export const STATE_PROV_UNIVERSE: string[] = [
+  ...[...US_STATES].sort(),
+  ...[...CA_PROVINCES].sort(),
+];
+
 /** The county table for a contest (by definition id), or null when it has none. */
 function partyCounties(defId: string | undefined): PartyCounties | null {
   return (defId && countyData[defId]) || null;
