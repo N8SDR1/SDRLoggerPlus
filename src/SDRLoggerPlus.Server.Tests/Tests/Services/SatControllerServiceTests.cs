@@ -81,7 +81,7 @@ public class SatControllerServiceTests
         qso.Callsign.Should().Be("K5P");
         qso.Mode.Should().Be("FM");
         qso.Band.Should().Be("70cm");                  // band from downlink 436.795 MHz
-        qso.Frequency.Should().BeApproximately(436.795, 0.001);
+        qso.Frequency.Should().BeApproximately(436795.0, 0.001);  // kHz — 436.795 MHz downlink
         qso.AdifExtra!["SAT_NAME"].AsString.Should().Be("SO-50");
         qso.AdifExtra["PROP_MODE"].AsString.Should().Be("SAT");
     }

@@ -13,6 +13,7 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAgGridState } from '../hooks/useAgGridState';
 import { utcDatePart, toUtcInstant } from '../utils/qsoDateTime';
+import { formMhzToStoredKhz, storedKhzToFormMhz } from '../utils/frequency';
 
 // Common RST values for phone modes (SSB, AM, FM)
 const RST_PHONE = ['59', '58', '57', '56', '55', '54', '53', '52', '51'];
@@ -1480,7 +1481,8 @@ function EditQsoModal({
     timeOn: qso.timeOn,
     band: qso.band,
     mode: qso.mode,
-    frequency: qso.frequency?.toString() || '',
+    // Stored in kHz, edited in MHz (matches the Log Entry form + the field label).
+    frequency: qso.frequency != null ? String(storedKhzToFormMhz(qso.frequency)) : '',
     rstSent: qso.rstSent || '',
     rstRcvd: qso.rstRcvd || '',
     name: qso.station?.name || '',
@@ -1504,7 +1506,8 @@ function EditQsoModal({
       timeOn: formData.timeOn,
       band: formData.band,
       mode: formData.mode,
-      frequency: formData.frequency ? parseFloat(formData.frequency) : undefined,
+      // Edited in MHz; Qso.Frequency is stored in kHz.
+      frequency: formData.frequency ? formMhzToStoredKhz(parseFloat(formData.frequency)) : undefined,
       rstSent: formData.rstSent || undefined,
       rstRcvd: formData.rstRcvd || undefined,
       name: formData.name || undefined,
@@ -1601,7 +1604,7 @@ function EditQsoModal({
               <label className="block text-sm text-dark-300 mb-1 font-ui">Frequency (MHz)</label>
               <input
                 type="number"
-                step="0.001"
+                step="0.000001"
                 value={formData.frequency}
                 onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
                 className="glass-input w-full font-mono"

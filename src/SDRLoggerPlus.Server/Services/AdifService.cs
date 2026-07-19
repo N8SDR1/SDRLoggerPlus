@@ -492,8 +492,10 @@ public partial class AdifService : IAdifService
 
                 if (dVal.HasValue)
                 {
-                    // Convert MHz to kHz for frequency fields
-                    if (fieldName == "freq" || fieldName == "freq_rx")
+                    // ADIF FREQ is MHz; Qso.Frequency is kHz, so scale it here.
+                    // FREQ_RX is NOT scaled: it round-trips through AdifExtra,
+                    // which is exported verbatim, so it must stay in MHz.
+                    if (fieldName == "freq")
                     {
                         dVal *= 1000.0;
                     }

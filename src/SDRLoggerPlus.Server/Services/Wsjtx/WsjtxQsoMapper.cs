@@ -13,7 +13,8 @@ public static class WsjtxQsoMapper
         if (string.IsNullOrWhiteSpace(qso.DxCall)) return null;
 
         var call = qso.DxCall.Trim().ToUpperInvariant();
-        var freqMhz = qso.TxFrequencyHz / 1_000_000.0;
+        // Qso.Frequency is stored in kHz (ADIF export divides by 1000 → MHz).
+        var freqKhz = qso.TxFrequencyHz / 1_000.0;
         var band = BandHelper.GetBand((long)qso.TxFrequencyHz);
         var (country, _, _) = CtyService.GetEntityFromCallsign(call);
 
@@ -23,7 +24,7 @@ public static class WsjtxQsoMapper
             TimeOn: qso.DateTimeOn.ToString("HHmm"),
             Band: band,
             Mode: string.IsNullOrWhiteSpace(qso.Mode) ? "FT8" : qso.Mode.Trim().ToUpperInvariant(),
-            Frequency: freqMhz,
+            Frequency: freqKhz,
             RstSent: NullIfEmpty(qso.ReportSent),
             RstRcvd: NullIfEmpty(qso.ReportReceived),
             Name: NullIfEmpty(qso.Name),

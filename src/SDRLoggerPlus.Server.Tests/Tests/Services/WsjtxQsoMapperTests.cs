@@ -39,7 +39,7 @@ public class WsjtxQsoMapperTests
         req.Callsign.Should().Be("JA1ABC");
         req.Band.Should().Be("20m");
         req.Mode.Should().Be("FT8");
-        req.Frequency.Should().BeApproximately(14.074, 0.0001);
+        req.Frequency.Should().BeApproximately(14074.0, 0.0001); // kHz — 14.074 MHz dial
         req.TimeOn.Should().Be("1428");
         req.RstSent.Should().Be("-10");
         req.RstRcvd.Should().Be("-08");
