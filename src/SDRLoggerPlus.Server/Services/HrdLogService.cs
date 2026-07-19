@@ -43,7 +43,9 @@ public class HrdLogService
         sb.Append(Field("TIME_ON", qso.TimeOn?.Replace(":", "") is { Length: > 6 } t ? t[..6] : qso.TimeOn?.Replace(":", "")));
         sb.Append(Field("BAND", qso.Band));
         sb.Append(Field("MODE", qso.Mode));
-        sb.Append(Field("FREQ", qso.Frequency is > 0 ? qso.Frequency.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : null));
+        // Qso.Frequency is kHz; ADIF FREQ is MHz.
+        sb.Append(Field("FREQ", qso.Frequency is > 0
+            ? (qso.Frequency.Value / 1000.0).ToString("F6", System.Globalization.CultureInfo.InvariantCulture) : null));
         sb.Append(Field("RST_SENT", qso.RstSent));
         sb.Append(Field("RST_RCVD", qso.RstRcvd));
         sb.Append("<EOR>");
