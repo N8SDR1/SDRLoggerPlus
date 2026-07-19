@@ -1461,24 +1461,54 @@ function RotatorSettingsSection() {
 }
 
 
+/**
+ * Props for a numeric settings input that holds draft text while the operator
+ * types and only commits on blur or Enter.
+ *
+ * Committing on every keystroke saves each intermediate value: typing "500"
+ * over a cleared field stores 5, then 50, then 500, and an edit interrupted
+ * partway through (clicking away, closing Settings) leaves whichever prefix
+ * landed last. That is how an RBN alert distance of 5 miles — which silently
+ * disables band-opening alerts, since it needs a skimmer within 5 miles —
+ * gets saved while typing 500.
+ *
+ * Empty or unparseable input keeps the current setting rather than falling
+ * back to a hardcoded default, so a stray edit can never substitute a number
+ * the operator did not choose.
+ */
+function useNumericDraft(
+  current: number,
+  min: number,
+  max: number,
+  commit: (value: number) => void
+) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return {
+    value: draft ?? current,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft(e.target.value),
+    onBlur: () => {
+      const parsed = parseFloat(draft ?? '');
+      if (Number.isFinite(parsed)) commit(Math.min(max, Math.max(min, parsed)));
+      setDraft(null);
+    },
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') e.currentTarget.blur();
+    },
+  };
+}
+
 // RBN Band-Opening Alerts Settings Section
 function RbnAlertsSettingsSection() {
   const { settings, updateRbnAlertSettings } = useSettingsStore();
   const rbn = settings.rbnAlerts;
 
-  // Alert Distance is held as draft text while typing and only committed on
-  // blur/Enter. Committing per keystroke saved every intermediate value — typing
-  // "500" over a cleared field stored 5, then 50 — so an interrupted edit left a
-  // distance nobody chose. An unparseable value falls back to the current
-  // setting rather than a magic default, so a stray edit can't invent a number.
-  const [distanceDraft, setDistanceDraft] = useState<string | null>(null);
-  const commitDistance = () => {
-    const parsed = parseFloat(distanceDraft ?? '');
-    if (Number.isFinite(parsed)) {
-      updateRbnAlertSettings({ distance: Math.min(5000, Math.max(1, parsed)) });
-    }
-    setDistanceDraft(null); // fall back to the stored value on empty/garbage
-  };
+  const portField = useNumericDraft(rbn.port, 1, 65535,
+    (port) => updateRbnAlertSettings({ port }));
+  const distanceField = useNumericDraft(rbn.distance, 1, 5000,
+    (distance) => updateRbnAlertSettings({ distance }));
+  const cooldownField = useNumericDraft(rbn.cooldownMinutes, 1, 120,
+    (cooldownMinutes) => updateRbnAlertSettings({ cooldownMinutes }));
+
   const bands: { key: 'band10m' | 'band6m' | 'band2m' | 'band70cm'; label: string }[] = [
     { key: 'band10m', label: '10m' },
     { key: 'band6m', label: '6m' },
@@ -1527,8 +1557,9 @@ function RbnAlertsSettingsSection() {
             <label className="text-sm font-medium font-ui text-dark-200">Port</label>
             <input
               type="number"
-              value={rbn.port}
-              onChange={(e) => updateRbnAlertSettings({ port: parseInt(e.target.value) || 7000 })}
+              min={1}
+              max={65535}
+              {...portField}
               className="glass-input w-full font-mono"
             />
           </div>
@@ -1557,12 +1588,9 @@ function RbnAlertsSettingsSection() {
             <div className="flex items-center gap-2">
               <input
                 type="number"
-                value={distanceDraft ?? rbn.distance}
                 min={1}
                 max={5000}
-                onChange={(e) => setDistanceDraft(e.target.value)}
-                onBlur={commitDistance}
-                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                {...distanceField}
                 className="glass-input flex-1 font-mono"
               />
               <select
@@ -1580,10 +1608,9 @@ function RbnAlertsSettingsSection() {
             <label className="text-sm font-medium font-ui text-dark-200">Cooldown (minutes)</label>
             <input
               type="number"
-              value={rbn.cooldownMinutes}
               min={1}
               max={120}
-              onChange={(e) => updateRbnAlertSettings({ cooldownMinutes: parseInt(e.target.value) || 15 })}
+              {...cooldownField}
               className="glass-input w-full font-mono"
             />
             <p className="text-xs text-dark-300">Minimum time between alerts for the same band</p>
