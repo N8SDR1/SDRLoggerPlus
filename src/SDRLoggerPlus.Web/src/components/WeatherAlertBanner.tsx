@@ -21,6 +21,10 @@ export function WeatherAlertBanner() {
   // Master unit system + the wind switch (which may be 'auto' → follow master).
   const unitSystem = useSettingsStore(state => state.settings.appearance.unitSystem);
   const windPref = useSettingsStore(state => state.settings.weather.wind.displayUnit);
+  // Lightning distance uses the lightning section's own unit (the same "Alert
+  // range" mi/km the operator set) so the displayed distance matches the
+  // threshold — not the master system.
+  const lightningUnit = useSettingsStore(state => state.settings.weather.lightning.rangeUnit);
   const [lightning, setLightning] = useState<LightningStatus | null>(null);
   const [wind, setWind] = useState<WindStatus | null>(null);
   const [dismissedKey, setDismissedKey] = useState('');
@@ -72,10 +76,12 @@ export function WeatherAlertBanner() {
   const windText = windActive
     ? `G${formatSpeed(w!.gustMph ?? 0, windUnit)} / ${formatSpeed(w!.sustainedMph ?? 0, windUnit)} ${w!.direction}`
     : '';
-  // Lightning proximity follows the master system (event carries both mi + km).
+  // Lightning proximity follows the lightning section's own unit (rangeUnit),
+  // so the banner distance matches the "Alert range" the operator set. The
+  // event carries both mi + km.
   const lightningDistText = l?.closestMi == null
     ? ''
-    : unitSystem === 'imperial'
+    : lightningUnit === 'mi'
       ? `${l.closestMi} mi`
       : `${l.closestKm ?? Math.round(l.closestMi * 1.609344)} km`;
 

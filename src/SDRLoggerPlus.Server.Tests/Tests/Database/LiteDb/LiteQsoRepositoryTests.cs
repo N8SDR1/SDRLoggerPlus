@@ -30,6 +30,7 @@ public class LiteQsoRepositoryTests : IDisposable
         int? dxcc = null,
         string? grid = null,
         string? name = null,
+        string? country = null,
         SyncStatus syncStatus = SyncStatus.NotSynced)
     {
         return new Qso
@@ -42,6 +43,7 @@ public class LiteQsoRepositoryTests : IDisposable
             Dxcc = dxcc,
             Grid = grid,
             Name = name,
+            Country = country,
             QrzSyncStatus = syncStatus
         };
     }
@@ -483,9 +485,11 @@ public class LiteQsoRepositoryTests : IDisposable
     public async Task GetStatisticsAsync_CountsQsosToday()
     {
         await _repo.DeleteAllAsync();
-        var today = DateTime.UtcNow.Date;
-        await _repo.CreateAsync(CreateQso(qsoDate: today));
-        await _repo.CreateAsync(CreateQso(qsoDate: today.AddDays(-1)));
+        // "Today" is the operator's LOCAL calendar day (see GetStatisticsAsync) —
+        // in-app QSOs are logged with a local timestamp, so count by local date.
+        var now = DateTime.Now;
+        await _repo.CreateAsync(CreateQso(qsoDate: now));               // today (local)
+        await _repo.CreateAsync(CreateQso(qsoDate: now.AddDays(-1)));   // yesterday (local)
 
         var stats = await _repo.GetStatisticsAsync();
         stats.TotalQsos.Should().Be(2);
@@ -536,11 +540,13 @@ public class LiteQsoRepositoryTests : IDisposable
     [Fact]
     public async Task GetStatisticsAsync_ComputesUniqueCountries()
     {
+        // UniqueCountries counts distinct country NAME (not DXCC id) — see
+        // GetStatisticsAsync — so seed country names, not just dxcc numbers.
         await _repo.DeleteAllAsync();
-        await _repo.CreateAsync(CreateQso(dxcc: 291));
-        await _repo.CreateAsync(CreateQso(dxcc: 291)); // duplicate
-        await _repo.CreateAsync(CreateQso(dxcc: 1));
-        await _repo.CreateAsync(CreateQso()); // no dxcc
+        await _repo.CreateAsync(CreateQso(country: "United States"));
+        await _repo.CreateAsync(CreateQso(country: "United States")); // duplicate name
+        await _repo.CreateAsync(CreateQso(country: "Canada"));
+        await _repo.CreateAsync(CreateQso()); // no country
 
         var stats = await _repo.GetStatisticsAsync();
         stats.UniqueCountries.Should().Be(2);

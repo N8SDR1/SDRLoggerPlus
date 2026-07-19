@@ -3,6 +3,32 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-18 — v2.5.0 "Vega+" 🌟
+
+Fit-more-on-screen release: scale the UI to your display, plus two logging fixes.
+
+### New
+- **UI Scale** — two independent, down-only (70–100%) zoom controls for smaller /
+  high-density screens. **Whole-app zoom** (desktop): the View menu or
+  **Ctrl + / − / 0**, and a stepper in **Settings → Appearance → UI Scale**.
+  **Per-panel scale** — a `− % +` stepper in each panel's tabset header (click the
+  % to reset), saved with your layout. Map / Globe / Panadapter stay at true
+  pixels. *(N9BC)*
+
+### Changed
+- The old **Compact Mode** toggles (superseded by UI Scale) are gone.
+- The per-panel "open settings" affordance on a tab is now a **gear icon**. *(N9BC)*
+- **2D Map** fit-fixes at small sizes; the Layers / Solar fly-outs no longer clip
+  under the globe. *(N9BC)*
+
+### Fixed
+- **"Today" QSO count** stayed at 0 for QSOs logged in the evening — it compared a
+  locally-stored QsoDate against a UTC "today" boundary. It now counts by your
+  **local** day.
+- **Lightning banner distance** showed km even with the Weather **Alert range** set
+  to miles — it followed the master unit system instead of the lightning unit.
+  It now matches the Alert-range unit you set.
+
 ## 2026-07-16 — v2.4.0 "Vega+" 🌟
 
 More reach, less friction: see who's hearing *you*, filter the FT8 firehose down
