@@ -1,5 +1,6 @@
 using LiteDB;
 using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Contracts.Models.Contesting;
 using SDRLoggerPlus.Server.Services;
 using Serilog;
 
@@ -54,6 +55,7 @@ public class LiteDbContext : IDbContext, IDisposable
         _mapper.Entity<Qso>();
         _mapper.Entity<CallsignMapImage>();
         _mapper.Entity<RadioConfigEntity>();
+        _mapper.Entity<ContestSession>();
 
         TryInitialize();
     }
@@ -154,6 +156,11 @@ public class LiteDbContext : IDbContext, IDisposable
         get { EnsureConnected(); return _database!.GetCollection<RadioConfigEntity>("radio_configs"); }
     }
 
+    internal ILiteCollection<ContestSession> ContestSessions
+    {
+        get { EnsureConnected(); return _database!.GetCollection<ContestSession>("contest_sessions"); }
+    }
+
     private void EnsureConnected()
     {
         if (!_isInitialized || _database == null)
@@ -191,6 +198,10 @@ public class LiteDbContext : IDbContext, IDisposable
         // Radio config indexes
         RadioConfigs.EnsureIndex(r => r.RadioId, true);
         RadioConfigs.EnsureIndex(r => r.RadioType);
+
+        // Contest session indexes
+        ContestSessions.EnsureIndex(s => s.Active);
+        ContestSessions.EnsureIndex(s => s.DefinitionId);
     }
 
     public void Dispose()

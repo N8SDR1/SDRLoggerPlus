@@ -1,0 +1,1 @@
+{"state":"DE","source":"https://www.fsarc.org/qsoparty/rules-2024.html","format":"3-letter uppercase (county-initial + 'DE'); non-DE stations use the 3 counties as multipliers, DE stations use states/provinces/DXCC","confidence":"verified","counties":[{"name":"New Castle","code":"NDE"},{"name":"Kent","code":"KDE"},{"name":"Sussex","code":"SDE"}]}

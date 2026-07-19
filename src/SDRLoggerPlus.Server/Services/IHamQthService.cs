@@ -48,5 +48,6 @@ public record HamQthCallsignInfo(
     int? CqZone,
     int? ItuZone,
     string? State,
+    string? City,
     string? ImageUrl
 );

@@ -225,6 +225,7 @@ public class QsoService : IQsoService
         ),
         qso.Comment,
         qso.CreatedAt,
+        qso.Contest?.ContestId,
         string.Equals(qso.Qsl?.Lotw?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         string.Equals(qso.Qsl?.Eqsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         string.Equals(qso.Qsl?.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),

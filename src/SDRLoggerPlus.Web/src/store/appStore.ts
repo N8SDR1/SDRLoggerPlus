@@ -15,6 +15,7 @@ import type {
   RadioStateChangedEvent,
   SpotSelectedEvent,
   CwKeyerStatusEvent,
+  ContestStateEvent,
 } from '../api/signalr';
 import type { PotaSpot, CallsignMapImage } from '../api/client';
 
@@ -51,6 +52,21 @@ interface AppState {
   // Rig
   rigStatus: RigStatusEvent | null;
   setRigStatus: (status: RigStatusEvent | null) => void;
+
+  // Contest (live state pushed after each contest QSO / session change)
+  contestState: ContestStateEvent | null;
+  setContestState: (state: ContestStateEvent | null) => void;
+
+  // Call sent from the contest bandmap to the contest entry window (click-to-fill).
+  contestSpotCall: { call: string; at: number } | null;
+  setContestSpotCall: (call: string) => void;
+
+  // Set by the Electron View > Layouts > "Save current layout…" menu item to ask
+  // the Layout Presets panel to open its name input (Electron has no prompt()).
+  // The panel clears it once consumed.
+  pendingLayoutSave: number | null;
+  requestLayoutSave: () => void;
+  clearPendingLayoutSave: () => void;
 
   // Station info
   stationCallsign: string;
@@ -271,6 +287,17 @@ export const useAppStore = create<AppState>((set) => ({
   // Rig
   rigStatus: null,
   setRigStatus: (status) => set({ rigStatus: status }),
+
+  contestState: null,
+  setContestState: (state) => set({ contestState: state }),
+
+  contestSpotCall: null,
+  // `at` timestamp makes repeated clicks of the same call still trigger the effect.
+  setContestSpotCall: (call) => set({ contestSpotCall: { call, at: Date.now() } }),
+
+  pendingLayoutSave: null,
+  requestLayoutSave: () => set({ pendingLayoutSave: Date.now() }),
+  clearPendingLayoutSave: () => set({ pendingLayoutSave: null }),
 
   // Station
   stationCallsign: '',

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Radio as RadioIcon, Pencil, Megaphone, ArrowUp, ArrowDown } from 'lucide-react';
+import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Swords, Radio as RadioIcon, Pencil, Megaphone, ArrowUp, ArrowDown } from 'lucide-react';
 import { api, CreateQsoRequest, SatState } from '../api/client';
 import { signalRService, setTciMetersCallback, clearTciMetersCallback, type TciMetersEvent } from '../api/signalr';
 import { S9_DBM, DB_PER_S_UNIT } from '../utils/smeter';
@@ -17,6 +17,10 @@ import { getCountryFlag } from '../core/countryFlags';
 // satellite name + uplink/downlink freq+mode from the live S.A.T.
 // controller state and writes ADIF-standard sat_name / prop_mode=SAT /
 // freq_rx / down_mode so LoTW satellite credit survives ADIF export.
+//
+// Contest is intentionally NOT a mode here — it sits beside these tabs as a
+// jump to the Contest Entry panel, which owns serials, dupe checking and
+// scoring. Adding it to this union would persist an empty mode to localStorage.
 type LogMode = 'general' | 'pota' | 'sat';
 
 // Modes typical for satellite passes — SSB birds use USB, FM/CW birds
@@ -317,6 +321,30 @@ export function LogEntryPlugin() {
       }));
     }
   }, [nameLocked, focusedCallsignInfo?.name]);
+
+  // Auto-populate QTH ("City, State") and grid from the callbook. Unlike the
+  // name field there's no lock toggle here, so this is keyed on the looked-up
+  // callsign: it fires once when a lookup lands and never again for that call,
+  // leaving any manual correction the operator types afterwards intact.
+  //
+  // The submit path already falls back to focusedCallsignInfo.grid, so this
+  // doesn't change what gets logged — it makes the value visible in the form so
+  // it can be checked or corrected before the QSO goes in.
+  const filledFor = useRef<string | null>(null);
+  useEffect(() => {
+    const info = focusedCallsignInfo;
+    if (!info?.callsign) { filledFor.current = null; return; }
+    if (filledFor.current === info.callsign) return;
+    const qth = [info.city, info.state].filter(Boolean).join(', ');
+    const grid = (info.grid ?? '').toUpperCase();
+    if (!qth && !grid) return;
+    filledFor.current = info.callsign;
+    setFormData(prev => ({
+      ...prev,
+      ...(qth ? { qth } : {}),
+      ...(grid ? { grid } : {}),
+    }));
+  }, [focusedCallsignInfo]);
 
   // Auto-populate from DX cluster spot selection. selectedSpot.frequency
   // arrives in kHz (the app-wide spot unit — see utils/frequency.ts); we
@@ -732,6 +760,20 @@ export function LogEntryPlugin() {
         <ModeTab id="general" label="General" icon={<RadioIcon className="w-3.5 h-3.5" />} />
         <ModeTab id="pota"    label="POTA"    icon={<Trees className="w-3.5 h-3.5" />} />
         <ModeTab id="sat"     label="SAT"     icon={<Satellite className="w-3.5 h-3.5" />} />
+        {/* Contest is a jump, not a log mode: contest QSOs need serials, dupe
+            checking and live scoring, which all live in the Contest Entry panel.
+            Deliberately does NOT set logMode — otherwise the empty "contest"
+            mode would persist to localStorage and reopen on restart. */}
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('open-panel', { detail: 'contest-entry' }))}
+          title="Open the Contest Entry panel — contest QSOs are logged there, with serials, dupe checking and scoring"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-t border-b-2 border-transparent font-ui text-xs font-semibold text-dark-300 transition-colors hover:text-accent-primary hover:bg-dark-700/20"
+        >
+          <Swords className="w-3.5 h-3.5" />
+          <span>Contest</span>
+          <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+        </button>
       </div>
 
       <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); handleClear(); } }} className="p-3 space-y-3">
@@ -1125,19 +1167,35 @@ export function LogEntryPlugin() {
           </div>
         </div>
 
-        {/* QTH/Location — v1.x General field, worked-station location */}
-        <div>
-          <label className="text-xs font-ui text-dark-200 mb-1 block flex items-center gap-1">
-            <MapPin className="w-3 h-3" />
-            QTH / Location
-          </label>
-          <input
-            type="text"
-            value={formData.qth}
-            onChange={(e) => setFormData(prev => ({ ...prev, qth: e.target.value }))}
-            placeholder="City, State"
-            className="glass-input w-full text-sm"
-          />
+        {/* QTH/Location + grid — v1.x General fields, worked-station location.
+            Both auto-fill from the callbook lookup. The grid was always logged
+            (the submit path falls back to the lookup value) but had no box, so
+            it couldn't be seen or corrected before logging. */}
+        <div className="flex gap-2">
+          <div className="flex-1 min-w-0">
+            <label className="text-xs font-ui text-dark-200 mb-1 block flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              QTH / Location
+            </label>
+            <input
+              type="text"
+              value={formData.qth}
+              onChange={(e) => setFormData(prev => ({ ...prev, qth: e.target.value }))}
+              placeholder="City, State"
+              className="glass-input w-full text-sm"
+            />
+          </div>
+          <div className="w-28 shrink-0">
+            <label className="text-xs font-ui text-dark-200 mb-1 block">Grid</label>
+            <input
+              type="text"
+              value={formData.grid}
+              onChange={(e) => setFormData(prev => ({ ...prev, grid: e.target.value.toUpperCase() }))}
+              placeholder="EN54"
+              spellCheck={false}
+              className="glass-input w-full text-sm uppercase"
+            />
+          </div>
         </div>
 
         {/* Frequency, RST Sent, RST Rcvd on one line */}

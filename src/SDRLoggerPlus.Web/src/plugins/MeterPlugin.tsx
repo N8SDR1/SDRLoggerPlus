@@ -7,7 +7,7 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { dbmToSUnit } from '../utils/smeter';
 
-const NO_DATA_MSG = 'No meter data — connect a TCI radio (Thetis) in the Rig panel';
+const NO_DATA_MSG = 'No meter data — connect a TCI radio (Thetis) in Settings > Station';
 const ROUND_CONFIG_STORAGE_KEY = 'sdrloggerplus-round-meter-config';
 // S-meter calibration: TCI reports a dBm that can sit well above the rig's own
 // S-meter (e.g. a Hermes Lite 2 / Thetis reads ~20 dB high). This offset is added

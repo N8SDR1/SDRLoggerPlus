@@ -1,4 +1,4 @@
-import type { SatState, WsjtxDecodeEvent } from './signalr';
+import type { SatState, ContestStateEvent, WsjtxDecodeEvent } from './signalr';
 export type { SatState } from './signalr';
 
 const API_BASE = '/api';
@@ -20,6 +20,8 @@ export interface QsoResponse {
   station?: StationInfo;
   comment?: string;
   createdAt: string;
+  // Contest this QSO was logged under (ContestDefinition id), null for casual QSOs.
+  contestId?: string;
   confirmedLotw?: boolean;
   confirmedEqsl?: boolean;
   confirmedQrz?: boolean;
@@ -868,6 +870,131 @@ class ApiClient {
     return this.fetch<Contest[]>('/contests/live');
   }
 
+  // Contest suite (/api/contest — rule presets, sessions, live operating)
+  async getContestDefinitions(): Promise<ContestDefinition[]> {
+    return this.fetch<ContestDefinition[]>('/contest/definitions');
+  }
+
+  async saveContestDefinition(def: ContestDefinition): Promise<ContestDefinition> {
+    return this.fetch<ContestDefinition>('/contest/definitions', {
+      method: 'POST',
+      body: JSON.stringify(def),
+    });
+  }
+
+  async cloneContestDefinition(id: string, newName: string): Promise<ContestDefinition> {
+    return this.fetch<ContestDefinition>(
+      `/contest/definitions/${encodeURIComponent(id)}/clone?newName=${encodeURIComponent(newName)}`,
+      { method: 'POST' });
+  }
+
+  async deleteContestDefinition(id: string): Promise<void> {
+    await fetch(`${API_BASE}/contest/definitions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  async getContestSessions(): Promise<ContestSession[]> {
+    return this.fetch<ContestSession[]>('/contest/sessions');
+  }
+
+  // The active session (with the operator's own MyExchange), or null when none.
+  async getActiveContestSession(): Promise<ContestSession | null> {
+    const response = await fetch(`${API_BASE}/contest/sessions/active`);
+    if (response.status === 204) return null;
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    return response.json();
+  }
+
+  async startContestSession(req: StartContestSessionRequest): Promise<ContestSession> {
+    return this.fetch<ContestSession>('/contest/sessions', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async activateContestSession(id: string): Promise<ContestSession> {
+    return this.fetch<ContestSession>(`/contest/sessions/${encodeURIComponent(id)}/activate`, { method: 'POST' });
+  }
+
+  async stopContestSession(id: string): Promise<void> {
+    await fetch(`${API_BASE}/contest/sessions/${encodeURIComponent(id)}/stop`, { method: 'POST' });
+  }
+
+  // Returns the Cabrillo file as a Blob + suggested filename (or throws with the
+  // server's error message, e.g. missing station callsign).
+  async downloadCabrillo(sessionId: string): Promise<{ blob: Blob; fileName: string }> {
+    const response = await fetch(`${API_BASE}/contest/sessions/${encodeURIComponent(sessionId)}/cabrillo`);
+    if (!response.ok) {
+      let msg = `API error: ${response.status}`;
+      try { msg = (await response.json()).error ?? msg; } catch { /* non-JSON */ }
+      throw new Error(msg);
+    }
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const match = /filename="?([^"]+)"?/.exec(disposition);
+    const fileName = match?.[1] ?? `${sessionId}.cbr`;
+    return { blob: await response.blob(), fileName };
+  }
+
+  async getContestState(): Promise<ContestStateEvent | null> {
+    const response = await fetch(`${API_BASE}/contest/state`);
+    if (response.status === 204) return null;
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    return response.json();
+  }
+
+  async checkContestCall(callsign: string, band: string, mode: string): Promise<ContestCheckResponse> {
+    const params = new URLSearchParams({ callsign, band, mode });
+    return this.fetch<ContestCheckResponse>(`/contest/check?${params}`);
+  }
+
+  // Super Check Partial call set (master.scp ∪ your logged calls); cache + match locally.
+  async getScpCalls(): Promise<string[]> {
+    return this.fetch<string[]>('/contest/scp');
+  }
+
+  // Batch dupe/new-mult check for bandmap spots.
+  async checkContestBatch(items: { call: string; band: string; mode: string }[]): Promise<BatchCheckEntry[]> {
+    return this.fetch<BatchCheckEntry[]>('/contest/check-batch', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  async logContestQso(req: LogContestQsoRequest): Promise<ContestLogResult> {
+    return this.fetch<ContestLogResult>('/contest/qso', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  // Recent QSOs of the active session (for the entry window's edit strip).
+  async getContestQsos(limit = 8): Promise<ContestQso[]> {
+    return this.fetch<ContestQso[]>(`/contest/qsos?limit=${limit}`);
+  }
+
+  // Correct a busted call / exchange; returns the recomputed session state.
+  async updateContestQso(id: string, req: UpdateContestQsoRequest): Promise<ContestStateEvent> {
+    return this.fetch<ContestStateEvent>(`/contest/qso/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    });
+  }
+
+  // Delete a busted QSO from the active session; returns the recomputed state.
+  async deleteContestQso(id: string): Promise<ContestStateEvent> {
+    return this.fetch<ContestStateEvent>(`/contest/qso/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Change the operator's own exchange (county / power class / state…) on a running
+  // session; re-derives role and returns the recomputed state.
+  async updateContestExchange(sessionId: string, exchange: ContestMyExchange): Promise<ContestStateEvent | null> {
+    return this.fetch<ContestStateEvent | null>(`/contest/sessions/${encodeURIComponent(sessionId)}/exchange`, {
+      method: 'PUT',
+      body: JSON.stringify(exchange),
+    });
+  }
+
   // DX News
   async getDXNews(): Promise<DXNewsItem[]> {
     return this.fetch<DXNewsItem[]>('/dxnews');
@@ -1030,6 +1157,141 @@ export interface SavedLayoutSlot {
   name: string;
   layoutJson: string;
   savedAt: string;
+}
+
+// Contest suite types (rule presets / sessions / live operating)
+export type { ContestStateEvent } from './signalr';
+
+export interface ContestField {
+  key: string;
+  label: string;
+  type: 'text' | 'rst' | 'serial' | 'zone' | 'state' | 'section' | 'grid' | 'name' | 'power' | 'check' | 'precedence' | string;
+  width: number;
+  required?: boolean;
+  validate?: string;
+  prefillFrom?: string;
+  // Show/collect only when the worked station is in this class ('InArea' = W/VE
+  // or in-state; 'Dx' = DX, for a WVE-kind contest). Absent/'All' ⇒ always. Drives
+  // per-QSO exchange branching.
+  appliesTo?: 'All' | 'InArea' | 'OutArea' | 'Dx';
+}
+
+export interface ContestDefinition {
+  id: string;
+  name: string;
+  cabrilloName: string;
+  builtin: boolean;
+  bands: string[];
+  modes: string[];
+  sentExchange: ContestField[];
+  rcvdExchange: ContestField[];
+  qsoPoints: {
+    sameCountry?: number;
+    sameContinent?: number;
+    otherContinent?: number;
+    sameZone?: number;
+    default: number;
+    // Base points per mode class ("CW", "PH", "RTTY", "DIGI") when no relation
+    // override matches; falls back to `default` for an unlisted mode.
+    byMode?: Record<string, number>;
+  };
+  multiplierRules: { source: string; perBand: boolean; perMode?: boolean }[];
+  dupeRule: 'PerBand' | 'PerBandMode' | 'PerContest';
+  serial: 'None' | 'PerBand' | 'AllBand';
+  // Present for role-split contests (QSO parties, ARRL DX). Drives the setup
+  // My-state/My-county inputs; kind 'None' or absent ⇒ no role split.
+  homeArea?: { kind: 'None' | 'StateCounty' | 'WVE'; states: string[] };
+  // Final-score multiplier by power class (e.g. { QRP: 2, LOW: 1.5, HIGH: 1 }).
+  // Present ⇒ setup shows a power-class picker.
+  powerMultipliers?: Record<string, number>;
+  scoringStrategyId?: string;
+}
+
+export interface ContestMyExchange {
+  dxcc?: number;
+  country?: string;
+  continent?: string;
+  cqZone?: number;
+  ituZone?: number;
+  state?: string;
+  county?: string;
+  section?: string;
+  grid?: string;
+  category?: string;
+  power?: string;
+  name?: string;
+  // Operator-declared role, overriding the location-based guess: "InArea"/"OutArea"
+  // for a StateCounty-kind contest, "InArea"/"Dx" for a WVE-kind one. Undefined =
+  // auto-derive from state.
+  roleOverride?: string;
+}
+
+export interface ContestSession {
+  id: string;
+  definitionId: string;
+  label: string;
+  myExchange: ContestMyExchange;
+  startedAt: string;
+  endedAt?: string;
+  active: boolean;
+}
+
+export interface StartContestSessionRequest {
+  definitionId: string;
+  myExchange: ContestMyExchange;
+  label?: string;
+}
+
+export interface LogContestQsoRequest {
+  callsign: string;
+  band: string;
+  mode: string;
+  frequency?: number;
+  rstSent?: string;
+  exchange?: Record<string, string>;
+}
+
+export interface ContestCheckResponse {
+  isDupe: boolean;
+  workedCount: number;
+  newMults: string[];
+  // Prefill for received-exchange fields (by field key), from call-history / prior QSO.
+  prefill?: Record<string, string> | null;
+  // How the engine classified the worked station: 'InArea' (W/VE / in-state),
+  // 'Dx' (WVE-kind: DX), 'OutArea' (StateCounty-kind: another US/VE station), or
+  // 'All' (no home-area split). Drives which received field the entry window
+  // shows (state vs serial).
+  workedClass?: 'All' | 'InArea' | 'OutArea' | 'Dx';
+}
+
+export interface ContestLogResult {
+  qsoId: string;
+  isDupe: boolean;
+  points: number;
+  newMults: string[];
+  state: ContestStateEvent;
+}
+
+export interface ContestQso {
+  id: string;
+  callsign: string;
+  band: string;
+  mode: string;
+  timeOn: string;
+  points: number;
+  isDupe: boolean;
+  exchange?: Record<string, string> | null;
+}
+
+export interface UpdateContestQsoRequest {
+  callsign: string;
+  exchange?: Record<string, string>;
+}
+
+export interface BatchCheckEntry {
+  call: string;
+  isDupe: boolean;
+  isNewMult: boolean;
 }
 
 // Contest Types

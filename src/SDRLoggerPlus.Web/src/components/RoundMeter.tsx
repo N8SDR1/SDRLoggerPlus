@@ -135,7 +135,7 @@ export function RoundMeter(props: RoundMeterProps) {
     return () => clearSpectrumDataCallback(onSpectrum);
   }, []);
 
-  // Scroll over the meter to tune the VFO (like the Rig panel / panadapter).
+  // Scroll over the meter to tune the VFO (like the panadapter).
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;

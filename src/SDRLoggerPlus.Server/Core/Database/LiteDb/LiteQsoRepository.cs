@@ -245,6 +245,39 @@ public class LiteQsoRepository : IQsoRepository
         return Task.FromResult<IEnumerable<Qso>>(results);
     }
 
+    public Task<List<Qso>> GetByContestSessionAsync(string sessionId)
+    {
+        // Oldest-first so the scoring engine replays the log in operating order.
+        var results = _context.Qsos
+            .Find(q => q.Contest != null && q.Contest.SessionId == sessionId)
+            .OrderBy(q => q.QsoDate).ThenBy(q => q.TimeOn).ThenBy(q => q.CreatedAt)
+            .ToList();
+        return Task.FromResult(results);
+    }
+
+    public Task<List<string>> GetDistinctCallsignsAsync()
+    {
+        var calls = _context.Qsos.Query()
+            .Select(q => q.Callsign)
+            .ToList()
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c, StringComparer.Ordinal)
+            .ToList();
+        return Task.FromResult(calls);
+    }
+
+    public Task<Qso?> GetMostRecentByCallsignAsync(string callsign)
+    {
+        var call = callsign.Trim().ToUpperInvariant();
+        var qso = _context.Qsos
+            .Find(q => q.Callsign == call)
+            .OrderByDescending(q => q.QsoDate).ThenByDescending(q => q.TimeOn)
+            .FirstOrDefault();
+        return Task.FromResult<Qso?>(qso);
+    }
+
     public Task<IEnumerable<Qso>> GetUnsyncedToQrzAsync()
     {
         var results = _context.Qsos.Find(q =>

@@ -29,6 +29,9 @@ public record CallsignLookedUpEvent(
     int? CqZone,
     int? ItuZone,
     string? State,
+    // Town/city from the callbook (QRZ addr2 / HamQTH adr_city). Pairs with
+    // State to fill the log-entry QTH box as "Green Bay, WI".
+    string? City,
     string? ImageUrl,
     double? Bearing = null,
     double? Distance = null,

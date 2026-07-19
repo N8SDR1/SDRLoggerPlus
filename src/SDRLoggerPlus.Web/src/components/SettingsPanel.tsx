@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DecodeAlertsSection } from './settings/DecodeAlertsSection';
 import {
   loadAnnouncementVoices,
@@ -61,6 +61,9 @@ import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type A
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
 import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
 import { useLayoutStore } from '../store/layoutStore';
+import { useAppStore } from '../store/appStore';
+import { notifyLayoutsChanged } from '../hooks/useLayoutMenu';
+import { RigConfig } from './RigConfig';
 import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
 import { Model } from 'flexlayout-react';
 import { gridToLatLon } from '../utils/maidenhead';
@@ -174,11 +177,66 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
   },
 ];
 
+/**
+ * Props for a numeric settings input that holds draft text while the operator
+ * types, committing only on blur or Enter.
+ *
+ * Writing on every keystroke saves each intermediate value: typing "500" over
+ * a cleared field stores 5, then 50, then 500. An edit interrupted partway —
+ * clicking away, closing Settings — leaves whichever prefix landed last, and
+ * the stranded value is usually a working number rather than an obvious error,
+ * so nothing complains. An RBN alert distance of 5 miles silently disables
+ * band-opening alerts; a backup retention of 1 prunes every backup but the
+ * newest; a half-typed port just fails to connect.
+ *
+ * Empty or unparseable input keeps the current setting instead of falling back
+ * to a hardcoded default, so a stray edit can never substitute a number the
+ * operator did not choose. Pass onEmpty where clearing the field is itself
+ * meaningful (station latitude/longitude clear to null).
+ */
+function useNumericDraft(
+  current: number | null | undefined,
+  min: number,
+  max: number,
+  commit: (value: number) => void,
+  onEmpty?: () => void
+) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return {
+    value: draft ?? current ?? '',
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft(e.target.value),
+    onBlur: () => {
+      const raw = (draft ?? '').trim();
+      if (raw === '' && onEmpty) {
+        onEmpty();
+      } else {
+        const parsed = parseFloat(raw);
+        if (Number.isFinite(parsed)) commit(Math.min(max, Math.max(min, parsed)));
+      }
+      setDraft(null); // empty/garbage with no onEmpty falls back to the stored value
+    },
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') e.currentTarget.blur();
+    },
+  };
+}
+
 // Station Settings Section
 function StationSettingsSection() {
   const { settings, updateStationSettings } = useSettingsStore();
   const station = settings.station;
   const lastAutoFilledCoords = useRef<{ lat: number; lon: number } | null>(null);
+
+  // Coordinates commit on blur: a stranded prefix (-88 for -88.5) is a ~30 mile
+  // position error that quietly skews every distance and beam-heading result.
+  // Clearing the field is meaningful here — it resets the coordinate to null so
+  // the grid square takes over again.
+  const latitudeField = useNumericDraft(station.latitude, -90, 90,
+    (latitude) => updateStationSettings({ latitude }),
+    () => updateStationSettings({ latitude: null }));
+  const longitudeField = useNumericDraft(station.longitude, -180, 180,
+    (longitude) => updateStationSettings({ longitude }),
+    () => updateStationSettings({ longitude: null }));
 
   // Station info sync to app store is now handled in App.tsx
   // to ensure it runs even when settings panel is not open
@@ -310,12 +368,7 @@ function StationSettingsSection() {
             <input
               type="number"
               step="0.0001"
-              value={station.latitude ?? ''}
-              onChange={(e) =>
-                updateStationSettings({
-                  latitude: e.target.value ? parseFloat(e.target.value) : null,
-                })
-              }
+              {...latitudeField}
               placeholder="e.g. 52.6667"
               className="glass-input w-full font-mono"
             />
@@ -325,17 +378,23 @@ function StationSettingsSection() {
             <input
               type="number"
               step="0.0001"
-              value={station.longitude ?? ''}
-              onChange={(e) =>
-                updateStationSettings({
-                  longitude: e.target.value ? parseFloat(e.target.value) : null,
-                })
-              }
+              {...longitudeField}
               placeholder="e.g. -8.6333"
               className="glass-input w-full font-mono"
             />
           </div>
         </div>
+      </div>
+
+      {/* Radio setup — moved here from the standalone Rig panel so all station
+          configuration lives in one place. */}
+      <div className="pt-6 mt-6 border-t border-glass-100">
+        <h4 className="text-sm font-semibold font-ui text-dark-200">Radio</h4>
+        <p className="text-xs text-dark-300 mt-0.5 mb-3">
+          Add and configure radios (Hamlib, flrig or TCI). Connect and switch between
+          them from the rig selector in the status bar.
+        </p>
+        <RigConfig />
       </div>
     </div>
   );
@@ -795,6 +854,11 @@ function RotatorSettingsSection() {
   const [rotatorModels, setRotatorModels] = useState<HamlibRotatorModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelSearchTerm, setModelSearchTerm] = useState('');
+
+  const portField = useNumericDraft(rotator.port, 1, 65535,
+    (port) => updateRotatorSettings({ port }));
+  const pollingField = useNumericDraft(rotator.pollingIntervalMs, 100, 5000,
+    (pollingIntervalMs) => updateRotatorSettings({ pollingIntervalMs }));
 
   // Load available rotator models from hamlib
   const loadRotatorModels = async () => {
@@ -1287,8 +1351,9 @@ function RotatorSettingsSection() {
               </label>
               <input
                 type="number"
-                value={rotator.port}
-                onChange={(e) => updateRotatorSettings({ port: parseInt(e.target.value) || 4533 })}
+                min={1}
+                max={65535}
+                {...portField}
                 placeholder="4533"
                 className="glass-input w-full font-mono"
                 disabled={!rotator.enabled}
@@ -1399,8 +1464,7 @@ function RotatorSettingsSection() {
             </label>
             <input
               type="number"
-              value={rotator.pollingIntervalMs}
-              onChange={(e) => updateRotatorSettings({ pollingIntervalMs: parseInt(e.target.value) || 500 })}
+              {...pollingField}
               min={100}
               max={5000}
               step={100}
@@ -1451,6 +1515,14 @@ function RotatorSettingsSection() {
 function RbnAlertsSettingsSection() {
   const { settings, updateRbnAlertSettings } = useSettingsStore();
   const rbn = settings.rbnAlerts;
+
+  const portField = useNumericDraft(rbn.port, 1, 65535,
+    (port) => updateRbnAlertSettings({ port }));
+  const distanceField = useNumericDraft(rbn.distance, 1, 5000,
+    (distance) => updateRbnAlertSettings({ distance }));
+  const cooldownField = useNumericDraft(rbn.cooldownMinutes, 1, 120,
+    (cooldownMinutes) => updateRbnAlertSettings({ cooldownMinutes }));
+
   const bands: { key: 'band10m' | 'band6m' | 'band2m' | 'band70cm'; label: string }[] = [
     { key: 'band10m', label: '10m' },
     { key: 'band6m', label: '6m' },
@@ -1499,8 +1571,9 @@ function RbnAlertsSettingsSection() {
             <label className="text-sm font-medium font-ui text-dark-200">Port</label>
             <input
               type="number"
-              value={rbn.port}
-              onChange={(e) => updateRbnAlertSettings({ port: parseInt(e.target.value) || 7000 })}
+              min={1}
+              max={65535}
+              {...portField}
               className="glass-input w-full font-mono"
             />
           </div>
@@ -1529,10 +1602,9 @@ function RbnAlertsSettingsSection() {
             <div className="flex items-center gap-2">
               <input
                 type="number"
-                value={rbn.distance}
                 min={1}
                 max={5000}
-                onChange={(e) => updateRbnAlertSettings({ distance: parseFloat(e.target.value) || 500 })}
+                {...distanceField}
                 className="glass-input flex-1 font-mono"
               />
               <select
@@ -1550,10 +1622,9 @@ function RbnAlertsSettingsSection() {
             <label className="text-sm font-medium font-ui text-dark-200">Cooldown (minutes)</label>
             <input
               type="number"
-              value={rbn.cooldownMinutes}
               min={1}
               max={120}
-              onChange={(e) => updateRbnAlertSettings({ cooldownMinutes: parseInt(e.target.value) || 15 })}
+              {...cooldownField}
               className="glass-input w-full font-mono"
             />
             <p className="text-xs text-dark-300">Minimum time between alerts for the same band</p>
@@ -2703,6 +2774,11 @@ function LayoutPresetsSubsection() {
   const [savedLayouts, setSavedLayouts] = useState<SavedLayoutSlot[]>([]);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  // Naming a preset uses an inline input, NOT window.prompt(): Electron does not
+  // implement prompt() (it throws "prompt() is and will not be supported"), so the
+  // save button silently did nothing in the desktop app while working in a browser.
+  const [naming, setNaming] = useState(false);
+  const [draftName, setDraftName] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -2720,21 +2796,37 @@ function LayoutPresetsSubsection() {
     setTimeout(() => setMessage(null), 4000);
   };
 
+  const startNaming = useCallback(() => {
+    setSavedLayouts((current) => {
+      setDraftName(current.length === 0 ? 'Default' : `Layout ${current.length + 1}`);
+      return current;
+    });
+    setNaming(true);
+  }, []);
+
+  // The View > Layouts > "Save current layout…" menu item routes here, since
+  // Electron can't prompt for the name itself.
+  const pendingLayoutSave = useAppStore((s) => s.pendingLayoutSave);
+  const clearPendingLayoutSave = useAppStore((s) => s.clearPendingLayoutSave);
+  useEffect(() => {
+    if (!pendingLayoutSave) return;
+    startNaming();
+    clearPendingLayoutSave();
+  }, [pendingLayoutSave, startNaming, clearPendingLayoutSave]);
+
   const handleSaveCurrent = async () => {
-    const suggested = savedLayouts.length === 0 ? 'Default' : `Layout ${savedLayouts.length + 1}`;
-    const name = window.prompt(
-      savedLayouts.length >= 3
-        ? 'You have 3 saved layouts (the max). Enter one of the existing names to overwrite it:'
-        : 'Name for this layout:',
-      suggested,
-    );
-    if (!name || !name.trim()) return;
+    const name = draftName.trim();
+    if (!name) return;
     setLoading(true);
     try {
       const json = JSON.stringify(layout);
-      const list = await api.saveNamedLayout(name.trim(), json);
+      const list = await api.saveNamedLayout(name, json);
       setSavedLayouts(list);
-      flash('ok', `Saved as "${name.trim()}"`);
+      setNaming(false);
+      setDraftName('');
+      // Refresh the native Layouts menu and mark this preset as the loaded one.
+      notifyLayoutsChanged(`saved:${name}`);
+      flash('ok', `Saved as "${name}"`);
     } catch (e) {
       flash('err', e instanceof Error ? e.message : String(e));
     } finally {
@@ -2748,6 +2840,7 @@ function LayoutPresetsSubsection() {
       // Sanity: FlexLayout throws if the JSON isn't a valid model.
       Model.fromJson(json);
       setLayout(json);
+      notifyLayoutsChanged(`saved:${slot.name}`);
       flash('ok', `Loaded "${slot.name}"`);
     } catch (e) {
       flash('err', `Failed to apply "${slot.name}": ${e instanceof Error ? e.message : String(e)}`);
@@ -2760,6 +2853,7 @@ function LayoutPresetsSubsection() {
     try {
       const list = await api.deleteNamedLayout(name);
       setSavedLayouts(list);
+      notifyLayoutsChanged();
       flash('ok', `Deleted "${name}"`);
     } catch (e) {
       flash('err', e instanceof Error ? e.message : String(e));
@@ -2777,15 +2871,52 @@ function LayoutPresetsSubsection() {
             Save up to 3 named panel arrangements (POTA, Contest, DXpedition, etc.) and swap between them with one click. The one you loaded last also comes back automatically on the next restart.
           </p>
         </div>
-        <button
-          onClick={handleSaveCurrent}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-ui border border-accent-success/40 text-accent-success hover:bg-accent-success/10 transition-colors disabled:opacity-50 whitespace-nowrap"
-          title="Save the current panel arrangement as a named preset"
-        >
-          <Save className="w-3.5 h-3.5" /> Save Current
-        </button>
+        {!naming && (
+          <button
+            onClick={startNaming}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-ui border border-accent-success/40 text-accent-success hover:bg-accent-success/10 transition-colors disabled:opacity-50 whitespace-nowrap"
+            title="Save the current panel arrangement as a named preset"
+          >
+            <Save className="w-3.5 h-3.5" /> Save Current
+          </button>
+        )}
       </div>
+
+      {naming && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded bg-dark-700/40 border border-glass-100 mb-1">
+          <input
+            autoFocus
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveCurrent();
+              if (e.key === 'Escape') { setNaming(false); setDraftName(''); }
+            }}
+            placeholder="Layout name"
+            maxLength={40}
+            className="glass-input flex-1 min-w-0 text-xs px-2 py-1.5"
+          />
+          <button
+            onClick={handleSaveCurrent}
+            disabled={loading || !draftName.trim()}
+            className="px-3 py-1.5 rounded text-xs font-ui border border-accent-success/40 text-accent-success hover:bg-accent-success/10 transition-colors disabled:opacity-40 whitespace-nowrap"
+          >
+            Save
+          </button>
+          <button
+            onClick={() => { setNaming(false); setDraftName(''); }}
+            className="px-3 py-1.5 rounded text-xs font-ui border border-glass-100 text-dark-300 hover:bg-dark-600/50 transition-colors whitespace-nowrap"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {naming && savedLayouts.length >= 3 && (
+        <p className="text-xs text-accent-warning font-ui mb-1 px-1">
+          You have 3 saved layouts (the max) — enter an existing name to overwrite it.
+        </p>
+      )}
 
       <div className="flex items-center justify-between gap-3 px-3 py-2 rounded bg-dark-700/40 border border-glass-100 mb-1">
         <p className="text-xs text-dark-300">Restore the original panel arrangement.</p>
@@ -3538,6 +3669,12 @@ function BackupSettingsSection() {
   const [ioMessage, setIoMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
 
+  // Retention is pruned against after every successful backup, so a value
+  // stranded mid-edit deletes folders: typing "10" over a cleared field used to
+  // pass through 1, leaving only the newest backup on disk.
+  const retentionField = useNumericDraft(backup.retention, 1, 100,
+    (retention) => updateBackupSettings({ retention }));
+
   const handleExportSettings = async () => {
     try {
       const response = await fetch('/api/settings');
@@ -3654,10 +3791,10 @@ function BackupSettingsSection() {
         <label className="block text-sm font-medium text-dark-200 mb-1">Keep Last</label>
         <input
           type="number"
-          value={backup.retention}
-          onChange={(e) => updateBackupSettings({ retention: Math.max(1, parseInt(e.target.value) || 10) })}
+          {...retentionField}
           className="glass-input w-24"
           min={1}
+          max={100}
         />
         <p className="text-xs text-dark-400 mt-1">Number of backup folders to retain (oldest pruned first)</p>
       </div>
@@ -3751,6 +3888,9 @@ function HotListSettingsSection() {
   const hotList = settings.hotList;
   const [newCall, setNewCall] = useState('');
 
+  const ttsCooldownField = useNumericDraft(hotList.ttsCooldownMinutes, 1, 120,
+    (ttsCooldownMinutes) => updateHotListSettings({ ttsCooldownMinutes }));
+
   const addCall = () => {
     const call = newCall.trim().toUpperCase();
     if (!call || hotList.callsigns.includes(call)) {
@@ -3814,10 +3954,10 @@ function HotListSettingsSection() {
         <label className="block text-sm font-medium text-dark-200 mb-1">Announcement Cooldown (minutes)</label>
         <input
           type="number"
-          value={hotList.ttsCooldownMinutes}
-          onChange={(e) => updateHotListSettings({ ttsCooldownMinutes: Math.max(1, parseInt(e.target.value) || 15) })}
-          className="glass-input w-24"
           min={1}
+          max={120}
+          {...ttsCooldownField}
+          className="glass-input w-24"
         />
         <p className="text-xs text-dark-400 mt-1">A callsign won't be announced again until this many minutes pass</p>
       </div>
@@ -3933,6 +4073,9 @@ function WsjtxSourceCard({ title, subtitle, source, defaultPort, onPatch, status
   onPatch: (patch: Partial<WsjtxSource>) => void;
   status: WsjtxStatus | null;
 }) {
+  const portField = useNumericDraft(source.port, 1024, 65535,
+    (port) => onPatch({ port }));
+
   return (
     <div className="rounded-lg border border-glass-100 bg-dark-700/40 p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -3955,8 +4098,8 @@ function WsjtxSourceCard({ title, subtitle, source, defaultPort, onPatch, status
               <label className="block text-sm font-medium text-dark-200 mb-1">UDP Port</label>
               <input
                 type="number"
-                value={source.port}
-                onChange={(e) => onPatch({ port: parseInt(e.target.value) || defaultPort })}
+                {...portField}
+                placeholder={String(defaultPort)}
                 className="glass-input w-32"
                 min={1024}
                 max={65535}
@@ -4018,6 +4161,17 @@ function WeatherSettingsSection() {
   const toDisplay = (mph: number) => isKph ? Math.round(mph * 1.60934) : mph;
   const fromDisplay = (v: number) => isKph ? v / 1.60934 : v;
 
+  // Wind thresholds are edited in display units (mph or kph) and stored in mph,
+  // so the draft clamps against display-unit bounds before converting back.
+  const lightningRangeField = useNumericDraft(weather.lightning.range, 5, 500,
+    (range) => updateWeatherSettings({ lightning: { range } as never }));
+  const sustainedField = useNumericDraft(toDisplay(weather.wind.threshSustainedMph), 1, toDisplay(200),
+    (v) => updateWeatherSettings({ wind: { threshSustainedMph: fromDisplay(v) } as never }));
+  const gustField = useNumericDraft(toDisplay(weather.wind.threshGustMph), 1, toDisplay(200),
+    (v) => updateWeatherSettings({ wind: { threshGustMph: fromDisplay(v) } as never }));
+  const windCooldownField = useNumericDraft(weather.wind.cooldownMinutes, 1, 120,
+    (cooldownMinutes) => updateWeatherSettings({ wind: { cooldownMinutes } as never }));
+
   const Toggle = ({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) => (
     <label className="flex items-center gap-2 text-xs text-dark-300 cursor-pointer">
       <input type="checkbox" checked={checked} onChange={onChange} className="accent-accent-primary" />
@@ -4061,8 +4215,7 @@ function WeatherSettingsSection() {
         </div>
         <div className="flex items-center gap-2 text-xs">
           <span className="text-dark-300">Alert range</span>
-          <input type="number" value={weather.lightning.range} min={5}
-            onChange={(e) => updateWeatherSettings({ lightning: { range: parseInt(e.target.value) || 50 } as never })}
+          <input type="number" min={5} max={500} {...lightningRangeField}
             className="glass-input w-20" />
           <select value={weather.lightning.rangeUnit}
             onChange={(e) => updateWeatherSettings({ lightning: { rangeUnit: e.target.value as 'mi' | 'km' } as never })}
@@ -4108,12 +4261,10 @@ function WeatherSettingsSection() {
         )}
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-dark-300">Thresholds: sustained</span>
-          <input type="number" value={toDisplay(weather.wind.threshSustainedMph)}
-            onChange={(e) => updateWeatherSettings({ wind: { threshSustainedMph: fromDisplay(parseInt(e.target.value) || 30) } as never })}
+          <input type="number" {...sustainedField}
             className="glass-input w-16" />
           <span className="text-dark-300">gust</span>
-          <input type="number" value={toDisplay(weather.wind.threshGustMph)}
-            onChange={(e) => updateWeatherSettings({ wind: { threshGustMph: fromDisplay(parseInt(e.target.value) || 45) } as never })}
+          <input type="number" {...gustField}
             className="glass-input w-16" />
           <select value={weather.wind.displayUnit}
             onChange={(e) => updateWeatherSettings({ wind: { displayUnit: e.target.value as 'auto' | 'mph' | 'kph' } as never })}
@@ -4123,8 +4274,7 @@ function WeatherSettingsSection() {
             <option value="kph">kph</option>
           </select>
           <span className="text-dark-300">cooldown</span>
-          <input type="number" value={weather.wind.cooldownMinutes} min={1}
-            onChange={(e) => updateWeatherSettings({ wind: { cooldownMinutes: parseInt(e.target.value) || 20 } as never })}
+          <input type="number" min={1} max={120} {...windCooldownField}
             className="glass-input w-16" />
           <span className="text-dark-400">min</span>
         </div>
@@ -4287,6 +4437,11 @@ function SatSettingsSection() {
   const { settings, updateSatSettings } = useSettingsStore();
   const sat = settings.sat;
 
+  const udpPortField = useNumericDraft(sat.udpPort, 1, 65535,
+    (udpPort) => updateSatSettings({ udpPort }));
+  const adifPortField = useNumericDraft(sat.adifPort, 1, 65535,
+    (adifPort) => updateSatSettings({ adifPort }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -4330,8 +4485,9 @@ function SatSettingsSection() {
           <label className="block text-sm font-medium text-dark-200 mb-1">Broadcast UDP Port</label>
           <input
             type="number"
-            value={sat.udpPort}
-            onChange={(e) => updateSatSettings({ udpPort: parseInt(e.target.value) || 9932 })}
+            min={1}
+            max={65535}
+            {...udpPortField}
             className="glass-input w-28"
           />
           <p className="text-xs text-dark-400 mt-1">Default: 9932</p>
@@ -4340,8 +4496,9 @@ function SatSettingsSection() {
           <label className="block text-sm font-medium text-dark-200 mb-1">ADIF QSO Port</label>
           <input
             type="number"
-            value={sat.adifPort}
-            onChange={(e) => updateSatSettings({ adifPort: parseInt(e.target.value) || 1100 })}
+            min={1}
+            max={65535}
+            {...adifPortField}
             className="glass-input w-28"
           />
           <p className="text-xs text-dark-400 mt-1">Default: 1100 (S.A.T. QSO LOG TYPE)</p>

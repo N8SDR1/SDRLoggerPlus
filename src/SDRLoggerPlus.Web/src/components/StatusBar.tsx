@@ -1,4 +1,4 @@
-import { Radio, MapPin, Clock, Settings, ChevronDown, Power } from 'lucide-react';
+import { Radio, MapPin, Settings, ChevronDown, Power, Volume2, VolumeX } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRigConnection } from '../hooks/useRigConnection';
@@ -6,20 +6,19 @@ import { useEffect, useRef, useState } from 'react';
 import { APP_VERSION } from '../version';
 import { AboutDialog, type TabId } from './AboutDialog';
 
+// Announcement volume to restore when unmuting.
+const VOLUME_BEFORE_MUTE = 'sdrl_volume_before_mute';
+
 export function StatusBar() {
   const { stationCallsign, stationGrid, rigStatus } = useAppStore();
-  const { openSettings } = useSettingsStore();
+  const { openSettings, setActiveSection, updateVoiceSettings, saveSettings } = useSettingsStore();
+  const voiceVolume = useSettingsStore((s) => s.settings.voice.volume);
+  const muted = voiceVolume === 0;
   const { rigs, switchTo, disconnect, pillRigName, pillConnected } = useRigConnection();
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [showAbout, setShowAbout] = useState(false);
   const [aboutTab, setAboutTab] = useState<TabId>('about');
   const [rigMenuOpen, setRigMenuOpen] = useState(false);
   const rigMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Close the rig switcher on any outside click.
   useEffect(() => {
@@ -48,10 +47,6 @@ export function StatusBar() {
     return () => window.removeEventListener('open-help-guide', openHelp);
   }, []);
 
-  const formatUtcTime = (date: Date) => {
-    return date.toISOString().slice(11, 19);
-  };
-
   const formatFrequency = (freq: number) => {
     return (freq / 1000000).toFixed(3);
   };
@@ -61,11 +56,32 @@ export function StatusBar() {
   const rigConnected = pillConnected;
   const rigName = pillRigName || 'Rig';
 
-  // Open the Rig panel (add/edit/remove radios) — the panel already owns all rig
-  // setup, so the selector just needs to surface it. App.tsx handles the event.
-  const openRigPanel = () => {
+  // Mute by zeroing the shared announcement volume — the same thing as dragging
+  // the Settings > Voice slider to 0, so every spoken alert (including the Test
+  // buttons) goes quiet with no separate mute flag to keep in sync. The pre-mute
+  // level is remembered so unmuting restores it rather than guessing.
+  const toggleMute = () => {
+    if (muted) {
+      const prev = Number(localStorage.getItem(VOLUME_BEFORE_MUTE) ?? '');
+      updateVoiceSettings({ volume: prev > 0 ? prev : 0.8 });
+    } else {
+      localStorage.setItem(VOLUME_BEFORE_MUTE, String(voiceVolume));
+      updateVoiceSettings({ volume: 0 });
+      // Volume is baked into an utterance when it's created, so zeroing it only
+      // silences future announcements — whatever is mid-sentence keeps talking.
+      // Kill the in-flight utterance and anything queued behind it so mute means
+      // "quiet now", not "quiet after this one finishes".
+      if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
+    }
+    // update* only touches local state; persist so the toggle survives a restart.
+    saveSettings().catch((e) => console.warn('[status-bar] mute save failed', e));
+  };
+
+  // Radio setup lives in Settings > Station (it used to be its own Rig panel).
+  const openRigSettings = () => {
     setRigMenuOpen(false);
-    window.dispatchEvent(new CustomEvent('open-panel', { detail: 'rig' }));
+    setActiveSection('station');
+    openSettings();
   };
 
   return (
@@ -111,10 +127,20 @@ export function StatusBar() {
 
       {/* Right side - Time and connection */}
       <div className="flex items-center gap-6">
-        <div className="flex items-center gap-2 text-dark-300">
-          <Clock className="w-3 h-3" />
-          <span className="font-mono">{formatUtcTime(currentTime)} UTC</span>
-        </div>
+        {/* Mute = announcement volume 0, exactly as if the Settings > Voice
+            volume slider were dragged to zero. Everything spoken already honours
+            that volume, so there's nothing else to gate. */}
+        <button
+          onClick={toggleMute}
+          className={`p-1 rounded transition-colors hover:bg-dark-600 ${
+            muted ? 'text-accent-danger' : 'text-accent-success'
+          }`}
+          title={muted ? 'Announcements muted — click to unmute' : 'Mute announcements'}
+          aria-label={muted ? 'Unmute announcements' : 'Mute announcements'}
+          aria-pressed={muted}
+        >
+          {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
 
         <button
           onClick={openSettings}
@@ -127,9 +153,9 @@ export function StatusBar() {
         <div className="relative" ref={rigMenuRef}>
           <button
             onClick={() => setRigMenuOpen((o) => !o)}
-            onContextMenu={(e) => { e.preventDefault(); openRigPanel(); }}
+            onContextMenu={(e) => { e.preventDefault(); openRigSettings(); }}
             className="flex items-center gap-2 hover:bg-dark-600 rounded px-1.5 py-0.5 transition-colors"
-            title="Left-click: choose radio · Right-click: open the Rig panel (add / edit radios)"
+            title="Left-click: choose radio · Right-click: radio setup in Settings > Station"
           >
             <Radio className={`w-4 h-4 ${rigConnected ? 'text-accent-success' : 'text-accent-danger'}`} />
             <span className={`text-xs font-mono ${rigConnected ? 'text-accent-success' : 'text-accent-danger'}`}>
@@ -146,7 +172,7 @@ export function StatusBar() {
 
               {rigs.length === 0 && (
                 <div className="px-1.5 py-2 text-xs text-dark-300 leading-relaxed">
-                  No rigs configured. Add one in the Rig panel below.
+                  No rigs configured. Add one with the button below.
                 </div>
               )}
 
@@ -214,9 +240,9 @@ export function StatusBar() {
               </div>
 
               <button
-                onClick={openRigPanel}
+                onClick={openRigSettings}
                 className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-glass-100/60 text-[11px] font-ui text-dark-200 hover:text-accent-primary hover:border-accent-primary/50 transition-colors"
-                title="Open the Rig panel to add, edit or remove radios"
+                title="Open Settings > Station to add, edit or remove radios"
               >
                 <Settings className="w-3 h-3" /> Add / manage radios
               </button>

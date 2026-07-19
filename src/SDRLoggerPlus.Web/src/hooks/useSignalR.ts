@@ -175,6 +175,13 @@ export function useSignalRConnection() {
               .getState()
               .push(`${evt.source}: ${evt.updated} QSO${evt.updated === 1 ? '' : 's'} newly confirmed`, 'success');
           },
+          onContestState: (evt) => {
+            useAppStore.getState().setContestState(evt);
+            // Keep the entry window's recent-QSO strip in sync with server-side
+            // changes (e.g. a QSO deleted/edited from the logbook recomputes and
+            // rebroadcasts state — the strip must drop/refresh that row too).
+            queryClient.invalidateQueries({ queryKey: ['contest-qsos'] });
+          },
           onSpotReceived: (evt) => {
             // Add spot to ephemeral in-memory store
             const spot = {

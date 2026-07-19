@@ -1,0 +1,674 @@
+{
+  "state": "VA",
+  "party": "Virginia QSO Party",
+  "source": "https://www.qsl.net/sterling/VA_QSO_Party/2024_VQP/VQP_Counties&Cities.pdf",
+  "confidence": "verified",
+  "note": "Official 2017 SPARC list: 95 counties + 38 independent cities (type field distinguishes). Each is a distinct multiplier code.",
+  "counties": [
+    {
+      "name": "Accomack",
+      "code": "ACC",
+      "type": "county"
+    },
+    {
+      "name": "Albemarle",
+      "code": "ALB",
+      "type": "county"
+    },
+    {
+      "name": "Alexandria",
+      "code": "ALX",
+      "type": "city"
+    },
+    {
+      "name": "Alleghany",
+      "code": "ALL",
+      "type": "county"
+    },
+    {
+      "name": "Amelia",
+      "code": "AME",
+      "type": "county"
+    },
+    {
+      "name": "Amherst",
+      "code": "AMH",
+      "type": "county"
+    },
+    {
+      "name": "Appomattox",
+      "code": "APP",
+      "type": "county"
+    },
+    {
+      "name": "Arlington",
+      "code": "ARL",
+      "type": "county"
+    },
+    {
+      "name": "Augusta",
+      "code": "AUG",
+      "type": "county"
+    },
+    {
+      "name": "Bath",
+      "code": "BAT",
+      "type": "county"
+    },
+    {
+      "name": "Bedford",
+      "code": "BED",
+      "type": "county"
+    },
+    {
+      "name": "Bland",
+      "code": "BLA",
+      "type": "county"
+    },
+    {
+      "name": "Botetourt",
+      "code": "BOT",
+      "type": "county"
+    },
+    {
+      "name": "Bristol",
+      "code": "BRX",
+      "type": "city"
+    },
+    {
+      "name": "Brunswick",
+      "code": "BRU",
+      "type": "county"
+    },
+    {
+      "name": "Buchanan",
+      "code": "BCH",
+      "type": "county"
+    },
+    {
+      "name": "Buckingham",
+      "code": "BHM",
+      "type": "county"
+    },
+    {
+      "name": "Buena Vista",
+      "code": "BVX",
+      "type": "city"
+    },
+    {
+      "name": "Campbell",
+      "code": "CAM",
+      "type": "county"
+    },
+    {
+      "name": "Caroline",
+      "code": "CLN",
+      "type": "county"
+    },
+    {
+      "name": "Carroll",
+      "code": "CRL",
+      "type": "county"
+    },
+    {
+      "name": "Charles City",
+      "code": "CCY",
+      "type": "county"
+    },
+    {
+      "name": "Charlotte",
+      "code": "CHA",
+      "type": "county"
+    },
+    {
+      "name": "Charlottesville",
+      "code": "CHX",
+      "type": "city"
+    },
+    {
+      "name": "Chesapeake",
+      "code": "CPX",
+      "type": "city"
+    },
+    {
+      "name": "Chesterfield",
+      "code": "CHE",
+      "type": "county"
+    },
+    {
+      "name": "Clarke",
+      "code": "CLA",
+      "type": "county"
+    },
+    {
+      "name": "Colonial Heights",
+      "code": "COX",
+      "type": "city"
+    },
+    {
+      "name": "Covington",
+      "code": "CVX",
+      "type": "city"
+    },
+    {
+      "name": "Craig",
+      "code": "CRA",
+      "type": "county"
+    },
+    {
+      "name": "Culpeper",
+      "code": "CUL",
+      "type": "county"
+    },
+    {
+      "name": "Cumberland",
+      "code": "CUM",
+      "type": "county"
+    },
+    {
+      "name": "Danville",
+      "code": "DAX",
+      "type": "city"
+    },
+    {
+      "name": "Dickenson",
+      "code": "DIC",
+      "type": "county"
+    },
+    {
+      "name": "Dinwiddie",
+      "code": "DIN",
+      "type": "county"
+    },
+    {
+      "name": "Emporia",
+      "code": "EMX",
+      "type": "city"
+    },
+    {
+      "name": "Essex",
+      "code": "ESS",
+      "type": "county"
+    },
+    {
+      "name": "Fairfax",
+      "code": "FFX",
+      "type": "county"
+    },
+    {
+      "name": "Fairfax",
+      "code": "FXX",
+      "type": "city"
+    },
+    {
+      "name": "Fauquier",
+      "code": "FAU",
+      "type": "county"
+    },
+    {
+      "name": "Falls Church",
+      "code": "FCX",
+      "type": "city"
+    },
+    {
+      "name": "Floyd",
+      "code": "FLO",
+      "type": "county"
+    },
+    {
+      "name": "Fluvanna",
+      "code": "FLU",
+      "type": "county"
+    },
+    {
+      "name": "Franklin",
+      "code": "FRA",
+      "type": "county"
+    },
+    {
+      "name": "Franklin",
+      "code": "FRX",
+      "type": "city"
+    },
+    {
+      "name": "Frederick",
+      "code": "FRE",
+      "type": "county"
+    },
+    {
+      "name": "Fredericksburg",
+      "code": "FBX",
+      "type": "city"
+    },
+    {
+      "name": "Galax",
+      "code": "GAX",
+      "type": "city"
+    },
+    {
+      "name": "Giles",
+      "code": "GIL",
+      "type": "county"
+    },
+    {
+      "name": "Gloucester",
+      "code": "GLO",
+      "type": "county"
+    },
+    {
+      "name": "Goochland",
+      "code": "GOO",
+      "type": "county"
+    },
+    {
+      "name": "Grayson",
+      "code": "GRA",
+      "type": "county"
+    },
+    {
+      "name": "Greene",
+      "code": "GRN",
+      "type": "county"
+    },
+    {
+      "name": "Greensville",
+      "code": "GVL",
+      "type": "county"
+    },
+    {
+      "name": "Halifax",
+      "code": "HAL",
+      "type": "county"
+    },
+    {
+      "name": "Hampton",
+      "code": "HAX",
+      "type": "city"
+    },
+    {
+      "name": "Hanover",
+      "code": "HAN",
+      "type": "county"
+    },
+    {
+      "name": "Henrico",
+      "code": "HCO",
+      "type": "county"
+    },
+    {
+      "name": "Harrisonburg",
+      "code": "HBX",
+      "type": "city"
+    },
+    {
+      "name": "Henry",
+      "code": "HRY",
+      "type": "county"
+    },
+    {
+      "name": "Highland",
+      "code": "HIG",
+      "type": "county"
+    },
+    {
+      "name": "Hopewell",
+      "code": "HOX",
+      "type": "city"
+    },
+    {
+      "name": "Isle of Wight",
+      "code": "IOW",
+      "type": "county"
+    },
+    {
+      "name": "James City",
+      "code": "JAM",
+      "type": "county"
+    },
+    {
+      "name": "King & Queen",
+      "code": "KQN",
+      "type": "county"
+    },
+    {
+      "name": "King George",
+      "code": "KGE",
+      "type": "county"
+    },
+    {
+      "name": "King William",
+      "code": "KWM",
+      "type": "county"
+    },
+    {
+      "name": "Lancaster",
+      "code": "LAN",
+      "type": "county"
+    },
+    {
+      "name": "Lee",
+      "code": "LEE",
+      "type": "county"
+    },
+    {
+      "name": "Lexington",
+      "code": "LEX",
+      "type": "city"
+    },
+    {
+      "name": "Loudoun",
+      "code": "LDN",
+      "type": "county"
+    },
+    {
+      "name": "Louisa",
+      "code": "LSA",
+      "type": "county"
+    },
+    {
+      "name": "Lunenburg",
+      "code": "LUN",
+      "type": "county"
+    },
+    {
+      "name": "Lynchburg",
+      "code": "LYX",
+      "type": "city"
+    },
+    {
+      "name": "Madison",
+      "code": "MAD",
+      "type": "county"
+    },
+    {
+      "name": "Mathews",
+      "code": "MAT",
+      "type": "county"
+    },
+    {
+      "name": "Manassas",
+      "code": "MAX",
+      "type": "city"
+    },
+    {
+      "name": "Manassas Park",
+      "code": "MPX",
+      "type": "city"
+    },
+    {
+      "name": "Martinsville",
+      "code": "MVX",
+      "type": "city"
+    },
+    {
+      "name": "Mecklenburg",
+      "code": "MEC",
+      "type": "county"
+    },
+    {
+      "name": "Middlesex",
+      "code": "MID",
+      "type": "county"
+    },
+    {
+      "name": "Montgomery",
+      "code": "MON",
+      "type": "county"
+    },
+    {
+      "name": "Nelson",
+      "code": "NEL",
+      "type": "county"
+    },
+    {
+      "name": "New Kent",
+      "code": "NEW",
+      "type": "county"
+    },
+    {
+      "name": "Newport News",
+      "code": "NNX",
+      "type": "city"
+    },
+    {
+      "name": "Norfolk",
+      "code": "NFX",
+      "type": "city"
+    },
+    {
+      "name": "Northampton",
+      "code": "NHA",
+      "type": "county"
+    },
+    {
+      "name": "Northumberland",
+      "code": "NUM",
+      "type": "county"
+    },
+    {
+      "name": "Norton",
+      "code": "NRX",
+      "type": "city"
+    },
+    {
+      "name": "Nottoway",
+      "code": "NOT",
+      "type": "county"
+    },
+    {
+      "name": "Orange",
+      "code": "ORG",
+      "type": "county"
+    },
+    {
+      "name": "Page",
+      "code": "PAG",
+      "type": "county"
+    },
+    {
+      "name": "Patrick",
+      "code": "PAT",
+      "type": "county"
+    },
+    {
+      "name": "Petersburg",
+      "code": "PBX",
+      "type": "city"
+    },
+    {
+      "name": "Pittsylvania",
+      "code": "PIT",
+      "type": "county"
+    },
+    {
+      "name": "Poquoson",
+      "code": "PQX",
+      "type": "city"
+    },
+    {
+      "name": "Portsmouth",
+      "code": "POX",
+      "type": "city"
+    },
+    {
+      "name": "Powhatan",
+      "code": "POW",
+      "type": "county"
+    },
+    {
+      "name": "Prince Edward",
+      "code": "PRE",
+      "type": "county"
+    },
+    {
+      "name": "Prince George",
+      "code": "PRG",
+      "type": "county"
+    },
+    {
+      "name": "Prince William",
+      "code": "PRW",
+      "type": "county"
+    },
+    {
+      "name": "Pulaski",
+      "code": "PUL",
+      "type": "county"
+    },
+    {
+      "name": "Radford",
+      "code": "RAX",
+      "type": "city"
+    },
+    {
+      "name": "Rappahannock",
+      "code": "RAP",
+      "type": "county"
+    },
+    {
+      "name": "Richmond",
+      "code": "RIC",
+      "type": "county"
+    },
+    {
+      "name": "Richmond",
+      "code": "RIX",
+      "type": "city"
+    },
+    {
+      "name": "Roanoke",
+      "code": "ROA",
+      "type": "county"
+    },
+    {
+      "name": "Roanoke",
+      "code": "ROX",
+      "type": "city"
+    },
+    {
+      "name": "Rockbridge",
+      "code": "RBR",
+      "type": "county"
+    },
+    {
+      "name": "Rockingham",
+      "code": "RHM",
+      "type": "county"
+    },
+    {
+      "name": "Russell",
+      "code": "RUS",
+      "type": "county"
+    },
+    {
+      "name": "Salem",
+      "code": "SAX",
+      "type": "city"
+    },
+    {
+      "name": "Scott",
+      "code": "SCO",
+      "type": "county"
+    },
+    {
+      "name": "Shenandoah",
+      "code": "SHE",
+      "type": "county"
+    },
+    {
+      "name": "Smyth",
+      "code": "SMY",
+      "type": "county"
+    },
+    {
+      "name": "Southampton",
+      "code": "SHA",
+      "type": "county"
+    },
+    {
+      "name": "Spotsylvania",
+      "code": "SPO",
+      "type": "county"
+    },
+    {
+      "name": "Stafford",
+      "code": "STA",
+      "type": "county"
+    },
+    {
+      "name": "Staunton",
+      "code": "STX",
+      "type": "city"
+    },
+    {
+      "name": "Suffolk",
+      "code": "SUX",
+      "type": "city"
+    },
+    {
+      "name": "Surry",
+      "code": "SUR",
+      "type": "county"
+    },
+    {
+      "name": "Sussex",
+      "code": "SUS",
+      "type": "county"
+    },
+    {
+      "name": "Tazewell",
+      "code": "TAZ",
+      "type": "county"
+    },
+    {
+      "name": "Virginia Beach",
+      "code": "VBX",
+      "type": "city"
+    },
+    {
+      "name": "Warren",
+      "code": "WAR",
+      "type": "county"
+    },
+    {
+      "name": "Washington",
+      "code": "WAS",
+      "type": "county"
+    },
+    {
+      "name": "Waynesboro",
+      "code": "WAX",
+      "type": "city"
+    },
+    {
+      "name": "Westmoreland",
+      "code": "WES",
+      "type": "county"
+    },
+    {
+      "name": "Williamsburg",
+      "code": "WMX",
+      "type": "city"
+    },
+    {
+      "name": "Winchester",
+      "code": "WIX",
+      "type": "city"
+    },
+    {
+      "name": "Wise",
+      "code": "WIS",
+      "type": "county"
+    },
+    {
+      "name": "Wythe",
+      "code": "WYT",
+      "type": "county"
+    },
+    {
+      "name": "York",
+      "code": "YOR",
+      "type": "county"
+    }
+  ]
+}

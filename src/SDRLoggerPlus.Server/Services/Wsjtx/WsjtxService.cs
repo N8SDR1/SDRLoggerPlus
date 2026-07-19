@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.AspNetCore.SignalR;
+using SDRLoggerPlus.Contracts.Api;
 using SDRLoggerPlus.Contracts.Events;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Hubs;
@@ -474,6 +475,13 @@ public class WsjtxService : BackgroundService
         }
 
         using var scope = _serviceProvider.CreateScope();
+
+        // WSJT-X has no protocol field for QTH and often sends no name, so an
+        // auto-logged QSO would otherwise be thinner than a hand-entered one.
+        // Backfill from the callbook, but only the gaps — the grid WSJT-X sent
+        // is what the station actually transmitted and always wins.
+        request = await FillGapsFromCallbookAsync(scope.ServiceProvider, request);
+
         var qsoService = scope.ServiceProvider.GetRequiredService<IQsoService>();
         var created = await qsoService.CreateAsync(request);
 
@@ -484,6 +492,58 @@ public class WsjtxService : BackgroundService
         }
         _logger.LogInformation("WSJT-X source {N} auto-logged {Mode} QSO with {Call} on {Band}",
             l.Source, request.Mode, created.Callsign, request.Band);
+    }
+
+    // Look the call up (QRZ first, HamQTH backfilling whatever QRZ lacked — the
+    // same precedence the manual lookup path uses) and fill only the request's
+    // empty fields. Best-effort: a missing/unconfigured callbook or a failed
+    // lookup must never block the auto-log, so all failures return the request
+    // untouched.
+    private async Task<CreateQsoRequest> FillGapsFromCallbookAsync(
+        IServiceProvider services, CreateQsoRequest request)
+    {
+        if (!CallbookGapFiller.HasGap(request)) return request;
+
+        try
+        {
+            var qrz = services.GetService<IQrzService>();
+            var info = qrz is null ? null : await qrz.LookupCallsignAsync(request.Callsign);
+
+            HamQthCallsignInfo? hq = null;
+            if (info is null || string.IsNullOrWhiteSpace(info.City) || string.IsNullOrWhiteSpace(info.Grid))
+            {
+                var hamQth = services.GetService<IHamQthService>();
+                if (hamQth is not null)
+                    hq = await hamQth.LookupCallsignAsync(request.Callsign);
+            }
+
+            if (info is null && hq is null) return request;
+
+            var name = info is not null
+                ? JoinName(info.FirstName, info.Name)
+                : JoinName(hq?.FirstName, hq?.Name);
+
+            return CallbookGapFiller.Fill(
+                request,
+                name: name,
+                city: info?.City ?? hq?.City,
+                state: info?.State ?? hq?.State,
+                grid: info?.Grid ?? hq?.Grid,
+                country: info?.Country ?? hq?.Country);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "WSJT-X callbook gap-fill failed for {Call}", request.Callsign);
+            return request;
+        }
+    }
+
+    private static string? JoinName(string? first, string? last)
+    {
+        var hasFirst = !string.IsNullOrWhiteSpace(first);
+        var hasLast = !string.IsNullOrWhiteSpace(last);
+        if (hasFirst && hasLast) return $"{first} {last}";
+        return hasFirst ? first : (hasLast ? last : null);
     }
 
     private async Task<WsjtxSettings> ReadSettingsAsync()

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Layout, Model, TabNode, TabSetNode, BorderNode, ITabSetRenderValues, Actions, DockLocation } from 'flexlayout-react';
-import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, RadioReceiver, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, Activity, TrendingUp, Gauge, Map, Target, Grid3x3, Settings } from 'lucide-react';
+import { X, LayoutGrid, Plus, Search, NotebookPen, ScrollText, RadioTower, Navigation2, Earth, ContactRound, Trophy, PanelTop, Satellite, Plane, BotMessageSquare, TentTree, Signal, Activity, TrendingUp, Gauge, Map, Swords, Grid3x3, Target, Settings } from 'lucide-react';
 import { StatusBar } from './components/StatusBar';
 import { WeatherAlertBanner } from './components/WeatherAlertBanner';
 import { Toasts } from './components/Toasts';
@@ -9,13 +9,14 @@ import { ConnectionOverlay } from './components/ConnectionOverlay';
 import { SetupWizard } from './components/SetupWizard';
 import { PluginErrorBoundary } from './components/PluginErrorBoundary';
 import { useSignalRConnection } from './hooks/useSignalR';
-import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, RigPlugin, QrzProfilePlugin, ContestsPlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin, DecodesPlugin, GridTrackerPlugin } from './plugins';
+import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, QrzProfilePlugin, ContestsPlugin, ContestEntryPlugin, MultNeededPlugin, ContestBandmapPlugin, ContestScorePlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin, DecodesPlugin, GridTrackerPlugin } from './plugins';
 import { useLayoutStore, defaultLayout } from './store/layoutStore';
 import { useSettingsStore, type SettingsSection } from './store/settingsStore';
 import { useSetupStore } from './store/setupStore';
 import { useAppStore } from './store/appStore';
 import { useTheme } from './hooks/useTheme';
 import { useOutOfBandAlert } from './hooks/useOutOfBandAlert';
+import { useLayoutMenu } from './hooks/useLayoutMenu';
 import { clampPanelScale, PANEL_STEP_PERCENT } from './utils/zoomScale';
 
 import 'flexlayout-react/style/dark.css';
@@ -84,13 +85,6 @@ const PLUGINS: Record<string, PluginDef> = {
     tags: ['map', 'earth'],
     scalable: false,
   },
-  'rig': {
-    name: 'Rig',
-    icon: <RadioReceiver className="w-4 h-4" />,
-    component: RigPlugin,
-    category: 'Radio & Equipment',
-    tags: ['transceiver', 'radio'],
-  },
   'qrz-profile': {
     name: 'QRZ Profile',
     icon: <ContactRound className="w-4 h-4" />,
@@ -103,6 +97,34 @@ const PLUGINS: Record<string, PluginDef> = {
     icon: <Trophy className="w-4 h-4" />,
     component: ContestsPlugin,
     category: 'Information',
+  },
+  'contest-entry': {
+    name: 'Contest Entry',
+    icon: <Swords className="w-4 h-4" />,
+    component: ContestEntryPlugin,
+    category: 'Logging',
+    tags: ['contest', 'dupe', 'serial', 'score', 'exchange'],
+  },
+  'contest-mults': {
+    name: 'Multipliers',
+    icon: <Grid3x3 className="w-4 h-4" />,
+    component: MultNeededPlugin,
+    category: 'Logging',
+    tags: ['contest', 'multipliers', 'zones', 'mults'],
+  },
+  'contest-bandmap': {
+    name: 'Bandmap',
+    icon: <Map className="w-4 h-4" />,
+    component: ContestBandmapPlugin,
+    category: 'Logging',
+    tags: ['contest', 'bandmap', 'spots', 'dupe', 'mult'],
+  },
+  'contest-score': {
+    name: 'Contest Score',
+    icon: <Gauge className="w-4 h-4" />,
+    component: ContestScorePlugin,
+    category: 'Logging',
+    tags: ['contest', 'score', 'rate', 'qsos', 'mults'],
   },
   'header-bar': {
     name: 'Header Bar',
@@ -237,6 +259,8 @@ export function App() {
 
   // Out-of-band VFO warnings (ITU band plan for the configured region)
   useOutOfBandAlert();
+  // Electron View > Layouts menu (no-op in a browser).
+  useLayoutMenu();
 
   // Check setup status on mount (for status display, not blocking)
   useEffect(() => {

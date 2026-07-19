@@ -23,6 +23,7 @@ public static class DbServiceRegistration
         services.AddScoped<ISettingsRepository, LiteSettingsRepository>();
         services.AddScoped<ICallsignImageRepository, LiteCallsignImageRepository>();
         services.AddScoped<IRadioConfigRepository, LiteRadioConfigRepository>();
+        services.AddScoped<IContestSessionRepository, LiteContestSessionRepository>();
         return services;
     }
 }

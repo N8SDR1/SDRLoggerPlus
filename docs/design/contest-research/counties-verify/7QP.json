@@ -1,0 +1,1304 @@
+{
+  "party": "7QP",
+  "source": "http://7qp.org/new/Page.asp?content=geo",
+  "format": "5-char per source example (AZYVP = Yavapai AZ): 2-letter STATE prefix + 3-letter county code. NOTE: source orders STATE first (state+county), the reverse of the KNGWA county+state form. Underlying county codes are 3 uppercase letters.",
+  "confidence": "verified",
+  "note": "Page last updated June 7, 2026 (current, not the 2006 list). Exchange instruction verbatim: \"Exchange state and county, e.g. AZYVP for Yavapai AZ.\" Codes here built as STATE+county to match that example; if the diff target uses county+state (KNGWA), every code will differ only by segment ordering. Underlying 3-letter county codes: King=KNG, Yavapai=YVP, etc. 259 counties across 8 states (AZ15, ID44, MT56, NV17 incl Carson City, OR36, UT29, WA39, WY23).",
+  "counties": [
+    {
+      "state": "AZ",
+      "name": "Apache",
+      "code": "AZAPH"
+    },
+    {
+      "state": "AZ",
+      "name": "Gila",
+      "code": "AZGLA"
+    },
+    {
+      "state": "AZ",
+      "name": "La Paz",
+      "code": "AZLPZ"
+    },
+    {
+      "state": "AZ",
+      "name": "Navajo",
+      "code": "AZNVO"
+    },
+    {
+      "state": "AZ",
+      "name": "Santa Cruz",
+      "code": "AZSCZ"
+    },
+    {
+      "state": "AZ",
+      "name": "Cochise",
+      "code": "AZCHS"
+    },
+    {
+      "state": "AZ",
+      "name": "Graham",
+      "code": "AZGHM"
+    },
+    {
+      "state": "AZ",
+      "name": "Maricopa",
+      "code": "AZMCP"
+    },
+    {
+      "state": "AZ",
+      "name": "Pima",
+      "code": "AZPMA"
+    },
+    {
+      "state": "AZ",
+      "name": "Yavapai",
+      "code": "AZYVP"
+    },
+    {
+      "state": "AZ",
+      "name": "Coconino",
+      "code": "AZCNO"
+    },
+    {
+      "state": "AZ",
+      "name": "Greenlee",
+      "code": "AZGLE"
+    },
+    {
+      "state": "AZ",
+      "name": "Mohave",
+      "code": "AZMHV"
+    },
+    {
+      "state": "AZ",
+      "name": "Pinal",
+      "code": "AZPNL"
+    },
+    {
+      "state": "AZ",
+      "name": "Yuma",
+      "code": "AZYMA"
+    },
+    {
+      "state": "ID",
+      "name": "Ada",
+      "code": "IDADA"
+    },
+    {
+      "state": "ID",
+      "name": "Bonneville",
+      "code": "IDBNV"
+    },
+    {
+      "state": "ID",
+      "name": "Custer",
+      "code": "IDCUS"
+    },
+    {
+      "state": "ID",
+      "name": "Kootenai",
+      "code": "IDKOO"
+    },
+    {
+      "state": "ID",
+      "name": "Owyhee",
+      "code": "IDOWY"
+    },
+    {
+      "state": "ID",
+      "name": "Adams",
+      "code": "IDADM"
+    },
+    {
+      "state": "ID",
+      "name": "Boundary",
+      "code": "IDBOU"
+    },
+    {
+      "state": "ID",
+      "name": "Elmore",
+      "code": "IDELM"
+    },
+    {
+      "state": "ID",
+      "name": "Latah",
+      "code": "IDLAT"
+    },
+    {
+      "state": "ID",
+      "name": "Payette",
+      "code": "IDPAY"
+    },
+    {
+      "state": "ID",
+      "name": "Bannock",
+      "code": "IDBAN"
+    },
+    {
+      "state": "ID",
+      "name": "Butte",
+      "code": "IDBUT"
+    },
+    {
+      "state": "ID",
+      "name": "Franklin",
+      "code": "IDFRA"
+    },
+    {
+      "state": "ID",
+      "name": "Lemhi",
+      "code": "IDLEM"
+    },
+    {
+      "state": "ID",
+      "name": "Power",
+      "code": "IDPOW"
+    },
+    {
+      "state": "ID",
+      "name": "Bear Lake",
+      "code": "IDBEA"
+    },
+    {
+      "state": "ID",
+      "name": "Camas",
+      "code": "IDCAM"
+    },
+    {
+      "state": "ID",
+      "name": "Fremont",
+      "code": "IDFRE"
+    },
+    {
+      "state": "ID",
+      "name": "Lewis",
+      "code": "IDLEW"
+    },
+    {
+      "state": "ID",
+      "name": "Shoshone",
+      "code": "IDSHO"
+    },
+    {
+      "state": "ID",
+      "name": "Benewah",
+      "code": "IDBEN"
+    },
+    {
+      "state": "ID",
+      "name": "Canyon",
+      "code": "IDCAN"
+    },
+    {
+      "state": "ID",
+      "name": "Gem",
+      "code": "IDGEM"
+    },
+    {
+      "state": "ID",
+      "name": "Lincoln",
+      "code": "IDLIN"
+    },
+    {
+      "state": "ID",
+      "name": "Teton",
+      "code": "IDTET"
+    },
+    {
+      "state": "ID",
+      "name": "Bingham",
+      "code": "IDBIN"
+    },
+    {
+      "state": "ID",
+      "name": "Caribou",
+      "code": "IDCAR"
+    },
+    {
+      "state": "ID",
+      "name": "Gooding",
+      "code": "IDGOO"
+    },
+    {
+      "state": "ID",
+      "name": "Madison",
+      "code": "IDMAD"
+    },
+    {
+      "state": "ID",
+      "name": "Twin Falls",
+      "code": "IDTWI"
+    },
+    {
+      "state": "ID",
+      "name": "Blaine",
+      "code": "IDBLA"
+    },
+    {
+      "state": "ID",
+      "name": "Cassia",
+      "code": "IDCAS"
+    },
+    {
+      "state": "ID",
+      "name": "Idaho",
+      "code": "IDIDA"
+    },
+    {
+      "state": "ID",
+      "name": "Minidoka",
+      "code": "IDMIN"
+    },
+    {
+      "state": "ID",
+      "name": "Valley",
+      "code": "IDVAL"
+    },
+    {
+      "state": "ID",
+      "name": "Boise",
+      "code": "IDBOI"
+    },
+    {
+      "state": "ID",
+      "name": "Clark",
+      "code": "IDCLA"
+    },
+    {
+      "state": "ID",
+      "name": "Jefferson",
+      "code": "IDJEF"
+    },
+    {
+      "state": "ID",
+      "name": "Nez Perce",
+      "code": "IDNEZ"
+    },
+    {
+      "state": "ID",
+      "name": "Washington",
+      "code": "IDWAS"
+    },
+    {
+      "state": "ID",
+      "name": "Bonner",
+      "code": "IDBNR"
+    },
+    {
+      "state": "ID",
+      "name": "Clearwater",
+      "code": "IDCLE"
+    },
+    {
+      "state": "ID",
+      "name": "Jerome",
+      "code": "IDJER"
+    },
+    {
+      "state": "ID",
+      "name": "Oneida",
+      "code": "IDONE"
+    },
+    {
+      "state": "MT",
+      "name": "Beaverhead",
+      "code": "MTBEA"
+    },
+    {
+      "state": "MT",
+      "name": "Fallon",
+      "code": "MTFAL"
+    },
+    {
+      "state": "MT",
+      "name": "Lake",
+      "code": "MTLAK"
+    },
+    {
+      "state": "MT",
+      "name": "Petroleum",
+      "code": "MTPET"
+    },
+    {
+      "state": "MT",
+      "name": "Sheridan",
+      "code": "MTSHE"
+    },
+    {
+      "state": "MT",
+      "name": "Big Horn",
+      "code": "MTBIG"
+    },
+    {
+      "state": "MT",
+      "name": "Fergus",
+      "code": "MTFER"
+    },
+    {
+      "state": "MT",
+      "name": "Lewis & Clark",
+      "code": "MTLEW"
+    },
+    {
+      "state": "MT",
+      "name": "Phillips",
+      "code": "MTPHI"
+    },
+    {
+      "state": "MT",
+      "name": "Silver Bow",
+      "code": "MTSIL"
+    },
+    {
+      "state": "MT",
+      "name": "Blaine",
+      "code": "MTBLA"
+    },
+    {
+      "state": "MT",
+      "name": "Flathead",
+      "code": "MTFLA"
+    },
+    {
+      "state": "MT",
+      "name": "Liberty",
+      "code": "MTLIB"
+    },
+    {
+      "state": "MT",
+      "name": "Pondera",
+      "code": "MTPON"
+    },
+    {
+      "state": "MT",
+      "name": "Stillwater",
+      "code": "MTSTI"
+    },
+    {
+      "state": "MT",
+      "name": "Broadwater",
+      "code": "MTBRO"
+    },
+    {
+      "state": "MT",
+      "name": "Gallatin",
+      "code": "MTGAL"
+    },
+    {
+      "state": "MT",
+      "name": "Lincoln",
+      "code": "MTLIN"
+    },
+    {
+      "state": "MT",
+      "name": "Powder River",
+      "code": "MTPWD"
+    },
+    {
+      "state": "MT",
+      "name": "Sweet Grass",
+      "code": "MTSWE"
+    },
+    {
+      "state": "MT",
+      "name": "Carbon",
+      "code": "MTCRB"
+    },
+    {
+      "state": "MT",
+      "name": "Garfield",
+      "code": "MTGAR"
+    },
+    {
+      "state": "MT",
+      "name": "Madison",
+      "code": "MTMAD"
+    },
+    {
+      "state": "MT",
+      "name": "Powell",
+      "code": "MTPWL"
+    },
+    {
+      "state": "MT",
+      "name": "Teton",
+      "code": "MTTET"
+    },
+    {
+      "state": "MT",
+      "name": "Carter",
+      "code": "MTCRT"
+    },
+    {
+      "state": "MT",
+      "name": "Glacier",
+      "code": "MTGLA"
+    },
+    {
+      "state": "MT",
+      "name": "McCone",
+      "code": "MTMCC"
+    },
+    {
+      "state": "MT",
+      "name": "Prairie",
+      "code": "MTPRA"
+    },
+    {
+      "state": "MT",
+      "name": "Toole",
+      "code": "MTTOO"
+    },
+    {
+      "state": "MT",
+      "name": "Cascade",
+      "code": "MTCAS"
+    },
+    {
+      "state": "MT",
+      "name": "Golden Valley",
+      "code": "MTGOL"
+    },
+    {
+      "state": "MT",
+      "name": "Meagher",
+      "code": "MTMEA"
+    },
+    {
+      "state": "MT",
+      "name": "Ravalli",
+      "code": "MTRAV"
+    },
+    {
+      "state": "MT",
+      "name": "Treasure",
+      "code": "MTTRE"
+    },
+    {
+      "state": "MT",
+      "name": "Chouteau",
+      "code": "MTCHO"
+    },
+    {
+      "state": "MT",
+      "name": "Granite",
+      "code": "MTGRA"
+    },
+    {
+      "state": "MT",
+      "name": "Mineral",
+      "code": "MTMIN"
+    },
+    {
+      "state": "MT",
+      "name": "Richland",
+      "code": "MTRIC"
+    },
+    {
+      "state": "MT",
+      "name": "Valley",
+      "code": "MTVAL"
+    },
+    {
+      "state": "MT",
+      "name": "Custer",
+      "code": "MTCUS"
+    },
+    {
+      "state": "MT",
+      "name": "Hill",
+      "code": "MTHIL"
+    },
+    {
+      "state": "MT",
+      "name": "Missoula",
+      "code": "MTMIS"
+    },
+    {
+      "state": "MT",
+      "name": "Roosevelt",
+      "code": "MTROO"
+    },
+    {
+      "state": "MT",
+      "name": "Wheatland",
+      "code": "MTWHE"
+    },
+    {
+      "state": "MT",
+      "name": "Daniels",
+      "code": "MTDAN"
+    },
+    {
+      "state": "MT",
+      "name": "Jefferson",
+      "code": "MTJEF"
+    },
+    {
+      "state": "MT",
+      "name": "Musselshell",
+      "code": "MTMUS"
+    },
+    {
+      "state": "MT",
+      "name": "Rosebud",
+      "code": "MTROS"
+    },
+    {
+      "state": "MT",
+      "name": "Wibaux",
+      "code": "MTWIB"
+    },
+    {
+      "state": "MT",
+      "name": "Dawson",
+      "code": "MTDAW"
+    },
+    {
+      "state": "MT",
+      "name": "Judith Basin",
+      "code": "MTJUD"
+    },
+    {
+      "state": "MT",
+      "name": "Park",
+      "code": "MTPAR"
+    },
+    {
+      "state": "MT",
+      "name": "Sanders",
+      "code": "MTSAN"
+    },
+    {
+      "state": "MT",
+      "name": "Yellowstone",
+      "code": "MTYEL"
+    },
+    {
+      "state": "MT",
+      "name": "Deer Lodge",
+      "code": "MTDEE"
+    },
+    {
+      "state": "NV",
+      "name": "Carson City",
+      "code": "NVCAR"
+    },
+    {
+      "state": "NV",
+      "name": "Elko",
+      "code": "NVELK"
+    },
+    {
+      "state": "NV",
+      "name": "Lander",
+      "code": "NVLAN"
+    },
+    {
+      "state": "NV",
+      "name": "Mineral",
+      "code": "NVMIN"
+    },
+    {
+      "state": "NV",
+      "name": "Storey",
+      "code": "NVSTO"
+    },
+    {
+      "state": "NV",
+      "name": "Churchill",
+      "code": "NVCHU"
+    },
+    {
+      "state": "NV",
+      "name": "Esmeralda",
+      "code": "NVESM"
+    },
+    {
+      "state": "NV",
+      "name": "Lincoln",
+      "code": "NVLIN"
+    },
+    {
+      "state": "NV",
+      "name": "Nye",
+      "code": "NVNYE"
+    },
+    {
+      "state": "NV",
+      "name": "Washoe",
+      "code": "NVWAS"
+    },
+    {
+      "state": "NV",
+      "name": "Clark",
+      "code": "NVCLA"
+    },
+    {
+      "state": "NV",
+      "name": "Eureka",
+      "code": "NVEUR"
+    },
+    {
+      "state": "NV",
+      "name": "Lyon",
+      "code": "NVLYO"
+    },
+    {
+      "state": "NV",
+      "name": "Pershing",
+      "code": "NVPER"
+    },
+    {
+      "state": "NV",
+      "name": "White Pine",
+      "code": "NVWHI"
+    },
+    {
+      "state": "NV",
+      "name": "Douglas",
+      "code": "NVDOU"
+    },
+    {
+      "state": "NV",
+      "name": "Humboldt",
+      "code": "NVHUM"
+    },
+    {
+      "state": "OR",
+      "name": "Baker",
+      "code": "ORBAK"
+    },
+    {
+      "state": "OR",
+      "name": "Deschutes",
+      "code": "ORDES"
+    },
+    {
+      "state": "OR",
+      "name": "Jefferson",
+      "code": "ORJEF"
+    },
+    {
+      "state": "OR",
+      "name": "Malheur",
+      "code": "ORMAL"
+    },
+    {
+      "state": "OR",
+      "name": "Umatilla",
+      "code": "ORUMA"
+    },
+    {
+      "state": "OR",
+      "name": "Benton",
+      "code": "ORBEN"
+    },
+    {
+      "state": "OR",
+      "name": "Douglas",
+      "code": "ORDOU"
+    },
+    {
+      "state": "OR",
+      "name": "Josephine",
+      "code": "ORJOS"
+    },
+    {
+      "state": "OR",
+      "name": "Marion",
+      "code": "ORMAR"
+    },
+    {
+      "state": "OR",
+      "name": "Union",
+      "code": "ORUNI"
+    },
+    {
+      "state": "OR",
+      "name": "Clackamas",
+      "code": "ORCLK"
+    },
+    {
+      "state": "OR",
+      "name": "Gilliam",
+      "code": "ORGIL"
+    },
+    {
+      "state": "OR",
+      "name": "Klamath",
+      "code": "ORKLA"
+    },
+    {
+      "state": "OR",
+      "name": "Morrow",
+      "code": "ORMOR"
+    },
+    {
+      "state": "OR",
+      "name": "Wallowa",
+      "code": "ORWAL"
+    },
+    {
+      "state": "OR",
+      "name": "Clatsop",
+      "code": "ORCLT"
+    },
+    {
+      "state": "OR",
+      "name": "Grant",
+      "code": "ORGRA"
+    },
+    {
+      "state": "OR",
+      "name": "Lake",
+      "code": "ORLAK"
+    },
+    {
+      "state": "OR",
+      "name": "Multnomah",
+      "code": "ORMUL"
+    },
+    {
+      "state": "OR",
+      "name": "Wasco",
+      "code": "ORWCO"
+    },
+    {
+      "state": "OR",
+      "name": "Columbia",
+      "code": "ORCOL"
+    },
+    {
+      "state": "OR",
+      "name": "Harney",
+      "code": "ORHAR"
+    },
+    {
+      "state": "OR",
+      "name": "Lane",
+      "code": "ORLAN"
+    },
+    {
+      "state": "OR",
+      "name": "Polk",
+      "code": "ORPOL"
+    },
+    {
+      "state": "OR",
+      "name": "Washington",
+      "code": "ORWSH"
+    },
+    {
+      "state": "OR",
+      "name": "Coos",
+      "code": "ORCOO"
+    },
+    {
+      "state": "OR",
+      "name": "Hood River",
+      "code": "ORHOO"
+    },
+    {
+      "state": "OR",
+      "name": "Lincoln",
+      "code": "ORLCN"
+    },
+    {
+      "state": "OR",
+      "name": "Sherman",
+      "code": "ORSHE"
+    },
+    {
+      "state": "OR",
+      "name": "Wheeler",
+      "code": "ORWHE"
+    },
+    {
+      "state": "OR",
+      "name": "Crook",
+      "code": "ORCRO"
+    },
+    {
+      "state": "OR",
+      "name": "Jackson",
+      "code": "ORJAC"
+    },
+    {
+      "state": "OR",
+      "name": "Linn",
+      "code": "ORLNN"
+    },
+    {
+      "state": "OR",
+      "name": "Tillamook",
+      "code": "ORTIL"
+    },
+    {
+      "state": "OR",
+      "name": "Yamhill",
+      "code": "ORYAM"
+    },
+    {
+      "state": "OR",
+      "name": "Curry",
+      "code": "ORCUR"
+    },
+    {
+      "state": "UT",
+      "name": "Beaver",
+      "code": "UTBEA"
+    },
+    {
+      "state": "UT",
+      "name": "Duchesne",
+      "code": "UTDUC"
+    },
+    {
+      "state": "UT",
+      "name": "Kane",
+      "code": "UTKAN"
+    },
+    {
+      "state": "UT",
+      "name": "San Juan",
+      "code": "UTSNJ"
+    },
+    {
+      "state": "UT",
+      "name": "Utah",
+      "code": "UTUTA"
+    },
+    {
+      "state": "UT",
+      "name": "Box Elder",
+      "code": "UTBOX"
+    },
+    {
+      "state": "UT",
+      "name": "Emery",
+      "code": "UTEME"
+    },
+    {
+      "state": "UT",
+      "name": "Millard",
+      "code": "UTMIL"
+    },
+    {
+      "state": "UT",
+      "name": "Sanpete",
+      "code": "UTSNP"
+    },
+    {
+      "state": "UT",
+      "name": "Wasatch",
+      "code": "UTWST"
+    },
+    {
+      "state": "UT",
+      "name": "Cache",
+      "code": "UTCAC"
+    },
+    {
+      "state": "UT",
+      "name": "Garfield",
+      "code": "UTGAR"
+    },
+    {
+      "state": "UT",
+      "name": "Morgan",
+      "code": "UTMOR"
+    },
+    {
+      "state": "UT",
+      "name": "Sevier",
+      "code": "UTSEV"
+    },
+    {
+      "state": "UT",
+      "name": "Washington",
+      "code": "UTWSH"
+    },
+    {
+      "state": "UT",
+      "name": "Carbon",
+      "code": "UTCAR"
+    },
+    {
+      "state": "UT",
+      "name": "Grand",
+      "code": "UTGRA"
+    },
+    {
+      "state": "UT",
+      "name": "Piute",
+      "code": "UTPIU"
+    },
+    {
+      "state": "UT",
+      "name": "Summit",
+      "code": "UTSUM"
+    },
+    {
+      "state": "UT",
+      "name": "Wayne",
+      "code": "UTWAY"
+    },
+    {
+      "state": "UT",
+      "name": "Daggett",
+      "code": "UTDAG"
+    },
+    {
+      "state": "UT",
+      "name": "Iron",
+      "code": "UTIRO"
+    },
+    {
+      "state": "UT",
+      "name": "Rich",
+      "code": "UTRIC"
+    },
+    {
+      "state": "UT",
+      "name": "Tooele",
+      "code": "UTTOO"
+    },
+    {
+      "state": "UT",
+      "name": "Weber",
+      "code": "UTWEB"
+    },
+    {
+      "state": "UT",
+      "name": "Davis",
+      "code": "UTDAV"
+    },
+    {
+      "state": "UT",
+      "name": "Juab",
+      "code": "UTJUA"
+    },
+    {
+      "state": "UT",
+      "name": "Salt Lake",
+      "code": "UTSAL"
+    },
+    {
+      "state": "UT",
+      "name": "Uintah",
+      "code": "UTUIN"
+    },
+    {
+      "state": "WA",
+      "name": "Adams",
+      "code": "WAADA"
+    },
+    {
+      "state": "WA",
+      "name": "Douglas",
+      "code": "WADOU"
+    },
+    {
+      "state": "WA",
+      "name": "Klickitat",
+      "code": "WAKLI"
+    },
+    {
+      "state": "WA",
+      "name": "Pacific",
+      "code": "WAPAC"
+    },
+    {
+      "state": "WA",
+      "name": "Stevens",
+      "code": "WASTE"
+    },
+    {
+      "state": "WA",
+      "name": "Asotin",
+      "code": "WAASO"
+    },
+    {
+      "state": "WA",
+      "name": "Ferry",
+      "code": "WAFER"
+    },
+    {
+      "state": "WA",
+      "name": "King",
+      "code": "WAKNG"
+    },
+    {
+      "state": "WA",
+      "name": "Pend Oreille",
+      "code": "WAPEN"
+    },
+    {
+      "state": "WA",
+      "name": "Thurston",
+      "code": "WATHU"
+    },
+    {
+      "state": "WA",
+      "name": "Benton",
+      "code": "WABEN"
+    },
+    {
+      "state": "WA",
+      "name": "Franklin",
+      "code": "WAFRA"
+    },
+    {
+      "state": "WA",
+      "name": "Kitsap",
+      "code": "WAKTP"
+    },
+    {
+      "state": "WA",
+      "name": "Pierce",
+      "code": "WAPIE"
+    },
+    {
+      "state": "WA",
+      "name": "Wahkiakum",
+      "code": "WAWAH"
+    },
+    {
+      "state": "WA",
+      "name": "Chelan",
+      "code": "WACHE"
+    },
+    {
+      "state": "WA",
+      "name": "Garfield",
+      "code": "WAGAR"
+    },
+    {
+      "state": "WA",
+      "name": "Kittitas",
+      "code": "WAKTT"
+    },
+    {
+      "state": "WA",
+      "name": "San Juan",
+      "code": "WASAN"
+    },
+    {
+      "state": "WA",
+      "name": "Walla Walla",
+      "code": "WAWAL"
+    },
+    {
+      "state": "WA",
+      "name": "Clallam",
+      "code": "WACLL"
+    },
+    {
+      "state": "WA",
+      "name": "Grant",
+      "code": "WAGRN"
+    },
+    {
+      "state": "WA",
+      "name": "Lewis",
+      "code": "WALEW"
+    },
+    {
+      "state": "WA",
+      "name": "Skagit",
+      "code": "WASKG"
+    },
+    {
+      "state": "WA",
+      "name": "Whatcom",
+      "code": "WAWHA"
+    },
+    {
+      "state": "WA",
+      "name": "Clark",
+      "code": "WACLR"
+    },
+    {
+      "state": "WA",
+      "name": "Grays Harbor",
+      "code": "WAGRY"
+    },
+    {
+      "state": "WA",
+      "name": "Lincoln",
+      "code": "WALIN"
+    },
+    {
+      "state": "WA",
+      "name": "Skamania",
+      "code": "WASKM"
+    },
+    {
+      "state": "WA",
+      "name": "Whitman",
+      "code": "WAWHI"
+    },
+    {
+      "state": "WA",
+      "name": "Columbia",
+      "code": "WACOL"
+    },
+    {
+      "state": "WA",
+      "name": "Island",
+      "code": "WAISL"
+    },
+    {
+      "state": "WA",
+      "name": "Mason",
+      "code": "WAMAS"
+    },
+    {
+      "state": "WA",
+      "name": "Snohomish",
+      "code": "WASNO"
+    },
+    {
+      "state": "WA",
+      "name": "Yakima",
+      "code": "WAYAK"
+    },
+    {
+      "state": "WA",
+      "name": "Cowlitz",
+      "code": "WACOW"
+    },
+    {
+      "state": "WA",
+      "name": "Jefferson",
+      "code": "WAJEF"
+    },
+    {
+      "state": "WA",
+      "name": "Okanogan",
+      "code": "WAOKA"
+    },
+    {
+      "state": "WA",
+      "name": "Spokane",
+      "code": "WASPO"
+    },
+    {
+      "state": "WY",
+      "name": "Albany",
+      "code": "WYALB"
+    },
+    {
+      "state": "WY",
+      "name": "Crook",
+      "code": "WYCRO"
+    },
+    {
+      "state": "WY",
+      "name": "Laramie",
+      "code": "WYLAR"
+    },
+    {
+      "state": "WY",
+      "name": "Platte",
+      "code": "WYPLA"
+    },
+    {
+      "state": "WY",
+      "name": "Teton",
+      "code": "WYTET"
+    },
+    {
+      "state": "WY",
+      "name": "Big Horn",
+      "code": "WYBIG"
+    },
+    {
+      "state": "WY",
+      "name": "Fremont",
+      "code": "WYFRE"
+    },
+    {
+      "state": "WY",
+      "name": "Lincoln",
+      "code": "WYLIN"
+    },
+    {
+      "state": "WY",
+      "name": "Sheridan",
+      "code": "WYSHE"
+    },
+    {
+      "state": "WY",
+      "name": "Uinta",
+      "code": "WYUIN"
+    },
+    {
+      "state": "WY",
+      "name": "Campbell",
+      "code": "WYCAM"
+    },
+    {
+      "state": "WY",
+      "name": "Goshen",
+      "code": "WYGOS"
+    },
+    {
+      "state": "WY",
+      "name": "Natrona",
+      "code": "WYNAT"
+    },
+    {
+      "state": "WY",
+      "name": "Sublette",
+      "code": "WYSUB"
+    },
+    {
+      "state": "WY",
+      "name": "Washakie",
+      "code": "WYWAS"
+    },
+    {
+      "state": "WY",
+      "name": "Carbon",
+      "code": "WYCAR"
+    },
+    {
+      "state": "WY",
+      "name": "Hot Springs",
+      "code": "WYHOT"
+    },
+    {
+      "state": "WY",
+      "name": "Niobrara",
+      "code": "WYNIO"
+    },
+    {
+      "state": "WY",
+      "name": "Sweetwater",
+      "code": "WYSWE"
+    },
+    {
+      "state": "WY",
+      "name": "Weston",
+      "code": "WYWES"
+    },
+    {
+      "state": "WY",
+      "name": "Converse",
+      "code": "WYCON"
+    },
+    {
+      "state": "WY",
+      "name": "Johnson",
+      "code": "WYJOH"
+    },
+    {
+      "state": "WY",
+      "name": "Park",
+      "code": "WYPAR"
+    }
+  ]
+}

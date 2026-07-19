@@ -356,6 +356,18 @@ export function LogHistoryPlugin() {
     queryFn: () => api.getStatistics(),
   });
 
+  // Resolve a QSO's contestId → the definition's display name for the Contest column.
+  const { data: contestDefs } = useQuery({
+    queryKey: ['contest-definitions'],
+    queryFn: () => api.getContestDefinitions(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const contestNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    contestDefs?.forEach((d) => map.set(d.id, d.name));
+    return map;
+  }, [contestDefs]);
+
   const qsos = response?.items || [];
   const totalCount = response?.totalCount || 0;
   const totalPages = response?.totalPages || 1;
@@ -463,6 +475,21 @@ export function LogHistoryPlugin() {
       resizable: true,
     },
     {
+      // Contest column — which contest this QSO was logged under. Resolves the
+      // stored ContestDefinition id to its display name, falling back to the raw
+      // id if the definition is gone. Blank for casual QSOs.
+      headerName: 'Contest',
+      field: 'contestId',
+      valueGetter: (params) => {
+        const id = params.data?.contestId;
+        if (!id) return '';
+        return contestNameById.get(id) ?? id;
+      },
+      cellClass: 'text-dark-300 truncate',
+      width: 130,
+      resizable: true,
+    },
+    {
       // Remarks column — v1.x parity. Log-entry writes the "Remarks" field
       // into Qso.Comment (the ADIF-exported field), so we surface it here.
       // Fills the previously-blank gap between Country and the action icons.
@@ -488,7 +515,7 @@ export function LogHistoryPlugin() {
       sortable: false,
       pinned: 'right',
     },
-  ], []);
+  ], [contestNameById]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -571,7 +598,10 @@ export function LogHistoryPlugin() {
         </div>
       }
     >
-      <div className="p-4 space-y-4">
+      {/* Fill the panel rather than the viewport: h-full + a flex column lets the
+          grid take the leftover space and keeps the pagination row on screen at
+          any panel height. */}
+      <div className="p-4 space-y-4 h-full flex flex-col min-h-0">
         {/* QRZ Sync Starting (before first progress event) */}
         {isSyncing && !qrzSyncProgress && (
           <div className="bg-dark-700/80 rounded-lg p-3 border border-accent-info/30">
@@ -814,7 +844,7 @@ export function LogHistoryPlugin() {
 
         {/* Summary — single line, counts spread across the panel to save vertical space */}
         {stats && (
-          <div className="bg-dark-700/50 rounded-lg px-5 py-1.5 flex items-center justify-between flex-nowrap gap-x-6 overflow-x-auto whitespace-nowrap font-ui leading-none">
+          <div className="shrink-0 bg-dark-700/50 rounded-lg px-5 py-1.5 flex items-center justify-between flex-nowrap gap-x-6 overflow-x-auto whitespace-nowrap font-ui leading-none">
             <span className="font-medium text-dark-200 text-sm">Summary</span>
             <span className="flex items-baseline gap-2">
               <span className="font-display font-bold text-accent-primary text-xl leading-none">{stats.totalQsos.toLocaleString()}</span>
@@ -839,7 +869,7 @@ export function LogHistoryPlugin() {
         )}
 
         {/* Search and Filters Row */}
-        <div className="flex gap-3 flex-wrap">
+        <div className="shrink-0 flex gap-3 flex-wrap">
           {/* Callsign Search */}
           <div className="flex-1 min-w-[150px] relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300" />
@@ -966,7 +996,7 @@ export function LogHistoryPlugin() {
         )}
 
         {/* AG Grid Table */}
-        <div className="ag-theme-alpine-dark h-[calc(100vh-380px)]">
+        <div className="ag-theme-alpine-dark flex-1 min-h-0">
           {isLoading ? (
             <div className="flex items-center justify-center py-8 text-dark-300">
               <Radio className="w-4 h-4 animate-spin mr-2" />
@@ -994,9 +1024,9 @@ export function LogHistoryPlugin() {
           )}
         </div>
 
-        {/* Pagination */}
+        {/* Pagination — shrink-0 so it's never squeezed out by the grid above */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-2 border-t border-glass-100">
+          <div className="shrink-0 flex items-center justify-between pt-2 border-t border-glass-100">
             <div className="text-sm text-dark-300 font-mono">
               Showing {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalCount)} of {totalCount.toLocaleString()}
             </div>
