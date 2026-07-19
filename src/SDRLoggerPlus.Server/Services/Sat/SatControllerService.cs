@@ -360,7 +360,8 @@ public class SatControllerService : BackgroundService
             TimeOn = now.ToString("HHmm"),
             Band = band,
             Mode = satQso.Mode,
-            Frequency = downMhz,
+            // Qso.Frequency is kHz; band/FREQ_RX stay in MHz.
+            Frequency = downMhz * 1000.0,
             RstSent = satQso.RstSent,
             RstRcvd = satQso.RstReceived,
             Comment = satQso.Comment,

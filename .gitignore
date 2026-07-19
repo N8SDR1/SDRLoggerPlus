@@ -90,3 +90,7 @@ src/SDRLoggerPlus.Server/*.db
 src/SDRLoggerPlus.Desktop/backend/
 src/SDRLoggerPlus.Desktop/dist/
 .superpowers/
+
+# Git worktrees created inside the repo (git tracks them itself; without this
+# they show up as a huge untracked directory in the main checkout)
+.worktrees/

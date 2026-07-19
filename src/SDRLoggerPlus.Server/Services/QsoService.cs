@@ -108,8 +108,10 @@ public class QsoService : IQsoService
             qso.AdifExtra["prop_mode"] = "SAT";
             if (!string.IsNullOrWhiteSpace(request.Satellite))
                 qso.AdifExtra["sat_name"] = request.Satellite.Trim().ToUpperInvariant();
+            // UplinkFreq/DownlinkFreq are MHz on the wire (see QsoDto). Qso.Frequency
+            // is kHz, but freq_rx is exported raw so it stays MHz.
             if (request.UplinkFreq.HasValue)
-                qso.Frequency = request.UplinkFreq;
+                qso.Frequency = request.UplinkFreq.Value * 1000.0;
             if (!string.IsNullOrWhiteSpace(request.UpMode))
                 qso.Mode = request.UpMode;
             if (request.DownlinkFreq.HasValue)

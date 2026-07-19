@@ -4,7 +4,7 @@ import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, Loc
 import { api, CreateQsoRequest, SatState } from '../api/client';
 import { signalRService, setTciMetersCallback, clearTciMetersCallback, type TciMetersEvent } from '../api/signalr';
 import { S9_DBM, DB_PER_S_UNIT } from '../utils/smeter';
-import { spotKhzToMhzString, spotKhzToHz } from '../utils/frequency';
+import { spotKhzToMhzString, spotKhzToHz, formMhzToStoredKhz, rigHzToStoredKhz } from '../utils/frequency';
 import { useSignalR } from '../hooks/useSignalR';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -278,9 +278,9 @@ export function LogEntryPlugin() {
   // Get current radio state
   const currentRadioState = selectedRadioId ? radioStates.get(selectedRadioId) : null;
 
-  // Auto-populate from radio state when followRadio is enabled. Freq
-  // is stored as MHz (matches v1.x display + ADIF convention) — six
-  // decimals to preserve sub-Hz precision from the rig.
+  // Auto-populate from radio state when followRadio is enabled. The form
+  // DISPLAYS MHz (v1.x parity); it is converted to kHz on submit, which is
+  // how Qso.Frequency is stored. Six decimals preserve sub-Hz rig precision.
   useEffect(() => {
     if (followRadio && currentRadioState) {
       const frequencyMhz = (currentRadioState.frequencyHz / 1_000_000).toFixed(6);
@@ -559,10 +559,12 @@ export function LogEntryPlugin() {
     // Combo sends Lyra's app mode (CWU/CWL/USB/…); normalizeMode maps it into
     // our canonical set. Absent override → the form's mode (already synced).
     const mode = overrides?.mode ? normalizeMode(overrides.mode) : formData.mode;
-    // Combo carries Hz; the form + backend Qso.Frequency use MHz (v1.x + ADIF).
+    // Combo carries Hz and the form displays MHz (v1.x parity), but backend
+    // Qso.Frequency is stored in kHz — ADIF export divides by 1000 to get MHz.
+    // Convert at this boundary only; the form stays MHz.
     const frequency = (overrides?.frequencyHz && overrides.frequencyHz > 0)
-      ? overrides.frequencyHz / 1e6
-      : (formData.frequency ? parseFloat(formData.frequency) : undefined);
+      ? rigHzToStoredKhz(overrides.frequencyHz)
+      : (formData.frequency ? formMhzToStoredKhz(parseFloat(formData.frequency)) : undefined);
 
     // Use the timestamp from state (either live or manual)
     const qsoDateTime = new Date(`${qsoDate}T${qsoTime}:00.000Z`);
