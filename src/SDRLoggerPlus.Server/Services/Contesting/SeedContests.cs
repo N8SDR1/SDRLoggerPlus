@@ -105,7 +105,9 @@ public static class SeedContests
                 Pts(5, sameCountry: 2, otherCont: 10),
                 new[] { M(MultSource.State), M(MultSource.Dxcc) });
 
-        yield return D("cq-vhf", "CQ VHF", "CQ-VHF", new() { "6M", "2M" }, new[] { "CW", "SSB", "FT8" },
+        // NOTE: 2m QSOs officially count 2 points (6m = 1); the flat Pts model can't
+        // express per-band points yet — tracked in the contest-scoring audit issue.
+        yield return D("cq-vhf", "CQ VHF", "CQ-VHF", new() { "6M", "2M" }, new[] { "CW", "SSB", "FM", "FT8" },
             new[] { Grid() }, new[] { Grid() }, Pts(1),
             new[] { M(MultSource.Grid, true) });
 
@@ -194,7 +196,10 @@ public static class SeedContests
         yield return D("arrl-vhf", "ARRL VHF", "ARRL-VHF", VhfBands, new[] { "CW", "SSB", "FT8" },
             new[] { Grid() }, new[] { Grid() }, Pts(1), new[] { M(MultSource.Grid, true) });
 
-        yield return D("arrl-digital", "ARRL International Digital", "ARRL-DIGITAL", Hf6, new[] { "FT8", "FT4", "RTTY" },
+        // RTTY is explicitly EXCLUDED from the ARRL International Digital Contest.
+        // NOTE: points are officially distance-based (1 + 1/500 km) — the flat Pts
+        // model can't express that yet; tracked in the contest-scoring audit issue.
+        yield return D("arrl-digital", "ARRL International Digital", "ARRL-DIGITAL", Hf6, new[] { "FT8", "FT4" },
             new[] { Grid() }, new[] { Grid() }, Pts(1), new[] { M(MultSource.Grid, true) });
 
         foreach (var (m, cab) in New("ARRL-SS", "CW", "SSB"))
@@ -219,8 +224,13 @@ public static class SeedContests
     // ---- DX / regional ----------------------------------------------------
     private static IEnumerable<ContestDefinition> DxRegional()
     {
+        // Stew Perry has NO grid multiplier — grids exist only to compute distance.
+        // Real scoring = (1 + 1/500 km distance) per QSO, scaled by worked- and
+        // own-station power multipliers. The flat model can't express distance/power
+        // yet (tracked in the audit issue); the bogus Grid mult is removed so it
+        // doesn't inflate the score with a multiplier the rules don't have.
         yield return D("stew-perry", "Stew Perry Topband", "STEW-PERRY", new() { "160M" }, new[] { "CW" },
-            new[] { Grid() }, new[] { Grid() }, Pts(1), new[] { M(MultSource.Grid) });
+            new[] { Grid() }, new[] { Grid() }, Pts(1), Array.Empty<MultRule>());
     }
 
     // ---- sprints, clubs, NAQP, digital roundups ---------------------------
