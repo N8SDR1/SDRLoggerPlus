@@ -67,6 +67,11 @@ export function StatusBar() {
     } else {
       localStorage.setItem(VOLUME_BEFORE_MUTE, String(voiceVolume));
       updateVoiceSettings({ volume: 0 });
+      // Volume is baked into an utterance when it's created, so zeroing it only
+      // silences future announcements — whatever is mid-sentence keeps talking.
+      // Kill the in-flight utterance and anything queued behind it so mute means
+      // "quiet now", not "quiet after this one finishes".
+      if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
     }
     // update* only touches local state; persist so the toggle survives a restart.
     saveSettings().catch((e) => console.warn('[status-bar] mute save failed', e));
@@ -128,7 +133,7 @@ export function StatusBar() {
         <button
           onClick={toggleMute}
           className={`p-1 rounded transition-colors hover:bg-dark-600 ${
-            muted ? 'text-accent-danger' : 'text-gray-400 hover:text-accent-secondary'
+            muted ? 'text-accent-danger' : 'text-accent-success'
           }`}
           title={muted ? 'Announcements muted — click to unmute' : 'Mute announcements'}
           aria-label={muted ? 'Unmute announcements' : 'Mute announcements'}
