@@ -1465,6 +1465,20 @@ function RotatorSettingsSection() {
 function RbnAlertsSettingsSection() {
   const { settings, updateRbnAlertSettings } = useSettingsStore();
   const rbn = settings.rbnAlerts;
+
+  // Alert Distance is held as draft text while typing and only committed on
+  // blur/Enter. Committing per keystroke saved every intermediate value — typing
+  // "500" over a cleared field stored 5, then 50 — so an interrupted edit left a
+  // distance nobody chose. An unparseable value falls back to the current
+  // setting rather than a magic default, so a stray edit can't invent a number.
+  const [distanceDraft, setDistanceDraft] = useState<string | null>(null);
+  const commitDistance = () => {
+    const parsed = parseFloat(distanceDraft ?? '');
+    if (Number.isFinite(parsed)) {
+      updateRbnAlertSettings({ distance: Math.min(5000, Math.max(1, parsed)) });
+    }
+    setDistanceDraft(null); // fall back to the stored value on empty/garbage
+  };
   const bands: { key: 'band10m' | 'band6m' | 'band2m' | 'band70cm'; label: string }[] = [
     { key: 'band10m', label: '10m' },
     { key: 'band6m', label: '6m' },
@@ -1543,10 +1557,12 @@ function RbnAlertsSettingsSection() {
             <div className="flex items-center gap-2">
               <input
                 type="number"
-                value={rbn.distance}
+                value={distanceDraft ?? rbn.distance}
                 min={1}
                 max={5000}
-                onChange={(e) => updateRbnAlertSettings({ distance: parseFloat(e.target.value) || 500 })}
+                onChange={(e) => setDistanceDraft(e.target.value)}
+                onBlur={commitDistance}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                 className="glass-input flex-1 font-mono"
               />
               <select
