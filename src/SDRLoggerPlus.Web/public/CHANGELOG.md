@@ -3,6 +3,50 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-19 — v2.6.0 "Vega+" 🌟
+
+Contest release: a rule-aware contest logger for the ARRL & CQ majors, plus a
+serious frequency-unit fix and several logging correctness fixes.
+
+### New
+- **Contest suite** — data-driven contest logging for the ARRL / CQ majors
+  (CQ WW / WPX / 160 / RTTY, ARRL DX / Sweepstakes / 10 m / 160 m / RTTY Roundup /
+  Field Day, NAQP, NA Sprint and more). **Contest Entry** window with per-contest
+  and per-worked-station exchange fields, live dupe flagging, running score,
+  serials, and quick-edit / delete with logbook sync; standalone **Contest Score**
+  and **Multipliers** panels; a dupe/mult-coloured **Bandmap**; power-class score
+  multiplier; in-session config, role override, and a resume-session guard.
+  Built-ins are read-only (clone to customise).
+- **Starter layouts** — a desktop **View → Layouts** menu with five ready-made
+  workspaces (General, Contest, POTA, Satellite, Digital) plus save / apply / reset.
+- **Rig setup moved to Settings → Station** — the standalone Rig panel is gone;
+  the status-bar rig selector's "Manage radios" opens Station settings.
+- **Status-bar Mute** — one button silences all spoken announcements (green
+  audible / red muted) and cuts off speech mid-sentence.
+- **Log Entry auto-fill** — QTH (city + state) and a new **Grid** box fill from the
+  callbook lookup; WSJT-X auto-logged QSOs get callbook gap-fill (external data
+  keeps precedence).
+- **Combo: auto "+dB over S9"** — with the Lyra Combo link, RST-Rcvd's over-S9
+  field now fills from the meter (nearest 5 dB), on top of the auto S digit.
+
+### Changed
+- Panels size to their container, not the viewport — no more bottom clipping.
+
+### Fixed
+- **QSO frequency unit (1000×).** Uploads to ClubLog / eQSL / HRDLog sent the
+  frequency **1000× too high**, and several write paths stored MHz into the kHz
+  field. Frequency is now canonical **kHz** end-to-end (forms still show MHz).
+- **Edit-a-QSO date shift.** Editing a QSO could move it a day (local vs UTC);
+  edits are now done in UTC.
+- **Contest QSO export time.** Contest QSOs exported `TIME_ON=000000`; the real
+  time of day is now kept.
+- **Settings numeric inputs.** Typed fields committed on every keystroke with a
+  fallback (typing "500" could strand "5", e.g. silently disabling RBN alerts or
+  over-pruning backups). Fields now commit on blur / Enter, clamped to range.
+- **Contest rule corrections** — ARRL International Digital drops RTTY (excluded
+  by the rules); CQ WW VHF adds FM; Stew Perry's non-existent grid multiplier is
+  removed. (Remaining band-weighted / distance scoring is tracked as a known gap.)
+
 ## 2026-07-18 — v2.5.0 "Vega+" 🌟
 
 Fit-more-on-screen release: scale the UI to your display, plus two logging fixes.

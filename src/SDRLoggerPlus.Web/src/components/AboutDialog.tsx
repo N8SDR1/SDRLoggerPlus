@@ -194,6 +194,7 @@ const HELP_SECTIONS = [
   { id: 'radio',    title: 'Your Radio' },
   { id: 'combo',    title: 'The Lyra Combo Link' },
   { id: 'logging',  title: 'Logging QSOs' },
+  { id: 'contest',  title: 'Contest Logging' },
   { id: 'spots',    title: 'DX Spots & the Map' },
   { id: 'decodes',  title: 'Digital Decodes & Grid' },
   { id: 'weather',  title: 'Weather & Alerts' },
@@ -275,7 +276,7 @@ function HelpTab() {
         </Section>
 
         <Section id="radio" title="Your Radio">
-          <p>Connect from the <B>Rig</B> panel — three paths, and more than one can run at once:</p>
+          <p>Set up radios in <B>Settings → Station</B> (or right-click the status-bar rig selector) — three connection paths, and more than one can run at once:</p>
           <ul className="ml-4 list-disc space-y-1.5">
             <li>
               <B>TCI</B> — works with{' '}
@@ -313,6 +314,17 @@ function HelpTab() {
             <li><B>SAT</B> — satellite QSOs. Auto-fills satellite + uplink/downlink freq &amp; mode from a connected CSN S.A.T. controller (<P>Settings → S.A.T.</P>); writes ADIF sat fields for LoTW credit.</li>
           </ul>
           <p>RST defaults sensibly per mode (599 CW / 59 phone). With the Combo link on, the received <B>S</B> can auto-fill from the meter (see above).</p>
+        </Section>
+
+        <Section id="contest" title="Contest Logging">
+          <p>The <B>contest suite</B> turns SDRLogger+ into a rule-aware contest logger for the ARRL and CQ majors (CQ WW / WPX / 160 / RTTY, ARRL DX / Sweepstakes / 10 m / 160 m / RTTY Roundup / Field Day, NAQP, NA Sprint and more). Pick a contest and it drives the exchange fields, dupe checking, and scoring for you.</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>Contest Entry</B> — a focused entry window with the right exchange fields for the contest (and for each worked station, e.g. a state vs a serial), live <B>dupe</B> flagging, a running <B>score</B>, serial numbers, and quick-edit / delete of a logged QSO with logbook sync. Open it from the <B>Contest</B> tab in Log Entry.</li>
+            <li><B>Contest Score</B> and <B>Multipliers</B> panels — standalone running-score and needed-multiplier displays.</li>
+            <li><B>Bandmap</B> — cluster spots coloured by dupe / new-multiplier for the running contest.</li>
+            <li><B>Power class</B> sets the final-score multiplier where the rules use one (e.g. Field Day QRP ×5).</li>
+          </ul>
+          <p className="text-xs text-dark-300">Built-in definitions are read-only — <B>clone</B> one to tweak a ruleset, or author your own. Exchanges, dupes and multipliers are correct across the catalog; scoring is exact for the well-known contests, and a few that use band-weighted or distance-based points are still being refined.</p>
         </Section>
 
         <Section id="spots" title="DX Spots & the Map">
@@ -394,6 +406,8 @@ function HelpTab() {
         <Section id="settings" title="Settings & Shortcuts">
           <p><B>Arrange your workspace.</B> Every panel <B>docks and drags</B> — grab a panel's title bar to move it, split the view, or tab panels together however you like, and the arrangement is remembered across sessions. Once you've built an operating position you like, save it: <P>Settings → Appearance → Layout Presets</P> holds up to <B>3 named layouts</B> to switch between (say, one for casual logging and one for a DX pileup).</p>
           <p>Every panel has its own <B>gear</B> (top-right of the header) for panel-specific tuning. The main <P>Settings</P> sections: Station · Web Logbooks · Alerts · ADIF Monitor · Decoder Link (UDP) · Digital Decode Alerts · Band Openings · Rotator · Backup &amp; Restore · S.A.T. · Appearance · Map · Header Bar · Chat AI · About.</p>
+          <p><B>Starter layouts.</B> The desktop app's <B>View → Layouts</B> menu has five ready-made workspaces — <B>General, Contest, POTA, Satellite, Digital</B> — plus save / apply / reset, on top of your own 3 named presets.</p>
+          <p><B>Mute.</B> The speaker button in the status bar silences all spoken announcements — green when audible, red when muted; it also cuts off whatever is mid-sentence.</p>
           <p><B>UI scale — fit more on screen.</B> Two independent, down-only (70–100%) zoom controls for smaller or high-density displays. <B>Whole-app zoom</B> (desktop app): the <B>View</B> menu or <span className="font-mono text-accent-primary">Ctrl +</span> / <span className="font-mono text-accent-primary">Ctrl −</span> / <span className="font-mono text-accent-primary">Ctrl 0</span>, also as a stepper in <P>Settings → Appearance → UI Scale</P>. <B>Per-panel scale</B>: the small <span className="font-mono">− % +</span> stepper in each panel's tabset header shrinks just that panel (click the % to reset); it's saved with your layout. The Map, Globe and Panadapter don't scale (their canvas geometry needs true pixels).</p>
           <p><B>Units (imperial / metric).</B> One master switch — <P>Settings → Appearance → Units</P> — sets how every physical value is shown app-wide: distance to DX, satellite range / altitude / footprint, header temperature &amp; wind, and lightning proximity. A few features can override it: the Weather <B>wind</B> switch defaults to <B>Auto</B> (follow the master) but can be pinned to mph or kph on its own, and the RBN Band-Openings and the lightning <B>Alert range</B> keep their own mi / km pickers — the lightning banner shows the strike distance in that same unit.</p>
           <p className="text-xs text-dark-300">Tip: the <B>Appearance</B> section has the theme picker (dark, night-ops, midnight, and more).</p>
