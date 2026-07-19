@@ -12,6 +12,7 @@ import { getCountryFlag } from '../core/countryFlags';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAgGridState } from '../hooks/useAgGridState';
+import { utcDatePart, toUtcInstant } from '../utils/qsoDateTime';
 
 // Common RST values for phone modes (SSB, AM, FM)
 const RST_PHONE = ['59', '58', '57', '56', '55', '54', '53', '52', '51'];
@@ -77,9 +78,13 @@ const FlagCellRenderer = (props: ICellRendererParams<QsoResponse>) => {
 
 // Custom cell renderer for date with calendar icon
 const DateCellRenderer = (props: ICellRendererParams<QsoResponse>) => {
+  // Rendered in UTC to match the Time column beside it, which shows the raw UTC
+  // TimeOn. Formatting locally put an evening QSO's date a day behind its own
+  // time, e.g. "Jun 26 · 0452" for a contact made 04:52 UTC on the 27th.
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', {
+      timeZone: 'UTC',
       month: 'short',
       day: 'numeric',
       year: '2-digit'
@@ -1469,7 +1474,9 @@ function EditQsoModal({
 }) {
   const [formData, setFormData] = useState({
     callsign: qso.callsign,
-    qsoDate: qso.qsoDate.split('T')[0],
+    // UTC date to match the "Time (UTC)" field beside it. Slicing the raw string
+    // would show the local date, which is a day behind for evening QSOs.
+    qsoDate: utcDatePart(qso.qsoDate),
     timeOn: qso.timeOn,
     band: qso.band,
     mode: qso.mode,
@@ -1491,7 +1498,9 @@ function EditQsoModal({
     e.preventDefault();
     onSave({
       callsign: formData.callsign,
-      qsoDate: formData.qsoDate,
+      // Send the full instant: a bare date deserialises to midnight server-side
+      // and would throw away the time of day.
+      qsoDate: toUtcInstant(formData.qsoDate, formData.timeOn),
       timeOn: formData.timeOn,
       band: formData.band,
       mode: formData.mode,
@@ -1523,7 +1532,7 @@ function EditQsoModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-dark-300 mb-1 font-ui">Date</label>
+              <label className="block text-sm text-dark-300 mb-1 font-ui">Date (UTC)</label>
               <input
                 type="date"
                 value={formData.qsoDate}
