@@ -33,10 +33,13 @@
 name: Tests
 
 on:
+  # No branch filter: `pull_request.branches` matches the PR's BASE branch, so
+  # `[main]` meant this pipeline never ran on real work — everything targets
+  # v2-alpha. Running on every PR regardless of base also survives the eventual
+  # v2-alpha -> main cutover without another edit here.
   pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    branches: [v2-alpha, main]
   workflow_dispatch:
     inputs:
       run_ai_tests:
