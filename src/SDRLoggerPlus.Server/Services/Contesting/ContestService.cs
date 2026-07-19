@@ -370,7 +370,7 @@ public class ContestService
 
     // -- helpers -------------------------------------------------------------
 
-    private static Qso BuildQso(ContestSession session, ContestDefinition def, LogContestQsoRequest request, bool enrich)
+    internal static Qso BuildQso(ContestSession session, ContestDefinition def, LogContestQsoRequest request, bool enrich)
     {
         var now = DateTime.UtcNow;
         var exchange = request.Exchange ?? new Dictionary<string, string>();
@@ -379,7 +379,10 @@ public class ContestService
         var qso = new Qso
         {
             Callsign = request.Callsign.Trim().ToUpperInvariant(),
-            QsoDate = now.Date,
+            // Keep the time of day: ADIF export derives both QSO_DATE and TIME_ON
+            // from QsoDate, so truncating to .Date here exported every contest QSO
+            // as TIME_ON=000000 no matter what TimeOn held.
+            QsoDate = now,
             TimeOn = now.ToString("HHmmss"),
             Band = request.Band,
             Mode = request.Mode,
