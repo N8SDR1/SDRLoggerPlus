@@ -95,7 +95,13 @@ public class LiteCallsignImageRepositoryTests : IDisposable
         await _repo.UpsertAsync(image);
 
         var result = await _repo.GetRecentAsync(1);
-        result[0].SavedAt.Should().BeAfter(before);
+
+        // The repository writes DateTime.UtcNow, but LiteDB hands the value back with
+        // Kind=Local — the same instant, re-expressed in local time. DateTime
+        // comparison ignores Kind and does no conversion, so comparing the raw value
+        // against a UTC baseline is wrong by the machine's UTC offset: it passes on a
+        // UTC CI runner and fails everywhere else. Normalise before comparing.
+        result[0].SavedAt.ToUniversalTime().Should().BeAfter(before);
     }
 
     [Fact]
