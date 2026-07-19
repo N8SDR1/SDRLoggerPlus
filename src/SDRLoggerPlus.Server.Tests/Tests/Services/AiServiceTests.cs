@@ -82,6 +82,29 @@ public class AiServiceTests
         return new HttpClient(handler.Object);
     }
 
+    /// <summary>
+    /// Like CreateMockHttpClient, but records the requests it serves so a test can
+    /// assert which provider endpoint the service actually called.
+    /// </summary>
+    private static HttpClient CreateCapturingHttpClient(
+        HttpStatusCode statusCode, string responseBody, List<HttpRequestMessage> captured)
+    {
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => captured.Add(req))
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = statusCode,
+                Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
+            });
+
+        return new HttpClient(handler.Object);
+    }
+
     #region GenerateTalkPointsAsync
 
     [Fact]
@@ -313,36 +336,77 @@ public class AiServiceTests
         result.ErrorMessage.Should().NotBeNullOrEmpty();
     }
 
+    /// <summary>
+    /// An unrecognised provider name is NOT an error: since 764b3f5 the service keeps
+    /// a native path for Anthropic and treats everything else as OpenAI-compatible,
+    /// which is what makes the "Custom (OpenAI-compatible)" preset and its Base-URL
+    /// field work. So the key test succeeds or fails on what the endpoint says, not
+    /// on whether we recognise the provider string.
+    /// </summary>
     [Fact]
-    public async Task TestApiKeyAsync_UnsupportedProvider_ReturnsInvalid()
+    public async Task TestApiKeyAsync_UnrecognisedProvider_UsesOpenAiCompatiblePath()
     {
-        var httpClient = CreateMockHttpClient(HttpStatusCode.OK, "{}");
+        var captured = new List<HttpRequestMessage>();
+        var httpClient = CreateCapturingHttpClient(HttpStatusCode.OK, "{}", captured);
         var service = CreateService(httpClient);
 
-        var result = await service.TestApiKeyAsync(new TestApiKeyRequest("unsupported", "key", "model"));
+        var result = await service.TestApiKeyAsync(new TestApiKeyRequest("unrecognised", "key", "model"));
+
+        result.IsValid.Should().BeTrue();
+        result.ErrorMessage.Should().BeNull();
+        captured.Should().ContainSingle();
+        captured[0].RequestUri!.ToString().Should().StartWith("https://api.openai.com/v1");
+    }
+
+    /// <summary>
+    /// The same unrecognised provider still reports a failure when the endpoint
+    /// rejects the key — proving the OK result above comes from the endpoint rather
+    /// than from the service skipping the call.
+    /// </summary>
+    [Fact]
+    public async Task TestApiKeyAsync_UnrecognisedProviderWithBadKey_ReturnsInvalid()
+    {
+        var httpClient = CreateMockHttpClient(HttpStatusCode.Unauthorized, "{\"error\": \"invalid_api_key\"}");
+        var service = CreateService(httpClient);
+
+        var result = await service.TestApiKeyAsync(new TestApiKeyRequest("unrecognised", "bad-key", "model"));
 
         result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().NotBeNullOrEmpty();
     }
 
     #endregion
 
     #region Provider Routing
 
+    /// <summary>
+    /// An unrecognised provider routes through the OpenAI-compatible path rather than
+    /// throwing (see TestApiKeyAsync_UnrecognisedProvider_UsesOpenAiCompatiblePath).
+    /// Serving an OpenAI-shaped body and getting talk points back proves the routing:
+    /// the Anthropic parser reads `content[].text` and would yield nothing from this.
+    /// </summary>
     [Fact]
-    public async Task GenerateTalkPointsAsync_UnsupportedProvider_ThrowsInvalidOperation()
+    public async Task GenerateTalkPointsAsync_UnrecognisedProvider_UsesOpenAiCompatiblePath()
     {
-        SetupSettingsWithAi("unsupported_provider", "key", "model");
+        SetupSettingsWithAi("unrecognised_provider", "key", "model");
         SetupEmptyQsoHistory();
         _qrzServiceMock.Setup(s => s.LookupCallsignAsync(It.IsAny<string>())).ReturnsAsync((QrzCallsignInfo?)null);
         _qrzServiceMock.Setup(s => s.GetBiographyAsync(It.IsAny<string>())).ReturnsAsync((string?)null);
 
-        var httpClient = CreateMockHttpClient(HttpStatusCode.OK, "{}");
+        var openAiResponse = JsonSerializer.Serialize(new
+        {
+            choices = new[] { new { message = new { content = "1. Mention propagation\n2. Ask about antenna" } } }
+        });
+
+        var captured = new List<HttpRequestMessage>();
+        var httpClient = CreateCapturingHttpClient(HttpStatusCode.OK, openAiResponse, captured);
         var service = CreateService(httpClient);
 
-        var act = () => service.GenerateTalkPointsAsync(new GenerateTalkPointsRequest("W1AW"));
+        var result = await service.GenerateTalkPointsAsync(new GenerateTalkPointsRequest("W1AW"));
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Unsupported AI provider*");
+        result.TalkPoints.Should().NotBeEmpty();
+        captured.Should().ContainSingle();
+        captured[0].RequestUri!.ToString().Should().StartWith("https://api.openai.com/v1");
     }
 
     #endregion
