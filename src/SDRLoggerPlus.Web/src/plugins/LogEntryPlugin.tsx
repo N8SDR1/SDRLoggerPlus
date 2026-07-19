@@ -649,7 +649,19 @@ export function LogEntryPlugin() {
     peakRxDbmRef.current = dbm;
     const s = dbmToSDigit(dbm);
     const rst = isCwMode(formData.mode) ? `5${s}9` : `5${s}`;
-    setFormData(prev => (prev.rstRcvd === rst ? prev : { ...prev, rstRcvd: rst }));
+    // At/over S9 the S digit caps at 9, so report the excess in the "+dB over S9"
+    // field (nearest 5 dB) — the same field the operator can type into. Only for
+    // modes that use it (same gate as the field's visibility), and cleared below
+    // S9. Rides the peak-hold above, so it settles on the strongest reading of the
+    // exchange just like the S digit.
+    const overDb = Math.round((dbm - S9_DBM) / 5) * 5;
+    const plus = (supportsDbEnhancement(formData.mode) && s === 9 && overDb >= 5)
+      ? String(overDb)
+      : '';
+    setFormData(prev =>
+      (prev.rstRcvd === rst && prev.rstRcvdPlus === plus)
+        ? prev
+        : { ...prev, rstRcvd: rst, rstRcvdPlus: plus });
   };
   useEffect(() => {
     const handler = (evt: TciMetersEvent) => onMeterForRstRef.current(evt);
