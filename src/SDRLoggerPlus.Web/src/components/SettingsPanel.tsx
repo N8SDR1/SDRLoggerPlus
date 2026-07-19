@@ -177,11 +177,66 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
   },
 ];
 
+/**
+ * Props for a numeric settings input that holds draft text while the operator
+ * types, committing only on blur or Enter.
+ *
+ * Writing on every keystroke saves each intermediate value: typing "500" over
+ * a cleared field stores 5, then 50, then 500. An edit interrupted partway —
+ * clicking away, closing Settings — leaves whichever prefix landed last, and
+ * the stranded value is usually a working number rather than an obvious error,
+ * so nothing complains. An RBN alert distance of 5 miles silently disables
+ * band-opening alerts; a backup retention of 1 prunes every backup but the
+ * newest; a half-typed port just fails to connect.
+ *
+ * Empty or unparseable input keeps the current setting instead of falling back
+ * to a hardcoded default, so a stray edit can never substitute a number the
+ * operator did not choose. Pass onEmpty where clearing the field is itself
+ * meaningful (station latitude/longitude clear to null).
+ */
+function useNumericDraft(
+  current: number | null | undefined,
+  min: number,
+  max: number,
+  commit: (value: number) => void,
+  onEmpty?: () => void
+) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return {
+    value: draft ?? current ?? '',
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft(e.target.value),
+    onBlur: () => {
+      const raw = (draft ?? '').trim();
+      if (raw === '' && onEmpty) {
+        onEmpty();
+      } else {
+        const parsed = parseFloat(raw);
+        if (Number.isFinite(parsed)) commit(Math.min(max, Math.max(min, parsed)));
+      }
+      setDraft(null); // empty/garbage with no onEmpty falls back to the stored value
+    },
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') e.currentTarget.blur();
+    },
+  };
+}
+
 // Station Settings Section
 function StationSettingsSection() {
   const { settings, updateStationSettings } = useSettingsStore();
   const station = settings.station;
   const lastAutoFilledCoords = useRef<{ lat: number; lon: number } | null>(null);
+
+  // Coordinates commit on blur: a stranded prefix (-88 for -88.5) is a ~30 mile
+  // position error that quietly skews every distance and beam-heading result.
+  // Clearing the field is meaningful here — it resets the coordinate to null so
+  // the grid square takes over again.
+  const latitudeField = useNumericDraft(station.latitude, -90, 90,
+    (latitude) => updateStationSettings({ latitude }),
+    () => updateStationSettings({ latitude: null }));
+  const longitudeField = useNumericDraft(station.longitude, -180, 180,
+    (longitude) => updateStationSettings({ longitude }),
+    () => updateStationSettings({ longitude: null }));
 
   // Station info sync to app store is now handled in App.tsx
   // to ensure it runs even when settings panel is not open
@@ -313,12 +368,7 @@ function StationSettingsSection() {
             <input
               type="number"
               step="0.0001"
-              value={station.latitude ?? ''}
-              onChange={(e) =>
-                updateStationSettings({
-                  latitude: e.target.value ? parseFloat(e.target.value) : null,
-                })
-              }
+              {...latitudeField}
               placeholder="e.g. 52.6667"
               className="glass-input w-full font-mono"
             />
@@ -328,12 +378,7 @@ function StationSettingsSection() {
             <input
               type="number"
               step="0.0001"
-              value={station.longitude ?? ''}
-              onChange={(e) =>
-                updateStationSettings({
-                  longitude: e.target.value ? parseFloat(e.target.value) : null,
-                })
-              }
+              {...longitudeField}
               placeholder="e.g. -8.6333"
               className="glass-input w-full font-mono"
             />
@@ -809,6 +854,11 @@ function RotatorSettingsSection() {
   const [rotatorModels, setRotatorModels] = useState<HamlibRotatorModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelSearchTerm, setModelSearchTerm] = useState('');
+
+  const portField = useNumericDraft(rotator.port, 1, 65535,
+    (port) => updateRotatorSettings({ port }));
+  const pollingField = useNumericDraft(rotator.pollingIntervalMs, 100, 5000,
+    (pollingIntervalMs) => updateRotatorSettings({ pollingIntervalMs }));
 
   // Load available rotator models from hamlib
   const loadRotatorModels = async () => {
@@ -1301,8 +1351,9 @@ function RotatorSettingsSection() {
               </label>
               <input
                 type="number"
-                value={rotator.port}
-                onChange={(e) => updateRotatorSettings({ port: parseInt(e.target.value) || 4533 })}
+                min={1}
+                max={65535}
+                {...portField}
                 placeholder="4533"
                 className="glass-input w-full font-mono"
                 disabled={!rotator.enabled}
@@ -1413,8 +1464,7 @@ function RotatorSettingsSection() {
             </label>
             <input
               type="number"
-              value={rotator.pollingIntervalMs}
-              onChange={(e) => updateRotatorSettings({ pollingIntervalMs: parseInt(e.target.value) || 500 })}
+              {...pollingField}
               min={100}
               max={5000}
               step={100}
@@ -1460,42 +1510,6 @@ function RotatorSettingsSection() {
   );
 }
 
-
-/**
- * Props for a numeric settings input that holds draft text while the operator
- * types and only commits on blur or Enter.
- *
- * Committing on every keystroke saves each intermediate value: typing "500"
- * over a cleared field stores 5, then 50, then 500, and an edit interrupted
- * partway through (clicking away, closing Settings) leaves whichever prefix
- * landed last. That is how an RBN alert distance of 5 miles — which silently
- * disables band-opening alerts, since it needs a skimmer within 5 miles —
- * gets saved while typing 500.
- *
- * Empty or unparseable input keeps the current setting rather than falling
- * back to a hardcoded default, so a stray edit can never substitute a number
- * the operator did not choose.
- */
-function useNumericDraft(
-  current: number,
-  min: number,
-  max: number,
-  commit: (value: number) => void
-) {
-  const [draft, setDraft] = useState<string | null>(null);
-  return {
-    value: draft ?? current,
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft(e.target.value),
-    onBlur: () => {
-      const parsed = parseFloat(draft ?? '');
-      if (Number.isFinite(parsed)) commit(Math.min(max, Math.max(min, parsed)));
-      setDraft(null);
-    },
-    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') e.currentTarget.blur();
-    },
-  };
-}
 
 // RBN Band-Opening Alerts Settings Section
 function RbnAlertsSettingsSection() {
@@ -3655,6 +3669,12 @@ function BackupSettingsSection() {
   const [ioMessage, setIoMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
 
+  // Retention is pruned against after every successful backup, so a value
+  // stranded mid-edit deletes folders: typing "10" over a cleared field used to
+  // pass through 1, leaving only the newest backup on disk.
+  const retentionField = useNumericDraft(backup.retention, 1, 100,
+    (retention) => updateBackupSettings({ retention }));
+
   const handleExportSettings = async () => {
     try {
       const response = await fetch('/api/settings');
@@ -3771,10 +3791,10 @@ function BackupSettingsSection() {
         <label className="block text-sm font-medium text-dark-200 mb-1">Keep Last</label>
         <input
           type="number"
-          value={backup.retention}
-          onChange={(e) => updateBackupSettings({ retention: Math.max(1, parseInt(e.target.value) || 10) })}
+          {...retentionField}
           className="glass-input w-24"
           min={1}
+          max={100}
         />
         <p className="text-xs text-dark-400 mt-1">Number of backup folders to retain (oldest pruned first)</p>
       </div>
@@ -3868,6 +3888,9 @@ function HotListSettingsSection() {
   const hotList = settings.hotList;
   const [newCall, setNewCall] = useState('');
 
+  const ttsCooldownField = useNumericDraft(hotList.ttsCooldownMinutes, 1, 120,
+    (ttsCooldownMinutes) => updateHotListSettings({ ttsCooldownMinutes }));
+
   const addCall = () => {
     const call = newCall.trim().toUpperCase();
     if (!call || hotList.callsigns.includes(call)) {
@@ -3931,10 +3954,10 @@ function HotListSettingsSection() {
         <label className="block text-sm font-medium text-dark-200 mb-1">Announcement Cooldown (minutes)</label>
         <input
           type="number"
-          value={hotList.ttsCooldownMinutes}
-          onChange={(e) => updateHotListSettings({ ttsCooldownMinutes: Math.max(1, parseInt(e.target.value) || 15) })}
-          className="glass-input w-24"
           min={1}
+          max={120}
+          {...ttsCooldownField}
+          className="glass-input w-24"
         />
         <p className="text-xs text-dark-400 mt-1">A callsign won't be announced again until this many minutes pass</p>
       </div>
@@ -4050,6 +4073,9 @@ function WsjtxSourceCard({ title, subtitle, source, defaultPort, onPatch, status
   onPatch: (patch: Partial<WsjtxSource>) => void;
   status: WsjtxStatus | null;
 }) {
+  const portField = useNumericDraft(source.port, 1024, 65535,
+    (port) => onPatch({ port }));
+
   return (
     <div className="rounded-lg border border-glass-100 bg-dark-700/40 p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -4072,8 +4098,8 @@ function WsjtxSourceCard({ title, subtitle, source, defaultPort, onPatch, status
               <label className="block text-sm font-medium text-dark-200 mb-1">UDP Port</label>
               <input
                 type="number"
-                value={source.port}
-                onChange={(e) => onPatch({ port: parseInt(e.target.value) || defaultPort })}
+                {...portField}
+                placeholder={String(defaultPort)}
                 className="glass-input w-32"
                 min={1024}
                 max={65535}
@@ -4135,6 +4161,17 @@ function WeatherSettingsSection() {
   const toDisplay = (mph: number) => isKph ? Math.round(mph * 1.60934) : mph;
   const fromDisplay = (v: number) => isKph ? v / 1.60934 : v;
 
+  // Wind thresholds are edited in display units (mph or kph) and stored in mph,
+  // so the draft clamps against display-unit bounds before converting back.
+  const lightningRangeField = useNumericDraft(weather.lightning.range, 5, 500,
+    (range) => updateWeatherSettings({ lightning: { range } as never }));
+  const sustainedField = useNumericDraft(toDisplay(weather.wind.threshSustainedMph), 1, toDisplay(200),
+    (v) => updateWeatherSettings({ wind: { threshSustainedMph: fromDisplay(v) } as never }));
+  const gustField = useNumericDraft(toDisplay(weather.wind.threshGustMph), 1, toDisplay(200),
+    (v) => updateWeatherSettings({ wind: { threshGustMph: fromDisplay(v) } as never }));
+  const windCooldownField = useNumericDraft(weather.wind.cooldownMinutes, 1, 120,
+    (cooldownMinutes) => updateWeatherSettings({ wind: { cooldownMinutes } as never }));
+
   const Toggle = ({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) => (
     <label className="flex items-center gap-2 text-xs text-dark-300 cursor-pointer">
       <input type="checkbox" checked={checked} onChange={onChange} className="accent-accent-primary" />
@@ -4178,8 +4215,7 @@ function WeatherSettingsSection() {
         </div>
         <div className="flex items-center gap-2 text-xs">
           <span className="text-dark-300">Alert range</span>
-          <input type="number" value={weather.lightning.range} min={5}
-            onChange={(e) => updateWeatherSettings({ lightning: { range: parseInt(e.target.value) || 50 } as never })}
+          <input type="number" min={5} max={500} {...lightningRangeField}
             className="glass-input w-20" />
           <select value={weather.lightning.rangeUnit}
             onChange={(e) => updateWeatherSettings({ lightning: { rangeUnit: e.target.value as 'mi' | 'km' } as never })}
@@ -4225,12 +4261,10 @@ function WeatherSettingsSection() {
         )}
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-dark-300">Thresholds: sustained</span>
-          <input type="number" value={toDisplay(weather.wind.threshSustainedMph)}
-            onChange={(e) => updateWeatherSettings({ wind: { threshSustainedMph: fromDisplay(parseInt(e.target.value) || 30) } as never })}
+          <input type="number" {...sustainedField}
             className="glass-input w-16" />
           <span className="text-dark-300">gust</span>
-          <input type="number" value={toDisplay(weather.wind.threshGustMph)}
-            onChange={(e) => updateWeatherSettings({ wind: { threshGustMph: fromDisplay(parseInt(e.target.value) || 45) } as never })}
+          <input type="number" {...gustField}
             className="glass-input w-16" />
           <select value={weather.wind.displayUnit}
             onChange={(e) => updateWeatherSettings({ wind: { displayUnit: e.target.value as 'auto' | 'mph' | 'kph' } as never })}
@@ -4240,8 +4274,7 @@ function WeatherSettingsSection() {
             <option value="kph">kph</option>
           </select>
           <span className="text-dark-300">cooldown</span>
-          <input type="number" value={weather.wind.cooldownMinutes} min={1}
-            onChange={(e) => updateWeatherSettings({ wind: { cooldownMinutes: parseInt(e.target.value) || 20 } as never })}
+          <input type="number" min={1} max={120} {...windCooldownField}
             className="glass-input w-16" />
           <span className="text-dark-400">min</span>
         </div>
@@ -4404,6 +4437,11 @@ function SatSettingsSection() {
   const { settings, updateSatSettings } = useSettingsStore();
   const sat = settings.sat;
 
+  const udpPortField = useNumericDraft(sat.udpPort, 1, 65535,
+    (udpPort) => updateSatSettings({ udpPort }));
+  const adifPortField = useNumericDraft(sat.adifPort, 1, 65535,
+    (adifPort) => updateSatSettings({ adifPort }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -4447,8 +4485,9 @@ function SatSettingsSection() {
           <label className="block text-sm font-medium text-dark-200 mb-1">Broadcast UDP Port</label>
           <input
             type="number"
-            value={sat.udpPort}
-            onChange={(e) => updateSatSettings({ udpPort: parseInt(e.target.value) || 9932 })}
+            min={1}
+            max={65535}
+            {...udpPortField}
             className="glass-input w-28"
           />
           <p className="text-xs text-dark-400 mt-1">Default: 9932</p>
@@ -4457,8 +4496,9 @@ function SatSettingsSection() {
           <label className="block text-sm font-medium text-dark-200 mb-1">ADIF QSO Port</label>
           <input
             type="number"
-            value={sat.adifPort}
-            onChange={(e) => updateSatSettings({ adifPort: parseInt(e.target.value) || 1100 })}
+            min={1}
+            max={65535}
+            {...adifPortField}
             className="glass-input w-28"
           />
           <p className="text-xs text-dark-400 mt-1">Default: 1100 (S.A.T. QSO LOG TYPE)</p>
