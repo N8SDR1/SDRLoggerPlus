@@ -115,6 +115,25 @@ public class BlitzortungStrikesTests
     }
 
     [Fact]
+    public async Task GetStrikesAsync_TreatsArrayWithNoParseableRowsAsFeedFailure()
+    {
+        var handler = new MockHttpMessageHandler();
+        // A well-formed array whose rows no longer match the expected flat
+        // [lon, lat, timestamp, ...] shape — e.g. the feed switching to
+        // objects. Zero strikes parse, but that is schema drift, not quiet
+        // skies: reading it as an all-clear would drop an active alert.
+        handler.When("*getjson.php*").Respond("application/json",
+            "[{\"lon\":-91.6,\"lat\":44.9,\"time\":\"2026-07-06 12:00:01\"}," +
+            "{\"lon\":2.3,\"lat\":48.9,\"time\":\"2026-07-06 12:00:02\"}]");
+
+        var client = new BlitzortungClient(Factory(handler), NullLogger<BlitzortungClient>.Instance);
+        var fetch = await client.GetStrikesAsync(44.8, -91.6, rangeKm: 100, CancellationToken.None);
+
+        fetch.Strikes.Should().BeEmpty();
+        fetch.FeedOk.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task GetStrikesAsync_TreatsNonArrayBodyAsFeedFailure()
     {
         var handler = new MockHttpMessageHandler();

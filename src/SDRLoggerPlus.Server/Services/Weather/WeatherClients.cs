@@ -363,9 +363,10 @@ public class BlitzortungClient : IBlitzortungClient
 
     /// <summary>
     /// Fetch and parse the given time slices. FeedOk is true when at least one
-    /// slice returned a well-formed array — the newest slice alone is usable
-    /// data, so a partial failure is still real information, but a total
-    /// failure must not be mistaken for "no strikes".
+    /// slice returned a usable array (empty, or with at least one parseable
+    /// row) — the newest slice alone is usable data, so a partial failure is
+    /// still real information, but a total failure must not be mistaken for
+    /// "no strikes".
     /// </summary>
     private async Task<(List<LightningStrike> Strikes, bool FeedOk)> FetchSlicesAsync(
         IEnumerable<int> slices, CancellationToken ct)
@@ -385,9 +386,11 @@ public class BlitzortungClient : IBlitzortungClient
                 using var doc = JsonDocument.Parse(json);
                 // A non-array body is the feed misbehaving, not an all-clear.
                 if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
-                feedOk = true;
+                var rowCount = 0;
+                var parsedCount = 0;
                 foreach (var item in doc.RootElement.EnumerateArray())
                 {
+                    rowCount++;
                     // Flat arrays: [lon, lat, timestamp, ...]. The live feed sends the
                     // timestamp as a "yyyy-MM-dd HH:mm:ss.fffffffff" UTC string; the
                     // ns-since-epoch number form is accepted for compatibility.
@@ -398,7 +401,15 @@ public class BlitzortungClient : IBlitzortungClient
                     var lon = item[0].GetDouble();
                     var lat = item[1].GetDouble();
                     strikes.Add(new LightningStrike(lat, lon, ts.Value, Local: false));
+                    parsedCount++;
                 }
+                // An empty array is quiet skies; an array with rows and none
+                // parseable is schema drift — the same "feed misbehaving" case
+                // as a non-array body, and must not read as an all-clear.
+                if (rowCount == 0 || parsedCount > 0) feedOk = true;
+                else _logger.LogDebug(
+                    "Blitzortung slice {Slice}: {Rows} rows, none parseable — treating as feed failure",
+                    slice, rowCount);
             }
             catch (Exception ex)
             {
