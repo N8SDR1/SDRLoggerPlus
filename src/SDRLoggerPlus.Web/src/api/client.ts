@@ -323,6 +323,20 @@ class ApiClient {
     return this.fetch<QsoResponse>(`/qsos/${id}`);
   }
 
+  /**
+   * Probable-duplicate check for the Log Entry form. 200 + the prior QSO when
+   * the same call+band+mode was logged within the backend's dupe window,
+   * 204 (→ null) when the entry looks clean. Advisory — never blocks logging.
+   * Uses fetch directly because the shared helper can't express a 204.
+   */
+  async checkQsoDupe(callsign: string, band: string, mode: string): Promise<QsoResponse | null> {
+    const params = new URLSearchParams({ callsign, band, mode });
+    const response = await fetch(`${API_BASE}/qsos/dupe-check?${params}`);
+    if (response.status === 204) return null;
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    return response.json();
+  }
+
   async createQso(qso: CreateQsoRequest): Promise<QsoResponse> {
     return this.fetch<QsoResponse>('/qsos', {
       method: 'POST',

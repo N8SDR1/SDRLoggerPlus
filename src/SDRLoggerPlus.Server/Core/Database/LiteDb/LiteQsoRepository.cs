@@ -278,6 +278,22 @@ public class LiteQsoRepository : IQsoRepository
         return Task.FromResult<Qso?>(qso);
     }
 
+    public Task<Qso?> FindRecentDuplicateAsync(string callsign, string band, string mode, DateTime createdSinceUtc)
+    {
+        var call = callsign.Trim().ToUpperInvariant();
+        // Callsign + window go to LiteDB (CreatedAt is stored UTC, and LiteDB
+        // compares the UTC BSON values, so the read-side local-Kind conversion
+        // doesn't skew the window). Band/mode are compared in memory so the
+        // match is case-insensitive — the candidate set is tiny.
+        var qso = _context.Qsos
+            .Find(q => q.Callsign == call && q.CreatedAt >= createdSinceUtc)
+            .Where(q => string.Equals(q.Band, band, StringComparison.OrdinalIgnoreCase)
+                     && string.Equals(q.Mode, mode, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(q => q.CreatedAt)
+            .FirstOrDefault();
+        return Task.FromResult<Qso?>(qso);
+    }
+
     public Task<IEnumerable<Qso>> GetUnsyncedToQrzAsync()
     {
         var results = _context.Qsos.Find(q =>

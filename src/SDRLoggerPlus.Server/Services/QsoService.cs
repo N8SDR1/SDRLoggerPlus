@@ -29,9 +29,31 @@ public class QsoService : IQsoService
         _eqsl = eqsl;
     }
 
+    /// <summary>
+    /// How far back an identical (callsign, band, mode) entry counts as a
+    /// probable duplicate. 30 minutes catches double-clicks, UDP re-logs and
+    /// "did I already log him?" without flagging legit repeat contacts later
+    /// in the day.
+    /// </summary>
+    internal static readonly TimeSpan DupeWindow = TimeSpan.FromMinutes(30);
+
     public async Task<QsoResponse?> GetByIdAsync(string id)
     {
         var qso = await _repository.GetByIdAsync(id);
+        return qso is null ? null : MapToResponse(qso);
+    }
+
+    public async Task<QsoResponse?> CheckRecentDupeAsync(string callsign, string band, string mode)
+    {
+        if (string.IsNullOrWhiteSpace(callsign) ||
+            string.IsNullOrWhiteSpace(band) ||
+            string.IsNullOrWhiteSpace(mode))
+        {
+            return null;
+        }
+
+        var since = DateTime.UtcNow - DupeWindow;
+        var qso = await _repository.FindRecentDuplicateAsync(callsign, band, mode, since);
         return qso is null ? null : MapToResponse(qso);
     }
 

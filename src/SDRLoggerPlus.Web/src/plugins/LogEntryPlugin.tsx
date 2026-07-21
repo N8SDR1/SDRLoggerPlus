@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Swords, Radio as RadioIcon, Pencil, Megaphone, ArrowUp, ArrowDown } from 'lucide-react';
-import { api, CreateQsoRequest, SatState } from '../api/client';
+import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Swords, Radio as RadioIcon, Pencil, Megaphone, ArrowUp, ArrowDown, AlertTriangle } from 'lucide-react';
+import { api, CreateQsoRequest, QsoResponse, SatState } from '../api/client';
+import { formatDupeWarning, MIN_CALLSIGN_LENGTH } from '../utils/dupeWarning';
 import { signalRService, setTciMetersCallback, clearTciMetersCallback, type TciMetersEvent } from '../api/signalr';
 import { S9_DBM, DB_PER_S_UNIT } from '../utils/smeter';
 import { spotKhzToMhzString, spotKhzToHz, formMhzToStoredKhz, rigHzToStoredKhz } from '../utils/frequency';
@@ -679,6 +680,32 @@ export function LogEntryPlugin() {
     setRstRcvdAuto(true);
   }, [formData.callsign]);
 
+  // Probable-dupe check (U-4): same call + band + mode logged within the
+  // backend's 30-min window → advisory warning strip. Never blocks logging.
+  // Debounced per keystroke; the sequence counter discards out-of-order
+  // responses (same pattern as the callsign-info card). Logging a QSO clears
+  // the callsign, which clears the warning through this same effect.
+  const [dupe, setDupe] = useState<QsoResponse | null>(null);
+  const dupeSeq = useRef(0);
+  useEffect(() => {
+    const call = formData.callsign.trim();
+    if (call.length < MIN_CALLSIGN_LENGTH) {
+      setDupe(null);
+      return;
+    }
+    const seq = ++dupeSeq.current;
+    const timer = setTimeout(async () => {
+      try {
+        const result = await api.checkQsoDupe(call, formData.band, formData.mode);
+        if (dupeSeq.current === seq) setDupe(result);
+      } catch {
+        // Best-effort advisory — an unreachable backend must not disturb entry.
+        if (dupeSeq.current === seq) setDupe(null);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [formData.callsign, formData.band, formData.mode]);
+
   // v1.x-style mode switcher tabs. Each mode has its own accent color
   // matching v1.x: General=cyan, POTA=green, SAT=goldish yellow.
   // POTA + SAT are clickable placeholders — the tab switches but the
@@ -1084,6 +1111,14 @@ export function LogEntryPlugin() {
             </select>
           </div>
         </div>
+
+        {/* Probable dupe — advisory only; the Log button stays enabled. */}
+        {dupe && (
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-accent-warning/40 bg-accent-warning/10 text-accent-warning text-xs font-ui animate-fade-in">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>Possible dupe — {formatDupeWarning(dupe, Date.now())}</span>
+          </div>
+        )}
 
         {/* Callsign Info Card - Loading State */}
         {isLookingUpCallsign && formData.callsign && (

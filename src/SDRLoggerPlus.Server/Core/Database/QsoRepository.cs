@@ -27,6 +27,15 @@ public interface IQsoRepository
 
     /// <summary>Most recent QSO with a callsign (for exchange prefill), or null.</summary>
     Task<Qso?> GetMostRecentByCallsignAsync(string callsign);
+
+    /// <summary>
+    /// Most recent QSO with the same callsign + band + mode entered into the
+    /// log since <paramref name="createdSinceUtc"/>, or null. Windows on
+    /// CreatedAt (when the row was written), not the QSO's own date/time — a
+    /// duplicate is by definition something the operator just entered, and
+    /// CreatedAt is always UTC regardless of the QsoDate kind quirks.
+    /// </summary>
+    Task<Qso?> FindRecentDuplicateAsync(string callsign, string band, string mode, DateTime createdSinceUtc);
     Task<bool> UpdateQrzSyncStatusAsync(string id, string qrzLogId);
     Task<int> GetPendingSyncCountAsync();
     Task<long> DeleteAllAsync();

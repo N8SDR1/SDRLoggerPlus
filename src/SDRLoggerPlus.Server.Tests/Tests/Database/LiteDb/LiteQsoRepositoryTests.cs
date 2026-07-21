@@ -466,6 +466,75 @@ public class LiteQsoRepositoryTests : IDisposable
     }
 
     // =========================================================================
+    // FindRecentDuplicateAsync
+    // =========================================================================
+
+    /// <summary>Backdate a stored QSO's CreatedAt (the repo stamps UtcNow on create).</summary>
+    private void BackdateCreatedAt(Qso qso, TimeSpan age)
+    {
+        qso.CreatedAt = DateTime.UtcNow - age;
+        _fixture.Context.Qsos.Update(qso);
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_FindsSameTripleWithinWindow()
+    {
+        await _repo.CreateAsync(CreateQso("K1ABC", band: "20m", mode: "FT8"));
+
+        var dupe = await _repo.FindRecentDuplicateAsync(
+            "K1ABC", "20m", "FT8", DateTime.UtcNow.AddMinutes(-30));
+
+        dupe.Should().NotBeNull();
+        dupe!.Callsign.Should().Be("K1ABC");
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_MatchesCaseInsensitively()
+    {
+        await _repo.CreateAsync(CreateQso("K1ABC", band: "20m", mode: "FT8"));
+
+        var dupe = await _repo.FindRecentDuplicateAsync(
+            "k1abc", "20M", "ft8", DateTime.UtcNow.AddMinutes(-30));
+
+        dupe.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_IgnoresEntriesOlderThanWindow()
+    {
+        var old = await _repo.CreateAsync(CreateQso("K1ABC", band: "20m", mode: "FT8"));
+        BackdateCreatedAt(old, TimeSpan.FromMinutes(45));
+
+        var dupe = await _repo.FindRecentDuplicateAsync(
+            "K1ABC", "20m", "FT8", DateTime.UtcNow.AddMinutes(-30));
+
+        dupe.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_IgnoresDifferentBandOrMode()
+    {
+        await _repo.CreateAsync(CreateQso("K1ABC", band: "20m", mode: "FT8"));
+
+        var since = DateTime.UtcNow.AddMinutes(-30);
+        (await _repo.FindRecentDuplicateAsync("K1ABC", "40m", "FT8", since)).Should().BeNull();
+        (await _repo.FindRecentDuplicateAsync("K1ABC", "20m", "CW", since)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_ReturnsMostRecentMatch()
+    {
+        var older = await _repo.CreateAsync(CreateQso("K1ABC", band: "20m", mode: "FT8", timeOn: "1200"));
+        BackdateCreatedAt(older, TimeSpan.FromMinutes(10));
+        var newer = await _repo.CreateAsync(CreateQso("K1ABC", band: "20m", mode: "FT8", timeOn: "1210"));
+
+        var dupe = await _repo.FindRecentDuplicateAsync(
+            "K1ABC", "20m", "FT8", DateTime.UtcNow.AddMinutes(-30));
+
+        dupe!.Id.Should().Be(newer.Id);
+    }
+
+    // =========================================================================
     // GetStatisticsAsync
     // =========================================================================
 

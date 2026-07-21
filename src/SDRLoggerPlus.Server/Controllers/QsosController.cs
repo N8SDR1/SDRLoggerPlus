@@ -51,6 +51,23 @@ public class QsosController : ControllerBase
     }
 
     /// <summary>
+    /// Probable-duplicate check for the Log Entry form: the most recent QSO
+    /// with the same callsign + band + mode entered within the dupe window,
+    /// or 204 when the entry looks clean. Advisory — logging is never blocked.
+    /// </summary>
+    [HttpGet("dupe-check")]
+    [ProducesResponseType(typeof(QsoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<ActionResult<QsoResponse>> CheckDupe(
+        [FromQuery] string callsign,
+        [FromQuery] string band,
+        [FromQuery] string mode)
+    {
+        var dupe = await _qsoService.CheckRecentDupeAsync(callsign, band, mode);
+        return dupe is null ? NoContent() : Ok(dupe);
+    }
+
+    /// <summary>
     /// Get a specific QSO by ID
     /// </summary>
     [HttpGet("{id}")]
