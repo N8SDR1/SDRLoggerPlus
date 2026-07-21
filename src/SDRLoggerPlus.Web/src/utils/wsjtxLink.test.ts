@@ -87,6 +87,33 @@ describe('summarizeWsjtxLink', () => {
     expect(link.title).toContain('Address already in use');
   });
 
+  // Regression: older backends never cleared a stopped source's client table,
+  // so a source disabled an hour ago still carries its old decoder — whose
+  // aging lastHeardUtc must not read as a permanently stale link.
+  it('ignores clients of sources that are not listening', () => {
+    const link = summarizeWsjtxLink(
+      [
+        status({ source: 1 }), // listening, nobody connected yet
+        status({ source: 2, port: 2333, listening: false, clients: [heardAgo(3_600_000, 'JTDX')] }),
+      ],
+      NOW,
+    );
+    expect(link.state).toBe('listening');
+  });
+
+  it('omits a dead source’s client name from the alive tooltip', () => {
+    const link = summarizeWsjtxLink(
+      [
+        status({ source: 1, clients: [heardAgo(1_000, 'WSJT-X')] }),
+        status({ source: 2, port: 2333, listening: false, clients: [heardAgo(2_000, 'JTDX')] }),
+      ],
+      NOW,
+    );
+    expect(link.state).toBe('alive');
+    expect(link.title).toContain('WSJT-X');
+    expect(link.title).not.toContain('JTDX');
+  });
+
   it('takes the newest heartbeat across both sources', () => {
     const link = summarizeWsjtxLink(
       [

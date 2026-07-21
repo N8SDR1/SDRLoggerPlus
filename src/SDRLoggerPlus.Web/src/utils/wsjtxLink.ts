@@ -79,7 +79,11 @@ export function summarizeWsjtxLink(statuses: WsjtxStatus[] | null, nowMs: number
 
   const ports = listening.map((s) => s.port).join(', ');
   const label = listening.length > 1 ? `FT8 ×${listening.length}` : 'FT8';
-  const newest = newestHeartbeat(list);
+  // Freshness is judged only from sources that are listening right now. A
+  // stopped source may still carry the clients it heard while alive (older
+  // backends never cleared the table), and their ever-aging lastHeardUtc
+  // would otherwise read as a permanently stale link.
+  const newest = newestHeartbeat(listening);
 
   if (newest === null) {
     return {
@@ -91,7 +95,7 @@ export function summarizeWsjtxLink(statuses: WsjtxStatus[] | null, nowMs: number
 
   const ageMs = nowMs - newest;
   if (ageMs <= HEARTBEAT_STALE_MS) {
-    const clients = list.flatMap((s) => s.clients ?? []);
+    const clients = listening.flatMap((s) => s.clients ?? []);
     const names = [...new Set(clients.map((c) => c.id).filter(Boolean))].join(', ');
     return {
       state: 'alive',
