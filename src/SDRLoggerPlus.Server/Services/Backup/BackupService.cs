@@ -96,7 +96,8 @@ public class BackupService : IHostedService, IDisposable
                 destinationRoot: ResolveDestination(backup.DestinationPath),
                 retention: Math.Max(1, backup.Retention),
                 stateStore: _stateStore,
-                logger: _runnerLogger);
+                logger: _runnerLogger,
+                verifyDbCopy: LiteDbBackupVerifier.Verify);
             return await runner.RunAsync(trigger);
         }
         finally
