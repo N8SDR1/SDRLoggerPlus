@@ -52,7 +52,7 @@ public class WeatherAlertServiceTests
         _settings.Weather.Lightning.Range = 50;       // miles → ~80 km
 
         _blitzortung.Setup(b => b.GetStrikesAsync(It.IsAny<double>(), It.IsAny<double>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new StrikeInfo(40, 90), new StrikeInfo(60, 180)]);
+            .ReturnsAsync(new StrikeFetch([new StrikeInfo(40, 90), new StrikeInfo(60, 180)], FeedOk: true));
         _ambient.Setup(a => a.GetLightningAsync(It.IsAny<AmbientCredentials>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new LightningReading(25.0, 12));
         _ecowitt.Setup(e => e.GetLightningAsync(It.IsAny<EcowittCredentials>(), It.IsAny<CancellationToken>()))
@@ -73,11 +73,99 @@ public class WeatherAlertServiceTests
         _settings.Weather.Lightning.Enabled = true;
         _settings.Weather.Lightning.UseBlitzortung = true;
         _blitzortung.Setup(b => b.GetStrikesAsync(It.IsAny<double>(), It.IsAny<double>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+            .ReturnsAsync(new StrikeFetch([], FeedOk: true));
 
         await _service.PollLightningAsync(_settings, CancellationToken.None);
 
         _service.GetLightningStatus().Active.Should().BeFalse();
+    }
+
+    // ─── Lightning: feed-outage holdover ─────────────────────────────────
+
+    /// <summary>Drive one poll with the given Blitzortung result.</summary>
+    private async Task PollWithFeed(StrikeFetch fetch)
+    {
+        _settings.Weather.Lightning.Enabled = true;
+        _settings.Weather.Lightning.UseBlitzortung = true;
+        _blitzortung.Setup(b => b.GetStrikesAsync(It.IsAny<double>(), It.IsAny<double>(),
+                It.IsAny<double>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(fetch);
+        await _service.PollLightningAsync(_settings, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Lightning_FeedOutage_HoldsActiveAlert()
+    {
+        await PollWithFeed(new StrikeFetch([new StrikeInfo(15, 270)], FeedOk: true));
+        _service.GetLightningStatus().Active.Should().BeTrue();
+        var beforeOutage = _service.GetLightningStatus();
+
+        // Feed unreachable: an empty list here means "no data", not "no storm".
+        await PollWithFeed(new StrikeFetch([], FeedOk: false));
+
+        var held = _service.GetLightningStatus();
+        held.Active.Should().BeTrue();
+        held.ClosestKm.Should().Be(beforeOutage.ClosestKm);
+        // The timestamp must NOT advance — the status is knowingly stale.
+        held.LastUpdateUtc.Should().Be(beforeOutage.LastUpdateUtc);
+    }
+
+    [Fact]
+    public async Task Lightning_SuccessfulQuietPoll_ClearsImmediately()
+    {
+        await PollWithFeed(new StrikeFetch([new StrikeInfo(15, 270)], FeedOk: true));
+        _service.GetLightningStatus().Active.Should().BeTrue();
+
+        // A poll that DID reach the feed and found nothing is a real all-clear
+        // — the holdover must not delay it.
+        await PollWithFeed(new StrikeFetch([], FeedOk: true));
+
+        _service.GetLightningStatus().Active.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Lightning_FeedOutage_ClearsOnceHoldoverExpires()
+    {
+        await PollWithFeed(new StrikeFetch([new StrikeInfo(15, 270)], FeedOk: true));
+
+        // Age the last-good marker past the holdover, as a long outage would.
+        _service._lightningLastGoodUtc =
+            DateTime.UtcNow - WeatherAlertService.LightningHoldover - TimeSpan.FromSeconds(1);
+
+        await PollWithFeed(new StrikeFetch([], FeedOk: false));
+
+        _service.GetLightningStatus().Active.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Lightning_FeedOutage_DoesNotHoldWhenNothingWasActive()
+    {
+        await PollWithFeed(new StrikeFetch([], FeedOk: true));   // quiet, inactive
+        await PollWithFeed(new StrikeFetch([], FeedOk: false));  // outage
+
+        var status = _service.GetLightningStatus();
+        status.Active.Should().BeFalse();
+        // Nothing to protect, so the poll published normally.
+        status.LastUpdateUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Lightning_FeedOutage_PublishesWhenAnotherSourceHasData()
+    {
+        await PollWithFeed(new StrikeFetch([new StrikeInfo(15, 270)], FeedOk: true));
+        _service.GetLightningStatus().Active.Should().BeTrue();
+
+        // Blitzortung is down but the local PWS is reporting — that is real
+        // information about the sky, so the poll publishes instead of holding.
+        _settings.Weather.Lightning.UseAmbient = true;
+        _ambient.Setup(a => a.GetLightningAsync(It.IsAny<AmbientCredentials>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LightningReading(30.0, 4));
+
+        await PollWithFeed(new StrikeFetch([], FeedOk: false));
+
+        var status = _service.GetLightningStatus();
+        status.Sources.Should().BeEquivalentTo("ambient");
+        status.ClosestKm.Should().Be(30.0);
     }
 
     [Fact]

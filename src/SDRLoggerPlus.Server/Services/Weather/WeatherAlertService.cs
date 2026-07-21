@@ -46,6 +46,16 @@ public class WeatherAlertService : BackgroundService
     private static readonly TimeSpan LightningInterval = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan WindInterval = TimeSpan.FromSeconds(120);
 
+    /// <summary>
+    /// How long an active lightning alert survives a Blitzortung outage. Three
+    /// consecutive failed polls (90 s apart) — one failure is noise, three in a
+    /// row is a real outage. Kept short because the feed's own slices only
+    /// cover ~10 minutes: holding much longer would let the banner claim a
+    /// storm that has genuinely ended. A *successful* poll with no strikes is
+    /// a real all-clear and clears immediately, regardless of this.
+    /// </summary>
+    internal static readonly TimeSpan LightningHoldover = TimeSpan.FromMinutes(5);
+
     private readonly IServiceProvider _serviceProvider;
     private readonly INwsClient _nws;
     private readonly IAmbientWeatherClient _ambient;
@@ -57,6 +67,10 @@ public class WeatherAlertService : BackgroundService
     private LightningStatus _lightning = new(false, null, null, "", 0, [], null, null);
     private WindStatus _wind = new(false, "", null, null, null, null, "", [], null, null, "mph", 30, 45);
     private DateTime _windLastClearUtc = DateTime.MinValue;
+    // When a lightning poll last reached a source at all (success or quiet).
+    // Anchors the outage holdover; only touched from the poll loop. Internal
+    // so tests can age it instead of waiting out a real five minutes.
+    internal DateTime _lightningLastGoodUtc = DateTime.MinValue;
     private readonly object _statusLock = new();
 
     public WeatherAlertService(
@@ -139,9 +153,15 @@ public class WeatherAlertService : BackgroundService
         var sources = new List<string>();
         string? nwsWarning = null;
 
+        // True only when Blitzortung was consulted and every slice fetch failed
+        // — distinct from "consulted, and the skies are quiet".
+        var blitzortungFailed = false;
+
         if (lightning.UseBlitzortung && location != null)
         {
-            var strikes = await _blitzortung.GetStrikesAsync(location.Value.Lat, location.Value.Lon, rangeKm, ct);
+            var fetch = await _blitzortung.GetStrikesAsync(location.Value.Lat, location.Value.Lon, rangeKm, ct);
+            blitzortungFailed = !fetch.FeedOk;
+            var strikes = fetch.Strikes;
             if (strikes.Count > 0)
             {
                 sources.Add("blitzortung");
@@ -185,6 +205,27 @@ public class WeatherAlertService : BackgroundService
             }
         }
 
+        // Outage holdover: Blitzortung failed outright and nothing else had
+        // anything to say, so this poll carries no information about the sky.
+        // Clearing an active alert here would be asserting an all-clear we
+        // cannot back up — hold the last known status until the holdover
+        // expires. A poll that DID reach a source falls through and clears
+        // normally, because that is a real all-clear.
+        var now = DateTime.UtcNow;
+        var noInformation = blitzortungFailed && sources.Count == 0 && string.IsNullOrEmpty(nwsWarning);
+        if (noInformation)
+        {
+            LightningStatus held;
+            lock (_statusLock) held = _lightning;
+            if (held.Active && now - _lightningLastGoodUtc < LightningHoldover)
+            {
+                _logger.LogDebug(
+                    "Lightning feed unreachable; holding the active alert ({Age:F0}s of {Hold:F0}s)",
+                    (now - _lightningLastGoodUtc).TotalSeconds, LightningHoldover.TotalSeconds);
+                return;
+            }
+        }
+
         var status = new LightningStatus(
             Active: (closestKm != null && closestKm <= rangeKm) || !string.IsNullOrEmpty(nwsWarning),
             ClosestKm: closestKm != null ? Math.Round(closestKm.Value, 1) : null,
@@ -193,7 +234,11 @@ public class WeatherAlertService : BackgroundService
             StrikeCount: totalStrikes,
             Sources: sources,
             NwsWarning: nwsWarning,
-            LastUpdateUtc: DateTime.UtcNow);
+            LastUpdateUtc: now);
+
+        // Only a poll that actually heard from a source refreshes the holdover
+        // clock; otherwise an outage would keep extending its own grace period.
+        if (!noInformation) _lightningLastGoodUtc = now;
 
         lock (_statusLock) _lightning = status;
         if (_hubContext != null)

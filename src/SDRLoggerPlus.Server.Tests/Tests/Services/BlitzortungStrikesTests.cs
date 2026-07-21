@@ -61,9 +61,69 @@ public class BlitzortungStrikesTests
             .Respond("application/json", "[]");
 
         var client = new BlitzortungClient(Factory(handler), NullLogger<BlitzortungClient>.Instance);
-        var strikes = await client.GetStrikesAsync(44.8, -91.6, rangeKm: 100, CancellationToken.None);
+        var fetch = await client.GetStrikesAsync(44.8, -91.6, rangeKm: 100, CancellationToken.None);
 
-        strikes.Should().HaveCount(1);
-        strikes[0].DistanceKm.Should().BeLessThan(100);
+        fetch.FeedOk.Should().BeTrue();
+        fetch.Strikes.Should().HaveCount(1);
+        fetch.Strikes[0].DistanceKm.Should().BeLessThan(100);
+    }
+
+    [Fact]
+    public async Task GetStrikesAsync_ReportsFeedOk_WhenSkiesAreQuiet()
+    {
+        var handler = new MockHttpMessageHandler();
+        handler.When("*getjson.php*").Respond("application/json", "[]");
+
+        var client = new BlitzortungClient(Factory(handler), NullLogger<BlitzortungClient>.Instance);
+        var fetch = await client.GetStrikesAsync(44.8, -91.6, rangeKm: 100, CancellationToken.None);
+
+        // Empty + FeedOk is a genuine all-clear, and must stay distinguishable
+        // from the outage case below.
+        fetch.Strikes.Should().BeEmpty();
+        fetch.FeedOk.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetStrikesAsync_ReportsFeedFailure_WhenEverySliceErrors()
+    {
+        var handler = new MockHttpMessageHandler();
+        handler.When("*getjson.php*").Respond(System.Net.HttpStatusCode.ServiceUnavailable);
+
+        var client = new BlitzortungClient(Factory(handler), NullLogger<BlitzortungClient>.Instance);
+        var fetch = await client.GetStrikesAsync(44.8, -91.6, rangeKm: 100, CancellationToken.None);
+
+        fetch.Strikes.Should().BeEmpty();
+        fetch.FeedOk.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetStrikesAsync_ReportsFeedOk_WhenOnlyTheNewestSliceSucceeds()
+    {
+        var handler = new MockHttpMessageHandler();
+        handler.When("*getjson.php*").WithQueryString("n", "00")
+            .Respond("application/json", "[[-91.6,44.9,\"2026-07-06 12:00:01.000000000\",1]]");
+        handler.When("*getjson.php*").WithQueryString("n", "01")
+            .Respond(System.Net.HttpStatusCode.ServiceUnavailable);
+
+        var client = new BlitzortungClient(Factory(handler), NullLogger<BlitzortungClient>.Instance);
+        var fetch = await client.GetStrikesAsync(44.8, -91.6, rangeKm: 100, CancellationToken.None);
+
+        // Partial failure still yields real, current data — the newest slice is
+        // the one that matters, so this is not an outage.
+        fetch.Strikes.Should().HaveCount(1);
+        fetch.FeedOk.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetStrikesAsync_TreatsNonArrayBodyAsFeedFailure()
+    {
+        var handler = new MockHttpMessageHandler();
+        handler.When("*getjson.php*").Respond("application/json", "{\"error\":\"rate limited\"}");
+
+        var client = new BlitzortungClient(Factory(handler), NullLogger<BlitzortungClient>.Instance);
+        var fetch = await client.GetStrikesAsync(44.8, -91.6, rangeKm: 100, CancellationToken.None);
+
+        // A 200 carrying a non-array body is the feed misbehaving, not an all-clear.
+        fetch.FeedOk.Should().BeFalse();
     }
 }

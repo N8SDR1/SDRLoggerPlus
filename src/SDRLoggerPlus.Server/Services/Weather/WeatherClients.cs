@@ -9,6 +9,14 @@ public record LightningReading(double? DistanceKm, int StrikeCount);
 public record NwsWindAlert(string Headline, bool IsExtreme);
 public record StrikeInfo(double DistanceKm, double BearingDeg);
 
+/// <summary>
+/// Result of an alert-path strike fetch. FeedOk distinguishes "quiet skies"
+/// (feed answered, nothing in range) from "no data" (every slice fetch
+/// failed) — an empty list alone can't, and treating an outage as an
+/// all-clear made a transient feed failure drop an active proximity alert.
+/// </summary>
+public record StrikeFetch(List<StrikeInfo> Strikes, bool FeedOk);
+
 public record EcowittCredentials(string AppKey, string ApiKey, string Mac);
 public record AmbientCredentials(string ApiKey, string AppKey);
 
@@ -33,7 +41,7 @@ public interface IEcowittClient
 
 public interface IBlitzortungClient
 {
-    Task<List<StrikeInfo>> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default);
+    Task<StrikeFetch> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default);
     Task<List<LightningStrike>> GetStrikesRawAsync(IEnumerable<int> slices, CancellationToken ct = default);
 }
 
@@ -335,11 +343,11 @@ public class BlitzortungClient : IBlitzortungClient
         _logger = logger;
     }
 
-    public async Task<List<StrikeInfo>> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default)
+    public async Task<StrikeFetch> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default)
     {
         // Same fetch + parse as the raw path (previously a diverging copy that
         // accepted timestamp-less rows), then distance-filtered for the alert.
-        var raw = await GetStrikesRawAsync(AlertSlices, ct);
+        var (raw, feedOk) = await FetchSlicesAsync(AlertSlices, ct);
         var strikes = new List<StrikeInfo>();
         foreach (var s in raw)
         {
@@ -347,12 +355,23 @@ public class BlitzortungClient : IBlitzortungClient
             if (dist <= rangeKm)
                 strikes.Add(new StrikeInfo(dist, GeoMath.BearingDeg(lat, lon, s.Lat, s.Lon)));
         }
-        return strikes;
+        return new StrikeFetch(strikes, feedOk);
     }
 
     public async Task<List<LightningStrike>> GetStrikesRawAsync(IEnumerable<int> slices, CancellationToken ct = default)
+        => (await FetchSlicesAsync(slices, ct)).Strikes;
+
+    /// <summary>
+    /// Fetch and parse the given time slices. FeedOk is true when at least one
+    /// slice returned a well-formed array — the newest slice alone is usable
+    /// data, so a partial failure is still real information, but a total
+    /// failure must not be mistaken for "no strikes".
+    /// </summary>
+    private async Task<(List<LightningStrike> Strikes, bool FeedOk)> FetchSlicesAsync(
+        IEnumerable<int> slices, CancellationToken ct)
     {
         var strikes = new List<LightningStrike>();
+        var feedOk = false;
         foreach (var slice in slices)
         {
             try
@@ -364,7 +383,9 @@ public class BlitzortungClient : IBlitzortungClient
                 var json = await client.GetStringAsync(
                     $"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={slice:D2}", ct);
                 using var doc = JsonDocument.Parse(json);
+                // A non-array body is the feed misbehaving, not an all-clear.
                 if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
+                feedOk = true;
                 foreach (var item in doc.RootElement.EnumerateArray())
                 {
                     // Flat arrays: [lon, lat, timestamp, ...]. The live feed sends the
@@ -381,10 +402,10 @@ public class BlitzortungClient : IBlitzortungClient
             }
             catch (Exception ex)
             {
-                _logger.LogDebug("Blitzortung raw slice {Slice} error: {Error}", slice, ex.Message);
+                _logger.LogDebug("Blitzortung slice {Slice} error: {Error}", slice, ex.Message);
             }
         }
-        return strikes;
+        return (strikes, feedOk);
     }
 
     /// <summary>
