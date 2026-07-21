@@ -19,6 +19,10 @@ public static class DbServiceRegistration
         // to the local LiteDB implementation.
         services.AddSingleton<LiteDbContext>();
         services.AddSingleton<IDbContext>(sp => sp.GetRequiredService<LiteDbContext>());
+        // Singleton because the repository and the awards service are scoped:
+        // the shared award snapshot has to outlive a request to be worth
+        // anything. Invalidated by every QSO write (LiteQsoRepository.Commit).
+        services.AddSingleton<QsoSnapshotCache>();
         services.AddScoped<IQsoRepository, LiteQsoRepository>();
         services.AddScoped<ISettingsRepository, LiteSettingsRepository>();
         services.AddScoped<ICallsignImageRepository, LiteCallsignImageRepository>();
