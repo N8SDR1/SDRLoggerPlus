@@ -5,6 +5,14 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { api, type GenerateTalkPointsResponse, type ChatMessage as ChatMessageType } from '../api/client';
+import { useRegisterShortcuts } from '../hooks/useRegisterShortcuts';
+import type { Shortcut } from '../utils/shortcuts';
+
+// Implemented by the composer's onKeyDown handler.
+const SHORTCUTS: Shortcut[] = [
+  { keys: 'Enter', label: 'Send the message' },
+  { keys: 'Shift+Enter', label: 'Start a new line' },
+];
 
 const BAND_RANGES: Record<string, [number, number]> = {
   '160m': [1800, 2000], '80m': [3500, 4000], '60m': [5330, 5410],
@@ -22,6 +30,7 @@ const getBandFromFrequency = (freqHz: number): string | undefined => {
 };
 
 export function ChatAiPlugin() {
+  useRegisterShortcuts('Chat AI', SHORTCUTS);
   const { focusedCallsignInfo, isLookingUpCallsign, rigStatus } = useAppStore();
   const { settings, openSettings } = useSettingsStore();
   const [isGenerating, setIsGenerating] = useState(false);

@@ -4,6 +4,13 @@ import { useAppStore } from '../store/appStore';
 import { useSignalR } from '../hooks/useSignalR';
 import { GlassPanel } from '../components/GlassPanel';
 import { useSettingsStore, RotatorPreset } from '../store/settingsStore';
+import { useRegisterShortcuts } from '../hooks/useRegisterShortcuts';
+import type { Shortcut } from '../utils/shortcuts';
+
+// Implemented by the heading inputs' onKeyDown handlers.
+const SHORTCUTS: Shortcut[] = [
+  { keys: 'Enter', label: 'Rotate to the entered heading' },
+];
 
 // Rotator compass display prefs (per-install, like the meter calibration).
 const ROTATOR_BEAM_KEY = 'sdrloggerplus-rotator-beam';
@@ -735,6 +742,7 @@ export function RotatorCore({ hideControls, hideCompass, integratedMode }: { hid
 
 export function RotatorPlugin() {
   const { settings } = useSettingsStore();
+  useRegisterShortcuts('Rotator', SHORTCUTS);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const toggleFullscreen = useCallback(() => {

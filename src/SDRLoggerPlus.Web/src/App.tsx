@@ -8,6 +8,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { ConnectionOverlay } from './components/ConnectionOverlay';
 import { SetupWizard } from './components/SetupWizard';
 import { PluginErrorBoundary } from './components/PluginErrorBoundary';
+import { ShortcutOverlay } from './components/ShortcutOverlay';
 import { useSignalRConnection } from './hooks/useSignalR';
 import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, QrzProfilePlugin, ContestsPlugin, ContestEntryPlugin, MultNeededPlugin, ContestBandmapPlugin, ContestScorePlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin, DecodesPlugin, GridTrackerPlugin } from './plugins';
 import { useLayoutStore, defaultLayout } from './store/layoutStore';
@@ -742,6 +743,9 @@ export function App() {
 
       {/* Transient notifications (OOB warnings, band openings, …) */}
       <Toasts />
+
+      {/* "?" keyboard reference, generated from the shortcut registry */}
+      <ShortcutOverlay />
     </div>
   );
 }
