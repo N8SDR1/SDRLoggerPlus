@@ -85,6 +85,15 @@ export function WeatherAlertBanner() {
       ? `${l.closestMi} mi`
       : `${l.closestKm ?? Math.round(l.closestMi * 1.609344)} km`;
 
+  // The lightning status can be knowingly stale: during a Blitzortung outage
+  // the backend holds the last alert (up to 5 min) rather than fake an
+  // all-clear, and a held status keeps its original LastUpdateUtc. Say so
+  // instead of letting a frozen banner masquerade as live data. 3 min clears
+  // the worst-case healthy age (90 s backend poll + 60 s banner poll), so this
+  // only appears during a real stall. Preview statuses are stamped fresh.
+  const lightningStale = lightningActive && !previewActive && l?.lastUpdateUtc != null &&
+    Date.now() - Date.parse(l.lastUpdateUtc) > 3 * 60_000;
+
   const severityStyle = SEVERITY_STYLES[w?.severity ?? ''] ?? SEVERITY_STYLES.high;
   const style = lightningActive ? SEVERITY_STYLES.extreme : severityStyle;
 
@@ -103,6 +112,7 @@ export function WeatherAlertBanner() {
               ~10 min, PWS hourly/daily), so this is a magnitude, not a rate. */}
           {l != null && l.strikeCount > 0 && ` · ${l.strikeCount} strikes`}
           {l?.nwsWarning && ` · ${l.nwsWarning}`}
+          {lightningStale && <span className="opacity-75 italic">· data delayed</span>}
         </span>
       )}
       {windActive && (
