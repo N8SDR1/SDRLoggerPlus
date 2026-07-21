@@ -9,7 +9,12 @@ public record LightningStatus(
     double? ClosestKm,
     double? ClosestMi,
     string Direction,
-    int StrikesLastHour,
+    // Aggregate strike count across enabled sources. Deliberately NOT named
+    // for a time window: each source counts over its own — Blitzortung is a
+    // fresh ~10-minute snapshot (slices {0,1}), Ambient reports the last
+    // hour, Ecowitt its own firmware-defined counter. It is an activity
+    // magnitude, not a rate.
+    int StrikeCount,
     List<string> Sources,
     string? NwsWarning,
     DateTime? LastUpdateUtc);
@@ -185,7 +190,7 @@ public class WeatherAlertService : BackgroundService
             ClosestKm: closestKm != null ? Math.Round(closestKm.Value, 1) : null,
             ClosestMi: closestKm != null ? Math.Round(closestKm.Value / 1.60934, 1) : null,
             Direction: closestBearing != null ? GeoMath.BearingToCompass(closestBearing.Value) : "",
-            StrikesLastHour: totalStrikes,
+            StrikeCount: totalStrikes,
             Sources: sources,
             NwsWarning: nwsWarning,
             LastUpdateUtc: DateTime.UtcNow);

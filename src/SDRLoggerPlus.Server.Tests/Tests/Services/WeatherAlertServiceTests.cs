@@ -63,7 +63,7 @@ public class WeatherAlertServiceTests
         var status = _service.GetLightningStatus();
         status.Active.Should().BeTrue();
         status.ClosestKm.Should().Be(25.0);            // Ambient was closest
-        status.StrikesLastHour.Should().Be(2 + 12 + 3);
+        status.StrikeCount.Should().Be(2 + 12 + 3);
         status.Sources.Should().BeEquivalentTo("blitzortung", "ambient", "ecowitt");
     }
 

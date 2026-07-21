@@ -62,7 +62,7 @@ export function WeatherAlertBanner() {
   if (!lightningActive && !windActive) return null;
 
   // Key changes whenever the alert content changes, un-hiding a dismissed banner
-  const key = `${lightningActive ? `L${effectiveLightning?.strikesLastHour}${effectiveLightning?.closestKm}` : ''}|${windActive ? `W${effectiveWind?.severity}${effectiveWind?.gustMph}` : ''}`;
+  const key = `${lightningActive ? `L${effectiveLightning?.strikeCount}${effectiveLightning?.closestKm}` : ''}|${windActive ? `W${effectiveWind?.severity}${effectiveWind?.gustMph}` : ''}`;
   if (key === dismissedKey) return null;
 
   // Resolve the display unit from the master system (the event's echoed `unit`
@@ -99,7 +99,9 @@ export function WeatherAlertBanner() {
         <span className="flex items-center gap-1.5" title={l?.nwsWarning ?? 'Lightning detected'}>
           <Zap className="w-3.5 h-3.5" />
           Lightning{lightningDistText && ` ${lightningDistText} ${l!.direction}`}
-          {l != null && l.strikesLastHour > 0 && ` · ${l.strikesLastHour}/hr`}
+          {/* No "/hr" — the sources count over different windows (Blitzortung
+              ~10 min, PWS hourly/daily), so this is a magnitude, not a rate. */}
+          {l != null && l.strikeCount > 0 && ` · ${l.strikeCount} strikes`}
           {l?.nwsWarning && ` · ${l.nwsWarning}`}
         </span>
       )}

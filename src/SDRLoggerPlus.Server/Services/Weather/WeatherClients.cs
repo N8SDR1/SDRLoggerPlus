@@ -276,11 +276,13 @@ public class EcowittClient : IEcowittClient
     {
         var data = await GetLastDataAsync(creds, ct);
         if (data == null) return null;
-        // Ecowitt v3 reports lightning distance in km on most firmwares
+        // Ecowitt v3 reports lightning distance in km on most firmwares. Note
+        // `count` is Ecowitt's own counter (not an hourly window) — its reset
+        // period is firmware-defined.
         var distKm = Leaf(data.Value, "lightning", "distance");
-        var hour = (int)(Leaf(data.Value, "lightning", "count") ?? 0);
-        if (distKm == null || hour <= 0) return new LightningReading(null, 0);
-        return new LightningReading(distKm, hour);
+        var count = (int)(Leaf(data.Value, "lightning", "count") ?? 0);
+        if (distKm == null || count <= 0) return new LightningReading(null, 0);
+        return new LightningReading(distKm, count);
     }
 
     public async Task<WindReading?> GetWindAsync(EcowittCredentials creds, CancellationToken ct = default)
@@ -335,35 +337,15 @@ public class BlitzortungClient : IBlitzortungClient
 
     public async Task<List<StrikeInfo>> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default)
     {
+        // Same fetch + parse as the raw path (previously a diverging copy that
+        // accepted timestamp-less rows), then distance-filtered for the alert.
+        var raw = await GetStrikesRawAsync(AlertSlices, ct);
         var strikes = new List<StrikeInfo>();
-        foreach (var slice in AlertSlices)
+        foreach (var s in raw)
         {
-            try
-            {
-                var client = _httpClientFactory.CreateClient();
-                client.Timeout = TimeSpan.FromSeconds(8);
-                client.DefaultRequestHeaders.Add("Referer", "https://map.blitzortung.org/");
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) SDRLoggerPlus");
-                var json = await client.GetStringAsync(
-                    $"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={slice:D2}", ct);
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
-                foreach (var item in doc.RootElement.EnumerateArray())
-                {
-                    // Flat arrays: [lon, lat, timestamp, ...]
-                    if (item.ValueKind != JsonValueKind.Array || item.GetArrayLength() < 2) continue;
-                    if (item[0].ValueKind != JsonValueKind.Number || item[1].ValueKind != JsonValueKind.Number) continue;
-                    var sLon = item[0].GetDouble();
-                    var sLat = item[1].GetDouble();
-                    var dist = PropagationService.HaversineDistanceKm(lat, lon, sLat, sLon);
-                    if (dist <= rangeKm)
-                        strikes.Add(new StrikeInfo(dist, GeoMath.BearingDeg(lat, lon, sLat, sLon)));
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug("Blitzortung slice {Slice} error: {Error}", slice, ex.Message);
-            }
+            var dist = PropagationService.HaversineDistanceKm(lat, lon, s.Lat, s.Lon);
+            if (dist <= rangeKm)
+                strikes.Add(new StrikeInfo(dist, GeoMath.BearingDeg(lat, lon, s.Lat, s.Lon)));
         }
         return strikes;
     }
