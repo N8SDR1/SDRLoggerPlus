@@ -212,7 +212,11 @@ public class WeatherAlertService : BackgroundService
         // expires. A poll that DID reach a source falls through and clears
         // normally, because that is a real all-clear.
         var now = DateTime.UtcNow;
-        var noInformation = blitzortungFailed && sources.Count == 0 && string.IsNullOrEmpty(nwsWarning);
+        // An empty sources list already covers NWS — a non-empty nwsWarning
+        // always adds "nws" to it. (NWS cannot distinguish "no warning" from
+        // "request failed" — INwsClient returns null for both — so it cannot
+        // participate in the outage distinction the way Blitzortung does.)
+        var noInformation = blitzortungFailed && sources.Count == 0;
         if (noInformation)
         {
             LightningStatus held;
