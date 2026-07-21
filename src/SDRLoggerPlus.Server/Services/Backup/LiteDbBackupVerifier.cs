@@ -15,10 +15,23 @@ public static class LiteDbBackupVerifier
     {
         try
         {
-            // ReadOnly opens the file without writing a WAL/-log sidecar into the
-            // backup folder; reading the collection catalog forces the engine to
-            // parse the header pages, which throws on a corrupt/invalid file.
-            using var db = new LiteDatabase($"Filename={path};ReadOnly=true");
+            // Two deliberate choices here, both learned the hard way:
+            //
+            // 1. We open the FileStream ourselves rather than passing a
+            //    filename. When LiteDatabase's constructor throws on a corrupt
+            //    file, a `using` on the database never binds and the underlying
+            //    handle leaks — which would then block the caller from deleting
+            //    the bad copy. Owning the stream releases it either way.
+            //
+            // 2. The stream is READ-ONLY. Given a writable stream it does not
+            //    recognise, LiteDB formats it as a brand-new empty database
+            //    rather than failing — which would report a corrupt backup as
+            //    healthy *and* destroy it. Read-only makes an unreadable file
+            //    throw, which is the whole point of verifying.
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var db = new LiteDatabase(fs);
+            // Reading the collection catalog forces the engine to parse the
+            // header pages, which throws on a corrupt or non-LiteDB file.
             _ = db.GetCollectionNames().ToList();
             return null;
         }
