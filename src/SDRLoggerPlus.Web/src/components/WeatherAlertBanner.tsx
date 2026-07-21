@@ -4,6 +4,7 @@ import { api, LightningStatus, WindStatus } from '../api/client';
 import { useSettingsStore } from '../store/settingsStore';
 import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
 import { formatSpeed, resolveSpeedUnit } from '../utils/units';
+import { isLightningDataDelayed } from '../utils/lightningStale';
 
 const SEVERITY_STYLES: Record<string, string> = {
   elevated: 'bg-yellow-900/60 border-yellow-600/60 text-yellow-200',
@@ -88,11 +89,10 @@ export function WeatherAlertBanner() {
   // The lightning status can be knowingly stale: during a Blitzortung outage
   // the backend holds the last alert (up to 5 min) rather than fake an
   // all-clear, and a held status keeps its original LastUpdateUtc. Say so
-  // instead of letting a frozen banner masquerade as live data. 3 min clears
-  // the worst-case healthy age (90 s backend poll + 60 s banner poll), so this
-  // only appears during a real stall. Preview statuses are stamped fresh.
-  const lightningStale = lightningActive && !previewActive && l?.lastUpdateUtc != null &&
-    Date.now() - Date.parse(l.lastUpdateUtc) > 3 * 60_000;
+  // instead of letting a frozen banner masquerade as live data. Preview
+  // statuses are stamped fresh, but skip them explicitly anyway.
+  const lightningStale = lightningActive && !previewActive &&
+    isLightningDataDelayed(l?.lastUpdateUtc, Date.now());
 
   const severityStyle = SEVERITY_STYLES[w?.severity ?? ''] ?? SEVERITY_STYLES.high;
   const style = lightningActive ? SEVERITY_STYLES.extreme : severityStyle;
