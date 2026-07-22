@@ -17,6 +17,8 @@ public interface IAwardsService
     Task<WacStatistics> GetWacStatisticsAsync(StatisticsFilters? filters = null);
     Task<FiveBandStatistics> Get5BWasStatisticsAsync(string? mode = null);
     Task<FiveBandStatistics> Get5BDxccStatisticsAsync(string? mode = null);
+    Task<CountiesStatistics> GetCountiesStatisticsAsync(StatisticsFilters? filters = null);
+    Task<List<CountyDetail>> GetCountyDetailsAsync(string state, StatisticsFilters? filters = null);
 }
 
 public partial class AwardsService : IAwardsService

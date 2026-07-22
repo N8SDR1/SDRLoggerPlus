@@ -595,6 +595,11 @@ public partial class AdifService : IAdifService
                 CqZone = GetIntField(fields, "cqz"),
                 ItuZone = GetIntField(fields, "ituz"),
                 State = GetStringField(fields, "state"),
+                // ADIF carries CNTY as "ST,County Name". Store the county part
+                // only; the state is already its own field, and keeping the
+                // prefix would make every comparison strip it again.
+                County = Counties.CountyNameNormalizer.SplitStatePrefix(GetStringField(fields, "cnty")).County
+                    is { Length: > 0 } county ? county : null,
                 Continent = continent,
                 Latitude = GetDoubleField(fields, "lat"),
                 Longitude = GetDoubleField(fields, "lon")
@@ -635,7 +640,7 @@ public partial class AdifService : IAdifService
         {
             "call", "qso_date", "time_on", "time_off", "band", "mode", "freq",
             "rst_sent", "rst_rcvd", "name", "country", "gridsquare", "dxcc", "cont",
-            "comment", "notes", "cqz", "ituz", "state", "lat", "lon",
+            "comment", "notes", "cqz", "ituz", "state", "cnty", "lat", "lon",
             "qsl_sent", "qslsdate", "qsl_rcvd", "qslrdate",
             "lotw_qsl_sent", "lotw_qsl_rcvd", "eqsl_qsl_sent", "eqsl_qsl_rcvd",
             "contest_id", "stx", "stx_string", "srx", "srx_string"
@@ -721,6 +726,12 @@ public partial class AdifService : IAdifService
         if (!string.IsNullOrEmpty(qso.Station?.State))
             AppendAdifField(sb, "STATE", qso.Station.State);
 
+        // ADIF convention is CNTY = "ST,County Name". We store the bare county,
+        // so re-attach the state on the way out; without a state there is no
+        // valid CNTY to emit.
+        if (!string.IsNullOrEmpty(qso.Station?.County) && !string.IsNullOrEmpty(qso.Station?.State))
+            AppendAdifField(sb, "CNTY", $"{qso.Station.State},{qso.Station.County}");
+
         if (qso.Station?.Latitude.HasValue == true)
             AppendAdifField(sb, "LAT", qso.Station.Latitude.Value.ToString("F6", CultureInfo.InvariantCulture));
 
@@ -788,8 +799,18 @@ public partial class AdifService : IAdifService
         // Export extra ADIF fields that were preserved during import
         if (qso.AdifExtra != null)
         {
+            // Whether a CNTY was already written above (from Station.County).
+            var cntyEmitted = !string.IsNullOrEmpty(qso.Station?.County) && !string.IsNullOrEmpty(qso.Station?.State);
             foreach (var element in qso.AdifExtra)
             {
+                // Legacy QSOs (imported before CNTY was a mapped field) carry
+                // their county here, and exporting it verbatim is what keeps
+                // their ADIF round-trip whole. But if the canonical field was
+                // also emitted, a second CNTY would be a duplicate — and the
+                // stale copy at that.
+                if (cntyEmitted && string.Equals(element.Name, "cnty", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 var value = element.Value?.ToString();
                 if (!string.IsNullOrEmpty(value))
                 {

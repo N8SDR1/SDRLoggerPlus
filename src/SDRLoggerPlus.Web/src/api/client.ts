@@ -404,6 +404,14 @@ class ApiClient {
     return this.fetch<WacStatistics>(`/statistics/wac${awardQs(filters)}`);
   }
 
+  async getCountiesStatistics(filters?: AwardFilters): Promise<CountiesStatistics> {
+    return this.fetch<CountiesStatistics>(`/statistics/counties${awardQs(filters)}`);
+  }
+
+  async getCountyDetails(state: string, filters?: AwardFilters): Promise<CountyDetail[]> {
+    return this.fetch<CountyDetail[]>(`/statistics/counties/${encodeURIComponent(state)}${awardQs(filters)}`);
+  }
+
   async get5BWasStatistics(mode?: string): Promise<FiveBandStatistics> {
     return this.fetch<FiveBandStatistics>(`/statistics/5bwas${awardQs({ mode })}`);
   }
@@ -1492,6 +1500,32 @@ export interface WasStateStatus {
   state: string;
   bands: Record<string, string[]>;
   qsoCount: number;
+}
+
+// USA-CA. A county counts once regardless of band/mode, and worked/confirmed
+// are reported separately because confirmation is the point of the award.
+export interface CountiesStateStatus {
+  state: string;
+  worked: number;
+  confirmed: number;
+  target: number;
+  qsoCount: number;
+}
+
+export interface CountiesStatistics {
+  totalWorked: number;
+  totalConfirmed: number;
+  totalTarget: number;
+  states: CountiesStateStatus[];
+}
+
+export interface CountyDetail {
+  state: string;
+  county: string;
+  qsoCount: number;
+  confirmed: boolean;
+  firstWorked: string | null;
+  lastWorked: string | null;
 }
 
 export interface WasStatistics {
