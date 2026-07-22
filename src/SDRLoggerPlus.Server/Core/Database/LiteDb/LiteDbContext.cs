@@ -2,6 +2,7 @@ using LiteDB;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Contracts.Models.Contesting;
 using SDRLoggerPlus.Server.Core.Database.Migrations;
+using SDRLoggerPlus.Server.Core.Security;
 using SDRLoggerPlus.Server.Services;
 using Serilog;
 using Serilog.Extensions.Logging;
@@ -194,8 +195,16 @@ public class LiteDbContext : IDbContext, IDisposable
     {
         try
         {
-            var logger = new SerilogLoggerFactory(Log.Logger).CreateLogger("Migrations");
-            var runner = new MigrationRunner(MigrationCatalog.All, logger);
+            var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+            // Built here rather than injected: LiteDbContext is constructed
+            // during DI setup, and a credential migration must use the same
+            // protector the settings repository will later read back with.
+            var protector = new SecretProtector(
+                Path.GetDirectoryName(_dbPath)!,
+                loggerFactory.CreateLogger<SecretProtector>());
+
+            var runner = new MigrationRunner(
+                MigrationCatalog.Build(protector), loggerFactory.CreateLogger("Migrations"));
             runner.Run(_database!, _dbPath);
         }
         catch (Exception ex)

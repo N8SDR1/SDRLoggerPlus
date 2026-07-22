@@ -3,6 +3,7 @@ using LiteDB;
 using Microsoft.Extensions.Logging.Abstractions;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Core.Database.Migrations;
+using SDRLoggerPlus.Server.Tests.Fixtures;
 using Xunit;
 
 namespace SDRLoggerPlus.Server.Tests.Tests.Database.Migrations;
@@ -39,8 +40,11 @@ public class M001FrequencyKhzRepairPredicateTests
     // --- The cases a value-magnitude rule destroys ---------------------------
     //
     // 630m and 2200m store legitimate kHz values BELOW 1000. A naive
-    // "under 1000 means MHz" rule would multiply these by 1000 and corrupt
-    // 1,871 rows in Brent's log alone. The band-anchored predicate must not.
+    // "under 1000 means MHz" rule would multiply these by 1000 and silently
+    // corrupt every one of them. No LF rows exist in the author's log today
+    // (checked), so this is protection for imports and future LF operating
+    // rather than a case already in the wild — which is exactly why it needs
+    // a test instead of a live check.
 
     [Theory]
     [InlineData("630m", 474)]        // correct 630m kHz, looks like MHz by magnitude
@@ -117,6 +121,7 @@ public class M001FrequencyKhzRepairPredicateTests
 }
 
 [Trait("Category", "Integration")]
+[Collection("LiteDbMapper")]
 public class M001FrequencyKhzRepairApplyTests : IDisposable
 {
     private readonly string _dir;

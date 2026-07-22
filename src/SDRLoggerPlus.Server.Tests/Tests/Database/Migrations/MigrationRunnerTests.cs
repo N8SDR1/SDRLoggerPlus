@@ -3,11 +3,14 @@ using LiteDB;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SDRLoggerPlus.Server.Core.Database.Migrations;
+using SDRLoggerPlus.Server.Core.Security;
+using SDRLoggerPlus.Server.Tests.Fixtures;
 using Xunit;
 
 namespace SDRLoggerPlus.Server.Tests.Tests.Database.Migrations;
 
 [Trait("Category", "Integration")]
+[Collection("LiteDbMapper")]
 public class MigrationRunnerTests : IDisposable
 {
     private readonly string _dir;
@@ -247,10 +250,14 @@ public class MigrationRunnerTests : IDisposable
 [Trait("Category", "Unit")]
 public class MigrationCatalogTests
 {
+    private static IReadOnlyList<IDbMigration> Catalog =>
+        MigrationCatalog.Build(new SecretProtector(
+            Path.GetTempPath(), NullLogger<SecretProtector>.Instance, useDpapi: false));
+
     [Fact]
     public void VersionsAreUniqueAndContiguousFromOne()
     {
-        var versions = MigrationCatalog.All.Select(m => m.Version).ToList();
+        var versions = Catalog.Select(m => m.Version).ToList();
 
         versions.Should().OnlyHaveUniqueItems();
         versions.OrderBy(v => v).Should().Equal(Enumerable.Range(1, versions.Count),
@@ -261,7 +268,7 @@ public class MigrationCatalogTests
     [Fact]
     public void EveryMigrationHasAName()
     {
-        MigrationCatalog.All.Should().OnlyContain(m => !string.IsNullOrWhiteSpace(m.Name));
+        Catalog.Should().OnlyContain(m => !string.IsNullOrWhiteSpace(m.Name));
     }
 
     [Fact]
@@ -270,7 +277,7 @@ public class MigrationCatalogTests
         // Pins the duplicate-version guard against the real catalog, so adding
         // a migration with a copy-pasted version number fails here, not on a
         // user's machine at startup.
-        var act = () => new MigrationRunner(MigrationCatalog.All, NullLogger.Instance);
+        var act = () => new MigrationRunner(Catalog, NullLogger.Instance);
 
         act.Should().NotThrow();
     }
