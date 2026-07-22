@@ -23,6 +23,14 @@ export const BAND_RANGES: Record<string, [number, number]> = {
   '23cm': [1240000, 1300000],
 };
 
+/**
+ * Every band the app knows, longest wavelength first. The award and statistics
+ * band filters derive their options from this, so a band can never be present
+ * in the log and missing from a filter — which is exactly what happened when
+ * each tab kept its own hard-coded list and none of them included 30m.
+ */
+export const ALL_BANDS = Object.keys(BAND_RANGES);
+
 export const BAND_OPTIONS: MultiSelectOption[] = [
   { value: '2200m', label: '2200m' },
   { value: '630m', label: '630m' },

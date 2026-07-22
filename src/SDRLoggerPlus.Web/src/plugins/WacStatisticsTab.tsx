@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, AwardFilters, WacContinentStatus } from '../api/client';
+import { ALL_BANDS as BANDS } from '../utils/spotBands';
 
-const BANDS = ['160m', '80m', '40m', '20m', '17m', '15m', '12m', '10m', '6m'];
 const BASE_ORDER = ['NA', 'SA', 'EU', 'AS', 'AF', 'OC'];
 
 function ContinentCard({ status, code, name }: { status?: WacContinentStatus; code: string; name: string }) {

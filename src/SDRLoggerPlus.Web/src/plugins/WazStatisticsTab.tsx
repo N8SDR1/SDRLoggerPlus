@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, AwardFilters } from '../api/client';
-
-const BANDS = ['160m', '80m', '40m', '20m', '17m', '15m', '12m', '10m', '6m'];
+import { ALL_BANDS as BANDS } from '../utils/spotBands';
 
 export function WazStatisticsTab() {
   const [filters, setFilters] = useState<AwardFilters>({});

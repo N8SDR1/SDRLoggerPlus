@@ -12,10 +12,10 @@ import { WazStatisticsTab } from './WazStatisticsTab';
 import { WpxStatisticsTab } from './WpxStatisticsTab';
 import { WacStatisticsTab } from './WacStatisticsTab';
 import { FiveBandWasTab, FiveBandDxccTab } from './FiveBandTab';
+import { ALL_BANDS as BANDS } from '../utils/spotBands';
 
 type StatsTab = 'dxcc' | 'was' | 'counties' | 'waz' | 'wpx' | 'wac' | '5bwas' | '5bdxcc' | 'vucc' | 'pota' | 'iota';
 
-const BANDS = ['160m', '80m', '40m', '20m', '17m', '15m', '10m', '6m'];
 const CONTINENTS = ['AF', 'AN', 'AS', 'EU', 'NA', 'OC', 'SA'];
 const STATUS_OPTIONS = [
   { value: '', label: 'All' },
