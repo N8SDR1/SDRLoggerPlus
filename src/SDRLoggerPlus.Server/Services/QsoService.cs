@@ -76,7 +76,12 @@ public class QsoService : IQsoService
                 Name = request.Name,
                 Qth = request.Qth,
                 Grid = request.Grid,
-                Country = request.Country
+                Country = request.Country,
+                State = request.State,
+                // Stored as the bare name; a "ST," prefix (ADIF CNTY style)
+                // is stripped in case a caller sends the prefixed form.
+                County = Counties.CountyNameNormalizer.SplitStatePrefix(request.County).County
+                    is { Length: > 0 } county ? county : null,
             }
         };
 
@@ -221,6 +226,7 @@ public class QsoService : IQsoService
             qso.Country ?? qso.Station?.Country,
             qso.Dxcc ?? qso.Station?.Dxcc,
             qso.Station?.State,
+            qso.Station?.County,
             qso.Continent ?? qso.Station?.Continent,
             qso.Station?.Latitude,
             qso.Station?.Longitude

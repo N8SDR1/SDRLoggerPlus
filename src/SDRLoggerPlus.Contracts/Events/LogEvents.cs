@@ -32,6 +32,9 @@ public record CallsignLookedUpEvent(
     // Town/city from the callbook (QRZ addr2 / HamQTH adr_city). Pairs with
     // State to fill the log-entry QTH box as "Green Bay, WI".
     string? City,
+    // US county from the callbook (QRZ county / HamQTH us_county), bare name
+    // ("Hennepin"). Feeds the log-entry County field for USA-CA tracking.
+    string? County,
     string? ImageUrl,
     double? Bearing = null,
     double? Distance = null,

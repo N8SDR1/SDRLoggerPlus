@@ -18,6 +18,10 @@ public record CreateQsoRequest(
     string? Contest = null,
     string? Notes = null,
     string? Qth = null,
+    // Worked-station US state + county (bare name, no "ST," prefix), usually
+    // auto-filled from the callbook lookup. County feeds USA-CA tracking.
+    string? State = null,
+    string? County = null,
     // v1.x POTA-mode fields — MyPotaRef is the park the operator is
     // activating (e.g. "K-1234"), PotaRef is the worked station's park
     // when it's a park-to-park contact. Both stored on the QSO via
@@ -82,6 +86,7 @@ public record StationInfoDto(
     string? Country,
     int? Dxcc,
     string? State,
+    string? County,
     string? Continent,
     double? Latitude,
     double? Longitude

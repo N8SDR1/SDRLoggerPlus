@@ -5,6 +5,10 @@
 # ~3077 counties; the two differ slightly (Virginia independent cities,
 # Alaska boroughs/census areas). Treat progress here as indicative, not as
 # an official award submission count.
+# CT: the 2022 Census replaced Connecticut's 8 counties with 9 "planning
+# regions", but amateur radio (ADIF CNTY, USA-CA, every logger) still uses the
+# historical counties - so CT is deliberately the 8 historical counties here,
+# not the Census planning regions.
 AK,Aleutians East
 AK,Aleutians West
 AK,Anchorage
@@ -314,15 +318,14 @@ CO,Teller
 CO,Washington
 CO,Weld
 CO,Yuma
-CT,Capitol
-CT,Greater Bridgeport
-CT,Lower Connecticut River Valley
-CT,Naugatuck Valley
-CT,Northeastern Connecticut
-CT,Northwest Hills
-CT,South Central Connecticut
-CT,Southeastern Connecticut
-CT,Western Connecticut
+CT,Fairfield
+CT,Hartford
+CT,Litchfield
+CT,Middlesex
+CT,New Haven
+CT,New London
+CT,Tolland
+CT,Windham
 DE,Kent
 DE,New Castle
 DE,Sussex

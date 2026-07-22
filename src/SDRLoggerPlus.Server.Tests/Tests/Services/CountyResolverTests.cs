@@ -110,6 +110,19 @@ public class CountyReferenceTests
     }
 
     [Fact]
+    public void ConnecticutUsesTheHistoricalCountiesNotCensusPlanningRegions()
+    {
+        // The 2022 Census replaced CT's 8 counties with 9 "planning regions",
+        // but ADIF CNTY, USA-CA and every logger still use the historical
+        // counties. Found live: every CT county in a real log failed to match
+        // until the reference was corrected.
+        CountyReference.CountyCount("CT").Should().Be(8);
+        CountyReference.IsKnownCounty("CT", "Hartford").Should().BeTrue();
+        CountyReference.IsKnownCounty("CT", "Fairfield").Should().BeTrue();
+        CountyReference.IsKnownCounty("CT", "Capitol").Should().BeFalse("planning regions are not counties");
+    }
+
+    [Fact]
     public void RejectsACountyFromTheWrongState()
     {
         // Kent exists in MI, DE and RI — but not in California.

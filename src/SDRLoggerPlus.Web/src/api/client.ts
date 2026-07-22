@@ -34,6 +34,7 @@ export interface StationInfo {
   country?: string;
   dxcc?: number;
   state?: string;
+  county?: string;
   continent?: string;
   latitude?: number;
   longitude?: number;
@@ -58,6 +59,10 @@ export interface CreateQsoRequest {
   // identifier that lands on Qso.Contest.ContestId server-side.
   qth?: string;
   contest?: string;
+  // Worked-station US state + county (bare name), usually carried from the
+  // callbook lookup. County feeds USA-CA county tracking.
+  state?: string;
+  county?: string;
   // v1.x POTA-mode fields — myPotaRef is the park YOU'RE activating,
   // potaRef is the WORKED station's park for park-to-park contacts.
   // Both stored on the QSO via AdifExtra so PotaStatistics picks them

@@ -212,7 +212,7 @@ public class AiServiceTests
 
         _qrzServiceMock.Setup(s => s.LookupCallsignAsync("W1AW"))
             .ReturnsAsync(new QrzCallsignInfo(
-                "W1AW", "ARRL", "ARRL", null, "Newington", "CT",
+                "W1AW", "ARRL", "ARRL", null, "Newington", "CT", "Hartford",
                 "United States", "FN31", 41.7, -72.7,
                 291, 5, 8, null, null, null, null));
         _qrzServiceMock.Setup(s => s.GetBiographyAsync("W1AW"))
