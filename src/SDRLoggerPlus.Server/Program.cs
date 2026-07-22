@@ -20,6 +20,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Configure Serilog. The console sink is what Electron captures into main.log,
 // so it formats through ScrubbingTextFormatter: any credential that reaches a
 // log line — from our code or the framework's — is masked before it is written.
+// Any sink added later (here or via a WriteTo section in appsettings.json)
+// bypasses that formatter unless it is wrapped the same way — wrap it, or
+// credentials get a fresh unscrubbed channel.
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()

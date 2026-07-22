@@ -62,6 +62,18 @@ public class SecretScrubberTests
     }
 
     [Fact]
+    public void MasksTheTrimmedFormOfAWhitespacePaddedSecret()
+    {
+        // Services trim credentials before sending (whitespace from copy-paste
+        // is why the trims exist), so what a rejection echoes back is the
+        // TRIMMED value. Exact-match replacement on the padded stored value
+        // would miss it in precisely the configurations the trims are for.
+        var scrubbed = SecretScrubber.Redact("rejected key CODE-123456 try again", "  CODE-123456  ");
+
+        scrubbed.Should().NotContain("CODE-123456");
+    }
+
+    [Fact]
     public void MasksASecretEvenWhenItReachesTheTextPercentEncoded()
     {
         const string password = "p@ss word/99";

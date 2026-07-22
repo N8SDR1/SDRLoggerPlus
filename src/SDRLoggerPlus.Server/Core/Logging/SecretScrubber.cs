@@ -66,9 +66,15 @@ public static partial class SecretScrubber
 
         var result = CredentialParameter().Replace(text, m => $"{m.Groups["name"].Value}={Mask}");
 
-        foreach (var secret in secrets)
+        foreach (var raw in secrets)
         {
-            if (string.IsNullOrWhiteSpace(secret) || secret.Length < MinimumMaskableSecretLength)
+            // Match on the trimmed form: services trim credentials before
+            // sending (copy-paste padding is why), so the value a rejection
+            // echoes back is the trimmed one — exact-match replacement on a
+            // padded stored value would miss it in precisely the
+            // configurations the trims exist for.
+            var secret = raw?.Trim();
+            if (string.IsNullOrEmpty(secret) || secret.Length < MinimumMaskableSecretLength)
                 continue;
             result = result.Replace(secret, Mask, StringComparison.Ordinal);
             // Credentials reach a log through a URL as often as raw, and by then

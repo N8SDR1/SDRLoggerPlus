@@ -89,6 +89,27 @@ public class CredentialRedactionTests
     }
 
     [Fact]
+    public async Task HrdLogMasksTheEchoedCodeEvenWhenTheStoredOneHasPaddingWhitespace()
+    {
+        // The service sends UploadCode.Trim(), so the value HRDLog echoes back
+        // is the trimmed one. Redaction must mask that, not the padded original.
+        const string trimmedCode = "HRD-PAD-CODE-3355";
+        var logger = new CapturingLogger<HrdLogService>();
+        var settings = new Mock<ISettingsService>();
+        settings.Setup(s => s.GetSettingsAsync()).ReturnsAsync(new UserSettings
+        {
+            HrdLog = new HrdLogSettings { Enabled = true, UploadCode = $"  {trimmedCode}  ", Callsign = "N9BC" },
+        });
+
+        var handler = new StubHandler(HttpStatusCode.OK, $"<result>unknown code {trimmedCode}</result>");
+        var service = new HrdLogService(settings.Object, new HttpClient(handler), logger);
+
+        await service.UploadQsoAsync(NewQso());
+
+        logger.All.Should().NotContain(trimmedCode);
+    }
+
+    [Fact]
     public async Task RedactionDoesNotChangeHowAResponseIsClassified()
     {
         // A password containing a marker word would, if masking ran before
