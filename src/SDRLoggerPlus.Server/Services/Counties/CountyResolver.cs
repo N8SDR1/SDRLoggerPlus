@@ -27,12 +27,12 @@ public static class CountyResolver
     private const string AdifCountyField = "CNTY";
 
     /// <summary>
-    /// Satellite QSOs are excluded from USA-CA. They are not flagged by a
-    /// field on Qso — SatControllerService records the ADIF convention
-    /// PROP_MODE=SAT in AdifExtra, so that is what we test.
+    /// Satellite QSOs are excluded from USA-CA. Delegates to
+    /// <see cref="Satellites.SatelliteResolver"/> so "is this a satellite QSO"
+    /// has exactly one answer across the app — the SAT award counting a QSO
+    /// that USA-CA also counted would be a contradiction, not a rounding error.
     /// </summary>
-    public static bool IsSatellite(Qso qso) =>
-        string.Equals(ReadAdifField(qso, "PROP_MODE")?.Trim(), "SAT", StringComparison.OrdinalIgnoreCase);
+    public static bool IsSatellite(Qso qso) => Satellites.SatelliteResolver.IsSatellite(qso);
 
     /// <summary>
     /// Resolves the county for a QSO, or null when it cannot count: satellite,
@@ -93,27 +93,7 @@ public static class CountyResolver
 
     private static string? ReadAdifCounty(Qso qso) => ReadAdifField(qso, AdifCountyField);
 
-    /// <summary>
-    /// Case-insensitive read from AdifExtra. ADIF field names are
-    /// case-insensitive by spec and this log carries them lower-cased ("cnty")
-    /// while the spec and our own writers use upper ("CNTY"), so an
-    /// exact-match lookup would find nothing.
-    /// </summary>
-    private static string? ReadAdifField(Qso qso, string name)
-    {
-        var extra = qso.AdifExtra;
-        if (extra == null) return null;
-
-        foreach (var element in extra.Elements)
-        {
-            if (!string.Equals(element.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
-            var value = element.Value;
-            if (value == null || value.IsBsonNull) return null;
-            // Import stringifies extras, but older rows may hold other types.
-            return value.IsString ? value.AsString : value.ToString();
-        }
-        return null;
-    }
+    private static string? ReadAdifField(Qso qso, string name) => AdifExtraReader.Read(qso, name);
 
     private static string? FirstNonBlank(params string?[] values)
     {

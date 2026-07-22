@@ -61,6 +61,32 @@ public record GridDetail(
     DateTime? LastWorked
 );
 
+/// <summary>
+/// Satellite operating summary. Grids/states/entities are counted over
+/// satellite QSOs only, which is what makes them awards in their own right:
+/// ARRL runs VUCC Satellite as a separate award at 100 grids, and the same
+/// contacts also chase WAS and DXCC via satellite.
+/// </summary>
+public record SatelliteStatistics(
+    int TotalSatellites,
+    int TotalQsos,
+    int UniqueGrids,
+    int ConfirmedGrids,
+    int VuccThreshold,
+    int UniqueStates,
+    int UniqueEntities,
+    List<SatelliteDetail> Satellites
+);
+
+public record SatelliteDetail(
+    string Satellite,
+    int QsoCount,
+    int ConfirmedQsos,
+    int UniqueGrids,
+    DateTime? FirstWorked,
+    DateTime? LastWorked
+);
+
 // Grid-tracker map: worked 4-char grids across ALL bands (or a filtered band/mode),
 // reading Station.Grid with the top-level Grid as fallback. "Needed" = any grid
 // NOT in this set; live activity comes from the decode stream on the frontend.

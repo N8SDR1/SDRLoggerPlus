@@ -135,6 +135,17 @@ public class StatisticsController : ControllerBase
         => Ok(await _awardsService.GetWasStatisticsAsync(new StatisticsFilters(Band: band, Mode: mode)));
 
     /// <summary>
+    /// Get satellite operating statistics: birds worked, plus the grids,
+    /// states and DXCC entities worked through satellites.
+    /// </summary>
+    [HttpGet("satellites")]
+    [ProducesResponseType(typeof(SatelliteStatistics), StatusCodes.Status200OK)]
+    public async Task<ActionResult<SatelliteStatistics>> GetSatelliteStatistics(
+        [FromQuery] string? band = null,
+        [FromQuery] string? mode = null)
+        => Ok(await _awardsService.GetSatelliteStatisticsAsync(new StatisticsFilters(Band: band, Mode: mode)));
+
+    /// <summary>
     /// Get USA-CA (US Counties Award) statistics: worked, confirmed and target
     /// counties for every state.
     /// </summary>

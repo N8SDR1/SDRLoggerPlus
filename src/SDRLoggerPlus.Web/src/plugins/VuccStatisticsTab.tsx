@@ -4,6 +4,12 @@ import { RefreshCw } from 'lucide-react';
 import { api, VuccFilters } from '../api/client';
 
 const VUCC_BANDS = ['6m', '2m', '70cm', '23cm'];
+
+// ARRL runs VUCC Satellite as its own award (100 grids), so it gets a row
+// beside the bands. Deliberately NOT in VUCC_BANDS: "sat" is not a band, and
+// putting it in the band filter would query band=sat and match nothing.
+const SAT_CATEGORY = 'sat';
+const VUCC_CATEGORIES = [...VUCC_BANDS, SAT_CATEGORY];
 const STATUS_OPTIONS = [
   { value: '', label: 'All' },
   { value: 'worked', label: 'Worked' },
@@ -37,7 +43,10 @@ export function VuccStatisticsTab() {
   const [sortBy, setSortBy] = useState<'grid' | 'band' | 'qsos'>('grid');
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['vucc-statistics', filters],
+    // Nested under 'statistics' so QSO mutations invalidate it. React Query
+    // matches by key prefix, so the old standalone 'vucc-statistics' key never
+    // saw the ['statistics'] invalidation and the bars sat on cached numbers.
+    queryKey: ['statistics', 'vucc', filters],
     queryFn: () => api.getVuccStatistics(filters),
     staleTime: 60_000,
   });
@@ -46,7 +55,7 @@ export function VuccStatisticsTab() {
     if (!data) return [];
     return [...data.grids].sort((a, b) => {
       if (sortBy === 'band') {
-        const bandOrder = (band: string) => VUCC_BANDS.indexOf(band.toLowerCase());
+        const bandOrder = (band: string) => VUCC_CATEGORIES.indexOf(band.toLowerCase());
         const cmp = bandOrder(a.band) - bandOrder(b.band);
         return cmp !== 0 ? cmp : a.grid.localeCompare(b.grid);
       }
@@ -116,13 +125,13 @@ export function VuccStatisticsTab() {
       {/* Summary */}
       {data && (
         <div className="flex-shrink-0 px-4 py-2 border-b border-glass-100 space-y-1">
-          {VUCC_BANDS.map(band => {
+          {VUCC_CATEGORIES.map(band => {
             const summary = data.bandSummaries[band];
             if (!summary) return null;
             return (
               <SummaryBar
                 key={band}
-                label={band}
+                label={band === SAT_CATEGORY ? 'SAT' : band}
                 value={summary.uniqueGrids}
                 confirmed={summary.confirmedGrids}
                 threshold={summary.awardThreshold}

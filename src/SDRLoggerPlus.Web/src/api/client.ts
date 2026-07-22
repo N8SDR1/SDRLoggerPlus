@@ -22,6 +22,8 @@ export interface QsoResponse {
   createdAt: string;
   // Contest this QSO was logged under (ContestDefinition id), null for casual QSOs.
   contestId?: string;
+  // The bird, for satellite QSOs (ADIF SAT_NAME).
+  satellite?: string | null;
   confirmedLotw?: boolean;
   confirmedEqsl?: boolean;
   confirmedQrz?: boolean;
@@ -428,6 +430,10 @@ class ApiClient {
 
   async getWacStatistics(filters?: AwardFilters): Promise<WacStatistics> {
     return this.fetch<WacStatistics>(`/statistics/wac${awardQs(filters)}`);
+  }
+
+  async getSatelliteStatistics(filters?: AwardFilters): Promise<SatelliteStatistics> {
+    return this.fetch<SatelliteStatistics>(`/statistics/satellites${awardQs(filters)}`);
   }
 
   async getCountiesStatistics(filters?: AwardFilters): Promise<CountiesStatistics> {
@@ -1536,6 +1542,29 @@ export interface CountiesStateStatus {
   confirmed: number;
   target: number;
   qsoCount: number;
+}
+
+// Satellite operating. Grids/states/entities are counted over satellite QSOs
+// only — ARRL runs VUCC Satellite as its own award at 100 grids, and the same
+// contacts chase WAS and DXCC via satellite.
+export interface SatelliteDetail {
+  satellite: string;
+  qsoCount: number;
+  confirmedQsos: number;
+  uniqueGrids: number;
+  firstWorked: string | null;
+  lastWorked: string | null;
+}
+
+export interface SatelliteStatistics {
+  totalSatellites: number;
+  totalQsos: number;
+  uniqueGrids: number;
+  confirmedGrids: number;
+  vuccThreshold: number;
+  uniqueStates: number;
+  uniqueEntities: number;
+  satellites: SatelliteDetail[];
 }
 
 export interface CountiesStatistics {

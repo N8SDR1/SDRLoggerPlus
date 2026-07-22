@@ -75,6 +75,10 @@ public record QsoResponse(
     // The contest this QSO was logged under (ContestDefinition id / ADIF CONTEST_ID),
     // null for casual QSOs. Surfaced as the Log History "Contest" column.
     string? ContestId = null,
+    // The bird, for satellite QSOs (ADIF SAT_NAME, held in AdifExtra). Without
+    // this the name goes in through Log Entry and out through ADIF export but
+    // never comes back from the log API, so no UI can show or filter on it.
+    string? Satellite = null,
     // Per-QSO confirmation status for the Log History "QSL" column.
     bool ConfirmedLotw = false,
     bool ConfirmedEqsl = false,
