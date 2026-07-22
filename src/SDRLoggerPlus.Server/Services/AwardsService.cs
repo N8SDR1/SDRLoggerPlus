@@ -23,14 +23,27 @@ public partial class AwardsService : IAwardsService
 {
     private readonly IQsoRepository _repository;
 
-    public AwardsService(IQsoRepository repository)
+    private readonly QsoSnapshotCache? _snapshots;
+
+    public AwardsService(IQsoRepository repository, QsoSnapshotCache? snapshots = null)
     {
         _repository = repository;
+        _snapshots = snapshots;
     }
+
+    /// <summary>
+    /// Every QSO, from the shared snapshot when one is wired up. Awards are
+    /// pure read-only aggregations, so they can share instances; the snapshot
+    /// must never be mutated (see QsoSnapshotCache).
+    /// </summary>
+    private async Task<IEnumerable<Qso>> AllQsosAsync()
+        => _snapshots is null
+            ? await _repository.GetAllAsync()
+            : await _snapshots.GetAsync(() => _repository.GetAllAsync());
 
     public async Task<DxccStatistics> GetDxccStatisticsAsync(StatisticsFilters? filters = null)
     {
-        var allQsos = await _repository.GetAllAsync();
+        var allQsos = await AllQsosAsync();
         var qsos = allQsos.ToList();
 
         // Apply filters
@@ -161,7 +174,7 @@ public partial class AwardsService : IAwardsService
 
     public async Task<VuccStatistics> GetVuccStatisticsAsync(StatisticsFilters? filters = null)
     {
-        var allQsos = await _repository.GetAllAsync();
+        var allQsos = await AllQsosAsync();
         var qsos = allQsos
             .Where(q => !string.IsNullOrEmpty(q.Grid) && q.Grid.Length >= 4)
             .Where(q => VuccBands.Contains(q.Band, StringComparer.OrdinalIgnoreCase))
@@ -247,7 +260,7 @@ public partial class AwardsService : IAwardsService
 
     public async Task<GridMapStatistics> GetGridMapAsync(StatisticsFilters? filters = null)
     {
-        var allQsos = await _repository.GetAllAsync();
+        var allQsos = await AllQsosAsync();
 
         // Grids live in Station.Grid (top-level Grid as fallback) — same GridOf
         // the log's grid stat uses. All bands unless the filter narrows it.
@@ -295,7 +308,7 @@ public partial class AwardsService : IAwardsService
 
     public async Task<PotaStatistics> GetPotaStatisticsAsync(PotaFilters? filters = null)
     {
-        var allQsos = await _repository.GetAllAsync();
+        var allQsos = await AllQsosAsync();
         var qsos = allQsos.ToList();
 
         // Apply date filters
@@ -378,7 +391,7 @@ public partial class AwardsService : IAwardsService
 
     public async Task<IotaStatistics> GetIotaStatisticsAsync(IotaFilters? filters = null)
     {
-        var allQsos = await _repository.GetAllAsync();
+        var allQsos = await AllQsosAsync();
         var qsos = allQsos.ToList();
 
         // Apply date filters

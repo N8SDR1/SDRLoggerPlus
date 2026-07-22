@@ -196,17 +196,62 @@ public class WsjtxServiceTests
         _spots.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task Heartbeat_TracksClient()
+    private static byte[] BuildHeartbeatDatagram(string id = "JTDX", string version = "2.2.160")
     {
         var bytes = new List<byte>();
         void U32(uint v) { Span<byte> b = stackalloc byte[4]; BinaryPrimitives.WriteUInt32BigEndian(b, v); bytes.AddRange(b.ToArray()); }
         void Utf8(string s) { var d = Encoding.UTF8.GetBytes(s); U32((uint)d.Length); bytes.AddRange(d); }
-        U32(0xadbccbda); U32(2); U32(0); Utf8("JTDX"); U32(3); Utf8("2.2.160"); Utf8("rev");
+        U32(0xadbccbda); U32(2); U32(0); Utf8(id); U32(3); Utf8(version); Utf8("rev");
+        return bytes.ToArray();
+    }
 
-        await _service.HandleDatagramAsync(bytes.ToArray());
+    [Fact]
+    public async Task Heartbeat_TracksClient()
+    {
+        await _service.HandleDatagramAsync(BuildHeartbeatDatagram());
 
         var status = _service.GetStatus();
         status.Clients.Should().ContainSingle(c => c.Id == "JTDX" && c.Version == "2.2.160");
+    }
+
+    [Fact]
+    public async Task Disable_ClearsClientTable()
+    {
+        await _service.HandleDatagramAsync(BuildHeartbeatDatagram());
+        _service.GetStatus().Clients.Should().NotBeEmpty();
+
+        _service.Reconcile(source: 1, enabled: false);
+
+        // A disabled source must not keep advertising decoders it heard while
+        // it was alive — their ever-aging LastHeardUtc would read as a stale
+        // link to anything judging heartbeat freshness.
+        _service.GetStatus().Clients.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Disable_ClearsBindError_EvenWithoutASocket()
+    {
+        // Port -1 makes the bind throw, leaving Udp null with LastError set —
+        // the enabled-but-failing state.
+        _service.Reconcile(source: 1, enabled: true, port: -1);
+        _service.GetStatus().Error.Should().NotBeNullOrEmpty();
+
+        _service.Reconcile(source: 1, enabled: false);
+
+        _service.GetStatus().Error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ReceivedDatagram_ClearsTransientError()
+    {
+        _service.Reconcile(source: 1, enabled: true, port: -1);
+        _service.GetStatus().Error.Should().NotBeNullOrEmpty();
+
+        // Any datagram proves the socket is receiving, so the recorded error
+        // is over. Otherwise one transient receive fault (e.g. WSAECONNRESET
+        // from ICMP port-unreachable) would flag the source as failed forever.
+        await _service.HandleDatagramAsync(BuildHeartbeatDatagram());
+
+        _service.GetStatus().Error.Should().BeNull();
     }
 }

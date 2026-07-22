@@ -1,13 +1,24 @@
-import { Radio, MapPin, Settings, ChevronDown, Power, Volume2, VolumeX } from 'lucide-react';
+import { Radio, MapPin, Settings, ChevronDown, Power, Volume2, VolumeX, Waves } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRigConnection } from '../hooks/useRigConnection';
+import { useWsjtxLink } from '../hooks/useWsjtxLink';
+import type { WsjtxLinkState } from '../utils/wsjtxLink';
 import { useEffect, useRef, useState } from 'react';
 import { APP_VERSION } from '../version';
 import { AboutDialog, type TabId } from './AboutDialog';
 
 // Announcement volume to restore when unmuting.
 const VOLUME_BEFORE_MUTE = 'sdrl_volume_before_mute';
+
+// Colour per decoder-link state. 'off' never reaches here — the pill unmounts.
+const WSJTX_LINK_COLOR: Record<WsjtxLinkState, string> = {
+  off: '',
+  listening: 'text-dark-400',
+  alive: 'text-accent-success',
+  stale: 'text-accent-warning',
+  error: 'text-accent-danger',
+};
 
 export function StatusBar() {
   const { stationCallsign, stationGrid, rigStatus } = useAppStore();
@@ -19,6 +30,7 @@ export function StatusBar() {
   const [aboutTab, setAboutTab] = useState<TabId>('about');
   const [rigMenuOpen, setRigMenuOpen] = useState(false);
   const rigMenuRef = useRef<HTMLDivElement>(null);
+  const wsjtxLink = useWsjtxLink();
 
   // Close the rig switcher on any outside click.
   useEffect(() => {
@@ -84,6 +96,11 @@ export function StatusBar() {
     openSettings();
   };
 
+  const openWsjtxSettings = () => {
+    setActiveSection('wsjtx');
+    openSettings();
+  };
+
   return (
     <>
     <div className="h-8 bg-dark-800/90 backdrop-blur-sm border-t border-glass-100 flex items-center justify-between px-4 text-sm font-ui">
@@ -127,6 +144,25 @@ export function StatusBar() {
 
       {/* Right side - Time and connection */}
       <div className="flex items-center gap-6">
+        {/* Decoder link. Hidden unless a WSJT-X source is enabled, so operators
+            who never run digital modes lose no status-bar space. The dot tracks
+            heartbeat freshness — a bound socket only proves we're listening. */}
+        {wsjtxLink.state !== 'off' && (
+          <button
+            onClick={openWsjtxSettings}
+            className={`flex items-center gap-1.5 hover:bg-dark-600 rounded px-1.5 py-0.5 transition-colors ${WSJTX_LINK_COLOR[wsjtxLink.state]}`}
+            title={`${wsjtxLink.title} · Click for decoder settings`}
+          >
+            <Waves className="w-3.5 h-3.5" />
+            <span className="text-xs font-mono">{wsjtxLink.label}</span>
+            <span
+              className={`w-1.5 h-1.5 rounded-full bg-current ${
+                wsjtxLink.state === 'stale' || wsjtxLink.state === 'error' ? 'animate-pulse' : ''
+              }`}
+            />
+          </button>
+        )}
+
         {/* Mute = announcement volume 0, exactly as if the Settings > Voice
             volume slider were dragged to zero. Everything spoken already honours
             that volume, so there's nothing else to gate. */}

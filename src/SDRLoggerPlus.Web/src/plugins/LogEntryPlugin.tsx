@@ -10,6 +10,14 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
+import { useRegisterShortcuts } from '../hooks/useRegisterShortcuts';
+import type { Shortcut } from '../utils/shortcuts';
+
+// Enter is the form's implicit submit; Esc is the onKeyDown handler on <form>.
+const SHORTCUTS: Shortcut[] = [
+  { keys: 'Enter', label: 'Log the QSO' },
+  { keys: 'Esc', label: 'Clear the entry form' },
+];
 
 // v1.x-style log-entry mode switcher — General, POTA, and SAT are all
 // fully wired now. General is the default free-form logger, POTA layers
@@ -156,6 +164,8 @@ function RstCombobox({ value, onChange, options, className }: {
 }
 
 export function LogEntryPlugin() {
+  useRegisterShortcuts('Log Entry', SHORTCUTS);
+
   const queryClient = useQueryClient();
   const { focusCallsign, persistCallsignMapImage, setRadioMode, tuneToBand, sendDxSpot } = useSignalR();
   const { focusedCallsignInfo, radioStates, selectedRadioId, isLookingUpCallsign, setFocusedCallsign, setFocusedCallsignInfo, setLogHistoryCallsignFilter, clearCallsignFromAllControls, selectedSpot, setSelectedSpot, addCallsignMapImage, comboLinked } = useAppStore();

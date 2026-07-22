@@ -157,7 +157,7 @@ public partial class AwardsService
     /// <summary>Shared 5-band counting: distinct items (states/entities) per award band.</summary>
     private async Task<FiveBandStatistics> GetFiveBandAsync(string? mode, int threshold, Func<Qso, string?> itemSelector)
     {
-        var allQsos = await _repository.GetAllAsync();
+        var allQsos = await AllQsosAsync();
 
         var bands = FiveBandBands.ToDictionary(
             b => b, _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
@@ -189,7 +189,7 @@ public partial class AwardsService
 
     private async Task<List<Qso>> GetFilteredQsosAsync(StatisticsFilters? filters)
     {
-        var qsos = (await _repository.GetAllAsync()).ToList();
+        var qsos = (await AllQsosAsync()).ToList();
         if (filters == null) return qsos;
 
         if (!string.IsNullOrEmpty(filters.Band))

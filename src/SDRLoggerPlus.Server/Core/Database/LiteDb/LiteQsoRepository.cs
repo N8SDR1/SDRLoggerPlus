@@ -7,10 +7,23 @@ namespace SDRLoggerPlus.Server.Core.Database.LiteDb;
 public class LiteQsoRepository : IQsoRepository
 {
     private readonly LiteDbContext _context;
+    private readonly QsoSnapshotCache? _snapshots;
 
-    public LiteQsoRepository(LiteDbContext context)
+    public LiteQsoRepository(LiteDbContext context, QsoSnapshotCache? snapshots = null)
     {
         _context = context;
+        _snapshots = snapshots;
+    }
+
+    /// <summary>
+    /// Flush the write and drop the shared award snapshot. Every mutation goes
+    /// through here so a new write path cannot persist without invalidating —
+    /// a stale snapshot would show "not worked" for a country just logged.
+    /// </summary>
+    private void Commit()
+    {
+        _context.Database.Checkpoint();
+        _snapshots?.Invalidate();
     }
 
     public Task<Qso?> GetByIdAsync(string id)
@@ -109,7 +122,7 @@ public class LiteQsoRepository : IQsoRepository
         }
 
         _context.Qsos.Insert(qso);
-        _context.Database.Checkpoint();
+        Commit();
         return Task.FromResult(qso);
     }
 
@@ -134,7 +147,7 @@ public class LiteQsoRepository : IQsoRepository
         _context.Qsos.InsertBulk(qsoList);
 
         // Single checkpoint after all inserts - this is the key optimization
-        _context.Database.Checkpoint();
+        Commit();
 
         return Task.FromResult<IEnumerable<Qso>>(qsoList);
     }
@@ -151,14 +164,14 @@ public class LiteQsoRepository : IQsoRepository
 
         qso.Id = id;
         var success = _context.Qsos.Update(qso);
-        _context.Database.Checkpoint();
+        Commit();
         return Task.FromResult(success);
     }
 
     public Task<bool> DeleteAsync(string id)
     {
         var success = _context.Qsos.Delete(new BsonValue(id));
-        _context.Database.Checkpoint();
+        Commit();
         return Task.FromResult(success);
     }
 
@@ -310,14 +323,14 @@ public class LiteQsoRepository : IQsoRepository
         qso.UpdatedAt = DateTime.UtcNow;
 
         var success = _context.Qsos.Update(qso);
-        _context.Database.Checkpoint();
+        Commit();
         return Task.FromResult(success);
     }
 
     public Task<long> DeleteAllAsync()
     {
         var count = _context.Qsos.DeleteAll();
-        _context.Database.Checkpoint();
+        Commit();
         return Task.FromResult((long)count);
     }
 }

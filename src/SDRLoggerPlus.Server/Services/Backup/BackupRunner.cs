@@ -17,9 +17,11 @@ public class BackupRunner
     private readonly int _retention;
     private readonly BackupStateStore _stateStore;
     private readonly ILogger<BackupRunner> _logger;
+    private readonly Func<string, string?>? _verifyDbCopy; // null → skip verification; else returns error or null
 
     public BackupRunner(string? dbPath, Func<Task<string>> adifExport, string destinationRoot,
-        int retention, BackupStateStore stateStore, ILogger<BackupRunner> logger)
+        int retention, BackupStateStore stateStore, ILogger<BackupRunner> logger,
+        Func<string, string?>? verifyDbCopy = null)
     {
         _dbPath = dbPath;
         _adifExport = adifExport;
@@ -27,6 +29,7 @@ public class BackupRunner
         _retention = retention;
         _stateStore = stateStore;
         _logger = logger;
+        _verifyDbCopy = verifyDbCopy;
     }
 
     public async Task<BackupRunResult> RunAsync(string trigger)
@@ -51,8 +54,21 @@ public class BackupRunner
             {
                 if (File.Exists(_dbPath))
                 {
-                    File.Copy(_dbPath, Path.Combine(folder, Path.GetFileName(_dbPath)), overwrite: true);
-                    written.Add(Path.GetFileName(_dbPath));
+                    var destPath = Path.Combine(folder, Path.GetFileName(_dbPath));
+                    File.Copy(_dbPath, destPath, overwrite: true);
+
+                    var verifyError = _verifyDbCopy?.Invoke(destPath);
+                    if (verifyError != null)
+                    {
+                        // The copy is unreadable/corrupt — a backup that would fail
+                        // on restore. Remove it and do not count it as written.
+                        try { File.Delete(destPath); } catch { /* best effort */ }
+                        failures.Add($"db: copy failed verification ({verifyError})");
+                    }
+                    else
+                    {
+                        written.Add(Path.GetFileName(_dbPath));
+                    }
                 }
                 else
                 {

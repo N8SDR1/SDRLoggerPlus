@@ -192,7 +192,10 @@ public class WsjtxService : BackgroundService
     {
         if (!enabled)
         {
-            if (l.Udp != null) StopListener(l);
+            // Unconditional: a source can be socketless but still carry state
+            // worth clearing — e.g. enabled-but-failing has Udp == null with
+            // LastError set, and disabling it must drop that error too.
+            StopListener(l);
             l.CurrentEnabled = false;
             return;
         }
@@ -243,6 +246,16 @@ public class WsjtxService : BackgroundService
     {
         l.Udp?.Dispose();
         l.Udp = null;
+        // A stopped socket has no live clients and no current error. Without
+        // this, a disabled source's snapshot keeps advertising its old decoders
+        // (with an ever-aging LastHeardUtc) and its last bind error forever —
+        // and anything judging link health from the status would cry wolf.
+        // Clients repopulate from heartbeats (~15s apart) after a rebind.
+        lock (l.StateLock)
+        {
+            l.Clients.Clear();
+        }
+        l.LastError = null;
     }
 
     /// <summary>Pump every bound socket for a 5-second window, then re-check settings.</summary>
@@ -308,8 +321,19 @@ public class WsjtxService : BackgroundService
     /// <summary>Test / default entry point — attributes datagrams to the primary source.</summary>
     internal Task HandleDatagramAsync(byte[] buffer) => HandleDatagramAsync(_primary, buffer);
 
+    /// <summary>Test entry point — reconcile a source against explicit settings.</summary>
+    internal void Reconcile(int source, bool enabled, int port = 0, string? multicast = null)
+        => Reconcile(source == 2 ? _secondary : _primary, enabled, port, multicast);
+
     private async Task HandleDatagramAsync(Listener l, byte[] buffer)
     {
+        // A datagram arrived, so the socket is demonstrably receiving — any
+        // recorded error is over. Without this, one transient receive fault
+        // (e.g. Windows surfacing an ICMP port-unreachable as WSAECONNRESET
+        // after an outbound Reply) would flag the source as failed forever,
+        // because only a successful re-bind ever cleared LastError.
+        l.LastError = null;
+
         var message = WsjtxMessageReader.Parse(buffer);
         switch (message)
         {

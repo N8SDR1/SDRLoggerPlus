@@ -1587,7 +1587,9 @@ export interface LightningStatus {
   closestKm?: number | null;
   closestMi?: number | null;
   direction: string;
-  strikesLastHour: number;
+  // Aggregate across sources, each over its own window (Blitzortung ~10 min,
+  // Ambient last hour, Ecowitt firmware-defined) — a magnitude, not a rate.
+  strikeCount: number;
   sources: string[];
   nwsWarning?: string | null;
   lastUpdateUtc?: string | null;

@@ -9,6 +9,14 @@ public record LightningReading(double? DistanceKm, int StrikeCount);
 public record NwsWindAlert(string Headline, bool IsExtreme);
 public record StrikeInfo(double DistanceKm, double BearingDeg);
 
+/// <summary>
+/// Result of an alert-path strike fetch. FeedOk distinguishes "quiet skies"
+/// (feed answered, nothing in range) from "no data" (every slice fetch
+/// failed) — an empty list alone can't, and treating an outage as an
+/// all-clear made a transient feed failure drop an active proximity alert.
+/// </summary>
+public record StrikeFetch(List<StrikeInfo> Strikes, bool FeedOk);
+
 public record EcowittCredentials(string AppKey, string ApiKey, string Mac);
 public record AmbientCredentials(string ApiKey, string AppKey);
 
@@ -33,7 +41,7 @@ public interface IEcowittClient
 
 public interface IBlitzortungClient
 {
-    Task<List<StrikeInfo>> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default);
+    Task<StrikeFetch> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default);
     Task<List<LightningStrike>> GetStrikesRawAsync(IEnumerable<int> slices, CancellationToken ct = default);
 }
 
@@ -276,11 +284,13 @@ public class EcowittClient : IEcowittClient
     {
         var data = await GetLastDataAsync(creds, ct);
         if (data == null) return null;
-        // Ecowitt v3 reports lightning distance in km on most firmwares
+        // Ecowitt v3 reports lightning distance in km on most firmwares. Note
+        // `count` is Ecowitt's own counter (not an hourly window) — its reset
+        // period is firmware-defined.
         var distKm = Leaf(data.Value, "lightning", "distance");
-        var hour = (int)(Leaf(data.Value, "lightning", "count") ?? 0);
-        if (distKm == null || hour <= 0) return new LightningReading(null, 0);
-        return new LightningReading(distKm, hour);
+        var count = (int)(Leaf(data.Value, "lightning", "count") ?? 0);
+        if (distKm == null || count <= 0) return new LightningReading(null, 0);
+        return new LightningReading(distKm, count);
     }
 
     public async Task<WindReading?> GetWindAsync(EcowittCredentials creds, CancellationToken ct = default)
@@ -333,44 +343,36 @@ public class BlitzortungClient : IBlitzortungClient
         _logger = logger;
     }
 
-    public async Task<List<StrikeInfo>> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default)
+    public async Task<StrikeFetch> GetStrikesAsync(double lat, double lon, double rangeKm, CancellationToken ct = default)
     {
+        // Same fetch + parse as the raw path (previously a diverging copy that
+        // accepted timestamp-less rows), then distance-filtered for the alert.
+        var (raw, feedOk) = await FetchSlicesAsync(AlertSlices, ct);
         var strikes = new List<StrikeInfo>();
-        foreach (var slice in AlertSlices)
+        foreach (var s in raw)
         {
-            try
-            {
-                var client = _httpClientFactory.CreateClient();
-                client.Timeout = TimeSpan.FromSeconds(8);
-                client.DefaultRequestHeaders.Add("Referer", "https://map.blitzortung.org/");
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) SDRLoggerPlus");
-                var json = await client.GetStringAsync(
-                    $"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={slice:D2}", ct);
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
-                foreach (var item in doc.RootElement.EnumerateArray())
-                {
-                    // Flat arrays: [lon, lat, timestamp, ...]
-                    if (item.ValueKind != JsonValueKind.Array || item.GetArrayLength() < 2) continue;
-                    if (item[0].ValueKind != JsonValueKind.Number || item[1].ValueKind != JsonValueKind.Number) continue;
-                    var sLon = item[0].GetDouble();
-                    var sLat = item[1].GetDouble();
-                    var dist = PropagationService.HaversineDistanceKm(lat, lon, sLat, sLon);
-                    if (dist <= rangeKm)
-                        strikes.Add(new StrikeInfo(dist, GeoMath.BearingDeg(lat, lon, sLat, sLon)));
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug("Blitzortung slice {Slice} error: {Error}", slice, ex.Message);
-            }
+            var dist = PropagationService.HaversineDistanceKm(lat, lon, s.Lat, s.Lon);
+            if (dist <= rangeKm)
+                strikes.Add(new StrikeInfo(dist, GeoMath.BearingDeg(lat, lon, s.Lat, s.Lon)));
         }
-        return strikes;
+        return new StrikeFetch(strikes, feedOk);
     }
 
     public async Task<List<LightningStrike>> GetStrikesRawAsync(IEnumerable<int> slices, CancellationToken ct = default)
+        => (await FetchSlicesAsync(slices, ct)).Strikes;
+
+    /// <summary>
+    /// Fetch and parse the given time slices. FeedOk is true when at least one
+    /// slice returned a usable array (empty, or with at least one parseable
+    /// row) — the newest slice alone is usable data, so a partial failure is
+    /// still real information, but a total failure must not be mistaken for
+    /// "no strikes".
+    /// </summary>
+    private async Task<(List<LightningStrike> Strikes, bool FeedOk)> FetchSlicesAsync(
+        IEnumerable<int> slices, CancellationToken ct)
     {
         var strikes = new List<LightningStrike>();
+        var feedOk = false;
         foreach (var slice in slices)
         {
             try
@@ -382,9 +384,13 @@ public class BlitzortungClient : IBlitzortungClient
                 var json = await client.GetStringAsync(
                     $"https://map.blitzortung.org/GEOjson/getjson.php?f=s&n={slice:D2}", ct);
                 using var doc = JsonDocument.Parse(json);
+                // A non-array body is the feed misbehaving, not an all-clear.
                 if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
+                var rowCount = 0;
+                var parsedCount = 0;
                 foreach (var item in doc.RootElement.EnumerateArray())
                 {
+                    rowCount++;
                     // Flat arrays: [lon, lat, timestamp, ...]. The live feed sends the
                     // timestamp as a "yyyy-MM-dd HH:mm:ss.fffffffff" UTC string; the
                     // ns-since-epoch number form is accepted for compatibility.
@@ -395,14 +401,22 @@ public class BlitzortungClient : IBlitzortungClient
                     var lon = item[0].GetDouble();
                     var lat = item[1].GetDouble();
                     strikes.Add(new LightningStrike(lat, lon, ts.Value, Local: false));
+                    parsedCount++;
                 }
+                // An empty array is quiet skies; an array with rows and none
+                // parseable is schema drift — the same "feed misbehaving" case
+                // as a non-array body, and must not read as an all-clear.
+                if (rowCount == 0 || parsedCount > 0) feedOk = true;
+                else _logger.LogDebug(
+                    "Blitzortung slice {Slice}: {Rows} rows, none parseable — treating as feed failure",
+                    slice, rowCount);
             }
             catch (Exception ex)
             {
-                _logger.LogDebug("Blitzortung raw slice {Slice} error: {Error}", slice, ex.Message);
+                _logger.LogDebug("Blitzortung slice {Slice} error: {Error}", slice, ex.Message);
             }
         }
-        return strikes;
+        return (strikes, feedOk);
     }
 
     /// <summary>

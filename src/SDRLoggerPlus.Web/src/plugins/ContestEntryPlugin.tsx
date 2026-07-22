@@ -16,6 +16,14 @@ import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { ContestEditor } from '../components/ContestEditor';
 import { isValidStateProv } from '../contest/locations';
+import { useRegisterShortcuts } from '../hooks/useRegisterShortcuts';
+import type { Shortcut } from '../utils/shortcuts';
+
+// Implemented by onKeyDown below — keep the two in step.
+const SHORTCUTS: Shortcut[] = [
+  { keys: 'Enter', label: 'Log the QSO' },
+  { keys: 'Esc', label: 'Clear the entry fields' },
+];
 
 // Only used before the active definition has loaded; the live dropdowns come from
 // the contest definition's own bands/modes so we never offer a band or mode the
@@ -678,6 +686,8 @@ function EntryView() {
       setLogging(false);
     }
   }, [call, band, mode, exchange, editingId, definition, workedClass, rigStatus, rstDefault, logging, setContestState, queryClient, wipe]);
+
+  useRegisterShortcuts('Contest Entry', SHORTCUTS);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {

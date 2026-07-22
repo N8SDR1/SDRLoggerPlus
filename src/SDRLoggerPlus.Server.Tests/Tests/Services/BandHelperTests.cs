@@ -8,6 +8,12 @@ namespace SDRLoggerPlus.Server.Tests.Tests.Services;
 public class BandHelperTests
 {
     [Theory]
+    [InlineData(135_700, "2200m")]
+    [InlineData(136_000, "2200m")]
+    [InlineData(137_800, "2200m")]
+    [InlineData(472_000, "630m")]
+    [InlineData(475_000, "630m")]
+    [InlineData(479_000, "630m")]
     [InlineData(1_800_000, "160m")]
     [InlineData(1_900_000, "160m")]
     [InlineData(1_999_999, "160m")]
@@ -43,9 +49,18 @@ public class BandHelperTests
     [InlineData(144_000_000, "2m")]
     [InlineData(146_000_000, "2m")]
     [InlineData(148_000_000, "2m")]
+    [InlineData(222_000_000, "1.25m")]
+    [InlineData(223_500_000, "1.25m")]
+    [InlineData(225_000_000, "1.25m")]
     [InlineData(420_000_000, "70cm")]
     [InlineData(435_000_000, "70cm")]
     [InlineData(450_000_000, "70cm")]
+    [InlineData(902_000_000, "33cm")]
+    [InlineData(915_000_000, "33cm")]
+    [InlineData(928_000_000, "33cm")]
+    [InlineData(1_240_000_000, "23cm")]
+    [InlineData(1_270_000_000, "23cm")]
+    [InlineData(1_300_000_000, "23cm")]
     public void GetBand_ReturnsCorrectBand(long frequencyHz, string expectedBand)
     {
         BandHelper.GetBand(frequencyHz).Should().Be(expectedBand);
@@ -53,6 +68,11 @@ public class BandHelperTests
 
     [Theory]
     [InlineData(0)]
+    [InlineData(135_699)]   // just below 2200m
+    [InlineData(137_801)]   // just above 2200m
+    [InlineData(300_000)]   // gap between 2200m and 630m
+    [InlineData(471_999)]   // just below 630m
+    [InlineData(479_001)]   // just above 630m
     [InlineData(500_000)]
     [InlineData(2_500_000)]
     [InlineData(5_000_000)]

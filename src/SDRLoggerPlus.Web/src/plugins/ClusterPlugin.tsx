@@ -13,6 +13,7 @@ import { useAppStore, Spot } from '../store/appStore';
 import { useAgGridState } from '../hooks/useAgGridState';
 import { rigModeToSpotModes } from '../utils/rigTracking';
 import { getBandFromFrequency, BAND_OPTIONS, MODE_OPTIONS } from '../utils/spotBands';
+import { computeSpotGeo, formatDistance, formatBearing, type SpotGeo } from '../utils/spotGeo';
 
 const STATUS_OPTIONS: MultiSelectOption[] = [
   { value: 'newDxcc', label: 'New DXCC' },
@@ -600,6 +601,9 @@ export function ClusterPlugin() {
 
   // Row style callback for status coloring
   const hotListEnabled = useSettingsStore(state => state.settings.hotList.enabled);
+  // Station position drives the Dist/Bearing columns; re-subscribe so editing
+  // the grid square in Settings refreshes them without a reload.
+  const station = useSettingsStore(state => state.settings.station);
   const getRowStyle = useCallback((params: { data?: Spot }): RowStyle | undefined => {
     // Hot-list callsigns always win — they override all category colors
     if (hotListEnabled && params.data?.isHot) {
@@ -730,6 +734,32 @@ export function ClusterPlugin() {
       resizable: true,
     },
     {
+      headerName: 'Dist',
+      colId: 'distance',
+      headerTooltip: 'Great-circle distance from your station (km). "~" = country centroid, not a reported grid.',
+      // The cell value is the whole SpotGeo so the formatter can show the
+      // approximate marker without recomputing; sorting uses the raw km.
+      valueGetter: (params) => computeSpotGeo(station, params.data),
+      valueFormatter: (params) => formatDistance(params.value as SpotGeo | null),
+      comparator: (a: SpotGeo | null, b: SpotGeo | null) =>
+        (a?.distanceKm ?? Infinity) - (b?.distanceKm ?? Infinity),
+      cellClass: 'font-mono text-dark-300 text-right',
+      width: 75,
+      resizable: true,
+    },
+    {
+      headerName: 'Brg',
+      colId: 'bearing',
+      headerTooltip: 'Beam heading from your station, degrees true',
+      valueGetter: (params) => computeSpotGeo(station, params.data),
+      valueFormatter: (params) => formatBearing(params.value as SpotGeo | null),
+      comparator: (a: SpotGeo | null, b: SpotGeo | null) =>
+        (a?.bearingDeg ?? Infinity) - (b?.bearingDeg ?? Infinity),
+      cellClass: 'font-mono text-dark-300 text-right',
+      width: 65,
+      resizable: true,
+    },
+    {
       headerName: 'Spotter',
       field: 'spotter',
       cellClass: 'font-mono text-dark-300',
@@ -749,7 +779,7 @@ export function ClusterPlugin() {
       minWidth: 100,
       resizable: true,
     },
-  ], []);
+  ], [station]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,

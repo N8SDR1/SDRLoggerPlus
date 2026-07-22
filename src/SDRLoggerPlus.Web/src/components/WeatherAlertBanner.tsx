@@ -4,6 +4,7 @@ import { api, LightningStatus, WindStatus } from '../api/client';
 import { useSettingsStore } from '../store/settingsStore';
 import { useWeatherPreviewStore } from '../store/weatherPreviewStore';
 import { formatSpeed, resolveSpeedUnit } from '../utils/units';
+import { isLightningDataDelayed } from '../utils/lightningStale';
 
 const SEVERITY_STYLES: Record<string, string> = {
   elevated: 'bg-yellow-900/60 border-yellow-600/60 text-yellow-200',
@@ -62,7 +63,7 @@ export function WeatherAlertBanner() {
   if (!lightningActive && !windActive) return null;
 
   // Key changes whenever the alert content changes, un-hiding a dismissed banner
-  const key = `${lightningActive ? `L${effectiveLightning?.strikesLastHour}${effectiveLightning?.closestKm}` : ''}|${windActive ? `W${effectiveWind?.severity}${effectiveWind?.gustMph}` : ''}`;
+  const key = `${lightningActive ? `L${effectiveLightning?.strikeCount}${effectiveLightning?.closestKm}` : ''}|${windActive ? `W${effectiveWind?.severity}${effectiveWind?.gustMph}` : ''}`;
   if (key === dismissedKey) return null;
 
   // Resolve the display unit from the master system (the event's echoed `unit`
@@ -85,6 +86,14 @@ export function WeatherAlertBanner() {
       ? `${l.closestMi} mi`
       : `${l.closestKm ?? Math.round(l.closestMi * 1.609344)} km`;
 
+  // The lightning status can be knowingly stale: during a Blitzortung outage
+  // the backend holds the last alert (up to 5 min) rather than fake an
+  // all-clear, and a held status keeps its original LastUpdateUtc. Say so
+  // instead of letting a frozen banner masquerade as live data. Preview
+  // statuses are stamped fresh, but skip them explicitly anyway.
+  const lightningStale = lightningActive && !previewActive &&
+    isLightningDataDelayed(l?.lastUpdateUtc, Date.now());
+
   const severityStyle = SEVERITY_STYLES[w?.severity ?? ''] ?? SEVERITY_STYLES.high;
   const style = lightningActive ? SEVERITY_STYLES.extreme : severityStyle;
 
@@ -99,8 +108,11 @@ export function WeatherAlertBanner() {
         <span className="flex items-center gap-1.5" title={l?.nwsWarning ?? 'Lightning detected'}>
           <Zap className="w-3.5 h-3.5" />
           Lightning{lightningDistText && ` ${lightningDistText} ${l!.direction}`}
-          {l != null && l.strikesLastHour > 0 && ` · ${l.strikesLastHour}/hr`}
+          {/* No "/hr" — the sources count over different windows (Blitzortung
+              ~10 min, PWS hourly/daily), so this is a magnitude, not a rate. */}
+          {l != null && l.strikeCount > 0 && ` · ${l.strikeCount} strikes`}
           {l?.nwsWarning && ` · ${l.nwsWarning}`}
+          {lightningStale && <span className="opacity-75 italic">· data delayed</span>}
         </span>
       )}
       {windActive && (

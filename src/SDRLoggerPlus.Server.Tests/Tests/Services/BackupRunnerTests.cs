@@ -27,7 +27,8 @@ public class BackupRunnerTests : IDisposable
     private BackupRunner CreateRunner(
         string? dbFile = "default",
         Func<Task<string>>? adifExport = null,
-        int retention = 10)
+        int retention = 10,
+        Func<string, string?>? verifyDbCopy = null)
     {
         return new BackupRunner(
             dbPath: dbFile == "default" ? _dbFile : dbFile,
@@ -35,7 +36,8 @@ public class BackupRunnerTests : IDisposable
             destinationRoot: _dest,
             retention: retention,
             stateStore: _stateStore,
-            logger: NullLogger<BackupRunner>.Instance);
+            logger: NullLogger<BackupRunner>.Instance,
+            verifyDbCopy: verifyDbCopy);
     }
 
     [Fact]
@@ -116,6 +118,45 @@ public class BackupRunnerTests : IDisposable
         var state = _stateStore.Load();
         state.LastRunUtc.Should().NotBeNull();
         state.Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Run_DbCopyPassesVerification_VerifierSeesCopiedFile_AndDbIsKept()
+    {
+        string? verifiedPath = null;
+        var result = await CreateRunner(verifyDbCopy: p => { verifiedPath = p; return null; }).RunAsync("manual");
+
+        result.Ok.Should().BeTrue();
+        var folder = Directory.GetDirectories(_dest).Single();
+        // Verifier was handed the freshly written copy, not the source.
+        verifiedPath.Should().Be(Path.Combine(folder, "sdrloggerplus.db"));
+        File.Exists(Path.Combine(folder, "sdrloggerplus.db")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Run_DbCopyFailsVerification_RemovesBadCopy_AndReportsPartial()
+    {
+        // ADIF still succeeds, so the run is a (partial) success, but the corrupt
+        // DB copy must not be left behind or counted as a good backup.
+        var result = await CreateRunner(verifyDbCopy: _ => "corrupt header").RunAsync("manual");
+
+        result.Ok.Should().BeTrue(); // ADIF written → partial success
+        result.Message.Should().Contain("corrupt header");
+        var folder = Directory.GetDirectories(_dest).Single();
+        File.Exists(Path.Combine(folder, "sdrloggerplus.db")).Should().BeFalse();
+        File.Exists(Path.Combine(folder, "sdrloggerplus.adi")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Run_DbFailsVerification_AndNoAdif_ReportsFailure()
+    {
+        var result = await CreateRunner(
+            adifExport: () => throw new InvalidOperationException("boom"),
+            verifyDbCopy: _ => "corrupt header").RunAsync("scheduled");
+
+        result.Ok.Should().BeFalse();
+        var folder = Directory.GetDirectories(_dest).Single();
+        File.Exists(Path.Combine(folder, "sdrloggerplus.db")).Should().BeFalse();
     }
 
     [Fact]
