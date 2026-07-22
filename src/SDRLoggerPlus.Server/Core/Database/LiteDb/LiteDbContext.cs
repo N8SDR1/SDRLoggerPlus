@@ -1,8 +1,10 @@
 using LiteDB;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Contracts.Models.Contesting;
+using SDRLoggerPlus.Server.Core.Database.Migrations;
 using SDRLoggerPlus.Server.Services;
 using Serilog;
+using Serilog.Extensions.Logging;
 
 namespace SDRLoggerPlus.Server.Core.Database.LiteDb;
 
@@ -94,6 +96,7 @@ public class LiteDbContext : IDbContext, IDisposable
                 _isInitialized = true;
 
                 CreateIndexes();
+                RunMigrations();
 
                 Log.Information("LiteDB initialized successfully");
                 return true;
@@ -175,6 +178,30 @@ public class LiteDbContext : IDbContext, IDisposable
         var configPath = _userConfigService.GetConfigPath();
         var configDir = Path.GetDirectoryName(configPath)!;
         return Path.Combine(configDir, "sdrloggerplus.db");
+    }
+
+    /// <summary>
+    /// Apply pending schema/data migrations. Runs after the indexes exist (a
+    /// migration may scan a collection) and before any repository can read, so
+    /// no caller ever observes half-repaired data.
+    ///
+    /// Migration failure must not stop the app from opening — see
+    /// MigrationRunner — so this only guards against the runner itself
+    /// throwing, which would mean a programming error such as duplicate
+    /// version numbers.
+    /// </summary>
+    private void RunMigrations()
+    {
+        try
+        {
+            var logger = new SerilogLoggerFactory(Log.Logger).CreateLogger("Migrations");
+            var runner = new MigrationRunner(MigrationCatalog.All, logger);
+            runner.Run(_database!, _dbPath);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Migration runner could not start; database left unmigrated");
+        }
     }
 
     private void CreateIndexes()
