@@ -73,7 +73,37 @@ public record QsoResponse(
     bool ConfirmedLotw = false,
     bool ConfirmedEqsl = false,
     bool ConfirmedQrz = false,
-    bool ConfirmedCard = false
+    bool ConfirmedCard = false,
+    // Upload state per QSL service for the Log History "Sync" column. Null
+    // means the QSO predates upload tracking — deliberately distinct from
+    // "not sent", because for those QSOs we genuinely do not know.
+    QslSyncDto? QslSync = null
+);
+
+/// <summary>Upload state for one QSL service, as shown in Log History.</summary>
+public record QslServiceSyncDto(
+    string Status,
+    DateTime? SyncedAt,
+    DateTime? LastAttemptAt,
+    string? LastError,
+    string FailureKind,
+    int Attempts,
+    bool Retryable
+);
+
+public record QslSyncDto(
+    QslServiceSyncDto? ClubLog,
+    QslServiceSyncDto? HrdLog,
+    QslServiceSyncDto? Eqsl
+);
+
+/// <summary>Ledger totals for the whole log, per service.</summary>
+public record QslSyncSummaryDto(
+    int Total,
+    int Synced,
+    int Failed,
+    int Retryable,
+    int Untracked
 );
 
 public record StationInfoDto(

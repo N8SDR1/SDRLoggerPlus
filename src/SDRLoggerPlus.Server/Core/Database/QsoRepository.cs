@@ -29,5 +29,15 @@ public interface IQsoRepository
     Task<Qso?> GetMostRecentByCallsignAsync(string callsign);
     Task<bool> UpdateQrzSyncStatusAsync(string id, string qrzLogId);
     Task<int> GetPendingSyncCountAsync();
+
+    /// <summary>
+    /// Persist the Club Log / HRDLog / eQSL ledger for one QSO without
+    /// touching any other field. Separate from UpdateAsync on purpose — see
+    /// the implementation for why.
+    /// </summary>
+    Task<bool> UpdateQslSyncAsync(string id, QslSyncLedger ledger);
+
+    /// <summary>QSOs whose ledger records a retryable failure for the given service.</summary>
+    Task<IEnumerable<Qso>> GetQslFailuresAsync(string service);
     Task<long> DeleteAllAsync();
 }

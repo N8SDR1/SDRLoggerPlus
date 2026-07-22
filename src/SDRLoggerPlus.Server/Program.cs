@@ -161,11 +161,19 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<FlrigService>());
 
 
 // Club Log realtime QSO upload (singleton so the one-strike auth block persists)
+// Club Log's one-strike auth block, persisted beside the database so a
+// restart cannot re-arm uploads against credentials already rejected.
+builder.Services.AddSingleton(sp => new SDRLoggerPlus.Server.Services.Qsl.QslBlockStateStore(
+    Path.Combine(
+        Path.GetDirectoryName(sp.GetRequiredService<IUserConfigService>().GetConfigPath())!,
+        "qsl-block-state.json")));
+
 builder.Services.AddSingleton<ClubLogService>(sp =>
     new ClubLogService(
         sp.GetRequiredService<ISettingsService>(),
         sp.GetRequiredService<IHttpClientFactory>().CreateClient("ClubLog"),
-        sp.GetRequiredService<ILogger<ClubLogService>>()));
+        sp.GetRequiredService<ILogger<ClubLogService>>(),
+        sp.GetRequiredService<SDRLoggerPlus.Server.Services.Qsl.QslBlockStateStore>()));
 
 // HRDLog.net realtime QSO upload
 builder.Services.AddSingleton<HrdLogService>(sp =>
@@ -180,6 +188,11 @@ builder.Services.AddSingleton<EqslService>(sp =>
         sp.GetRequiredService<ISettingsService>(),
         sp.GetRequiredService<IHttpClientFactory>().CreateClient("Eqsl"),
         sp.GetRequiredService<ILogger<EqslService>>()));
+
+// Records every QSL upload attempt on the QSO it belongs to. Scoped because
+// it uses the scoped QSO repository; the background upload tasks resolve it
+// through their own scope.
+builder.Services.AddScoped<SDRLoggerPlus.Server.Services.Qsl.QslSyncRecorder>();
 
 // Generic ADIF-over-UDP auto-import (VarAC / N1MM / Logger32 / …)
 builder.Services.AddHostedService<AdifUdpListenerService>();
