@@ -49,9 +49,14 @@ public class LiteSettingsRepository : ISettingsRepository
         // response; handing back ciphertext would put "slp$1$dpapi$..." into
         // the settings form's password boxes and the operator would save it
         // as their new password.
-        SettingsSecrets.Transform(settings, _protector.Protect);
+        //
+        // The encrypt transform sits INSIDE the try so that a Protect failure
+        // partway through the fields still hits the finally — Unprotect passes
+        // plaintext through untouched, so restoring a half-protected object is
+        // safe and leaves the caller holding exactly what it passed in.
         try
         {
+            SettingsSecrets.Transform(settings, _protector.Protect);
             _context.Settings.Upsert(settings);
             _context.Database.Checkpoint();
         }

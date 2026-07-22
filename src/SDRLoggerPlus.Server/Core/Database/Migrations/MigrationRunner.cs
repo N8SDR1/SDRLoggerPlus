@@ -121,7 +121,11 @@ public class MigrationRunner
             // overwrite: false — a pre-migration backup is the only copy of the
             // pre-repair data, so it must never be clobbered by a later run.
             File.Copy(dbPath, target, overwrite: false);
-            _logger.LogInformation("Pre-migration backup written to {Path}", target);
+            _logger.LogInformation(
+                "Pre-migration backup written to {Path}. It is an exact copy of the " +
+                "pre-migration data — including anything a migration is about to encrypt " +
+                "or repair — so treat it with the same care as the database itself, and " +
+                "consider deleting it once the app is verified working.", target);
             return true;
         }
         catch (Exception ex)

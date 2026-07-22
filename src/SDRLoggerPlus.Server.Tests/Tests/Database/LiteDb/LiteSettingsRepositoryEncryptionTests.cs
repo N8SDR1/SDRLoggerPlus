@@ -98,6 +98,52 @@ public class LiteSettingsRepositoryEncryptionTests : IDisposable
         loaded.Cluster.Connections[0].Name.Should().Be("VE7CC");
     }
 
+    /// <summary>Protects normally until the Nth non-empty value, then throws.</summary>
+    private sealed class FailingProtector : ISecretProtector
+    {
+        private readonly ISecretProtector _inner;
+        private readonly int _failOn;
+        private int _seen;
+
+        public FailingProtector(ISecretProtector inner, int failOn)
+        {
+            _inner = inner;
+            _failOn = failOn;
+        }
+
+        public string? Protect(string? plaintext)
+        {
+            if (string.IsNullOrEmpty(plaintext)) return plaintext;
+            if (++_seen >= _failOn) throw new InvalidOperationException("protector failed on purpose");
+            return _inner.Protect(plaintext);
+        }
+
+        public string? Unprotect(string? stored) => _inner.Unprotect(stored);
+    }
+
+    [Fact]
+    public async Task AFailedSaveLeavesTheCallersObjectFullyPlaintext()
+    {
+        // Protect throws partway through the credential fields. The save must
+        // fail loudly AND the caller's object must come back exactly as it
+        // went in — no field left holding ciphertext from before the throw.
+        var repo = new LiteSettingsRepository(_fixture.Context, new FailingProtector(_protector, failOn: 3));
+        var settings = new UserSettings
+        {
+            Qrz = { Password = "one", ApiKey = "two" },
+            Lotw = { Password = "three" },
+            Ai = { ApiKey = "four" }
+        };
+
+        var act = () => repo.UpsertAsync(settings);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        settings.Qrz.Password.Should().Be("one");
+        settings.Qrz.ApiKey.Should().Be("two");
+        settings.Lotw.Password.Should().Be("three");
+        settings.Ai.ApiKey.Should().Be("four");
+    }
+
     [Fact]
     public async Task WithoutAProtectorBehaviourIsUnchanged()
     {
