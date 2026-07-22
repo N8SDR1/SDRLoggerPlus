@@ -1,8 +1,11 @@
 using LiteDB;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Contracts.Models.Contesting;
+using SDRLoggerPlus.Server.Core.Database.Migrations;
+using SDRLoggerPlus.Server.Core.Security;
 using SDRLoggerPlus.Server.Services;
 using Serilog;
+using Serilog.Extensions.Logging;
 
 namespace SDRLoggerPlus.Server.Core.Database.LiteDb;
 
@@ -94,6 +97,7 @@ public class LiteDbContext : IDbContext, IDisposable
                 _isInitialized = true;
 
                 CreateIndexes();
+                RunMigrations();
 
                 Log.Information("LiteDB initialized successfully");
                 return true;
@@ -175,6 +179,38 @@ public class LiteDbContext : IDbContext, IDisposable
         var configPath = _userConfigService.GetConfigPath();
         var configDir = Path.GetDirectoryName(configPath)!;
         return Path.Combine(configDir, "sdrloggerplus.db");
+    }
+
+    /// <summary>
+    /// Apply pending schema/data migrations. Runs after the indexes exist (a
+    /// migration may scan a collection) and before any repository can read, so
+    /// no caller ever observes half-repaired data.
+    ///
+    /// Migration failure must not stop the app from opening — see
+    /// MigrationRunner — so this only guards against the runner itself
+    /// throwing, which would mean a programming error such as duplicate
+    /// version numbers.
+    /// </summary>
+    private void RunMigrations()
+    {
+        try
+        {
+            var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+            // Built here rather than injected: LiteDbContext is constructed
+            // during DI setup, and a credential migration must use the same
+            // protector the settings repository will later read back with.
+            var protector = new SecretProtector(
+                Path.GetDirectoryName(_dbPath)!,
+                loggerFactory.CreateLogger<SecretProtector>());
+
+            var runner = new MigrationRunner(
+                MigrationCatalog.Build(protector), loggerFactory.CreateLogger("Migrations"));
+            runner.Run(_database!, _dbPath);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Migration runner could not start; database left unmigrated");
+        }
     }
 
     private void CreateIndexes()

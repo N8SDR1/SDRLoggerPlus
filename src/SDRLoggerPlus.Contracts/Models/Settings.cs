@@ -201,7 +201,7 @@ public class QrzSettings
     public string? Username { get; set; } = string.Empty;
 
     [BsonElement("password")]
-    public string? Password { get; set; } = string.Empty; // Stored in plaintext (LiteDB is unencrypted); at-rest encryption is a known pending task.
+    public string? Password { get; set; } = string.Empty; // Encrypted at rest by SecretProtector (see SettingsSecrets)
 
     [BsonElement("enabled")]
     public bool Enabled { get; set; }
@@ -226,7 +226,7 @@ public class HamQthSettings
     public string? Username { get; set; } = string.Empty;
 
     [BsonElement("password")]
-    public string? Password { get; set; } = string.Empty; // Stored in plaintext (LiteDB is unencrypted); at-rest encryption is a known pending task.
+    public string? Password { get; set; } = string.Empty; // Encrypted at rest by SecretProtector (see SettingsSecrets)
 
     [BsonElement("enabled")]
     public bool Enabled { get; set; }
@@ -947,7 +947,7 @@ public class AiSettings
     public string? Provider { get; set; } = "anthropic";
 
     [BsonElement("apiKey")]
-    public string? ApiKey { get; set; } = string.Empty; // Stored in plaintext (LiteDB is unencrypted); optional for local providers (Ollama). At-rest encryption is a known pending task.
+    public string? ApiKey { get; set; } = string.Empty; // Encrypted at rest; optional for local providers (Ollama)
 
     [BsonElement("model")]
     public string? Model { get; set; } = "claude-sonnet-4-5-20250929"; // Provider-specific model name
