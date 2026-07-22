@@ -1,8 +1,12 @@
 import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, AwardFilters } from '../api/client';
+import { BAND_RANGES } from '../utils/spotBands';
 
-const BANDS = ['160m', '80m', '40m', '20m', '17m', '15m', '12m', '10m', '6m'];
+// Derived from the shared band table rather than a local copy, so a band can
+// never be missing from the filter while QSOs on it sit in the log. The old
+// hard-coded list omitted 30m, 60m, 2m and 70cm — 30m alone hides ~740 QSOs.
+const BANDS = Object.keys(BAND_RANGES);
 
 /** Worked/confirmed progress within one bar: confirmed fills over worked. */
 function ProgressBar({ worked, confirmed, target }: { worked: number; confirmed: number; target: number }) {
