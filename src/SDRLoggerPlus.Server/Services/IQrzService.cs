@@ -81,6 +81,7 @@ public record QrzCallsignInfo(
     string? Address,
     string? City,
     string? State,
+    string? County,
     string? Country,
     string? Grid,
     double? Latitude,

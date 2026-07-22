@@ -33,6 +33,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Data\cty.dat" />
+    <EmbeddedResource Include="Data\us_counties.csv" />
   </ItemGroup>
 
   <!-- Native Hamlib libraries - copy to output preserving directory structure -->

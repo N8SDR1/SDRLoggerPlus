@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, AwardFilters } from '../api/client';
+import { ALL_BANDS as BANDS } from '../utils/spotBands';
 
 const ALL_STATES = [
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA',
@@ -9,8 +10,6 @@ const ALL_STATES = [
   'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
   'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY',
 ];
-
-const BANDS = ['160m', '80m', '40m', '20m', '17m', '15m', '12m', '10m', '6m'];
 
 export function WasStatisticsTab() {
   const [filters, setFilters] = useState<AwardFilters>({});

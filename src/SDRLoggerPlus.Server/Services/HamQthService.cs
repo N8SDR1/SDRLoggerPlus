@@ -323,6 +323,7 @@ public class HamQthService : IHamQthService
             CqZone: ParseInt(Get("cq")),
             ItuZone: ParseInt(Get("itu")),
             State: Get("us_state") ?? Get("qsl_via"), // us_state is the usual HamQTH tag
+            County: Get("us_county"),
             City: Get("adr_city"),
             ImageUrl: Get("picture")
         );

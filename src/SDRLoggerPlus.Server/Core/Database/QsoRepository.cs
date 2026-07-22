@@ -14,6 +14,13 @@ public interface IQsoRepository
     Task<IEnumerable<Qso>> CreateBulkAsync(IEnumerable<Qso> qsos);
     Task<bool> UpdateAsync(string id, Qso qso);
     Task<bool> DeleteAsync(string id);
+
+    /// <summary>
+    /// Deletes several QSOs in one pass, returning how many actually existed.
+    /// Separate from looping <see cref="DeleteAsync"/> so the batch costs one
+    /// database checkpoint instead of one per row.
+    /// </summary>
+    Task<int> DeleteManyAsync(IEnumerable<string> ids);
     Task<QsoStatistics> GetStatisticsAsync();
     Task<int> GetCountAsync();
     Task<bool> ExistsAsync(string callsign, DateTime qsoDate, string timeOn, string band, string mode);

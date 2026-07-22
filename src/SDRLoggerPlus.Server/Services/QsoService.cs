@@ -136,7 +136,12 @@ public class QsoService : IQsoService
                 Name = request.Name,
                 Qth = request.Qth,
                 Grid = request.Grid,
-                Country = request.Country
+                Country = request.Country,
+                State = request.State,
+                // Stored as the bare name; a "ST," prefix (ADIF CNTY style)
+                // is stripped in case a caller sends the prefixed form.
+                County = Counties.CountyNameNormalizer.SplitStatePrefix(request.County).County
+                    is { Length: > 0 } county ? county : null,
             }
         };
 
@@ -245,6 +250,12 @@ public class QsoService : IQsoService
         if (request.Name != null) existing.Station.Name = request.Name;
         if (request.Grid != null) existing.Station.Grid = request.Grid;
         if (request.Country != null) existing.Station.Country = request.Country;
+        if (request.State != null) existing.Station.State = request.State;
+        // Stripped the same way as on create: a caller may send the ADIF
+        // "ST,County" form, but the field is stored as the bare name.
+        if (request.County != null)
+            existing.Station.County = Counties.CountyNameNormalizer.SplitStatePrefix(request.County).County
+                is { Length: > 0 } county ? county : null;
 
         await _repository.UpdateAsync(id, existing);
         return MapToResponse(existing);
@@ -253,6 +264,11 @@ public class QsoService : IQsoService
     public async Task<bool> DeleteAsync(string id)
     {
         return await _repository.DeleteAsync(id);
+    }
+
+    public async Task<int> DeleteManyAsync(IEnumerable<string> ids)
+    {
+        return await _repository.DeleteManyAsync(ids);
     }
 
     public async Task<QsoStatistics> GetStatisticsAsync()
@@ -277,6 +293,7 @@ public class QsoService : IQsoService
             qso.Country ?? qso.Station?.Country,
             qso.Dxcc ?? qso.Station?.Dxcc,
             qso.Station?.State,
+            qso.Station?.County,
             qso.Continent ?? qso.Station?.Continent,
             qso.Station?.Latitude,
             qso.Station?.Longitude
@@ -284,6 +301,7 @@ public class QsoService : IQsoService
         qso.Comment,
         qso.CreatedAt,
         qso.Contest?.ContestId,
+        Satellites.SatelliteResolver.Name(qso),
         string.Equals(qso.Qsl?.Lotw?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         string.Equals(qso.Qsl?.Eqsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         string.Equals(qso.Qsl?.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),

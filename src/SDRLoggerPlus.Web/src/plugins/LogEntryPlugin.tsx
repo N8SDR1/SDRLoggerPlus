@@ -209,6 +209,7 @@ export function LogEntryPlugin() {
     frequency: '',
     name: '',
     qth: '',
+    county: '',
     grid: '',
     contest: '',
     remarks: '',
@@ -348,12 +349,14 @@ export function LogEntryPlugin() {
     if (filledFor.current === info.callsign) return;
     const qth = [info.city, info.state].filter(Boolean).join(', ');
     const grid = (info.grid ?? '').toUpperCase();
-    if (!qth && !grid) return;
+    const county = info.county ?? '';
+    if (!qth && !grid && !county) return;
     filledFor.current = info.callsign;
     setFormData(prev => ({
       ...prev,
       ...(qth ? { qth } : {}),
       ...(grid ? { grid } : {}),
+      ...(county ? { county } : {}),
     }));
   }, [focusedCallsignInfo]);
 
@@ -485,6 +488,7 @@ export function LogEntryPlugin() {
         callsign: '',
         name: '',
         qth: '',
+        county: '',
         grid: '',
         contest: '',
         remarks: '',
@@ -529,6 +533,7 @@ export function LogEntryPlugin() {
       frequency: followRadio && currentRadioState ? formData.frequency : '',
       name: '',
       qth: '',
+      county: '',
       grid: '',
       contest: '',
       remarks: '',
@@ -590,6 +595,10 @@ export function LogEntryPlugin() {
       rstRcvd,
       name: formData.name || focusedCallsignInfo?.name,
       qth: formData.qth || undefined,
+      // State rides from the lookup like country does; county prefers the
+      // form value so an operator correction wins over the callbook.
+      state: focusedCallsignInfo?.state,
+      county: formData.county || focusedCallsignInfo?.county,
       // In SAT mode the operator hand-enters the worked station's grid
       // (satGrid); otherwise fall back to the general grid field then QRZ.
       grid: (logMode === 'sat' && formData.satGrid)
@@ -1226,7 +1235,7 @@ export function LogEntryPlugin() {
           </div>
         </div>
 
-        {/* QTH/Location + grid — v1.x General fields, worked-station location.
+        {/* QTH/Location + county + grid — worked-station location.
             Both auto-fill from the callbook lookup. The grid was always logged
             (the submit path falls back to the lookup value) but had no box, so
             it couldn't be seen or corrected before logging. */}
@@ -1241,6 +1250,16 @@ export function LogEntryPlugin() {
               value={formData.qth}
               onChange={(e) => setFormData(prev => ({ ...prev, qth: e.target.value }))}
               placeholder="City, State"
+              className="glass-input w-full text-sm"
+            />
+          </div>
+          <div className="w-32 shrink-0">
+            <label className="text-xs font-ui text-dark-200 mb-1 block">County</label>
+            <input
+              type="text"
+              value={formData.county}
+              onChange={(e) => setFormData(prev => ({ ...prev, county: e.target.value }))}
+              placeholder="County"
               className="glass-input w-full text-sm"
             />
           </div>

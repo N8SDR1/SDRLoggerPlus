@@ -17,6 +17,9 @@ public interface IAwardsService
     Task<WacStatistics> GetWacStatisticsAsync(StatisticsFilters? filters = null);
     Task<FiveBandStatistics> Get5BWasStatisticsAsync(string? mode = null);
     Task<FiveBandStatistics> Get5BDxccStatisticsAsync(string? mode = null);
+    Task<SatelliteStatistics> GetSatelliteStatisticsAsync(StatisticsFilters? filters = null);
+    Task<CountiesStatistics> GetCountiesStatisticsAsync(StatisticsFilters? filters = null);
+    Task<List<CountyDetail>> GetCountyDetailsAsync(string state, StatisticsFilters? filters = null);
 }
 
 public partial class AwardsService : IAwardsService
@@ -169,32 +172,35 @@ public partial class AwardsService : IAwardsService
         "2m" => 100,
         "70cm" => 50,
         "23cm" => 25,
+        SatelliteVuccBand => VuccSatelliteThreshold,
         _ => 25
     };
 
     public async Task<VuccStatistics> GetVuccStatisticsAsync(StatisticsFilters? filters = null)
     {
-        var allQsos = await AllQsosAsync();
-        var qsos = allQsos
-            .Where(q => !string.IsNullOrEmpty(q.Grid) && q.Grid.Length >= 4)
-            .Where(q => VuccBands.Contains(q.Band, StringComparer.OrdinalIgnoreCase))
-            .ToList();
+        var allQsos = await _repository.GetAllAsync();
 
-        // Apply filters
+        var filtered = allQsos.AsEnumerable();
         if (filters != null)
         {
             if (!string.IsNullOrEmpty(filters.Band))
-                qsos = qsos.Where(q => string.Equals(q.Band, filters.Band, StringComparison.OrdinalIgnoreCase)).ToList();
+                filtered = filtered.Where(q => string.Equals(q.Band, filters.Band, StringComparison.OrdinalIgnoreCase));
 
             if (!string.IsNullOrEmpty(filters.Mode))
-                qsos = qsos.Where(q => string.Equals(q.Mode, filters.Mode, StringComparison.OrdinalIgnoreCase)).ToList();
+                filtered = filtered.Where(q => string.Equals(q.Mode, filters.Mode, StringComparison.OrdinalIgnoreCase));
 
             if (filters.FromDate.HasValue)
-                qsos = qsos.Where(q => q.QsoDate >= filters.FromDate.Value).ToList();
+                filtered = filtered.Where(q => q.QsoDate >= filters.FromDate.Value);
 
             if (filters.ToDate.HasValue)
-                qsos = qsos.Where(q => q.QsoDate <= filters.ToDate.Value.AddDays(1)).ToList();
+                filtered = filtered.Where(q => q.QsoDate <= filters.ToDate.Value.AddDays(1));
         }
+        var filteredList = filtered.ToList();
+
+        var qsos = filteredList
+            .Where(q => !string.IsNullOrEmpty(q.Grid) && q.Grid.Length >= 4)
+            .Where(q => VuccBands.Contains(q.Band, StringComparer.OrdinalIgnoreCase))
+            .ToList();
 
         // Group by 4-char grid prefix + band
         var gridGroups = qsos
@@ -231,10 +237,16 @@ public partial class AwardsService : IAwardsService
             ));
         }
 
+        // Satellite is a VUCC award in its own right (100 grids), not a band.
+        // Its rows are built from the same filtered set without the VuccBands
+        // restriction, because a satellite QSO credits the satellite award
+        // whatever band the uplink happened to be on.
+        gridDetails.AddRange(BuildSatelliteGridRows(filteredList, filters?.Status));
+
         gridDetails = gridDetails.OrderBy(g => g.Grid).ThenBy(g => GetBandOrder(g.Band)).ToList();
 
         // Build band summaries
-        var bandSummaries = VuccBands.ToDictionary(
+        var bandSummaries = VuccBands.Append(SatelliteVuccBand).ToDictionary(
             band => band,
             band =>
             {

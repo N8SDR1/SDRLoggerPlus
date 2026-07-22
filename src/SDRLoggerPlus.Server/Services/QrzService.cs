@@ -365,6 +365,9 @@ public class QrzService : IQrzService
                 Address: GetElementValueNs(callsignElement, "addr1"),
                 City: GetElementValueNs(callsignElement, "addr2"),
                 State: GetElementValueNs(callsignElement, "state"),
+                // QRZ returns the bare county name for US calls ("Hennepin").
+                // Captured for USA-CA county tracking — previously discarded.
+                County: GetElementValueNs(callsignElement, "county"),
                 Country: GetElementValueNs(callsignElement, "country"),
                 Grid: GetElementValueNs(callsignElement, "grid"),
                 Latitude: latitude,

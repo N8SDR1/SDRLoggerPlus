@@ -210,6 +210,20 @@ public class LiteQsoRepository : IQsoRepository
         return Task.FromResult(success);
     }
 
+    public Task<int> DeleteManyAsync(IEnumerable<string> ids)
+    {
+        var deleted = 0;
+        foreach (var id in ids.Distinct(StringComparer.Ordinal))
+        {
+            if (_context.Qsos.Delete(new BsonValue(id))) deleted++;
+        }
+
+        // One checkpoint for the whole batch. Checkpointing per row would turn
+        // a 50-QSO delete into 50 flushes of the write-ahead log.
+        if (deleted > 0) _context.Database.Checkpoint();
+        return Task.FromResult(deleted);
+    }
+
     public Task<QsoStatistics> GetStatisticsAsync()
     {
         var all = _context.Qsos.FindAll().ToList();

@@ -329,6 +329,7 @@ public class LogHub : Hub<ILogHubClient>
             ItuZone: info?.ItuZone ?? hqInfo?.ItuZone,
             State: info?.State ?? hqInfo?.State,
             City: info?.City ?? hqInfo?.City,
+            County: info?.County ?? hqInfo?.County,
             ImageUrl: info?.ImageUrl ?? hqInfo?.ImageUrl,
             Bearing: bearing,
             Distance: distance,

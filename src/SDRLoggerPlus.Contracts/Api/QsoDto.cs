@@ -18,6 +18,10 @@ public record CreateQsoRequest(
     string? Contest = null,
     string? Notes = null,
     string? Qth = null,
+    // Worked-station US state + county (bare name, no "ST," prefix), usually
+    // auto-filled from the callbook lookup. County feeds USA-CA tracking.
+    string? State = null,
+    string? County = null,
     // v1.x POTA-mode fields — MyPotaRef is the park the operator is
     // activating (e.g. "K-1234"), PotaRef is the worked station's park
     // when it's a park-to-park contact. Both stored on the QSO via
@@ -49,6 +53,8 @@ public record UpdateQsoRequest(
     string? Name = null,
     string? Grid = null,
     string? Country = null,
+    string? State = null,
+    string? County = null,
     string? Comment = null
 );
 
@@ -69,6 +75,10 @@ public record QsoResponse(
     // The contest this QSO was logged under (ContestDefinition id / ADIF CONTEST_ID),
     // null for casual QSOs. Surfaced as the Log History "Contest" column.
     string? ContestId = null,
+    // The bird, for satellite QSOs (ADIF SAT_NAME, held in AdifExtra). Without
+    // this the name goes in through Log Entry and out through ADIF export but
+    // never comes back from the log API, so no UI can show or filter on it.
+    string? Satellite = null,
     // Per-QSO confirmation status for the Log History "QSL" column.
     bool ConfirmedLotw = false,
     bool ConfirmedEqsl = false,
@@ -106,12 +116,23 @@ public record QslSyncSummaryDto(
     int Untracked
 );
 
+/// <summary>Ids to remove in one call — the Log History multi-select delete.</summary>
+public record BulkDeleteQsosRequest(List<string> Ids);
+
+/// <summary>
+/// Deleted counts what actually existed; Requested is what the caller asked
+/// for. They differ when a QSO was already gone (deleted in another window),
+/// which the UI reports rather than treating as failure.
+/// </summary>
+public record BulkDeleteQsosResponse(int Deleted, int Requested);
+
 public record StationInfoDto(
     string? Name,
     string? Grid,
     string? Country,
     int? Dxcc,
     string? State,
+    string? County,
     string? Continent,
     double? Latitude,
     double? Longitude

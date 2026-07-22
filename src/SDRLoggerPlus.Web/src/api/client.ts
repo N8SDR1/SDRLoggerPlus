@@ -22,6 +22,8 @@ export interface QsoResponse {
   createdAt: string;
   // Contest this QSO was logged under (ContestDefinition id), null for casual QSOs.
   contestId?: string;
+  // The bird, for satellite QSOs (ADIF SAT_NAME).
+  satellite?: string | null;
   confirmedLotw?: boolean;
   confirmedEqsl?: boolean;
   confirmedQrz?: boolean;
@@ -53,6 +55,7 @@ export interface StationInfo {
   country?: string;
   dxcc?: number;
   state?: string;
+  county?: string;
   continent?: string;
   latitude?: number;
   longitude?: number;
@@ -77,6 +80,10 @@ export interface CreateQsoRequest {
   // identifier that lands on Qso.Contest.ContestId server-side.
   qth?: string;
   contest?: string;
+  // Worked-station US state + county (bare name), usually carried from the
+  // callbook lookup. County feeds USA-CA county tracking.
+  state?: string;
+  county?: string;
   // v1.x POTA-mode fields — myPotaRef is the park YOU'RE activating,
   // potaRef is the WORKED station's park for park-to-park contacts.
   // Both stored on the QSO via AdifExtra so PotaStatistics picks them
@@ -106,7 +113,16 @@ export interface UpdateQsoRequest {
   name?: string;
   grid?: string;
   country?: string;
+  state?: string;
+  county?: string;
   comment?: string;
+}
+
+export interface BulkDeleteQsosResponse {
+  /** How many of the requested QSOs actually existed and were removed. */
+  deleted: number;
+  /** How many were asked for — lower than `deleted` never happens; higher means some were already gone. */
+  requested: number;
 }
 
 export interface QsoStatistics {
@@ -374,6 +390,18 @@ class ApiClient {
     await fetch(`${API_BASE}/qsos/${id}`, { method: 'DELETE' });
   }
 
+  /**
+   * Delete several QSOs in one request — the Log History multi-select delete.
+   * A single call rather than one DELETE per row: a full page is 50 QSOs, and
+   * the server also only has to recompute contest state once.
+   */
+  async deleteQsos(ids: string[]): Promise<BulkDeleteQsosResponse> {
+    return this.fetch<BulkDeleteQsosResponse>('/qsos/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+  }
+
   async getStatistics(): Promise<QsoStatistics> {
     return this.fetch<QsoStatistics>('/qsos/statistics');
   }
@@ -435,6 +463,18 @@ class ApiClient {
 
   async getWacStatistics(filters?: AwardFilters): Promise<WacStatistics> {
     return this.fetch<WacStatistics>(`/statistics/wac${awardQs(filters)}`);
+  }
+
+  async getSatelliteStatistics(filters?: AwardFilters): Promise<SatelliteStatistics> {
+    return this.fetch<SatelliteStatistics>(`/statistics/satellites${awardQs(filters)}`);
+  }
+
+  async getCountiesStatistics(filters?: AwardFilters): Promise<CountiesStatistics> {
+    return this.fetch<CountiesStatistics>(`/statistics/counties${awardQs(filters)}`);
+  }
+
+  async getCountyDetails(state: string, filters?: AwardFilters): Promise<CountyDetail[]> {
+    return this.fetch<CountyDetail[]>(`/statistics/counties/${encodeURIComponent(state)}${awardQs(filters)}`);
   }
 
   async get5BWasStatistics(mode?: string): Promise<FiveBandStatistics> {
@@ -1525,6 +1565,55 @@ export interface WasStateStatus {
   state: string;
   bands: Record<string, string[]>;
   qsoCount: number;
+}
+
+// USA-CA. A county counts once regardless of band/mode, and worked/confirmed
+// are reported separately because confirmation is the point of the award.
+export interface CountiesStateStatus {
+  state: string;
+  worked: number;
+  confirmed: number;
+  target: number;
+  qsoCount: number;
+}
+
+// Satellite operating. Grids/states/entities are counted over satellite QSOs
+// only — ARRL runs VUCC Satellite as its own award at 100 grids, and the same
+// contacts chase WAS and DXCC via satellite.
+export interface SatelliteDetail {
+  satellite: string;
+  qsoCount: number;
+  confirmedQsos: number;
+  uniqueGrids: number;
+  firstWorked: string | null;
+  lastWorked: string | null;
+}
+
+export interface SatelliteStatistics {
+  totalSatellites: number;
+  totalQsos: number;
+  uniqueGrids: number;
+  confirmedGrids: number;
+  vuccThreshold: number;
+  uniqueStates: number;
+  uniqueEntities: number;
+  satellites: SatelliteDetail[];
+}
+
+export interface CountiesStatistics {
+  totalWorked: number;
+  totalConfirmed: number;
+  totalTarget: number;
+  states: CountiesStateStatus[];
+}
+
+export interface CountyDetail {
+  state: string;
+  county: string;
+  qsoCount: number;
+  confirmed: boolean;
+  firstWorked: string | null;
+  lastWorked: string | null;
 }
 
 export interface WasStatistics {

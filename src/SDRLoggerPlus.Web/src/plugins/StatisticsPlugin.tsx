@@ -7,14 +7,16 @@ import { VuccStatisticsTab } from './VuccStatisticsTab';
 import { PotaStatisticsTab } from './PotaStatisticsTab';
 import { IotaStatisticsTab } from './IotaStatisticsTab';
 import { WasStatisticsTab } from './WasStatisticsTab';
+import { CountiesStatisticsTab } from './CountiesStatisticsTab';
+import { SatStatisticsTab } from './SatStatisticsTab';
 import { WazStatisticsTab } from './WazStatisticsTab';
 import { WpxStatisticsTab } from './WpxStatisticsTab';
 import { WacStatisticsTab } from './WacStatisticsTab';
 import { FiveBandWasTab, FiveBandDxccTab } from './FiveBandTab';
+import { ALL_BANDS as BANDS } from '../utils/spotBands';
 
-type StatsTab = 'dxcc' | 'was' | 'waz' | 'wpx' | 'wac' | '5bwas' | '5bdxcc' | 'vucc' | 'pota' | 'iota';
+type StatsTab = 'dxcc' | 'was' | 'counties' | 'waz' | 'wpx' | 'wac' | '5bwas' | '5bdxcc' | 'vucc' | 'sat' | 'pota' | 'iota';
 
-const BANDS = ['160m', '80m', '40m', '20m', '17m', '15m', '10m', '6m'];
 const CONTINENTS = ['AF', 'AN', 'AS', 'EU', 'NA', 'OC', 'SA'];
 const STATUS_OPTIONS = [
   { value: '', label: 'All' },
@@ -104,7 +106,7 @@ export function StatisticsPlugin() {
         {/* Sub-tab navigation */}
         <div className="flex-shrink-0 px-4 pt-3 pb-0 border-b border-glass-100">
           <div className="flex gap-1">
-            {(['dxcc', 'was', 'waz', 'wpx', 'wac', '5bwas', '5bdxcc', 'vucc', 'pota', 'iota'] as const).map(tab => (
+            {(['dxcc', 'was', 'counties', 'waz', 'wpx', 'wac', '5bwas', '5bdxcc', 'vucc', 'sat', 'pota', 'iota'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -122,12 +124,14 @@ export function StatisticsPlugin() {
 
         {activeTab !== 'dxcc' ? (
           activeTab === 'was' ? <WasStatisticsTab /> :
+          activeTab === 'counties' ? <CountiesStatisticsTab /> :
           activeTab === 'waz' ? <WazStatisticsTab /> :
           activeTab === 'wpx' ? <WpxStatisticsTab /> :
           activeTab === 'wac' ? <WacStatisticsTab /> :
           activeTab === '5bwas' ? <FiveBandWasTab /> :
           activeTab === '5bdxcc' ? <FiveBandDxccTab /> :
           activeTab === 'vucc' ? <VuccStatisticsTab /> :
+          activeTab === 'sat' ? <SatStatisticsTab /> :
           activeTab === 'pota' ? <PotaStatisticsTab /> :
           <IotaStatisticsTab />
         ) : (<>
