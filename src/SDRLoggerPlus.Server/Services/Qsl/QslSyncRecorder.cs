@@ -15,6 +15,16 @@ namespace SDRLoggerPlus.Server.Services.Qsl;
 /// </summary>
 public class QslSyncRecorder
 {
+    /// <summary>
+    /// Serialises every ledger read-modify-write. The three uploads for one
+    /// QSO report back within milliseconds of each other, each on its own
+    /// task with its own scoped recorder — without this, two callbacks read
+    /// the same ledger state and the second write erases the first's entry.
+    /// Static because instances are scoped; global rather than per-QSO
+    /// because the guarded section is three ~ms writes per logged contact.
+    /// </summary>
+    private static readonly SemaphoreSlim WriteGate = new(1, 1);
+
     private readonly IQsoRepository _repository;
     private readonly ILogger<QslSyncRecorder> _logger;
 
@@ -34,6 +44,19 @@ public class QslSyncRecorder
         // QSO with red marks for services the operator never turned on.
         if (!result.IsRecordable) return false;
 
+        await WriteGate.WaitAsync();
+        try
+        {
+            return await RecordLockedAsync(qsoId, service, result);
+        }
+        finally
+        {
+            WriteGate.Release();
+        }
+    }
+
+    private async Task<bool> RecordLockedAsync(string qsoId, string service, QslUploadResult result)
+    {
         var qso = await _repository.GetByIdAsync(qsoId);
         if (qso == null)
         {

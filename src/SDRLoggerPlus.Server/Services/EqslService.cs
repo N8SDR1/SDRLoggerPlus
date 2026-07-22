@@ -181,6 +181,23 @@ public class EqslService
             _logger.LogDebug("eQSL: HTTP {Status} — {Body}", (int)response.StatusCode,
                 body.Length > 200 ? body[..200] : body);
 
+            // Status first: PostAsync does NOT throw on 5xx, so an eQSL outage
+            // otherwise falls through the body sniffing to Rejected and marks
+            // the QSO permanently needs-attention. A server fault or throttle
+            // is the retryable case; other non-2xx means this request will
+            // never be accepted as-is.
+            // Status first: PostAsync does NOT throw on 5xx, so an eQSL outage
+            // otherwise falls through the body sniffing to Rejected and marks
+            // the QSO permanently needs-attention. A server fault or throttle
+            // is the retryable case; other non-2xx means this request will
+            // never be accepted as-is.
+            if (!response.IsSuccessStatusCode)
+            {
+                var status = (int)response.StatusCode;
+                var kind = status >= 500 || status == 429 ? QslFailureKind.Temporary : QslFailureKind.Rejected;
+                return QslUploadResult.Fail(kind, $"eQSL: server returned HTTP {status}");
+            }
+
             if (body.Contains("Bad Callsign/Password", StringComparison.OrdinalIgnoreCase) ||
                 body.Contains("Bad password", StringComparison.OrdinalIgnoreCase))
                 return QslUploadResult.Fail(QslFailureKind.Auth,
@@ -190,9 +207,6 @@ public class EqslService
                 body.Contains("added", StringComparison.OrdinalIgnoreCase))
                 return QslUploadResult.Success();
 
-            // eQSL answers 200 with an HTML body regardless, so the status code
-            // carries no signal — a 5xx or a transport fault is the only
-            // retryable case, and both surface as an exception below.
             if (body.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
                 return QslUploadResult.Fail(QslFailureKind.Rejected,
                     body.Length > 200 ? body[..200] : body);

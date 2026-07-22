@@ -11,12 +11,42 @@ public class SettingsController : ControllerBase
     private readonly ISettingsService _settingsService;
     private readonly IHotListService _hotListService;
     private readonly ILogger<SettingsController> _logger;
+    private readonly ClubLogService? _clubLog;
 
-    public SettingsController(ISettingsService settingsService, IHotListService hotListService, ILogger<SettingsController> logger)
+    public SettingsController(ISettingsService settingsService, IHotListService hotListService,
+        ILogger<SettingsController> logger, ClubLogService? clubLog = null)
     {
         _settingsService = settingsService;
         _hotListService = hotListService;
         _logger = logger;
+        _clubLog = clubLog;
+    }
+
+    /// <summary>
+    /// Clear Club Log's persisted one-strike auth block when its credentials
+    /// change. The block stops all uploads after a single 403 (repeating
+    /// failed POSTs triggers Club Log's IP firewall) and, being persisted, it
+    /// survives restarts — so saving corrected credentials must be a way out,
+    /// or the operator is stuck until they happen to press "Test".
+    /// Changed-credentials-only: re-saving unrelated settings while still
+    /// blocked must NOT re-arm uploads against known-bad credentials.
+    /// </summary>
+    private void ResetClubLogBlockIfCredentialsChanged(UserSettings existing, UserSettings incoming)
+    {
+        if (_clubLog is not { IsBlocked: true }) return;
+
+        var before = existing.ClubLog;
+        var after = incoming.ClubLog;
+        var changed = before.Email != after.Email
+                      || before.Password != after.Password
+                      || before.ApiKey != after.ApiKey
+                      || before.Callsign != after.Callsign;
+
+        if (changed)
+        {
+            _clubLog.ResetBlock();
+            _logger.LogInformation("Club Log credentials changed — upload block cleared");
+        }
     }
 
     /// <summary>
@@ -81,6 +111,8 @@ public class SettingsController : ControllerBase
             {
                 settings.LayoutJson = existing.LayoutJson;
             }
+
+            ResetClubLogBlockIfCredentialsChanged(existing, settings);
 
             var saved = await _settingsService.SaveSettingsAsync(settings);
             // Hot list matching runs off an in-memory set — refresh it so
