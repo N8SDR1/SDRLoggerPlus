@@ -92,6 +92,8 @@ export interface UpdateQsoRequest {
   name?: string;
   grid?: string;
   country?: string;
+  state?: string;
+  county?: string;
   comment?: string;
 }
 

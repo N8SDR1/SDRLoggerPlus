@@ -1488,6 +1488,8 @@ function EditQsoModal({
     name: qso.station?.name || '',
     grid: qso.station?.grid || '',
     country: qso.station?.country || '',
+    state: qso.station?.state || '',
+    county: qso.station?.county || '',
     comment: qso.comment || '',
   });
 
@@ -1513,6 +1515,8 @@ function EditQsoModal({
       name: formData.name || undefined,
       grid: formData.grid || undefined,
       country: formData.country || undefined,
+      state: formData.state || undefined,
+      county: formData.county || undefined,
       comment: formData.comment || undefined,
     });
   };
@@ -1675,6 +1679,31 @@ function EditQsoModal({
                 value={formData.country}
                 onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                 className="glass-input w-full"
+              />
+            </div>
+          </div>
+
+          {/* Row 4b: State, County — worked-station location, feeds WAS/USA-CA */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-dark-300 mb-1 font-ui">State</label>
+              <input
+                type="text"
+                value={formData.state}
+                onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
+                className="glass-input w-full font-mono"
+                placeholder="MN"
+                maxLength={2}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-dark-300 mb-1 font-ui">County</label>
+              <input
+                type="text"
+                value={formData.county}
+                onChange={(e) => setFormData({ ...formData, county: e.target.value })}
+                className="glass-input w-full"
+                placeholder="Hennepin"
               />
             </div>
           </div>

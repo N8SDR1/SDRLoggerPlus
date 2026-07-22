@@ -79,6 +79,54 @@ public class QsoServiceLocationCaptureTests
     }
 
     [Fact]
+    public async Task EditCarriesStateAndCountyOntoTheStation()
+    {
+        // The Edit QSO modal is the only way to fix a wrong or missing county
+        // on an existing QSO, so the update path must carry both fields too.
+        var existing = new Qso
+        {
+            Id = "abc123",
+            Callsign = "W1AW",
+            QsoDate = new DateTime(2026, 7, 22, 12, 0, 0, DateTimeKind.Utc),
+            TimeOn = "120000",
+            Band = "20m",
+            Mode = "CW",
+            Station = new StationInfo { Country = "United States" },
+        };
+        _repo.Setup(r => r.GetByIdAsync("abc123")).ReturnsAsync(existing);
+        _repo.Setup(r => r.UpdateAsync("abc123", It.IsAny<Qso>())).ReturnsAsync(true);
+
+        await _service.UpdateAsync("abc123", new UpdateQsoRequest(State: "MN", County: "MN,Hennepin"));
+
+        existing.Station!.State.Should().Be("MN");
+        existing.Station.County.Should().Be("Hennepin", "the ADIF-style prefix is stripped on update just like on create");
+    }
+
+    [Fact]
+    public async Task EditLeavesLocationAloneWhenTheRequestOmitsIt()
+    {
+        // Partial-update semantics: null means "not edited", matching every
+        // other field on UpdateQsoRequest.
+        var existing = new Qso
+        {
+            Id = "abc123",
+            Callsign = "W1AW",
+            QsoDate = new DateTime(2026, 7, 22, 12, 0, 0, DateTimeKind.Utc),
+            TimeOn = "120000",
+            Band = "20m",
+            Mode = "CW",
+            Station = new StationInfo { State = "CT", County = "Hartford" },
+        };
+        _repo.Setup(r => r.GetByIdAsync("abc123")).ReturnsAsync(existing);
+        _repo.Setup(r => r.UpdateAsync("abc123", It.IsAny<Qso>())).ReturnsAsync(true);
+
+        await _service.UpdateAsync("abc123", new UpdateQsoRequest(Comment: "worked again"));
+
+        existing.Station!.State.Should().Be("CT");
+        existing.Station.County.Should().Be("Hartford");
+    }
+
+    [Fact]
     public async Task ACreatedQsoWithStateAndCountyCountsTowardUsaCa()
     {
         // The point of the capture: log at the radio → county tracked.

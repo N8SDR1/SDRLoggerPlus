@@ -17,7 +17,10 @@ function ProgressBar({ worked, confirmed, target }: { worked: number; confirmed:
 
 function StateDetail({ state, filters }: { state: string; filters: AwardFilters }) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['county-details', state, filters],
+    // Nested under 'statistics' so the app-wide invalidation on QSO
+    // create/edit/delete/import (which targets ['statistics']) refreshes this
+    // too. A standalone key silently missed those and the tab went stale.
+    queryKey: ['statistics', 'county-details', state, filters],
     queryFn: () => api.getCountyDetails(state, filters),
     staleTime: 60_000,
   });
@@ -53,7 +56,9 @@ export function CountiesStatisticsTab() {
   const [openState, setOpenState] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['counties-statistics', filters],
+    // See county-details note: nested under 'statistics' so QSO mutations
+    // invalidate this tab.
+    queryKey: ['statistics', 'counties', filters],
     queryFn: () => api.getCountiesStatistics(filters),
     staleTime: 60_000,
   });

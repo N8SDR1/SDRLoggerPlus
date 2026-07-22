@@ -53,6 +53,8 @@ public record UpdateQsoRequest(
     string? Name = null,
     string? Grid = null,
     string? Country = null,
+    string? State = null,
+    string? County = null,
     string? Comment = null
 );
 

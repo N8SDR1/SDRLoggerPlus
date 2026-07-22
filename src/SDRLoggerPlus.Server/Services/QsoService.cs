@@ -194,6 +194,12 @@ public class QsoService : IQsoService
         if (request.Name != null) existing.Station.Name = request.Name;
         if (request.Grid != null) existing.Station.Grid = request.Grid;
         if (request.Country != null) existing.Station.Country = request.Country;
+        if (request.State != null) existing.Station.State = request.State;
+        // Stripped the same way as on create: a caller may send the ADIF
+        // "ST,County" form, but the field is stored as the bare name.
+        if (request.County != null)
+            existing.Station.County = Counties.CountyNameNormalizer.SplitStatePrefix(request.County).County
+                is { Length: > 0 } county ? county : null;
 
         await _repository.UpdateAsync(id, existing);
         return MapToResponse(existing);
