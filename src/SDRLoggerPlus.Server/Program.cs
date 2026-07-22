@@ -17,11 +17,13 @@ var builder = WebApplication.CreateBuilder(args);
 // For standalone development, run with: ASPNETCORE_URLS=http://localhost:5050 dotnet run
 // We don't use UseUrls() here as it would override the environment variable
 
-// Configure Serilog
+// Configure Serilog. The console sink is what Electron captures into main.log,
+// so it formats through ScrubbingTextFormatter: any credential that reaches a
+// log line — from our code or the framework's — is masked before it is written.
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
-    .WriteTo.Console()
+    .WriteTo.Console(new SDRLoggerPlus.Server.Core.Logging.ScrubbingTextFormatter())
     .CreateLogger();
 
 builder.Host.UseSerilog();

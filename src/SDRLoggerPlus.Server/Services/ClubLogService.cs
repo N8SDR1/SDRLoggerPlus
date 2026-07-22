@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Core.Logging;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -159,20 +160,24 @@ public class ClubLogService
                 }), ct);
 
             var body = (await response.Content.ReadAsStringAsync(ct)).Trim();
-            _logger.LogDebug("Club Log: HTTP {Status} — {Body}", (int)response.StatusCode, body.Length > 200 ? body[..200] : body);
+            // Classify against the raw body and report the redacted one. Masking
+            // before classification would let a credential that happens to
+            // contain a marker word change how the response is interpreted.
+            var safeBody = SecretScrubber.Redact(body, settings.Password, settings.ApiKey)!;
+            _logger.LogDebug("Club Log: HTTP {Status} — {Body}", (int)response.StatusCode, SecretScrubber.Head(safeBody, 200));
 
             if (response.StatusCode == System.Net.HttpStatusCode.Forbidden || body.StartsWith("Login rejected"))
             {
                 // One-strike: stop everything until credentials change, and
                 // remember it across restarts.
-                Block($"HTTP {(int)response.StatusCode}: {(body.Length > 120 ? body[..120] : body)}");
+                Block($"HTTP {(int)response.StatusCode}: {SecretScrubber.Head(safeBody, 120)}");
                 _logger.LogWarning("Club Log: 403 — all uploads disabled to prevent IP firewall ban");
                 return QslUploadResult.Fail(QslFailureKind.Auth,
                     "Club Log: authentication failed (403) — uploads disabled to prevent an IP ban. Re-check credentials in Settings.");
             }
             if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
                 return QslUploadResult.Fail(QslFailureKind.Rejected,
-                    $"Club Log: QSO rejected — {(body.Length > 200 ? body[..200] : body)}");
+                    $"Club Log: QSO rejected — {SecretScrubber.Head(safeBody, 200)}");
             if ((int)response.StatusCode >= 500)
                 return QslUploadResult.Fail(QslFailureKind.Temporary, "Club Log: server error — try again later");
 
@@ -184,7 +189,7 @@ public class ClubLogService
             // Log already acted on is exactly the repetition its IP firewall
             // watches for. A human should look instead.
             return QslUploadResult.Fail(QslFailureKind.Rejected,
-                $"Club Log: unexpected response — {(body.Length > 200 ? body[..200] : body)}");
+                $"Club Log: unexpected response — {SecretScrubber.Head(safeBody, 200)}");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

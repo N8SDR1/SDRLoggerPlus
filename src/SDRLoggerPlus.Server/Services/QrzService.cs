@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Core.Database;
+using SDRLoggerPlus.Server.Core.Logging;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -501,7 +502,8 @@ public class QrzService : IQrzService
                 {
                     throw new QrzSubscriptionRequiredException(error);
                 }
-                _logger.LogWarning("QRZ login error: {Error}", error);
+                // QRZ quotes the rejected credential back in some error strings.
+                _logger.LogWarning("QRZ login error: {Error}", SecretScrubber.Redact(error, password));
                 return null;
             }
 
@@ -537,7 +539,9 @@ public class QrzService : IQrzService
         var response = await _httpClient.PostAsync(QrzLogbookApiUrl, content);
         var responseText = await response.Content.ReadAsStringAsync();
 
-        _logger.LogInformation("QRZ logbook response: {Response}", responseText);
+        // On a rejected key QRZ answers RESULT=AUTH&REASON=<message quoting the
+        // key>, so this line put the logbook API key in main.log verbatim.
+        _logger.LogInformation("QRZ logbook response: {Response}", SecretScrubber.Redact(responseText, apiKey));
 
         // Parse response - format is: RESULT=OK&LOGID=12345 or RESULT=FAIL&REASON=message
         // QRZ can also return RESULT=REPLACE&LOGID=xxx for duplicates

@@ -1,5 +1,6 @@
 using System.Text;
 using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Core.Logging;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -81,7 +82,11 @@ public class HrdLogService
                 }), ct);
 
             var body = (await response.Content.ReadAsStringAsync(ct)).Trim();
-            _logger.LogInformation("HRDLog: HTTP {Status} — {Body}", (int)response.StatusCode, body.Length > 300 ? body[..300] : body);
+            // Classify against the raw body and report the redacted one. Masking
+            // before classification would let a credential that happens to
+            // contain a marker word change how the response is interpreted.
+            var safeBody = SecretScrubber.Redact(body, settings.UploadCode)!;
+            _logger.LogInformation("HRDLog: HTTP {Status} — {Body}", (int)response.StatusCode, SecretScrubber.Head(safeBody, 300));
 
             if (!response.IsSuccessStatusCode)
             {
@@ -105,7 +110,7 @@ public class HrdLogService
                         ? QslFailureKind.Auth
                         : QslFailureKind.Rejected;
                     return QslUploadResult.Fail(kind,
-                        $"HRDLog rejected the QSO — {(body.Length > 200 ? body[..200] : body)}");
+                        $"HRDLog rejected the QSO — {SecretScrubber.Head(safeBody, 200)}");
                 }
             }
 

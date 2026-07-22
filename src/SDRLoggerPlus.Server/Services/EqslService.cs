@@ -1,5 +1,6 @@
 using System.Text;
 using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Core.Logging;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -178,14 +179,13 @@ public class EqslService
             var response = await _http.PostAsync("https://www.eQSL.cc/qslcard/importADIF.cfm",
                 new FormUrlEncodedContent(form), ct);
             var body = (await response.Content.ReadAsStringAsync(ct)).Trim();
+            // Classify against the raw body and report the redacted one. Masking
+            // before classification would let a credential that happens to
+            // contain a marker word change how the response is interpreted.
+            var safeBody = SecretScrubber.Redact(body, settings.Password)!;
             _logger.LogDebug("eQSL: HTTP {Status} — {Body}", (int)response.StatusCode,
-                body.Length > 200 ? body[..200] : body);
+                SecretScrubber.Head(safeBody, 200));
 
-            // Status first: PostAsync does NOT throw on 5xx, so an eQSL outage
-            // otherwise falls through the body sniffing to Rejected and marks
-            // the QSO permanently needs-attention. A server fault or throttle
-            // is the retryable case; other non-2xx means this request will
-            // never be accepted as-is.
             // Status first: PostAsync does NOT throw on 5xx, so an eQSL outage
             // otherwise falls through the body sniffing to Rejected and marks
             // the QSO permanently needs-attention. A server fault or throttle
@@ -209,10 +209,10 @@ public class EqslService
 
             if (body.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
                 return QslUploadResult.Fail(QslFailureKind.Rejected,
-                    body.Length > 200 ? body[..200] : body);
+                    SecretScrubber.Head(safeBody, 200));
 
             return QslUploadResult.Fail(QslFailureKind.Rejected,
-                $"eQSL: unexpected response — {(body.Length > 200 ? body[..200] : body)}");
+                $"eQSL: unexpected response — {SecretScrubber.Head(safeBody, 200)}");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
