@@ -115,6 +115,32 @@ public class QsosController : ControllerBase
     }
 
     /// <summary>
+    /// Delete several QSOs in one call — the Log History multi-select delete.
+    /// POST rather than DELETE because the id list travels in the body, and
+    /// bodies on DELETE are unevenly supported by proxies and clients.
+    /// </summary>
+    [HttpPost("bulk-delete")]
+    [ProducesResponseType(typeof(BulkDeleteQsosResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BulkDeleteQsosResponse>> BulkDeleteQsos([FromBody] BulkDeleteQsosRequest request)
+    {
+        var ids = (request.Ids ?? [])
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (ids.Count == 0)
+            return BadRequest("No QSO ids supplied.");
+
+        var deleted = await _qsoService.DeleteManyAsync(ids);
+
+        // Same reason as the single delete: removing a contest QSO changes the
+        // score strip and can un-dupe others. Once for the whole batch.
+        await _contest.RefreshActiveSessionAsync();
+        return Ok(new BulkDeleteQsosResponse(deleted, ids.Count));
+    }
+
+    /// <summary>
     /// Get QSO statistics
     /// </summary>
     [HttpGet("statistics")]

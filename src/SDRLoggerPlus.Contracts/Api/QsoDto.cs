@@ -82,6 +82,16 @@ public record QsoResponse(
     bool ConfirmedCard = false
 );
 
+/// <summary>Ids to remove in one call — the Log History multi-select delete.</summary>
+public record BulkDeleteQsosRequest(List<string> Ids);
+
+/// <summary>
+/// Deleted counts what actually existed; Requested is what the caller asked
+/// for. They differ when a QSO was already gone (deleted in another window),
+/// which the UI reports rather than treating as failure.
+/// </summary>
+public record BulkDeleteQsosResponse(int Deleted, int Requested);
+
 public record StationInfoDto(
     string? Name,
     string? Grid,

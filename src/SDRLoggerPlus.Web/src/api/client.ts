@@ -97,6 +97,13 @@ export interface UpdateQsoRequest {
   comment?: string;
 }
 
+export interface BulkDeleteQsosResponse {
+  /** How many of the requested QSOs actually existed and were removed. */
+  deleted: number;
+  /** How many were asked for — lower than `deleted` never happens; higher means some were already gone. */
+  requested: number;
+}
+
 export interface QsoStatistics {
   totalQsos: number;
   uniqueCallsigns: number;
@@ -346,6 +353,18 @@ class ApiClient {
 
   async deleteQso(id: string): Promise<void> {
     await fetch(`${API_BASE}/qsos/${id}`, { method: 'DELETE' });
+  }
+
+  /**
+   * Delete several QSOs in one request — the Log History multi-select delete.
+   * A single call rather than one DELETE per row: a full page is 50 QSOs, and
+   * the server also only has to recompute contest state once.
+   */
+  async deleteQsos(ids: string[]): Promise<BulkDeleteQsosResponse> {
+    return this.fetch<BulkDeleteQsosResponse>('/qsos/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
   }
 
   async getStatistics(): Promise<QsoStatistics> {

@@ -10,5 +10,6 @@ public interface IQsoService
     Task<QsoResponse> CreateAsync(CreateQsoRequest request);
     Task<QsoResponse?> UpdateAsync(string id, UpdateQsoRequest request);
     Task<bool> DeleteAsync(string id);
+    Task<int> DeleteManyAsync(IEnumerable<string> ids);
     Task<QsoStatistics> GetStatisticsAsync();
 }

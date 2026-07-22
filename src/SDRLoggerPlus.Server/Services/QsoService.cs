@@ -210,6 +210,11 @@ public class QsoService : IQsoService
         return await _repository.DeleteAsync(id);
     }
 
+    public async Task<int> DeleteManyAsync(IEnumerable<string> ids)
+    {
+        return await _repository.DeleteManyAsync(ids);
+    }
+
     public async Task<QsoStatistics> GetStatisticsAsync()
     {
         return await _repository.GetStatisticsAsync();

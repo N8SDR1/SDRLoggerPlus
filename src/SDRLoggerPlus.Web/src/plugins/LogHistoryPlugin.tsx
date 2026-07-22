@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ScrollText, Search, Calendar, Radio, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, CloudUpload, Loader2, Pencil, Trash2, Upload, Download, FileText, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
-import { ColDef, ICellRendererParams } from 'ag-grid-community';
+import { ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { api, QsoResponse, UpdateQsoRequest, AdifImportResponse, ConfirmationSource, ConfirmationMergeResponse } from '../api/client';
@@ -139,6 +139,12 @@ export function LogHistoryPlugin() {
   const [editingQso, setEditingQso] = useState<QsoResponse | null>(null);
   const [deletingQso, setDeletingQso] = useState<QsoResponse | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  // Multi-select delete. Selection is scoped to the page on screen — paging or
+  // refiltering swaps the grid's rows out, so it clears rather than silently
+  // holding rows you can no longer see.
+  const [selectedQsos, setSelectedQsos] = useState<QsoResponse[]>([]);
+  const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const pageSize = 50;
 
@@ -328,6 +334,43 @@ export function LogHistoryPlugin() {
     }
   }, [deletingQso, isDeleting, queryClient]);
 
+  // Grid api, captured alongside the column-state hook's own onGridReady so we
+  // can clear the selection after a delete or a page change.
+  const gridApiRef = useRef<GridApi<QsoResponse> | null>(null);
+  const handleGridReady = useCallback((params: GridReadyEvent<QsoResponse>) => {
+    gridApiRef.current = params.api;
+    onGridReady(params);
+  }, [onGridReady]);
+
+  const handleSelectionChanged = useCallback((event: SelectionChangedEvent<QsoResponse>) => {
+    setSelectedQsos(event.api.getSelectedRows());
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    gridApiRef.current?.deselectAll();
+    setSelectedQsos([]);
+  }, []);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedQsos.length === 0 || isDeleting) return;
+    setIsDeleting(true);
+    setBulkDeleteError(null);
+    try {
+      await api.deleteQsos(selectedQsos.map(q => q.id));
+      queryClient.invalidateQueries({ queryKey: ['qsos'] });
+      queryClient.invalidateQueries({ queryKey: ['statistics'] });
+      clearSelection();
+      setConfirmingBulkDelete(false);
+    } catch (error) {
+      // Keep the dialog open and say so — silently closing would look like the
+      // QSOs were deleted when they are all still there.
+      console.error('Failed to delete QSOs:', error);
+      setBulkDeleteError(error instanceof Error ? error.message : 'Delete failed');
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [selectedQsos, isDeleting, queryClient, clearSelection]);
+
   const handleSaveEdit = useCallback(async (updates: UpdateQsoRequest) => {
     if (!editingQso || isSaving) return;
     setIsSaving(true);
@@ -342,6 +385,13 @@ export function LogHistoryPlugin() {
       setIsSaving(false);
     }
   }, [editingQso, isSaving, queryClient]);
+
+  // Paging or refiltering swaps the grid's rows out from under the selection.
+  // Drop it, so "N selected" can never count rows that are no longer on screen
+  // and the delete button can never reach them.
+  useEffect(() => {
+    clearSelection();
+  }, [currentPage, callsignSearch, nameSearch, selectedBand, selectedMode, fromDate, toDate, clearSelection]);
 
   const { data: response, isLoading } = useQuery({
     queryKey: ['qsos', callsignSearch, nameSearch, selectedBand, selectedMode, fromDate, toDate, currentPage],
@@ -1001,6 +1051,32 @@ export function LogHistoryPlugin() {
           </div>
         )}
 
+        {/* Selection action bar — only rendered while rows are checked, so it
+            costs no vertical space during normal browsing. */}
+        {selectedQsos.length > 0 && (
+          <div className="shrink-0 flex items-center justify-between gap-3 mb-2 px-3 py-2 rounded-lg bg-accent-danger/10 border border-accent-danger/30">
+            <span className="text-sm text-dark-200 font-ui">
+              <span className="font-mono font-semibold text-white">{selectedQsos.length}</span>
+              {selectedQsos.length === 1 ? ' QSO selected' : ' QSOs selected'} on this page
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={clearSelection}
+                className="text-xs text-dark-300 hover:text-white px-2 py-1 rounded hover:bg-glass-100 transition-colors font-ui"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => { setBulkDeleteError(null); setConfirmingBulkDelete(true); }}
+                className="text-xs bg-accent-danger/90 hover:bg-accent-danger text-white px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors font-ui"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete {selectedQsos.length}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* AG Grid Table */}
         <div className="ag-theme-alpine-dark flex-1 min-h-0">
           {isLoading ? (
@@ -1016,11 +1092,26 @@ export function LogHistoryPlugin() {
               rowHeight={36}
               headerHeight={40}
               suppressCellFocus={true}
-              suppressRowClickSelection={true}
               animateRows={true}
+              // Multi-select for bulk delete. Checkbox-only (no click-to-select)
+              // so clicking a row to read it can never silently arm a delete;
+              // shift-click on the checkboxes still selects a range.
+              rowSelection={{
+                mode: 'multiRow',
+                checkboxes: true,
+                headerCheckbox: true,
+                enableClickSelection: false,
+              }}
+              selectionColumnDef={{
+                pinned: 'left',
+                width: 44,
+                resizable: false,
+                suppressHeaderMenuButton: true,
+              }}
+              onSelectionChanged={handleSelectionChanged}
               getRowId={(params) => params.data.id}
               suppressMenuHide={true}
-              onGridReady={onGridReady}
+              onGridReady={handleGridReady}
               onColumnMoved={onColumnChanged}
               onColumnResized={onColumnChanged}
               onColumnVisible={onColumnChanged}
@@ -1097,6 +1188,63 @@ export function LogHistoryPlugin() {
           onCancel={() => setEditingQso(null)}
           isSaving={isSaving}
         />
+      )}
+
+      {/* Bulk Delete Confirmation — lists what is about to go, because the
+          selection lives in checkboxes the dialog covers up. */}
+      {confirmingBulkDelete && selectedQsos.length > 0 && createPortal(
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-dark-800 rounded-lg p-6 max-w-md w-full mx-4 border border-glass-200">
+            <h3 className="text-lg font-ui font-semibold text-white mb-4">
+              Delete {selectedQsos.length} {selectedQsos.length === 1 ? 'QSO' : 'QSOs'}?
+            </h3>
+            <div className="bg-dark-700/50 rounded p-3 mb-4 max-h-48 overflow-y-auto">
+              {selectedQsos.slice(0, 12).map(q => (
+                <div key={q.id} className="flex items-baseline justify-between gap-3 py-0.5">
+                  <span className="text-accent-primary font-mono font-bold text-sm">{q.callsign}</span>
+                  <span className="text-xs text-dark-300 font-mono">
+                    {new Date(q.qsoDate).toLocaleDateString()} • {q.band} • {q.mode}
+                  </span>
+                </div>
+              ))}
+              {selectedQsos.length > 12 && (
+                <p className="text-xs text-dark-400 font-ui pt-1">
+                  …and {selectedQsos.length - 12} more
+                </p>
+              )}
+            </div>
+            <p className="text-sm text-accent-danger mb-4">
+              This action cannot be undone.
+            </p>
+            {bulkDeleteError && (
+              <p className="text-sm text-accent-danger mb-4 font-mono">
+                {bulkDeleteError} — nothing was deleted.
+              </p>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmingBulkDelete(false)}
+                disabled={isDeleting}
+                className="glass-button px-4 py-2"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={isDeleting}
+                className="bg-accent-danger hover:bg-accent-danger/80 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Delete {selectedQsos.length}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Delete Confirmation Modal */}
