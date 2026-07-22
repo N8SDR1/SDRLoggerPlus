@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Core.Logging;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -19,19 +20,49 @@ public class ClubLogService
     private readonly ISettingsService _settingsService;
     private readonly HttpClient _http;
     private readonly ILogger<ClubLogService> _logger;
+    private readonly Qsl.QslBlockStateStore? _blockStore;
     private volatile bool _blocked;
 
-    public ClubLogService(ISettingsService settingsService, HttpClient http, ILogger<ClubLogService> logger)
+    public ClubLogService(ISettingsService settingsService, HttpClient http, ILogger<ClubLogService> logger,
+        Qsl.QslBlockStateStore? blockStore = null)
     {
         _settingsService = settingsService;
         _http = http;
         _logger = logger;
+        _blockStore = blockStore;
+
+        // The block must survive a restart. It used to be process state only,
+        // so restarting the app re-armed uploads against credentials Club Log
+        // had already rejected — and repeating rejected POSTs is precisely what
+        // gets an IP firewalled.
+        if (_blockStore?.Load().ClubLogBlockedUtc is { } blockedAt)
+        {
+            _blocked = true;
+            _logger.LogWarning(
+                "Club Log uploads remain disabled from a previous authentication failure at {BlockedUtc}. " +
+                "Re-save Club Log credentials in Settings to clear it.", blockedAt);
+        }
     }
 
     public bool IsBlocked => _blocked;
 
     /// <summary>Clears the auth-failure block (called when credentials are re-saved).</summary>
-    public void ResetBlock() => _blocked = false;
+    public void ResetBlock()
+    {
+        _blocked = false;
+        _blockStore?.Save(new Qsl.QslBlockState());
+    }
+
+    /// <summary>Trips the one-strike block and persists it.</summary>
+    private void Block(string reason)
+    {
+        _blocked = true;
+        _blockStore?.Save(new Qsl.QslBlockState
+        {
+            ClubLogBlockedUtc = DateTime.UtcNow,
+            ClubLogReason = reason,
+        });
+    }
 
     /// <summary>Single-record ADIF string for realtime.php.</summary>
     public static string BuildAdif(Qso qso, string stationCallsign)
@@ -94,23 +125,24 @@ public class ClubLogService
     }
 
     /// <summary>Uploads one QSO. Returns (success, errorMessage).</summary>
-    public async Task<(bool Ok, string? Error)> UploadQsoAsync(Qso qso, CancellationToken ct = default)
+    public async Task<QslUploadResult> UploadQsoAsync(Qso qso, CancellationToken ct = default)
     {
         if (_blocked)
-            return (false, "Club Log uploads disabled — authentication failed previously; re-save credentials in Settings");
+            return QslUploadResult.Fail(QslFailureKind.Auth,
+                "Club Log uploads disabled — authentication failed previously; re-save credentials in Settings");
 
         var settings = (await _settingsService.GetSettingsAsync()).ClubLog;
         if (!settings.Enabled)
-            return (false, "Club Log upload not enabled");
+            return QslUploadResult.NotConfigured("Club Log upload not enabled");
         if (string.IsNullOrWhiteSpace(settings.ApiKey))
-            return (false, "Club Log application key not configured");
+            return QslUploadResult.NotConfigured("Club Log application key not configured");
         if (string.IsNullOrWhiteSpace(settings.Email) || string.IsNullOrWhiteSpace(settings.Password))
-            return (false, "Club Log credentials not configured");
+            return QslUploadResult.NotConfigured("Club Log credentials not configured");
 
         var station = (await _settingsService.GetSettingsAsync()).Station;
         var callsign = !string.IsNullOrWhiteSpace(settings.Callsign) ? settings.Callsign! : station.Callsign ?? "";
         if (string.IsNullOrWhiteSpace(callsign))
-            return (false, "No callsign configured");
+            return QslUploadResult.NotConfigured("No callsign configured");
 
         try
         {
@@ -128,28 +160,41 @@ public class ClubLogService
                 }), ct);
 
             var body = (await response.Content.ReadAsStringAsync(ct)).Trim();
-            _logger.LogDebug("Club Log: HTTP {Status} — {Body}", (int)response.StatusCode, body.Length > 200 ? body[..200] : body);
+            // Classify against the raw body and report the redacted one. Masking
+            // before classification would let a credential that happens to
+            // contain a marker word change how the response is interpreted.
+            var safeBody = SecretScrubber.Redact(body, settings.Password, settings.ApiKey)!;
+            _logger.LogDebug("Club Log: HTTP {Status} — {Body}", (int)response.StatusCode, SecretScrubber.Head(safeBody, 200));
 
             if (response.StatusCode == System.Net.HttpStatusCode.Forbidden || body.StartsWith("Login rejected"))
             {
-                _blocked = true; // one-strike: stop everything until credentials change
+                // One-strike: stop everything until credentials change, and
+                // remember it across restarts.
+                Block($"HTTP {(int)response.StatusCode}: {SecretScrubber.Head(safeBody, 120)}");
                 _logger.LogWarning("Club Log: 403 — all uploads disabled to prevent IP firewall ban");
-                return (false, "Club Log: authentication failed (403) — uploads disabled to prevent an IP ban. Re-check credentials in Settings.");
+                return QslUploadResult.Fail(QslFailureKind.Auth,
+                    "Club Log: authentication failed (403) — uploads disabled to prevent an IP ban. Re-check credentials in Settings.");
             }
             if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
-                return (false, $"Club Log: QSO rejected — {(body.Length > 200 ? body[..200] : body)}");
+                return QslUploadResult.Fail(QslFailureKind.Rejected,
+                    $"Club Log: QSO rejected — {SecretScrubber.Head(safeBody, 200)}");
             if ((int)response.StatusCode >= 500)
-                return (false, "Club Log: server error — try again later");
+                return QslUploadResult.Fail(QslFailureKind.Temporary, "Club Log: server error — try again later");
 
             if (Regex.IsMatch(body, @"\bOK\b") || Regex.IsMatch(body, @"\bDupe\b") || body.Contains("Updated QSO"))
-                return (true, null);
+                return QslUploadResult.Success();
 
-            return (false, $"Club Log: unexpected response — {(body.Length > 200 ? body[..200] : body)}");
+            // An unrecognised body is classified Rejected, not Temporary. The
+            // POST may well have been accepted, and re-sending something Club
+            // Log already acted on is exactly the repetition its IP firewall
+            // watches for. A human should look instead.
+            return QslUploadResult.Fail(QslFailureKind.Rejected,
+                $"Club Log: unexpected response — {SecretScrubber.Head(safeBody, 200)}");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Club Log upload failed");
-            return (false, $"Club Log upload failed: {ex.Message}");
+            return QslUploadResult.Fail(QslFailureKind.Temporary, $"Club Log upload failed: {ex.Message}");
         }
     }
 }

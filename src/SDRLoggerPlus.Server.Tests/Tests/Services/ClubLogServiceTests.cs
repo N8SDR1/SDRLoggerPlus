@@ -81,7 +81,8 @@ public class ClubLogServiceTests
     [Fact]
     public async Task Upload_Disabled_DoesNotCallHttp()
     {
-        var (ok, _) = await CreateService().UploadQsoAsync(MakeQso());
+        var result = await CreateService().UploadQsoAsync(MakeQso());
+        var ok = result.Ok;
         ok.Should().BeFalse();
         _handler.Calls.Should().Be(0);
     }
@@ -92,7 +93,8 @@ public class ClubLogServiceTests
         ConfigureEnabled();
         _handler.Body = "OK";
 
-        var (ok, error) = await CreateService().UploadQsoAsync(MakeQso());
+        var result = await CreateService().UploadQsoAsync(MakeQso());
+        var (ok, error) = (result.Ok, result.Error);
 
         ok.Should().BeTrue();
         error.Should().BeNull();
@@ -110,7 +112,8 @@ public class ClubLogServiceTests
     {
         ConfigureEnabled();
         _handler.Body = body;
-        var (ok, _) = await CreateService().UploadQsoAsync(MakeQso());
+        var result = await CreateService().UploadQsoAsync(MakeQso());
+        var ok = result.Ok;
         ok.Should().BeTrue();
     }
 
@@ -121,14 +124,16 @@ public class ClubLogServiceTests
         _handler.Status = HttpStatusCode.Forbidden;
 
         var service = CreateService();
-        var (ok, error) = await service.UploadQsoAsync(MakeQso());
+        var result = await service.UploadQsoAsync(MakeQso());
+        var (ok, error) = (result.Ok, result.Error);
         ok.Should().BeFalse();
         error.Should().Contain("disabled");
 
         // One-strike rule: the next upload must NOT hit HTTP at all
         _handler.Status = HttpStatusCode.OK;
         var before = _handler.Calls;
-        var (ok2, _) = await service.UploadQsoAsync(MakeQso());
+        var result2 = await service.UploadQsoAsync(MakeQso());
+        var ok2 = result2.Ok;
         ok2.Should().BeFalse();
         _handler.Calls.Should().Be(before);
     }
@@ -144,7 +149,8 @@ public class ClubLogServiceTests
         service.ResetBlock();
         _handler.Status = HttpStatusCode.OK;
         _handler.Body = "OK";
-        var (ok, _) = await service.UploadQsoAsync(MakeQso());
+        var result = await service.UploadQsoAsync(MakeQso());
+        var ok = result.Ok;
         ok.Should().BeTrue();
     }
 
@@ -156,13 +162,15 @@ public class ClubLogServiceTests
         _handler.Body = "Bad ADIF";
 
         var service = CreateService();
-        var (ok, error) = await service.UploadQsoAsync(MakeQso());
+        var result = await service.UploadQsoAsync(MakeQso());
+        var (ok, error) = (result.Ok, result.Error);
         ok.Should().BeFalse();
         error.Should().Contain("rejected");
 
         _handler.Status = HttpStatusCode.OK;
         _handler.Body = "OK";
-        var (ok2, _) = await service.UploadQsoAsync(MakeQso());
+        var result2 = await service.UploadQsoAsync(MakeQso());
+        var ok2 = result2.Ok;
         ok2.Should().BeTrue(); // not blocked
     }
 }

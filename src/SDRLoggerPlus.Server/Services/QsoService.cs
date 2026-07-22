@@ -16,10 +16,13 @@ public class QsoService : IQsoService
     private readonly ClubLogService? _clubLog;
     private readonly HrdLogService? _hrdLog;
     private readonly EqslService? _eqsl;
+    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly ILogger<QsoService>? _logger;
 
     public QsoService(IQsoRepository repository, IHubContext<LogHub, ILogHubClient> hub,
         ISpotStatusService? spotStatusService = null, ClubLogService? clubLog = null,
-        HrdLogService? hrdLog = null, EqslService? eqsl = null)
+        HrdLogService? hrdLog = null, EqslService? eqsl = null,
+        IServiceScopeFactory? scopeFactory = null, ILogger<QsoService>? logger = null)
     {
         _repository = repository;
         _hub = hub;
@@ -27,6 +30,41 @@ public class QsoService : IQsoService
         _clubLog = clubLog;
         _hrdLog = hrdLog;
         _eqsl = eqsl;
+        _scopeFactory = scopeFactory;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Run one upload in the background and write its outcome to the ledger.
+    ///
+    /// The work outlives the HTTP request that started it, so it resolves its
+    /// own scope rather than capturing this instance's scoped repository —
+    /// that repository belongs to a scope which is disposed the moment the
+    /// response is sent.
+    ///
+    /// Nothing is awaited by the caller (logging must not block on a slow
+    /// service), so this swallows and logs its own exceptions: an unobserved
+    /// faulted task would otherwise die silently, which is the failure mode
+    /// this whole feature exists to end.
+    /// </summary>
+    private void RecordUpload(string qsoId, string service, Func<Task<QslUploadResult>> upload)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await upload();
+
+                if (_scopeFactory == null) return;
+                using var scope = _scopeFactory.CreateScope();
+                var recorder = scope.ServiceProvider.GetRequiredService<Qsl.QslSyncRecorder>();
+                await recorder.RecordAsync(qsoId, service, result);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "QSL upload/ledger write failed for {Service}", service);
+            }
+        });
     }
 
     /// <summary>
@@ -144,27 +182,23 @@ public class QsoService : IQsoService
 
         var created = await _repository.CreateAsync(qso);
 
-        // Fire-and-forget Club Log realtime upload — logging must never block
-        // on (or fail because of) a slow external service. The service itself
-        // no-ops when disabled and self-blocks on auth failure.
+        // Fire-and-forget QSL uploads — logging must never block on (or fail
+        // because of) a slow external service. Each service no-ops when
+        // disabled, and Club Log self-blocks on auth failure.
+        //
+        // The results are no longer discarded: every attempt is written to the
+        // QSO's ledger so "did this reach Club Log?" has an answer. That is the
+        // whole point of R-1 — after the June frequency incident, months of
+        // wrong uploads to three services could not be repaired because nothing
+        // recorded what had been sent.
         if (_clubLog != null)
-        {
-            _ = Task.Run(() => _clubLog.UploadQsoAsync(created));
-        }
+            RecordUpload(created.Id, QslSyncLedger.ClubLogKey, () => _clubLog.UploadQsoAsync(created));
 
-        // Fire-and-forget HRDLog.net realtime upload (same rationale as above —
-        // the service no-ops when disabled).
         if (_hrdLog != null)
-        {
-            _ = Task.Run(() => _hrdLog.UploadQsoAsync(created));
-        }
+            RecordUpload(created.Id, QslSyncLedger.HrdLogKey, () => _hrdLog.UploadQsoAsync(created));
 
-        // Fire-and-forget eQSL.cc realtime upload — no-ops when disabled,
-        // logs a warning on auth failure but never throws into the caller.
         if (_eqsl != null)
-        {
-            _ = Task.Run(() => _eqsl.UploadQsoAsync(created));
-        }
+            RecordUpload(created.Id, QslSyncLedger.EqslKey, () => _eqsl.UploadQsoAsync(created));
 
         // Update spot status cache incrementally — including the grid, so a grid
         // you just worked stops showing as "needed" on the next decode.
@@ -253,6 +287,31 @@ public class QsoService : IQsoService
         string.Equals(qso.Qsl?.Lotw?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         string.Equals(qso.Qsl?.Eqsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         string.Equals(qso.Qsl?.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
-        string.Equals(qso.Qsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase)
+        string.Equals(qso.Qsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
+        MapQslSync(qso.QslSync)
     );
+
+    /// <summary>
+    /// Null in, null out — a QSO with no ledger predates upload tracking, and
+    /// the UI has to be able to tell that apart from "nothing sent yet".
+    /// </summary>
+    internal static QslSyncDto? MapQslSync(QslSyncLedger? ledger) =>
+        ledger is null
+            ? null
+            : new QslSyncDto(
+                MapQslService(ledger.ClubLog),
+                MapQslService(ledger.HrdLog),
+                MapQslService(ledger.Eqsl));
+
+    private static QslServiceSyncDto? MapQslService(QslServiceSync? entry) =>
+        entry is null
+            ? null
+            : new QslServiceSyncDto(
+                entry.Status.ToString(),
+                entry.SyncedAt,
+                entry.LastAttemptAt,
+                entry.LastError,
+                entry.FailureKind.ToString(),
+                entry.Attempts,
+                entry.IsRetryable);
 }

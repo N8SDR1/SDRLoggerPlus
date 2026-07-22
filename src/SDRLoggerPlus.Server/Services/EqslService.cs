@@ -1,5 +1,6 @@
 using System.Text;
 using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Core.Logging;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -149,17 +150,17 @@ public class EqslService
     }
 
     /// <summary>Uploads one QSO. Fire-and-forget style; the caller ignores the return except in tests.</summary>
-    public async Task<(bool Ok, string? Error)> UploadQsoAsync(Qso qso, CancellationToken ct = default)
+    public async Task<QslUploadResult> UploadQsoAsync(Qso qso, CancellationToken ct = default)
     {
         var all = await _settingsService.GetSettingsAsync();
         var settings = all.Eqsl;
-        if (!settings.Enabled) return (false, "eQSL upload not enabled");
+        if (!settings.Enabled) return QslUploadResult.NotConfigured("eQSL upload not enabled");
         if (string.IsNullOrWhiteSpace(settings.Username) || string.IsNullOrWhiteSpace(settings.Password))
-            return (false, "eQSL credentials not configured");
+            return QslUploadResult.NotConfigured("eQSL credentials not configured");
 
         var callsign = !string.IsNullOrWhiteSpace(settings.Username) ? settings.Username! : all.Station.Callsign ?? "";
         if (string.IsNullOrWhiteSpace(callsign))
-            return (false, "No callsign configured");
+            return QslUploadResult.NotConfigured("No callsign configured");
 
         try
         {
@@ -178,26 +179,45 @@ public class EqslService
             var response = await _http.PostAsync("https://www.eQSL.cc/qslcard/importADIF.cfm",
                 new FormUrlEncodedContent(form), ct);
             var body = (await response.Content.ReadAsStringAsync(ct)).Trim();
+            // Classify against the raw body and report the redacted one. Masking
+            // before classification would let a credential that happens to
+            // contain a marker word change how the response is interpreted.
+            var safeBody = SecretScrubber.Redact(body, settings.Password)!;
             _logger.LogDebug("eQSL: HTTP {Status} — {Body}", (int)response.StatusCode,
-                body.Length > 200 ? body[..200] : body);
+                SecretScrubber.Head(safeBody, 200));
+
+            // Status first: PostAsync does NOT throw on 5xx, so an eQSL outage
+            // otherwise falls through the body sniffing to Rejected and marks
+            // the QSO permanently needs-attention. A server fault or throttle
+            // is the retryable case; other non-2xx means this request will
+            // never be accepted as-is.
+            if (!response.IsSuccessStatusCode)
+            {
+                var status = (int)response.StatusCode;
+                var kind = status >= 500 || status == 429 ? QslFailureKind.Temporary : QslFailureKind.Rejected;
+                return QslUploadResult.Fail(kind, $"eQSL: server returned HTTP {status}");
+            }
 
             if (body.Contains("Bad Callsign/Password", StringComparison.OrdinalIgnoreCase) ||
                 body.Contains("Bad password", StringComparison.OrdinalIgnoreCase))
-                return (false, "eQSL rejected the credentials — fix them in Settings");
+                return QslUploadResult.Fail(QslFailureKind.Auth,
+                    "eQSL rejected the credentials — fix them in Settings");
 
             if (body.Contains("out of", StringComparison.OrdinalIgnoreCase) &&
                 body.Contains("added", StringComparison.OrdinalIgnoreCase))
-                return (true, null);
+                return QslUploadResult.Success();
 
             if (body.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
-                return (false, body.Length > 200 ? body[..200] : body);
+                return QslUploadResult.Fail(QslFailureKind.Rejected,
+                    SecretScrubber.Head(safeBody, 200));
 
-            return (false, $"eQSL: unexpected response — {(body.Length > 200 ? body[..200] : body)}");
+            return QslUploadResult.Fail(QslFailureKind.Rejected,
+                $"eQSL: unexpected response — {SecretScrubber.Head(safeBody, 200)}");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "eQSL upload failed");
-            return (false, $"eQSL upload failed: {ex.Message}");
+            return QslUploadResult.Fail(QslFailureKind.Temporary, $"eQSL upload failed: {ex.Message}");
         }
     }
 }

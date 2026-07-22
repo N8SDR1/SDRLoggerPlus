@@ -1,5 +1,6 @@
 using System.Text;
 using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Core.Logging;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -53,18 +54,18 @@ public class HrdLogService
     }
 
     /// <summary>Uploads one QSO. Returns (success, errorMessage).</summary>
-    public async Task<(bool Ok, string? Error)> UploadQsoAsync(Qso qso, CancellationToken ct = default)
+    public async Task<QslUploadResult> UploadQsoAsync(Qso qso, CancellationToken ct = default)
     {
         var settings = (await _settingsService.GetSettingsAsync()).HrdLog;
         if (!settings.Enabled)
-            return (false, "HRDLog upload not enabled");
+            return QslUploadResult.NotConfigured("HRDLog upload not enabled");
         if (string.IsNullOrWhiteSpace(settings.UploadCode))
-            return (false, "HRDLog upload code not configured");
+            return QslUploadResult.NotConfigured("HRDLog upload code not configured");
 
         var station = (await _settingsService.GetSettingsAsync()).Station;
         var callsign = !string.IsNullOrWhiteSpace(settings.Callsign) ? settings.Callsign! : station.Callsign ?? "";
         if (string.IsNullOrWhiteSpace(callsign))
-            return (false, "No callsign configured");
+            return QslUploadResult.NotConfigured("No callsign configured");
 
         try
         {
@@ -81,25 +82,44 @@ public class HrdLogService
                 }), ct);
 
             var body = (await response.Content.ReadAsStringAsync(ct)).Trim();
-            _logger.LogInformation("HRDLog: HTTP {Status} — {Body}", (int)response.StatusCode, body.Length > 300 ? body[..300] : body);
+            // Classify against the raw body and report the redacted one. Masking
+            // before classification would let a credential that happens to
+            // contain a marker word change how the response is interpreted.
+            var safeBody = SecretScrubber.Redact(body, settings.UploadCode)!;
+            _logger.LogInformation("HRDLog: HTTP {Status} — {Body}", (int)response.StatusCode, SecretScrubber.Head(safeBody, 300));
 
             if (!response.IsSuccessStatusCode)
-                return (false, $"HRDLog: server returned HTTP {(int)response.StatusCode}");
+            {
+                // 5xx and 429 are the service's problem and worth retrying;
+                // other 4xx mean this request will never be accepted as-is.
+                var status = (int)response.StatusCode;
+                var kind = status >= 500 || status == 429 ? QslFailureKind.Temporary : QslFailureKind.Rejected;
+                return QslUploadResult.Fail(kind, $"HRDLog: server returned HTTP {status}");
+            }
 
             // Lenient: only fail when the body clearly signals rejection. These
             // words are very unlikely to appear in a success acknowledgement.
             foreach (var marker in new[] { "invalid", "denied", "rejected", "not authorized", "unauthorized" })
             {
                 if (body.Contains(marker, StringComparison.OrdinalIgnoreCase))
-                    return (false, $"HRDLog rejected the QSO — {(body.Length > 200 ? body[..200] : body)}");
+                {
+                    // An upload code the service refuses is an auth problem, not
+                    // a per-QSO one — retrying every QSO against it would just
+                    // repeat the same rejection.
+                    var kind = marker is "not authorized" or "unauthorized" or "denied"
+                        ? QslFailureKind.Auth
+                        : QslFailureKind.Rejected;
+                    return QslUploadResult.Fail(kind,
+                        $"HRDLog rejected the QSO — {SecretScrubber.Head(safeBody, 200)}");
+                }
             }
 
-            return (true, null);
+            return QslUploadResult.Success();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "HRDLog upload failed");
-            return (false, $"HRDLog upload failed: {ex.Message}");
+            return QslUploadResult.Fail(QslFailureKind.Temporary, $"HRDLog upload failed: {ex.Message}");
         }
     }
 }

@@ -107,6 +107,14 @@ public class Qso
     [BsonElement("lotwSyncStatus")]
     [BsonRepresentation(BsonType.String)]
     public SyncStatus LotwSyncStatus { get; set; } = SyncStatus.NotSynced;
+
+    /// <summary>
+    /// Club Log / HRDLog / eQSL upload state. Null means the QSO was logged
+    /// before this tracking existed — see <see cref="QslSyncLedger"/> for why
+    /// that is deliberately not the same as "not synced".
+    /// </summary>
+    [BsonElement("qslSync")]
+    public QslSyncLedger? QslSync { get; set; }
 }
 
 public class StationInfo

@@ -7,6 +7,7 @@ import { ColDef, ICellRendererParams } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { api, QsoResponse, UpdateQsoRequest, AdifImportResponse, ConfirmationSource, ConfirmationMergeResponse } from '../api/client';
+import { qslSyncBadges, qslSyncSortKey, type QslBadgeState } from '../utils/qslSyncBadges';
 import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
 import { useAppStore } from '../store/appStore';
@@ -43,6 +44,40 @@ const QslCellRenderer = (props: ICellRendererParams<QsoResponse>) => {
             className="inline-flex items-center justify-center w-4 h-4 rounded-sm bg-accent-success/20 text-accent-success text-[10px] font-bold font-ui"
           >
             {c.letter}
+          </span>
+        ))
+      )}
+    </div>
+  );
+};
+
+// Sync column — upload state per QSL service (Club Log / HRDLog / eQSL).
+// Distinct from the QSL column: that one shows confirmations RECEIVED, this
+// one shows whether the QSO was successfully SENT.
+const SYNC_BADGE_CLASS: Record<QslBadgeState, string> = {
+  synced: 'bg-accent-success/20 text-accent-success',
+  retryable: 'bg-accent-warning/20 text-accent-warning',
+  blocked: 'bg-accent-error/20 text-accent-error',
+  untracked: 'bg-dark-700 text-dark-400',
+};
+
+const QslSyncCellRenderer = (props: ICellRendererParams<QsoResponse>) => {
+  const badges = qslSyncBadges(props.data?.qslSync);
+
+  return (
+    <div className="flex items-center gap-1 h-full">
+      {badges.length === 0 ? (
+        // A QSO logged before upload tracking existed, or one whose services
+        // are all switched off. Either way we know nothing, so claim nothing.
+        <span className="text-dark-500 text-xs">—</span>
+      ) : (
+        badges.map((badge) => (
+          <span
+            key={badge.key}
+            title={badge.title}
+            className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[10px] font-bold font-ui ${SYNC_BADGE_CLASS[badge.state]}`}
+          >
+            {badge.letter}
           </span>
         ))
       )}
@@ -456,7 +491,18 @@ export function LogHistoryPlugin() {
         (params.data?.confirmedCard ? 1 : 0),
       width: 70,
       resizable: true,
-      headerTooltip: 'Confirmations — L: LoTW, E: eQSL, Q: card / paper QSL',
+      headerTooltip: 'Confirmations received — L: LoTW, E: eQSL, Q: QRZ Logbook, C: card / paper QSL',
+    },
+    {
+      headerName: 'Sync',
+      cellRenderer: QslSyncCellRenderer,
+      // Sorts by severity so unresolved upload failures surface first.
+      valueGetter: (params) => qslSyncSortKey(params.data?.qslSync),
+      width: 70,
+      resizable: true,
+      headerTooltip:
+        'Upload status — C: Club Log, H: HRDLog, E: eQSL. Green sent, amber will retry, ' +
+        'red needs attention. A dash means the QSO predates upload tracking.',
     },
     {
       headerName: 'Name',

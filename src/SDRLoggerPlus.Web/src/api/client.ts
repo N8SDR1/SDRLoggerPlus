@@ -26,6 +26,25 @@ export interface QsoResponse {
   confirmedEqsl?: boolean;
   confirmedQrz?: boolean;
   confirmedCard?: boolean;
+  // Upload state per QSL service. Undefined means the QSO predates upload
+  // tracking — deliberately different from "nothing sent yet".
+  qslSync?: QslSync;
+}
+
+export interface QslServiceSync {
+  status: string;
+  syncedAt?: string;
+  lastAttemptAt?: string;
+  lastError?: string;
+  failureKind: string;
+  attempts: number;
+  retryable: boolean;
+}
+
+export interface QslSync {
+  clubLog?: QslServiceSync;
+  hrdLog?: QslServiceSync;
+  eqsl?: QslServiceSync;
 }
 
 export interface StationInfo {

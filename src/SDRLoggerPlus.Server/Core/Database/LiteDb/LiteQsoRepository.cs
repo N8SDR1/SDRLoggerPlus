@@ -168,6 +168,41 @@ public class LiteQsoRepository : IQsoRepository
         return Task.FromResult(success);
     }
 
+    /// <summary>
+    /// Writes only the QSL ledger.
+    ///
+    /// Deliberately NOT routed through UpdateAsync: that method bumps
+    /// UpdatedAt and flips a Synced QSO to Modified, which would queue a QRZ
+    /// re-upload every time an unrelated service reported back. Recording that
+    /// eQSL accepted a QSO must not tell QRZ the QSO changed — it didn't.
+    /// </summary>
+    public Task<bool> UpdateQslSyncAsync(string id, QslSyncLedger ledger)
+    {
+        var qso = _context.Qsos.FindById(new BsonValue(id));
+        if (qso == null) return Task.FromResult(false);
+
+        qso.QslSync = ledger;
+        var success = _context.Qsos.Update(qso);
+        _context.Database.Checkpoint();
+        return Task.FromResult(success);
+    }
+
+    public Task<IEnumerable<Qso>> GetQslFailuresAsync(string service)
+    {
+        // Filtered in memory: the ledger is a nested document and LiteDB's
+        // expression support for nested optional paths is fragile enough that
+        // a wrong predicate would silently return nothing — the worst failure
+        // mode for a "what still needs sending?" query. This runs on demand,
+        // not on a hot path.
+        var results = _context.Qsos.FindAll()
+            .Where(q => q.QslSync?.For(service)?.IsRetryable == true)
+            .OrderByDescending(q => q.QsoDate)
+            .ThenByDescending(q => q.TimeOn)
+            .ToList();
+
+        return Task.FromResult<IEnumerable<Qso>>(results);
+    }
+
     public Task<bool> DeleteAsync(string id)
     {
         var success = _context.Qsos.Delete(new BsonValue(id));
