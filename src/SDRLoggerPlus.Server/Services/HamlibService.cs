@@ -12,7 +12,7 @@ namespace SDRLoggerPlus.Server.Services;
 /// Service for direct Hamlib rig control via native library
 /// Supports all Hamlib-compatible rigs with full configuration options
 /// </summary>
-public class HamlibService : BackgroundService
+public partial class HamlibService : BackgroundService
 {
     private readonly ILogger<HamlibService> _logger;
     private readonly IHubContext<LogHub, ILogHubClient> _hubContext;

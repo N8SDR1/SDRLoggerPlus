@@ -17,7 +17,7 @@ namespace SDRLoggerPlus.Server.Services;
 /// <summary>
 /// Service for TCI (Thetis, Hermes, ANAN) radio discovery and CAT control
 /// </summary>
-public class TciRadioService : BackgroundService
+public partial class TciRadioService : BackgroundService
 {
     private readonly ILogger<TciRadioService> _logger;
     private readonly IHubContext<LogHub, ILogHubClient> _hubContext;

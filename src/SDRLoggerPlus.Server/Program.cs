@@ -165,9 +165,16 @@ builder.Services.AddSingleton<FlrigService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FlrigService>());
 
 // Rig backend abstraction (v2.8.0). The registry replaces LogHub's per-action
-// TCI→Hamlib→flrig ladders. Backends register themselves as IRigBackend in
-// precedence order in Stage 1; until then the injected sequence is empty and the
-// registry simply reports "nothing connected". See docs/design/rig-backend-abstraction.md.
+// TCI→Hamlib→flrig ladders. The three services are registered as IRigBackend in
+// PRECEDENCE ORDER (TCI → Hamlib → flrig) — the injection order IS the precedence.
+// Each resolves to the same singleton instance already registered above.
+// See docs/design/rig-backend-abstraction.md.
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigBackend>(
+    sp => sp.GetRequiredService<TciRadioService>());
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigBackend>(
+    sp => sp.GetRequiredService<HamlibService>());
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigBackend>(
+    sp => sp.GetRequiredService<FlrigService>());
 builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigRegistry,
     SDRLoggerPlus.Server.Services.Rig.RigRegistry>();
 

@@ -20,7 +20,7 @@ namespace SDRLoggerPlus.Server.Services;
 /// flrig's XML-RPC surface is tiny (six methods total) so we don't pull in
 /// a general-purpose XML-RPC NuGet dependency for it.
 /// </summary>
-public class FlrigService : BackgroundService
+public partial class FlrigService : BackgroundService
 {
     /// <summary>Fixed RadioId — flrig only exposes one connected rig at a time.</summary>
     public const string FlrigRadioId = "flrig";
