@@ -43,7 +43,12 @@ public record SatState(
     double? RangeKm,
     double? MaxElDeg,
     double? TimeToAosSec,
-    double? TimeToLosSec);
+    double? TimeToLosSec,
+    // Live Doppler-corrected uplink/downlink (Hz) for the ACTIVE transponder,
+    // from the /track poll — the display follows these while the nominal
+    // UplinkFreq/DownlinkFreq above are what a logged QSO records.
+    string? UplinkFreqLive,
+    string? DownlinkFreqLive);
 
 public record SatMapInfo(double Lat, double Lon, double AltKm, double FootprintRadiusKm);
 
@@ -72,6 +77,8 @@ public class SatControllerService : BackgroundService
     private string _status = "idle";
     private string? _serial, _firmware, _satellite, _catno, _transponder;
     private string? _upFreq, _upMode, _downFreq, _downMode, _aosAz, _losAz, _error;
+    // Live Doppler-corrected active-transponder freqs (Hz) from the /track poll.
+    private string? _upFreqLive, _downFreqLive;
     private DateTime? _aosTime, _lastHeard;
     private readonly List<SatPassQso> _passQsos = new();
     private readonly Queue<SatEvent> _events = new();
@@ -109,6 +116,7 @@ public class SatControllerService : BackgroundService
                 // Clear pass-scoped live-tracking data so a stale look-angle
                 // doesn't linger in the UI after the operator deactivates.
                 _azDeg = _elDeg = _rangeKm = _maxElDeg = _ttAosSec = _ttLosSec = null;
+                _upFreqLive = _downFreqLive = null;
             }
         }
         await BroadcastStateAsync();
@@ -121,7 +129,8 @@ public class SatControllerService : BackgroundService
             return new SatState(_active, _status, _serial, _firmware, _satellite, _catno,
                 _transponder, _upFreq, _upMode, _downFreq, _downMode, _aosAz, _losAz,
                 _aosTime, _lastHeard, _passQsos.ToList(), _events.ToList(), _map, _error,
-                _azDeg, _elDeg, _rangeKm, _maxElDeg, _ttAosSec, _ttLosSec);
+                _azDeg, _elDeg, _rangeKm, _maxElDeg, _ttAosSec, _ttLosSec,
+                _upFreqLive, _downFreqLive);
         }
     }
 
@@ -478,6 +487,50 @@ public class SatControllerService : BackgroundService
                 _azDeg = az;
                 _elDeg = el;
                 _rangeKm = rangeKm;
+
+                // Live Doppler-corrected freqs for the ACTIVE transponder. The box
+                // applies Doppler (+ the operator's passband offset) only to the
+                // selected transponder; match it by name, falling back to whichever
+                // entry is currently carrying Doppler. Nominal freqs stay in
+                // _upFreq/_downFreq (what a QSO logs); these drive the live display.
+                // The box applies Doppler/offset only to the SELECTED transponder,
+                // so that's the reliable "active" signal (name match is a fallback
+                // near TCA where Doppler momentarily crosses zero). From the active
+                // entry we populate BOTH the nominal transponder info (what a QSO
+                // logs — carried on every /track poll, so it survives a restart with
+                // no UDP TRANSPONDER frame and follows transponder switches) and the
+                // live Doppler-corrected freqs (what the display follows).
+                _upFreqLive = _downFreqLive = null;
+                if (root.TryGetProperty("freq", out var freqArr) && freqArr.ValueKind == JsonValueKind.Array)
+                {
+                    JsonElement? active = null;
+                    foreach (var f in freqArr.EnumerateArray())
+                        if ((Num(f, "dop_up") ?? 0) != 0 || (Num(f, "dop_down") ?? 0) != 0 ||
+                            (Num(f, "off_up") ?? 0) != 0 || (Num(f, "off_down") ?? 0) != 0) { active = f; break; }
+                    if (active is null && !string.IsNullOrEmpty(_transponder))
+                        foreach (var f in freqArr.EnumerateArray())
+                        {
+                            var descr = f.TryGetProperty("descr", out var de) ? de.GetString()?.Trim() : null;
+                            if (string.Equals(descr, _transponder!.Trim(), StringComparison.OrdinalIgnoreCase)) { active = f; break; }
+                        }
+                    if (active is { } a)
+                    {
+                        var upNom = Num(a, "upFreq") ?? 0;
+                        var dnNom = Num(a, "downFreq") ?? 0;
+                        var name = a.TryGetProperty("descr", out var dd) ? dd.GetString()?.Trim() : null;
+                        if (!string.IsNullOrEmpty(name)) _transponder = name;
+                        if (upNom > 0) _upFreq = ((long)Math.Round(upNom)).ToString();
+                        if (dnNom > 0) _downFreq = ((long)Math.Round(dnNom)).ToString();
+                        var um = a.TryGetProperty("upMode", out var umv) ? umv.GetString()?.Trim() : null;
+                        var dm = a.TryGetProperty("downMode", out var dmv) ? dmv.GetString()?.Trim() : null;
+                        if (!string.IsNullOrEmpty(um)) _upMode = um;
+                        if (!string.IsNullOrEmpty(dm)) _downMode = dm;
+                        var up = upNom + (Num(a, "dop_up") ?? 0) + (Num(a, "off_up") ?? 0);
+                        var dn = dnNom + (Num(a, "dop_down") ?? 0) + (Num(a, "off_down") ?? 0);
+                        if (up > 0) _upFreqLive = ((long)Math.Round(up)).ToString();
+                        if (dn > 0) _downFreqLive = ((long)Math.Round(dn)).ToString();
+                    }
+                }
                 // If the controller doesn't push maxEL, track the highest El
                 // we've observed this pass ourselves. Reset happens in
                 // SetActiveAsync(false) below.

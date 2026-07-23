@@ -312,6 +312,10 @@ export function LogEntryPlugin() {
   // truth during a pass). We only auto-fill when the operator hasn't
   // manually edited the satellite name for THIS pass (via a simple check
   // against the tracking satellite string).
+  // Nominal (Doppler-free) transponder freqs in MHz, stashed while tracking so a
+  // logged QSO records the clean transponder freq even though the fields below
+  // follow the live Doppler-corrected value.
+  const satNominalRef = useRef<{ up?: number; down?: number }>({});
   useEffect(() => {
     if (logMode !== 'sat' || !satState?.satellite) return;
     // The S.A.T. controller reports uplink/downlink in Hz (e.g. "432150000"),
@@ -323,14 +327,20 @@ export function LogEntryPlugin() {
       return n >= 100_000 ? n / 1_000_000 : n;
     };
     const fmt = (mhz: number) => String(parseFloat(mhz.toFixed(6)));
-    const upMhz = toMhz(satState.uplinkFreq);
-    const dnMhz = toMhz(satState.downlinkFreq);
+    // Display follows the live Doppler-corrected freq (matches the controller);
+    // logging uses the nominal transponder freq (stashed in satNominalRef).
+    const upLive = toMhz(satState.uplinkFreqLive ?? satState.uplinkFreq);
+    const dnLive = toMhz(satState.downlinkFreqLive ?? satState.downlinkFreq);
+    satNominalRef.current = {
+      up: toMhz(satState.uplinkFreq) ?? undefined,
+      down: toMhz(satState.downlinkFreq) ?? undefined,
+    };
     setFormData(prev => {
       const next = {
         ...prev,
         satellite: satState.satellite ?? prev.satellite,
-        uplinkFreq: upMhz != null ? fmt(upMhz) : prev.uplinkFreq,
-        downlinkFreq: dnMhz != null ? fmt(dnMhz) : prev.downlinkFreq,
+        uplinkFreq: upLive != null ? fmt(upLive) : prev.uplinkFreq,
+        downlinkFreq: dnLive != null ? fmt(dnLive) : prev.downlinkFreq,
         upMode: satState.uplinkMode ?? prev.upMode,
         downMode: satState.downlinkMode ?? prev.downMode,
       };
@@ -338,15 +348,15 @@ export function LogEntryPlugin() {
       // FREQ = transmit — so a contact logged straight from the controller is
       // self-consistent with no rig tuned to the pass. The downlink stays in its
       // own fields (freq_rx / down_mode) server-side.
-      if (upMhz != null) {
-        next.frequency = fmt(upMhz);
-        const b = getBandFromFrequency(upMhz * 1_000_000);
+      if (upLive != null) {
+        next.frequency = fmt(upLive);
+        const b = getBandFromFrequency(upLive * 1_000_000);
         if (b) next.band = b;
       }
       if (satState.uplinkMode) next.mode = normalizeMode(satState.uplinkMode);
       return next;
     });
-  }, [logMode, satState?.satellite, satState?.uplinkFreq, satState?.downlinkFreq, satState?.uplinkMode, satState?.downlinkMode]);
+  }, [logMode, satState?.satellite, satState?.uplinkFreq, satState?.downlinkFreq, satState?.uplinkFreqLive, satState?.downlinkFreqLive, satState?.uplinkMode, satState?.downlinkMode]);
 
   // Auto-populate name from QRZ when nameLocked is true
   useEffect(() => {
@@ -646,8 +656,19 @@ export function LogEntryPlugin() {
       // (worked station's grid) rides on the standard `grid` field
       // above — no separate wire field needed.
       satellite: logMode === 'sat' && formData.satellite ? formData.satellite : undefined,
-      uplinkFreq: logMode === 'sat' && formData.uplinkFreq ? parseFloat(formData.uplinkFreq) : undefined,
-      downlinkFreq: logMode === 'sat' && formData.downlinkFreq ? parseFloat(formData.downlinkFreq) : undefined,
+      // While tracking, log the NOMINAL transponder freq (the fields show the
+      // live Doppler-corrected value, which we don't want in the log). When not
+      // tracking, log whatever the operator hand-entered in the field.
+      uplinkFreq: logMode === 'sat'
+        ? (satTracking && satNominalRef.current.up != null
+            ? satNominalRef.current.up
+            : (formData.uplinkFreq ? parseFloat(formData.uplinkFreq) : undefined))
+        : undefined,
+      downlinkFreq: logMode === 'sat'
+        ? (satTracking && satNominalRef.current.down != null
+            ? satNominalRef.current.down
+            : (formData.downlinkFreq ? parseFloat(formData.downlinkFreq) : undefined))
+        : undefined,
       upMode: logMode === 'sat' && formData.upMode ? formData.upMode : undefined,
       downMode: logMode === 'sat' && formData.downMode ? formData.downMode : undefined,
     });

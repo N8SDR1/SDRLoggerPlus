@@ -144,6 +144,10 @@ export interface SatState {
   uplinkMode?: string | null;
   downlinkFreq?: string | null;
   downlinkMode?: string | null;
+  // Live Doppler-corrected active-transponder freqs (Hz) — the display follows
+  // these; the nominal uplinkFreq/downlinkFreq above are what a QSO logs.
+  uplinkFreqLive?: string | null;
+  downlinkFreqLive?: string | null;
   aosAzimuth?: string | null;
   losAzimuth?: string | null;
   aosTimeUtc?: string | null;
