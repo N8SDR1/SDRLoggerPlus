@@ -167,6 +167,12 @@ public partial class FlrigService : BackgroundService
                 new XElement("value", new XElement("double", frequencyHz.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))),
                 ct);
             _lastFreqHz = frequencyHz;
+            // Push the new state to clients now. The poll loop only broadcasts on a
+            // detected CHANGE, but we just moved _lastFreqHz to match the rig, so the
+            // next poll would see "no change" and stay silent — leaving Follow-Radio
+            // (e.g. the Log Entry frequency field) stuck on the old value after an
+            // app-initiated tune. Broadcasting here keeps the UI in sync immediately.
+            await BroadcastCurrentStateAsync();
             return true;
         }
         catch (Exception ex)
@@ -198,6 +204,9 @@ public partial class FlrigService : BackgroundService
                 new XElement("value", new XElement("string", flrigMode)),
                 ct);
             _lastMode = appMode.ToUpperInvariant();
+            // See SetFrequencyAsync — broadcast now so Follow-Radio reflects the mode
+            // change instead of waiting for a poll that will see "no change".
+            await BroadcastCurrentStateAsync();
             return true;
         }
         catch (Exception ex)
@@ -280,6 +289,17 @@ public partial class FlrigService : BackgroundService
                 SliceOrInstance: null));
         }
     }
+
+    // Broadcast the last-known freq/mode immediately (used right after an app-initiated
+    // set, where the poll loop's change-detection would otherwise stay silent).
+    private Task BroadcastCurrentStateAsync()
+        => _hubContext.BroadcastRadioStateChanged(new RadioStateChangedEvent(
+            RadioId: FlrigRadioId,
+            FrequencyHz: _lastFreqHz,
+            Mode: _lastMode,
+            IsTransmitting: false,
+            Band: BandFromHz(_lastFreqHz),
+            SliceOrInstance: null));
 
     /// <summary>
     /// Set sensible digital-mode defaults based on the rig brand BEFORE the
