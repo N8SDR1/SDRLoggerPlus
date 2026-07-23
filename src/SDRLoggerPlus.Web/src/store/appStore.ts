@@ -438,7 +438,15 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => {
       const connectionStates = new Map(state.radioConnectionStates);
       connectionStates.set(radioId, connectionState);
-      return { radioConnectionStates: connectionStates };
+      // If the currently-SELECTED rig just dropped, clear the selection so the
+      // app-wide auto-select can hand off to another live rig (e.g. flrig). Without
+      // this the status bar and the Log Entry follow-gate stay pinned to a dead rig.
+      const selectionLost =
+        state.selectedRadioId === radioId &&
+        (connectionState === "Disconnected" || connectionState === "Error");
+      return selectionLost
+        ? { radioConnectionStates: connectionStates, selectedRadioId: null }
+        : { radioConnectionStates: connectionStates };
     }),
   setRadioState: (radioState) =>
     set((state) => {

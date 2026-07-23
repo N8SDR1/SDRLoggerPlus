@@ -249,7 +249,7 @@ export function App() {
   const { layout, setLayout, loadFromBackend: loadLayout, syncToBackendSync } = useLayoutStore();
   const { loadSettings, openSettings, settings } = useSettingsStore();
   const { fetchStatus, status: setupStatus, isLoading: setupLoading } = useSetupStore();
-  const { setStationInfo, setDatabaseConnected } = useAppStore();
+  const { setStationInfo, setDatabaseConnected, selectedRadioId, radioConnectionStates, setSelectedRadio } = useAppStore();
   const [model, setModel] = useState<Model>(() => Model.fromJson(sanitizeLayout(layout)));
   const [showPanelPicker, setShowPanelPicker] = useState(false);
   const [targetTabSetId, setTargetTabSetId] = useState<string | null>(null);
@@ -293,6 +293,29 @@ export function App() {
 
   // Initialize SignalR connection (only called here, not in plugins)
   useSignalRConnection();
+
+  // App-wide active-rig auto-select. When no rig is selected but one is live, make
+  // it the active rig — this drives the status-bar indicator AND the Log Entry
+  // follow-gate (band/mode push). Runs regardless of whether the manage-radios panel
+  // is open, so a background rig with no Connect button (flrig) is surfaced, and
+  // closing one rig hands off to another that's still up. Prefers the saved
+  // auto-connect rig, else backend precedence (TCI > Hamlib > flrig).
+  useEffect(() => {
+    if (selectedRadioId) return;
+    const isLive = (id: string) => {
+      const s = radioConnectionStates.get(id);
+      return s === 'Connected' || s === 'Monitoring';
+    };
+    const autoConnectRigId = settings.radio?.autoConnectRigId ?? null;
+    if (autoConnectRigId && isLive(autoConnectRigId)) {
+      setSelectedRadio(autoConnectRigId);
+      return;
+    }
+    const rank = (id: string) =>
+      id.startsWith('tci-') ? 0 : id.startsWith('hamlib-') ? 1 : id === 'flrig' ? 2 : 3;
+    const best = [...radioConnectionStates.keys()].filter(isLive).sort((a, b) => rank(a) - rank(b))[0];
+    if (best) setSelectedRadio(best);
+  }, [selectedRadioId, radioConnectionStates, settings.radio?.autoConnectRigId, setSelectedRadio]);
 
   // Load settings and layout from the backend on mount (will gracefully fail if not connected)
   useEffect(() => {
