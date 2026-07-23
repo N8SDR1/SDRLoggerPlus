@@ -49,6 +49,15 @@ const StatRow = ({ label, value, valueClass }: { label: string; value: React.Rea
 export function SatPlugin() {
   const satEnabled = useSettingsStore(state => state.settings.sat.enabled);
   const distUnit = distanceUnitFor(useSettingsStore(state => state.settings.appearance.unitSystem));
+  // SAT readouts show BOTH units (the CSN tracker shows miles; the app's master
+  // unit decides which reads first, the other trails dimmed) so the two agree.
+  const dualDist = (km?: number | null): React.ReactNode =>
+    km == null || Number.isNaN(km) ? '' : (
+      <span>
+        {formatDistance(km, distUnit)}
+        <span className="text-dark-400"> · {formatDistance(km, distUnit === 'km' ? 'mi' : 'km')}</span>
+      </span>
+    );
   const queryClient = useQueryClient();
   const [liveState, setLiveState] = useState<SatState | null>(null);
 
@@ -158,16 +167,13 @@ export function SatPlugin() {
                     <StatRow label="Max EL" value={`${state.maxElDeg.toFixed(1)}°`} />
                   )}
                   {state.rangeKm != null && (
-                    <StatRow
-                      label="Range"
-                      value={formatDistance(state.rangeKm, distUnit)}
-                    />
+                    <StatRow label="Range" value={dualDist(state.rangeKm)} />
                   )}
                   {state.altitudeKm != null && (
-                    <StatRow label="Altitude" value={formatDistance(state.altitudeKm, distUnit)} />
+                    <StatRow label="Altitude" value={dualDist(state.altitudeKm)} />
                   )}
                   {state.footprintKm != null && (
-                    <StatRow label="Footprint" value={formatDistance(state.footprintKm, distUnit)} />
+                    <StatRow label="Footprint" value={dualDist(state.footprintKm)} />
                   )}
                   {(state.antAzDeg != null || state.antElDeg != null) && (
                     <StatRow
