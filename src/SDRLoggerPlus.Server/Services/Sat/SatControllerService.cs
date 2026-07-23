@@ -51,7 +51,17 @@ public record SatState(
     string? DownlinkFreqLive,
     // Satellite altitude + footprint diameter (km) straight from the /track feed.
     double? AltitudeKm,
-    double? FootprintKm);
+    double? FootprintKm,
+    // Extra CSN /track telemetry surfaced in the Satellite Status panel:
+    // per-leg Doppler (Hz), receiver signal (dBm), the antenna ROTOR look-angle
+    // (distinct from the satellite's), and the satellite sub-point (deg).
+    double? DopplerUpHz,
+    double? DopplerDownHz,
+    double? Rssi,
+    double? AntAzDeg,
+    double? AntElDeg,
+    double? SubLatDeg,
+    double? SubLonDeg);
 
 public record SatMapInfo(double Lat, double Lon, double AltKm, double FootprintRadiusKm);
 
@@ -92,6 +102,7 @@ public class SatControllerService : BackgroundService
     // ultimately go — matches v1.x SDRLogger+ Satellite Status panel.
     private double? _azDeg, _elDeg, _rangeKm, _maxElDeg, _ttAosSec, _ttLosSec;
     private double? _altKm, _footprintKm;
+    private double? _dopUpHz, _dopDownHz, _rssi, _antAz, _antEl, _subLat, _subLon;
 
     public SatControllerService(
         IServiceProvider serviceProvider,
@@ -121,6 +132,7 @@ public class SatControllerService : BackgroundService
                 // doesn't linger in the UI after the operator deactivates.
                 _azDeg = _elDeg = _rangeKm = _maxElDeg = _ttAosSec = _ttLosSec = null;
                 _altKm = _footprintKm = null;
+                _dopUpHz = _dopDownHz = _rssi = _antAz = _antEl = _subLat = _subLon = null;
                 _upFreqLive = _downFreqLive = null;
             }
         }
@@ -135,7 +147,8 @@ public class SatControllerService : BackgroundService
                 _transponder, _upFreq, _upMode, _downFreq, _downMode, _aosAz, _losAz,
                 _aosTime, _lastHeard, _passQsos.ToList(), _events.ToList(), _map, _error,
                 _azDeg, _elDeg, _rangeKm, _maxElDeg, _ttAosSec, _ttLosSec,
-                _upFreqLive, _downFreqLive, _altKm, _footprintKm);
+                _upFreqLive, _downFreqLive, _altKm, _footprintKm,
+                _dopUpHz, _dopDownHz, _rssi, _antAz, _antEl, _subLat, _subLon);
         }
     }
 
@@ -494,6 +507,16 @@ public class SatControllerService : BackgroundService
                 _rangeKm = rangeKm;
                 _altKm = Num(root, "satAlt");
                 _footprintKm = Num(root, "satFootprint");
+                _rssi = Num(root, "rssi");
+                // Antenna ROTOR look-angle (az/el) — distinct from the satellite's
+                // satAZ/satEL above; lets the operator see where the dish is pointed.
+                _antAz = Num(root, "az");
+                _antEl = Num(root, "el");
+                // Sub-point: the controller reports satLat/satLon in RADIANS.
+                var slat = Num(root, "satLat");
+                var slon = Num(root, "satLon");
+                _subLat = slat.HasValue ? slat.Value * 180.0 / Math.PI : null;
+                _subLon = slon.HasValue ? slon.Value * 180.0 / Math.PI : null;
 
                 // Live Doppler-corrected freqs for the ACTIVE transponder. The box
                 // applies Doppler (+ the operator's passband offset) only to the
@@ -508,6 +531,7 @@ public class SatControllerService : BackgroundService
                 // no UDP TRANSPONDER frame and follows transponder switches) and the
                 // live Doppler-corrected freqs (what the display follows).
                 _upFreqLive = _downFreqLive = null;
+                _dopUpHz = _dopDownHz = null;
                 if (root.TryGetProperty("freq", out var freqArr) && freqArr.ValueKind == JsonValueKind.Array)
                 {
                     JsonElement? active = null;
@@ -532,8 +556,10 @@ public class SatControllerService : BackgroundService
                         var dm = a.TryGetProperty("downMode", out var dmv) ? dmv.GetString()?.Trim() : null;
                         if (!string.IsNullOrEmpty(um)) _upMode = um;
                         if (!string.IsNullOrEmpty(dm)) _downMode = dm;
-                        var up = upNom + (Num(a, "dop_up") ?? 0) + (Num(a, "off_up") ?? 0);
-                        var dn = dnNom + (Num(a, "dop_down") ?? 0) + (Num(a, "off_down") ?? 0);
+                        _dopUpHz = Num(a, "dop_up");
+                        _dopDownHz = Num(a, "dop_down");
+                        var up = upNom + (_dopUpHz ?? 0) + (Num(a, "off_up") ?? 0);
+                        var dn = dnNom + (_dopDownHz ?? 0) + (Num(a, "off_down") ?? 0);
                         if (up > 0) _upFreqLive = ((long)Math.Round(up)).ToString();
                         if (dn > 0) _downFreqLive = ((long)Math.Round(dn)).ToString();
                     }

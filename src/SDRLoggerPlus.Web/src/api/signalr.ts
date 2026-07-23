@@ -166,6 +166,13 @@ export interface SatState {
   timeToLosSec?: number | null;
   altitudeKm?: number | null;
   footprintKm?: number | null;
+  dopplerUpHz?: number | null;
+  dopplerDownHz?: number | null;
+  rssi?: number | null;
+  antAzDeg?: number | null;
+  antElDeg?: number | null;
+  subLatDeg?: number | null;
+  subLonDeg?: number | null;
 }
 
 export interface HotListChangedEvent {

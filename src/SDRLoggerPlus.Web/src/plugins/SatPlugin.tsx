@@ -22,6 +22,14 @@ const fmtSecs = (s: number): string => {
   return `${m}:${String(sec).padStart(2, '0')}`;
 };
 
+// Signed Doppler shift, e.g. "-1318 Hz" / "+445 Hz".
+const fmtDoppler = (hz?: number | null): string =>
+  hz == null ? '—' : `${hz > 0 ? '+' : ''}${Math.round(hz)} Hz`;
+
+// Sub-satellite point, e.g. "14.0°N, 101.1°W".
+const fmtLatLon = (lat: number, lon: number): string =>
+  `${Math.abs(lat).toFixed(1)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(1)}°${lon >= 0 ? 'E' : 'W'}`;
+
 // Small labelled row used in the tracking-info grid — label stays dimmer
 // than the value, but both are pushed up from the near-invisible dark-400
 // the panel used to have so the text actually reads on the glass background.
@@ -160,6 +168,30 @@ export function SatPlugin() {
                   )}
                   {state.footprintKm != null && (
                     <StatRow label="Footprint" value={formatDistance(state.footprintKm, distUnit)} />
+                  )}
+                  {(state.antAzDeg != null || state.antElDeg != null) && (
+                    <StatRow
+                      label="Antenna AZ / EL"
+                      value={`${state.antAzDeg?.toFixed(1) ?? '—'}° / ${state.antElDeg?.toFixed(1) ?? '—'}°`}
+                    />
+                  )}
+                  {(state.dopplerUpHz != null || state.dopplerDownHz != null) && (
+                    <StatRow
+                      label="Doppler ↑ / ↓"
+                      value={
+                        <span>
+                          <span className="text-accent-secondary">{fmtDoppler(state.dopplerUpHz)}</span>
+                          {' / '}
+                          <span className="text-accent-success">{fmtDoppler(state.dopplerDownHz)}</span>
+                        </span>
+                      }
+                    />
+                  )}
+                  {(state.subLatDeg != null && state.subLonDeg != null) && (
+                    <StatRow label="Sub-point" value={fmtLatLon(state.subLatDeg, state.subLonDeg)} />
+                  )}
+                  {state.rssi != null && (
+                    <StatRow label="Signal" value={`${state.rssi.toFixed(0)} dBm`} />
                   )}
                   {state.aosAzimuth && <StatRow label="AOS Az" value={`${state.aosAzimuth}°`} />}
                   {state.losAzimuth && <StatRow label="LOS Az" value={`${state.losAzimuth}°`} />}
