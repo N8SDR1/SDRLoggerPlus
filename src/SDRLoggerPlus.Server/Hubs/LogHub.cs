@@ -811,6 +811,13 @@ public class LogHub : Hub<ILogHubClient>
                 _logger.LogWarning("No saved Hamlib config found for {RadioId}", cmd.RadioId);
             }
         }
+        else if (cmd.RadioId.StartsWith("flex-"))
+        {
+            // Native FlexRadio — the backend resolves the discovered radio and connects.
+            var owner = _rigRegistry.ResolveOwner(cmd.RadioId);
+            if (owner != null) await owner.ConnectAsync(cmd.RadioId);
+            else _logger.LogWarning("Flex radio {RadioId} not found in discovery", cmd.RadioId);
+        }
         else
         {
             _logger.LogWarning("Radio {RadioId} not found", cmd.RadioId);
@@ -828,6 +835,11 @@ public class LogHub : Hub<ILogHubClient>
         else if (cmd.RadioId == _hamlibService.RadioId)
         {
             await _hamlibService.DisconnectAsync();
+        }
+        else if (cmd.RadioId.StartsWith("flex-"))
+        {
+            var owner = _rigRegistry.ResolveOwner(cmd.RadioId);
+            if (owner != null) await owner.DisconnectAsync(cmd.RadioId);
         }
     }
 

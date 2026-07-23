@@ -90,6 +90,9 @@ export function RigConfig() {
   // flrig form state (v1.x SDRLogger+ port)
   const [showFlrigForm, setShowFlrigForm] = useState(false);
 
+  // FlexRadio form state (native SmartSDR backend — discovery-based)
+  const [showFlexForm, setShowFlexForm] = useState(false);
+
   // Hamlib form state
   const [showHamlibForm, setShowHamlibForm] = useState(false);
   const [isConnectingHamlib, setIsConnectingHamlib] = useState(false);
@@ -449,12 +452,13 @@ export function RigConfig() {
           <div className="text-xs text-dark-300 uppercase tracking-wider mb-2 font-ui">
             Radio Type
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             <button
               onClick={() => {
                 setShowTciForm(!showTciForm);
                 setShowHamlibForm(false);
                 setShowFlrigForm(false);
+                setShowFlexForm(false);
               }}
               className={`px-3 py-3 rounded-lg text-sm font-medium font-ui transition-all border ${
                 showTciForm
@@ -472,6 +476,7 @@ export function RigConfig() {
                 setShowHamlibForm(!showHamlibForm);
                 setShowTciForm(false);
                 setShowFlrigForm(false);
+                setShowFlexForm(false);
               }}
               className={`px-3 py-3 rounded-lg text-sm font-medium font-ui transition-all border ${
                 showHamlibForm
@@ -489,6 +494,7 @@ export function RigConfig() {
                 setShowFlrigForm(!showFlrigForm);
                 setShowTciForm(false);
                 setShowHamlibForm(false);
+                setShowFlexForm(false);
               }}
               className={`px-3 py-3 rounded-lg text-sm font-medium font-ui transition-all border ${
                 showFlrigForm
@@ -502,8 +508,49 @@ export function RigConfig() {
                 <span>flrig</span>
               </div>
             </button>
+            <button
+              onClick={() => {
+                setShowFlexForm(!showFlexForm);
+                setShowTciForm(false);
+                setShowHamlibForm(false);
+                setShowFlrigForm(false);
+              }}
+              className={`px-3 py-3 rounded-lg text-sm font-medium font-ui transition-all border ${
+                showFlexForm
+                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-400/30"
+                  : "bg-dark-700 text-dark-200 hover:bg-dark-600 border-glass-100"
+              }`}
+              title="Native FlexRadio 6000 (SmartSDR) — auto-discovered on the LAN"
+            >
+              <div className="flex flex-col items-center gap-1">
+                <Radio className="w-5 h-5" />
+                <span>FlexRadio</span>
+              </div>
+            </button>
           </div>
         </div>
+
+        {/* FlexRadio info — the native SmartSDR backend needs no manual config: it
+            listens for the radio's UDP discovery broadcast and lists any Flex 6000 on
+            the LAN below. Connecting rides ALONGSIDE SmartSDR (the API is multi-client). */}
+        {showFlexForm && (
+          <div className="bg-dark-700/50 rounded-lg p-4 border border-emerald-400/30 space-y-2">
+            <div className="text-xs text-emerald-400 uppercase tracking-wider font-ui">
+              FlexRadio 6000 (SmartSDR)
+            </div>
+            <p className="text-sm text-dark-200">
+              Flex radios are <strong className="text-white">auto-discovered</strong> on your
+              local network — no host or port to enter. Any powered-on 6000-series radio
+              appears in the list below; click it to connect. SDRLogger+ connects to the
+              radio's control API <strong className="text-white">alongside SmartSDR</strong> (or
+              Aether), so you don't have to close anything.
+            </p>
+            <p className="text-xs text-amber-400/90">
+              ⚠ New in this build and not yet bench-verified against hardware — please report
+              any issues.
+            </p>
+          </div>
+        )}
 
         {/* flrig Configuration Form — v1.x SDRLogger+ port. flrig is a
             desktop bridge that talks to the physical rig over CAT/USB and
