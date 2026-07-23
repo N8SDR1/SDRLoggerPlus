@@ -276,7 +276,7 @@ function HelpTab() {
         </Section>
 
         <Section id="radio" title="Your Radio">
-          <p>Set up radios in <B>Settings → Station</B> (or right-click the status-bar rig selector) — three connection paths, and more than one can run at once:</p>
+          <p>Set up radios in <B>Settings → Station</B> (or right-click the status-bar rig selector) — four connection paths, and more than one can run at once:</p>
           <ul className="ml-4 list-disc space-y-1.5">
             <li>
               <B>TCI</B> — works with{' '}
@@ -285,6 +285,7 @@ function HelpTab() {
             </li>
             <li><B>Hamlib</B> — universal (Icom / Yaesu / Kenwood / …) via rigctld. Tunes + reads the rig; no panadapter.</li>
             <li><B>flrig</B> — XML-RPC bridge to flrig's rig database (auto-detects data-mode names). Tunes + reads the rig; no panadapter.</li>
+            <li><B>FlexRadio</B> <span className="text-accent-secondary">(new)</span> — native support for FlexRadio 6000-series (SmartSDR). Flex radios are <B>auto-discovered</B> on your LAN (no host/port to enter) and appear in the list; SDRLogger+ connects to the radio's control API <B>alongside SmartSDR</B> (or Aether), follows the active slice, and tunes freq/mode. <em>New in this build and still being verified on hardware — please report anything odd.</em></li>
           </ul>
           <p className="text-xs text-dark-300">Adding a TCI rig runs a quick <B>connection check</B> first — a wrong port tells you right away instead of leaving a rig that never connects. Use <B>Test</B> to probe it, or <B>Add anyway</B> to skip the check. Saved rigs have an <B>Edit</B> button to change the name, host, or port.</p>
           <p className="text-xs text-dark-300">The <B>rig selector</B> in the status bar (bottom-right) shows your connected radio at a glance: <B>left-click</B> it to switch or connect any configured rig, and <B>right-click</B> it (or use <B>Add / manage radios</B> in the popover) to jump straight to radio setup in <B>Settings → Station</B>.</p>
@@ -311,7 +312,7 @@ function HelpTab() {
           <ul className="ml-4 list-disc space-y-1.5">
             <li><B>General</B> — daily logging. Type a call → callbook fills name / QTH / grid / country. With a rig connected, <B>Follow Radio</B> keeps frequency + mode tracking the dial.</li>
             <li><B>POTA</B> — park activations. Set your activating park (rides as <span className="font-mono text-[11px] text-dark-100">my_pota_ref</span>) and an optional P2P park for park-to-park. Self-spot to POTA with <P>Settings → Web Logbooks → POTA</P> credentials.</li>
-            <li><B>SAT</B> — satellite QSOs. Auto-fills satellite, band, and uplink/downlink freq &amp; mode from a connected CSN S.A.T. controller (<P>Settings → S.A.T.</P>); writes ADIF sat fields for LoTW credit. The <B>S.A.T.</B> panel tracks the live pass — azimuth/elevation, range, altitude, footprint, Doppler-shifted up/downlink, sub-satellite point and signal — in both <B>miles and km</B>. It <em>follows the live (Doppler-corrected) frequency on screen but logs the nominal</em> transponder frequency, which is what LoTW expects.</li>
+            <li><B>SAT</B> — satellite QSOs. Auto-fills satellite, band, and uplink/downlink freq &amp; mode from a connected CSN S.A.T. controller (<P>Settings → S.A.T.</P>); writes ADIF sat fields for LoTW credit. The <B>S.A.T.</B> panel tracks the live pass — azimuth/elevation, range, altitude, footprint, Doppler-shifted up/downlink, sub-satellite point and signal — in both <B>miles and km</B>. It <em>follows the live (Doppler-corrected) frequency on screen but logs the nominal</em> transponder frequency, which is what LoTW expects. <B>While a pass is being tracked the controller owns the radio</B> — SDRLogger+ pauses its own rig control (a <B>🛰 rig-control-paused</B> badge shows, Band/Mode grey out) so it never fights the controller, and the Log Entry auto-switches to SAT mode for the pass and back to General after.</li>
           </ul>
           <p>RST defaults sensibly per mode (599 CW / 59 phone). With the Combo link on, the received <B>S</B> can auto-fill from the meter (see above).</p>
         </Section>
