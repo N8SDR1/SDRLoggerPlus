@@ -176,7 +176,14 @@ public class QsoService : IQsoService
             // UplinkFreq/DownlinkFreq are MHz on the wire (see QsoDto). Qso.Frequency
             // is kHz, but freq_rx is exported raw so it stays MHz.
             if (request.UplinkFreq.HasValue)
+            {
                 qso.Frequency = request.UplinkFreq.Value * 1000.0;
+                // Backstop: derive Band from the uplink (TX) leg when the caller
+                // didn't supply one — a SAT QSO logged straight from the controller
+                // has no rig to source the band, so it would otherwise store blank.
+                if (string.IsNullOrWhiteSpace(qso.Band))
+                    qso.Band = BandHelper.GetBandFromMhz(request.UplinkFreq.Value);
+            }
             if (!string.IsNullOrWhiteSpace(request.UpMode))
                 qso.Mode = request.UpMode;
             if (request.DownlinkFreq.HasValue)

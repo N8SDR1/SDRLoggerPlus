@@ -314,14 +314,38 @@ export function LogEntryPlugin() {
   // against the tracking satellite string).
   useEffect(() => {
     if (logMode !== 'sat' || !satState?.satellite) return;
-    setFormData(prev => ({
-      ...prev,
-      satellite: satState.satellite ?? prev.satellite,
-      uplinkFreq: satState.uplinkFreq ?? prev.uplinkFreq,
-      downlinkFreq: satState.downlinkFreq ?? prev.downlinkFreq,
-      upMode: satState.uplinkMode ?? prev.upMode,
-      downMode: satState.downlinkMode ?? prev.downMode,
-    }));
+    // The S.A.T. controller reports uplink/downlink in Hz (e.g. "432150000"),
+    // but the SAT form fields and the submit path are MHz. Convert defensively:
+    // a ham freq value ≥ 100k is Hz, anything smaller is already MHz.
+    const toMhz = (raw?: string | null): number | null => {
+      const n = parseFloat(raw ?? '');
+      if (Number.isNaN(n) || n <= 0) return null;
+      return n >= 100_000 ? n / 1_000_000 : n;
+    };
+    const fmt = (mhz: number) => String(parseFloat(mhz.toFixed(6)));
+    const upMhz = toMhz(satState.uplinkFreq);
+    const dnMhz = toMhz(satState.downlinkFreq);
+    setFormData(prev => {
+      const next = {
+        ...prev,
+        satellite: satState.satellite ?? prev.satellite,
+        uplinkFreq: upMhz != null ? fmt(upMhz) : prev.uplinkFreq,
+        downlinkFreq: dnMhz != null ? fmt(dnMhz) : prev.downlinkFreq,
+        upMode: satState.uplinkMode ?? prev.upMode,
+        downMode: satState.downlinkMode ?? prev.downMode,
+      };
+      // The QSO's primary Freq / Band / Mode follow the UPLINK (TX) leg — ADIF
+      // FREQ = transmit — so a contact logged straight from the controller is
+      // self-consistent with no rig tuned to the pass. The downlink stays in its
+      // own fields (freq_rx / down_mode) server-side.
+      if (upMhz != null) {
+        next.frequency = fmt(upMhz);
+        const b = getBandFromFrequency(upMhz * 1_000_000);
+        if (b) next.band = b;
+      }
+      if (satState.uplinkMode) next.mode = normalizeMode(satState.uplinkMode);
+      return next;
+    });
   }, [logMode, satState?.satellite, satState?.uplinkFreq, satState?.downlinkFreq, satState?.uplinkMode, satState?.downlinkMode]);
 
   // Auto-populate name from QRZ when nameLocked is true
@@ -967,10 +991,10 @@ export function LogEntryPlugin() {
               />
               {satTracking && (
                 <span
-                  className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-ui tracking-wider"
-                  title="S.A.T. controller is tracking this pass"
+                  className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-ui tracking-wider whitespace-nowrap"
+                  title="Following the CSN S.A.T. controller for this pass"
                 >
-                  TRACKING
+                  TRACKING · CSN S.A.T.
                 </span>
               )}
             </div>
