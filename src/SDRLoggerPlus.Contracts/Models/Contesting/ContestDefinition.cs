@@ -148,6 +148,14 @@ public class PointsRule
     public int? MemberPoints { get; set; }
 
     /// <summary>
+    /// Distance-based scoring (Stew Perry, ARRL Digital): a QSO scores
+    /// 1 + floor(great-circle km between the operator's grid and the worked grid /
+    /// this value). e.g. 500 = one extra point per 500 km. Needs both grids; falls
+    /// back to 1 when either is missing. Null = not distance-scored.
+    /// </summary>
+    public int? DistanceKmPerPoint { get; set; }
+
+    /// <summary>
     /// Flat points per band (band → value), e.g. VHF+ contests where 6 m = 1 and
     /// 2 m / 222 / 432 = 2. When the worked band is listed here it wins outright
     /// (no relationship/mode logic). Keys are upper-case band labels ("2M").

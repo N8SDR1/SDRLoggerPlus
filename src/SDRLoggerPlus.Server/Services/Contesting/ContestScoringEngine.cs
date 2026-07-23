@@ -1,6 +1,8 @@
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Contracts.Models.Contesting;
 using SDRLoggerPlus.Server.Services; // WpxPrefixExtractor
+using SDRLoggerPlus.Server.Services.Weather; // GeoMath (grid → lat/lon)
+using SDRLoggerPlus.Server.Services.BandOpening; // HaversineKm
 
 namespace SDRLoggerPlus.Server.Services.Contesting;
 
@@ -286,6 +288,18 @@ public static class ContestScoringEngine
     private static readonly HashSet<string> LowBands =
         new(StringComparer.OrdinalIgnoreCase) { "160M", "80M", "40M" };
 
+    // 1 + one point per <kmPerPoint> of great-circle distance between the
+    // operator's grid and the worked station's grid. Missing/invalid grids score
+    // the minimum 1. Uses the 4-char grid the exchange carries.
+    private static int DistancePoints(int kmPerPoint, MyExchange me, Qso qso)
+    {
+        var here = GeoMath.GridToLatLon(me.Grid);
+        var there = GeoMath.GridToLatLon(qso.Contest?.RcvdGrid ?? qso.Grid);
+        if (here is null || there is null || kmPerPoint <= 0) return 1;
+        var km = BandOpeningLogic.HaversineKm(here.Value.Lat, here.Value.Lon, there.Value.Lat, there.Value.Lon);
+        return 1 + (int)Math.Floor(km / kmPerPoint);
+    }
+
     private static int Points(Effective eff, MyExchange me, Qso qso)
     {
         var rule = eff.Points;
@@ -295,6 +309,10 @@ public static class ContestScoringEngine
         if (rule.ByBand is not null && !string.IsNullOrEmpty(qso.Band)
             && rule.ByBand.TryGetValue(qso.Band.ToUpperInvariant(), out var byBand))
             return byBand;
+
+        // Distance-based scoring (Stew Perry, ARRL Digital).
+        if (rule.DistanceKmPerPoint is > 0)
+            return DistancePoints(rule.DistanceKmPerPoint.Value, me, qso);
 
         // Member vs non-member points (10-10: a non-zero 10-10 number = member).
         if (!string.IsNullOrEmpty(rule.MemberField) && rule.MemberPoints.HasValue)

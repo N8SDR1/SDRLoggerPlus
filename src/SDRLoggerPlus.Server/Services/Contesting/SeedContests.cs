@@ -206,11 +206,11 @@ public static class SeedContests
             new[] { Grid() }, new[] { Grid() },
             PtsBand(("6M", 1), ("2M", 1), ("1.25M", 2), ("70CM", 2)), new[] { M(MultSource.Grid, true) });
 
-        // RTTY is explicitly EXCLUDED from the ARRL International Digital Contest.
-        // NOTE: points are officially distance-based (1 + 1/500 km) — the flat Pts
-        // model can't express that yet; tracked in the contest-scoring audit issue.
+        // RTTY is explicitly EXCLUDED. Distance-scored: 1 + 1 point per 500 km
+        // between the grids; grid-square multipliers per band.
         yield return D("arrl-digital", "ARRL International Digital", "ARRL-DIGITAL", Hf6, new[] { "FT8", "FT4" },
-            new[] { Grid() }, new[] { Grid() }, Pts(1), new[] { M(MultSource.Grid, true) });
+            new[] { Grid() }, new[] { Grid() },
+            new PointsRule { DistanceKmPerPoint = 500 }, new[] { M(MultSource.Grid, true) });
 
         foreach (var (m, cab) in New("ARRL-SS", "CW", "SSB"))
             yield return D($"arrl-ss-{m.L}", $"ARRL Sweepstakes {m.N}", cab, HfBands, m.Modes,
@@ -234,13 +234,16 @@ public static class SeedContests
     // ---- DX / regional ----------------------------------------------------
     private static IEnumerable<ContestDefinition> DxRegional()
     {
-        // Stew Perry has NO grid multiplier — grids exist only to compute distance.
-        // Real scoring = (1 + 1/500 km distance) per QSO, scaled by worked- and
-        // own-station power multipliers. The flat model can't express distance/power
-        // yet (tracked in the audit issue); the bogus Grid mult is removed so it
-        // doesn't inflate the score with a multiplier the rules don't have.
-        yield return D("stew-perry", "Stew Perry Topband", "STEW-PERRY", new() { "160M" }, new[] { "CW" },
-            new[] { Grid() }, new[] { Grid() }, Pts(1), Array.Empty<MultRule>());
+        // Distance-scored: 1 + 1 point per 500 km, times the operator's own power
+        // multiplier (>100 W ×1, ≤100 W ×1.5, QRP ≤5 W ×3). No grid multiplier —
+        // grids only feed the distance. The WORKED station's power multiplier is a
+        // log-checker concern (power isn't in the grid-only exchange), so it's not
+        // applied here.
+        var stew = D("stew-perry", "Stew Perry Topband", "STEW-PERRY", new() { "160M" }, new[] { "CW" },
+            new[] { Grid() }, new[] { Grid() },
+            new PointsRule { DistanceKmPerPoint = 500 }, Array.Empty<MultRule>());
+        stew.PowerMultipliers = new() { ["HIGH"] = 1, ["LOW"] = 1.5, ["QRP"] = 3 };
+        yield return stew;
     }
 
     // ---- sprints, clubs, NAQP, digital roundups ---------------------------

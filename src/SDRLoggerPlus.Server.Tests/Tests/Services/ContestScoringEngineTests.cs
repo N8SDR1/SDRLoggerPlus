@@ -378,4 +378,21 @@ public class ContestScoringEngineTests
         Pt("ten-ten", WithNr("0")).Should().Be(1);    // non-member logs 0
         Pt("ten-ten", WithNr("")).Should().Be(1);     // no number given
     }
+
+    [Fact]
+    public void Distance_ScalesWithGridDistance()
+    {
+        var op = new MyExchange { Grid = "EN80", Continent = "NA", Country = "United States", Dxcc = 291 };
+        int Pts160(string grid) => ContestScoringEngine.Evaluate(
+            Seed("stew-perry"), op, Array.Empty<Qso>(),
+            new Qso
+            {
+                Callsign = "W7X", Band = "160M", Mode = "CW",
+                Station = new StationInfo(), Contest = new ContestInfo { RcvdGrid = grid },
+            }).Points;
+
+        Pts160("EN80").Should().Be(1);                          // same grid → minimum 1
+        Pts160("DM43").Should().BeGreaterThan(3);               // ~2600 km → several points
+        Pts160("JO31").Should().BeGreaterThan(Pts160("DM43"));  // Germany, farther → more
+    }
 }
