@@ -3,6 +3,31 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-23 — v2.8.1 "Rigel" 📡
+
+The stable **2.8** release. Promotes the rebuilt rig engine + satellite / flrig
+refinements from the v2.8.0 pre-release to stable, and fixes three
+digital-logging bugs reported by testers. **Native FlexRadio 6000 support ships as
+experimental** (still being verified on hardware) — it's inactive unless you own a
+Flex 6000, so it doesn't affect other rigs.
+
+### Fixed
+- **JTDX logged QSOs weren't saved.** JTDX (an older WSJT-X fork) sends a shorter
+  "QSO logged" UDP packet than current WSJT-X / MSHV; the parser read past the end and
+  dropped the whole message, so QSOs logged in JTDX never reached the logbook. (The
+  ADIF monitor and MSHV were unaffected.) JTDX now logs correctly.
+- **Imported QSOs wouldn't upload to QRZ.** ADIF-monitor and ADIF-imported contacts
+  were marked "already synced to QRZ," so the uploader skipped them ("all already
+  synced"). Imports are now marked **not-synced** so they upload; the "mark as already
+  synced" option remains for importing your existing QRZ export.
+- **Imported QSOs didn't appear until Reload.** Background ADIF-monitor imports now
+  refresh the logbook, summary and grid map live, like a directly-entered QSO.
+
+### Included from the v2.8.0 pre-release (now stable)
+Unified rig engine; **experimental** native FlexRadio 6000 (SmartSDR) support;
+S.A.T. controller takes the radio during a pass (rig control paused + auto-switch to
+SAT mode); flrig active-rig hand-off and frequency-follow fixes.
+
 ## 2026-07-23 — v2.8.0 "Rigel" 📡 (pre-release · Flex test)
 
 A rebuilt rig-control engine, **native FlexRadio 6000 support**, and satellite +
