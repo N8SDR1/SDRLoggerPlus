@@ -466,9 +466,15 @@ public class SatControllerService : BackgroundService
                 // Sub-point + footprint from station look-angle and slant range.
                 // Also stash the raw look-angle numbers on the state so the
                 // Satellite Status panel can show them (v1.x parity).
-                var az = Num(root, "az");
-                var el = Num(root, "el");
-                var rangeKm = Num(root, "range");
+                // CSN /track exposes the *satellite* look-angle as satAZ/satEL and
+                // the slant range as rng. The bare az/el fields are the ANTENNA
+                // ROTOR position (0/0 with no rotor slewing), and there is no
+                // "range" field — reading those left Az/El stuck at 0 and Range
+                // blank. Prefer the satellite fields, falling back to the rotor
+                // ones only if a firmware doesn't provide them.
+                var az = Num(root, "satAZ") ?? Num(root, "az");
+                var el = Num(root, "satEL") ?? Num(root, "el");
+                var rangeKm = Num(root, "rng") ?? Num(root, "range");
                 _azDeg = az;
                 _elDeg = el;
                 _rangeKm = rangeKm;
