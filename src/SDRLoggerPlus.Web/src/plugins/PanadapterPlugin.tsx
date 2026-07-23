@@ -132,7 +132,7 @@ function loadSplitRatio(): number {
   return loadNumber(SPLIT_STORAGE_KEY, DEFAULT_SPECTRUM_RATIO, MIN_SPECTRUM_RATIO, MAX_SPECTRUM_RATIO);
 }
 
-const NO_DATA_MSG = 'No spectrum — connect a TCI radio (Thetis) with IQ streaming';
+const NO_DATA_MSG = 'No spectrum — connect a supported TCI radio with IQ streaming';
 
 export function PanadapterPlugin() {
   const containerRef = useRef<HTMLDivElement>(null);
