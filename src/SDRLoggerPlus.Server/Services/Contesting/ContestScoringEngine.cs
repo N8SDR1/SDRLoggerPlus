@@ -416,7 +416,10 @@ public static class ContestScoringEngine
 
             var key = $"{rule.Source}:{value}";
             if (rule.PerBand) key += $"@{qso.Band}";
-            if (rule.PerMode) key += $"+{qso.Mode}";
+            // Per-mode multipliers partition by mode CLASS (Phone/CW/Digital), not raw
+            // mode, so a state worked on USB and LSB is one Phone mult — the ARRL 10 m
+            // "counted once per mode (phone and CW)" rule.
+            if (rule.PerMode) key += $"+{MultModeClass(qso.Mode)}";
             yield return key;
         }
     }
@@ -434,9 +437,18 @@ public static class ContestScoringEngine
         // One mult per mode-class (Phone/CW/Digital) — combined with PerBand this
         // yields the Winter Field Day "one multiplier per mode per band". A constant
         // per class keeps USB/LSB as one Phone mult; RTTY folds into Digital.
-        MultSource.BandMode => ModeClass(qso.Mode) is "PH" ? "PH" : ModeClass(qso.Mode) is "CW" ? "CW" : "DIGI",
+        MultSource.BandMode => MultModeClass(qso.Mode),
         _ => null,
     };
+
+    // Collapses a raw mode to the Phone/CW/Digital partition used for multiplier
+    // counting (RTTY folds into Digital) — distinct from ModeClass, which keeps RTTY
+    // separate for per-mode QSO points.
+    private static string MultModeClass(string? mode)
+    {
+        var c = ModeClass(mode);
+        return c is "PH" or "CW" ? c : "DIGI";
+    }
 
     private static string? Truncate(string? s, int len)
         => string.IsNullOrEmpty(s) ? s : (s.Length <= len ? s : s[..len]);

@@ -447,6 +447,32 @@ public class ContestScoringEngineTests
     }
 
     [Fact]
+    public void Arrl10m_MultipliersCountOncePerMode()
+    {
+        var op = new MyExchange { Country = "United States", Continent = "NA", State = "OH", Dxcc = 291 };
+        // DX (Germany) so only the DXCC country multiplier applies — isolates the
+        // per-mode behaviour from the state multiplier.
+        Qso Q(string call, string mode) => new()
+        {
+            Callsign = call, Band = "10M", Mode = mode,
+            Dxcc = 230, Continent = "EU", Country = "Germany",
+            Station = new StationInfo(), Contest = new ContestInfo(),
+        };
+
+        // Same country (DL) on both CW and phone → two multipliers, not one; USB and
+        // LSB collapse to a single Phone mult.
+        var summary = ContestScoringEngine.Recompute(Seed("arrl-10m"), op, new[]
+        {
+            Q("DL1A", "CW"),    // CW pt 4, mult Dxcc:230+CW
+            Q("DL2B", "USB"),   // phone pt 2, mult Dxcc:230+PH
+            Q("DL3C", "LSB"),   // phone pt 2, Dxcc:230+PH already claimed
+        });
+
+        summary.Points.Should().Be(4 + 2 + 2);   // 8
+        summary.Multipliers.Should().Be(2);       // DL on CW + DL on phone
+    }
+
+    [Fact]
     public void WinterFieldDay_DeclaredBonusIgnoredWithNoQsos()
     {
         var op = new MyExchange { Country = "United States", Continent = "NA", Power = "LOW", BonusPoints = 1500 };

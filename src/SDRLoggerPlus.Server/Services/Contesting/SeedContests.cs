@@ -108,6 +108,11 @@ public static class SeedContests
                 new[] { M(MultSource.WpxPrefix) }, serial: SerialMode.AllBand);
 
         // Own country = 2, same continent (diff country) = 5, different continent = 10.
+        // Multipliers: US states (48) + DC + Canadian areas + DXCC "DX country" — all
+        // for every entrant, matching the S/P/C + DXCC rules here. DX stations actually
+        // send a CQ zone (or country/prefix, varying by rule year) that is INFORMATIONAL
+        // ONLY — it never counts as a multiplier, so the S/P/C field label is a harmless
+        // simplification (the DX multiplier is derived from DXCC, not the typed value).
         foreach (var (m, cab) in New("CQ-160", "CW", "SSB"))
             yield return D($"cq-160-{m.L}", $"CQ 160 {m.N}", cab, new() { "160M" }, m.Modes,
                 new[] { Rst(), StateF("S/P/C") }, new[] { Rst(), StateF("S/P/C") },
@@ -159,12 +164,16 @@ public static class SeedContests
         }
 
         // Single band (28 MHz). Phone = 2, CW = 4. W/VE + Mexican stations send a
-        // state; DX stations send a serial (per-QSO branching). (Mexican-state
-        // multipliers are approximated as states — a documented simplification.)
+        // state; DX stations send a serial (per-QSO branching). Multipliers (states +
+        // DC + VE + DXCC) are counted ONCE PER MODE — a state worked on both CW and
+        // phone is two mults (PerMode). Simplifications: Mexican-state mults are
+        // approximated as states, and the ITU-region mults (maritime/aeronautical
+        // mobile only) are not counted — both rare edge cases.
         var tenM = D("arrl-10m", "ARRL 10 Meter", "ARRL-10", new() { "10M" }, new[] { "CW", "SSB" },
             new[] { Rst(), StateF("S/P/C") },
             new[] { Rst(), When(StateF("S/P/C"), ContestRole.InArea), When(Serial(), ContestRole.Dx) },
-            Pm(2, 4), new[] { M(MultSource.State), M(MultSource.Dxcc) }, serial: SerialMode.AllBand);
+            Pm(2, 4), new[] { M(MultSource.State, perMode: true), M(MultSource.Dxcc, perMode: true) },
+            serial: SerialMode.AllBand);
         tenM.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
         yield return tenM;
 
