@@ -27,7 +27,7 @@ public class AdifController : ControllerBase
     /// </summary>
     /// <param name="file">ADIF file to import (.adi, .adif, or .xml)</param>
     /// <param name="skipDuplicates">Skip duplicate QSOs (same callsign, date, time, band, mode)</param>
-    /// <param name="markAsSyncedToQrz">Mark imported QSOs as already synced to QRZ (default: true, useful when importing from QRZ export)</param>
+    /// <param name="markAsSyncedToQrz">Mark imported QSOs as already synced to QRZ (default: false). Only enable when importing your existing QRZ export, so those QSOs aren't re-uploaded; for logs from other apps leave false so they can still upload to QRZ.</param>
     /// <param name="clearExistingLogs">Delete all existing QSOs before import (default: false)</param>
     [HttpPost("import")]
     [ProducesResponseType(typeof(AdifImportResponse), StatusCodes.Status200OK)]
@@ -36,7 +36,7 @@ public class AdifController : ControllerBase
     public async Task<ActionResult<AdifImportResponse>> ImportAdif(
         IFormFile file,
         [FromQuery] bool skipDuplicates = true,
-        [FromQuery] bool markAsSyncedToQrz = true,
+        [FromQuery] bool markAsSyncedToQrz = false,
         [FromQuery] bool clearExistingLogs = false)
     {
         if (file == null || file.Length == 0)

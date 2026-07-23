@@ -3,6 +3,7 @@ import { useToastStore } from '../store/toastStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { announceBandOpening } from '../utils/bandOpeningAnnouncer';
 import { createCallbackSet } from '../utils/callbackSet';
+import { queryClient } from './queryClient';
 
 export interface CallsignFocusedEvent {
   callsign: string;
@@ -1046,6 +1047,13 @@ class SignalRService {
         `ADIF Monitor: imported ${evt.imported} QSO${evt.imported === 1 ? '' : 's'} from ${evt.fileName}${skipped}`,
         'success'
       );
+      // Background monitor imports bypass the manual-import mutation, so refresh the
+      // logbook / summary / grid map live instead of waiting for a manual Reload.
+      if (evt.imported > 0) {
+        queryClient.invalidateQueries({ queryKey: ['qsos'] });
+        queryClient.invalidateQueries({ queryKey: ['statistics'] });
+        queryClient.invalidateQueries({ queryKey: ['gridmap'] });
+      }
     });
 
     this.connection.on('OnHotListChanged', (evt: HotListChangedEvent) => {

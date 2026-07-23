@@ -138,7 +138,11 @@ public class AdifMonitorService : BackgroundService
 
             var adifService = scope.ServiceProvider.GetRequiredService<IAdifService>();
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(result.Fragment));
-            var import = await adifService.ImportAdifAsync(stream, skipDuplicates: true, markAsSyncedToQrz: true, cancellationToken: ct);
+            // Monitored files are the LIVE output of logging apps (JTDX / WSJT-X / MSHV /
+            // VarAC …) — i.e. NEW QSOs, not a QRZ export. Import them as NOT-synced so the
+            // QRZ uploader still picks them up. (Marking-as-synced is only correct when
+            // importing your existing QRZ log to avoid re-uploading it.)
+            var import = await adifService.ImportAdifAsync(stream, skipDuplicates: true, markAsSyncedToQrz: false, cancellationToken: ct);
 
             _state.SetOffset(file, result.NewOffset);
             _state.Save();

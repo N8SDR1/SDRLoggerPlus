@@ -187,7 +187,9 @@ export function LogHistoryPlugin() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importResult, setImportResult] = useState<AdifImportResponse | null>(null);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
-  const [markAsSyncedToQrz, setMarkAsSyncedToQrz] = useState(true);
+  // Default OFF: most imports are logs from other apps that SHOULD still upload to QRZ.
+  // Enable only when importing your existing QRZ export (so it isn't re-uploaded).
+  const [markAsSyncedToQrz, setMarkAsSyncedToQrz] = useState(false);
   const [clearExistingLogs, setClearExistingLogs] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mergeFileInputRef = useRef<HTMLInputElement>(null);
@@ -283,6 +285,7 @@ export function LogHistoryPlugin() {
       setImportResult(data);
       queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['gridmap'] });
     },
   });
 
