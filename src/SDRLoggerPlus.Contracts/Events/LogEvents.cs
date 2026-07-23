@@ -419,7 +419,8 @@ public enum RadioType
 {
     Tci,
     Hamlib,
-    Flrig
+    Flrig,
+    Flex
 }
 
 /// <summary>

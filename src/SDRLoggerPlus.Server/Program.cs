@@ -164,6 +164,10 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<HamlibService>());
 builder.Services.AddSingleton<FlrigService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FlrigService>());
 
+// Register native FlexRadio 6000 (SmartSDR) backend
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Flex.FlexRadioService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SDRLoggerPlus.Server.Services.Flex.FlexRadioService>());
+
 // Rig backend abstraction (v2.8.0). The registry replaces LogHub's per-action
 // TCI→Hamlib→flrig ladders. The three services are registered as IRigBackend in
 // PRECEDENCE ORDER (TCI → Hamlib → flrig) — the injection order IS the precedence.
@@ -175,6 +179,8 @@ builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigBackend>(
     sp => sp.GetRequiredService<HamlibService>());
 builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigBackend>(
     sp => sp.GetRequiredService<FlrigService>());
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigBackend>(
+    sp => sp.GetRequiredService<SDRLoggerPlus.Server.Services.Flex.FlexRadioService>());
 builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigRegistry,
     SDRLoggerPlus.Server.Services.Rig.RigRegistry>();
 
