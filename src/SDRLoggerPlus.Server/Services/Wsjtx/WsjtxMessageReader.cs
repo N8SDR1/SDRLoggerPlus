@@ -145,9 +145,13 @@ public static class WsjtxMessageReader
         var operatorCall = r.ReadUtf8();
         var myCall = r.ReadUtf8();
         var myGrid = r.ReadUtf8();
-        var exchangeSent = r.ReadUtf8();
-        var exchangeReceived = r.ReadUtf8();
-        var propMode = schema >= 3 ? r.ReadUtf8() : null;
+        // JTDX (an older WSJT-X fork) ends the QSOLogged frame after my_grid — it does
+        // NOT append exchange_sent / exchange_received / prop_mode. Read them defensively
+        // (like ReadDecode's trailing booleans) so a truncated JTDX frame still logs the
+        // QSO instead of throwing EndOfDatagram → the whole message being dropped.
+        var exchangeSent = r.Remaining >= 4 ? r.ReadUtf8() : "";
+        var exchangeReceived = r.Remaining >= 4 ? r.ReadUtf8() : "";
+        var propMode = schema >= 3 && r.Remaining >= 4 ? r.ReadUtf8() : null;
 
         return new WsjtxQsoLogged(id, dateTimeOff, dxCall, dxGrid, txFreq, mode,
             reportSent, reportReceived, txPower, comments, name, dateTimeOn,

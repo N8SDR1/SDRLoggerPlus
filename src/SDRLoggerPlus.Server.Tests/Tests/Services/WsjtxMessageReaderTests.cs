@@ -241,4 +241,38 @@ public class WsjtxMessageReaderTests
         var full = Header(5).QDateTime(DateTime.UtcNow).Utf8("JA1ABC").Build();
         WsjtxMessageReader.Parse(full).Should().BeNull(); // missing remaining fields
     }
+
+    [Fact]
+    public void Parse_JtdxQsoLogged_OmitsTrailingExchangeFields_StillLogs()
+    {
+        // JTDX (older WSJT-X fork) ends the QSOLogged frame after my_grid — it does NOT
+        // append exchange_sent / exchange_received / prop_mode. Must still parse + log.
+        var timeOff = new DateTime(2026, 6, 10, 14, 30, 15, DateTimeKind.Utc);
+        var timeOn = new DateTime(2026, 6, 10, 14, 28, 0, DateTimeKind.Utc);
+        var data = Header(5)
+            .QDateTime(timeOff)
+            .Utf8("YO8RFS")          // dx call
+            .Utf8("KN27")            // dx grid
+            .U64(14_074_000)         // tx freq Hz
+            .Utf8("FT8")             // mode
+            .Utf8("-12")             // report sent
+            .Utf8("-15")             // report received
+            .Utf8("30")              // tx power
+            .Utf8("")                // comments
+            .Utf8("Tic")             // name
+            .QDateTime(timeOn)
+            .Utf8("")                // operator call
+            .Utf8("W8XYZ")           // my call
+            .Utf8("EN82")            // my grid
+            .Build();                // <-- NO exchange_sent / exchange_received / prop_mode
+
+        var qso = WsjtxMessageReader.Parse(data).Should().BeOfType<WsjtxQsoLogged>().Subject;
+        qso.DxCall.Should().Be("YO8RFS");
+        qso.DxGrid.Should().Be("KN27");
+        qso.TxFrequencyHz.Should().Be(14_074_000);
+        qso.Mode.Should().Be("FT8");
+        qso.MyCall.Should().Be("W8XYZ");
+        qso.ExchangeSent.Should().Be("");
+        qso.AdifPropagationMode.Should().BeNull();
+    }
 }
