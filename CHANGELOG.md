@@ -3,6 +3,40 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-23 — v2.8.0 "Rigel" 📡 (pre-release · Flex test)
+
+A rebuilt rig-control engine, **native FlexRadio 6000 support**, and satellite +
+flrig refinements. FlexRadio is new and **not yet bench-verified against hardware** —
+this build is a pre-release for Flex owners to test.
+
+### New
+- **Native FlexRadio 6000 (SmartSDR) support** — Flex radios are **auto-discovered**
+  on your LAN (no host/port to enter) and appear in **Settings → Station → Radio
+  Type → FlexRadio**. SDRLogger+ connects to the radio's control API **alongside
+  SmartSDR** (the API is multi-client, so nothing has to close), follows the active
+  slice, and tunes frequency/mode. ⚠ **Unverified on hardware** — please report issues.
+- **Unified rig engine** — TCI, Hamlib, flrig and FlexRadio now run through one
+  internal backend abstraction. No behaviour change to existing rigs; it makes each
+  new radio a clean plug-in (this is how FlexRadio was added).
+- **S.A.T. takes the radio during a pass** — while the CSN S.A.T. controller is
+  actively tracking, it fully owns the connected radio: SDRLogger+ **pauses its own
+  rig control** (spot-click, band/mode dropdowns), shows a **🛰 "S.A.T. controlling
+  radio — rig control paused"** badge with the dropdowns greyed, and only **reads**
+  freq/mode from the S.A.T. output. Control resumes automatically when the pass ends.
+- **S.A.T. auto-switch** — activating the controller drops the Log Entry into **SAT**
+  mode; deactivating returns it to **General**.
+
+### Fixed
+- **flrig: active rig now surfaced.** When your selected rig disconnects, SDRLogger+
+  hands off to another live rig (e.g. flrig / an IC-9100) app-wide, so the status bar
+  and the Log Entry follow-gate track it instead of a dead rig — Band/Mode from the
+  Log Entry now drive flrig.
+- **flrig: frequency follows band changes.** After the app tuned flrig (e.g. a band
+  change), the displayed frequency could lag; flrig now broadcasts its new state
+  immediately so Follow-Radio stays in sync.
+- **"Supported TCI radio"** wording on the Meters/Panadapter no-data hints (was
+  Thetis-specific; TCI works with Lyra / Thetis / ExpertSDR3 too).
+
 ## 2026-07-23 — v2.7.0 "Vega" 🛰️
 
 Contest scoring is now exact across the entire catalog, a big Satellite-panel
