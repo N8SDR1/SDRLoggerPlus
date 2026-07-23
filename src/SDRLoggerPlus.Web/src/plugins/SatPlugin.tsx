@@ -155,6 +155,12 @@ export function SatPlugin() {
                       value={formatDistance(state.rangeKm, distUnit)}
                     />
                   )}
+                  {state.altitudeKm != null && (
+                    <StatRow label="Altitude" value={formatDistance(state.altitudeKm, distUnit)} />
+                  )}
+                  {state.footprintKm != null && (
+                    <StatRow label="Footprint" value={formatDistance(state.footprintKm, distUnit)} />
+                  )}
                   {state.aosAzimuth && <StatRow label="AOS Az" value={`${state.aosAzimuth}°`} />}
                   {state.losAzimuth && <StatRow label="LOS Az" value={`${state.losAzimuth}°`} />}
                   {state.timeToLosSec != null && state.timeToLosSec > 0 && (

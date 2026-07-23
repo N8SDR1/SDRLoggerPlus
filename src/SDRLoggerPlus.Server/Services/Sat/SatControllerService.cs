@@ -48,7 +48,10 @@ public record SatState(
     // from the /track poll — the display follows these while the nominal
     // UplinkFreq/DownlinkFreq above are what a logged QSO records.
     string? UplinkFreqLive,
-    string? DownlinkFreqLive);
+    string? DownlinkFreqLive,
+    // Satellite altitude + footprint diameter (km) straight from the /track feed.
+    double? AltitudeKm,
+    double? FootprintKm);
 
 public record SatMapInfo(double Lat, double Lon, double AltKm, double FootprintRadiusKm);
 
@@ -88,6 +91,7 @@ public class SatControllerService : BackgroundService
     // reports current El) so the operator can see how high the bird will
     // ultimately go — matches v1.x SDRLogger+ Satellite Status panel.
     private double? _azDeg, _elDeg, _rangeKm, _maxElDeg, _ttAosSec, _ttLosSec;
+    private double? _altKm, _footprintKm;
 
     public SatControllerService(
         IServiceProvider serviceProvider,
@@ -116,6 +120,7 @@ public class SatControllerService : BackgroundService
                 // Clear pass-scoped live-tracking data so a stale look-angle
                 // doesn't linger in the UI after the operator deactivates.
                 _azDeg = _elDeg = _rangeKm = _maxElDeg = _ttAosSec = _ttLosSec = null;
+                _altKm = _footprintKm = null;
                 _upFreqLive = _downFreqLive = null;
             }
         }
@@ -130,7 +135,7 @@ public class SatControllerService : BackgroundService
                 _transponder, _upFreq, _upMode, _downFreq, _downMode, _aosAz, _losAz,
                 _aosTime, _lastHeard, _passQsos.ToList(), _events.ToList(), _map, _error,
                 _azDeg, _elDeg, _rangeKm, _maxElDeg, _ttAosSec, _ttLosSec,
-                _upFreqLive, _downFreqLive);
+                _upFreqLive, _downFreqLive, _altKm, _footprintKm);
         }
     }
 
@@ -487,6 +492,8 @@ public class SatControllerService : BackgroundService
                 _azDeg = az;
                 _elDeg = el;
                 _rangeKm = rangeKm;
+                _altKm = Num(root, "satAlt");
+                _footprintKm = Num(root, "satFootprint");
 
                 // Live Doppler-corrected freqs for the ACTIVE transponder. The box
                 // applies Doppler (+ the operator's passband offset) only to the

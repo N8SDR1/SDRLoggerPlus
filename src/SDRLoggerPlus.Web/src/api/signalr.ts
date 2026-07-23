@@ -164,6 +164,8 @@ export interface SatState {
   maxElDeg?: number | null;
   timeToAosSec?: number | null;
   timeToLosSec?: number | null;
+  altitudeKm?: number | null;
+  footprintKm?: number | null;
 }
 
 export interface HotListChangedEvent {
