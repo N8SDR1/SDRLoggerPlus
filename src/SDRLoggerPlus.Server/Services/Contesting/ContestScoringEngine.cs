@@ -105,6 +105,13 @@ public static class ContestScoringEngine
         var powerFactor = PowerFactor(def, me);
         if (powerFactor != 1.0)
             summary.Score = (int)Math.Round(summary.Score * powerFactor, MidpointRounding.AwayFromZero);
+        // Operator-declared bonus/objective points (WFD) — added after the power
+        // factor. Only credited when at least one QSO was made (contest convention).
+        if (def.BonusPointsHint is not null && me.BonusPoints is > 0 && summary.Qsos > 0)
+        {
+            summary.BonusPoints = me.BonusPoints.Value;
+            summary.Score += summary.BonusPoints;
+        }
         summary.MultsBySource = multsBySource.ToDictionary(
             kv => kv.Key, kv => kv.Value.OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList());
         return summary;
@@ -424,6 +431,10 @@ public static class ContestScoringEngine
         MultSource.WpxPrefix => WpxPrefixExtractor.Extract(qso.Callsign ?? string.Empty),
         MultSource.Grid => Truncate(qso.Contest?.RcvdGrid ?? qso.Grid, 4),
         MultSource.Continent => qso.Continent,
+        // One mult per mode-class (Phone/CW/Digital) — combined with PerBand this
+        // yields the Winter Field Day "one multiplier per mode per band". A constant
+        // per class keeps USB/LSB as one Phone mult; RTTY folds into Digital.
+        MultSource.BandMode => ModeClass(qso.Mode) is "PH" ? "PH" : ModeClass(qso.Mode) is "CW" ? "CW" : "DIGI",
         _ => null,
     };
 

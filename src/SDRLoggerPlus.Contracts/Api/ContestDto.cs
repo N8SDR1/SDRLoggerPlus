@@ -85,6 +85,7 @@ public record ContestStateDto(
     int Dupes,
     int Points,
     int Multipliers,
+    int BonusPoints,
     int Score,
     double RateLastHour,
     double RateLast10,

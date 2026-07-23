@@ -73,6 +73,16 @@ public class ContestDefinition
 
     /// <summary>Optional registered C# strategy id for exotic scoring.</summary>
     public string? ScoringStrategyId { get; set; }
+
+    /// <summary>
+    /// When set, the entry window shows a "claimed bonus points" input and the
+    /// engine ADDS the operator's declared bonus to the final score (after the power
+    /// multiplier). Used for contests whose objective/bonus points are self-declared
+    /// achievements rather than per-QSO data — e.g. Winter Field Day's alternate-power
+    /// / away-from-home / satellite objectives. The string is a short hint shown by
+    /// the input (e.g. "WFD objectives — see current rules"). Null ⇒ no bonus input.
+    /// </summary>
+    public string? BonusPointsHint { get; set; }
 }
 
 /// <summary>A single exchange field, sent or received.</summary>
@@ -285,6 +295,15 @@ public enum MultSource
     WpxPrefix,
     Grid,
     Continent,
+
+    /// <summary>
+    /// One multiplier for each mode operated on each band (the Winter Field Day
+    /// rule). The multiplier value is the mode CLASS — Phone / CW / Digital — so
+    /// USB and LSB both count as one Phone mult per band, and RTTY folds into
+    /// Digital. Always used with <see cref="MultRule.PerBand"/>; the mode is already
+    /// baked into the value so <see cref="MultRule.PerMode"/> is unnecessary.
+    /// </summary>
+    BandMode,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

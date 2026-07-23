@@ -395,4 +395,63 @@ public class ContestScoringEngineTests
         Pts160("DM43").Should().BeGreaterThan(3);               // ~2600 km → several points
         Pts160("JO31").Should().BeGreaterThan(Pts160("DM43"));  // Germany, farther → more
     }
+
+    [Fact]
+    public void WinterFieldDay_BandModeMults_PowerFactor_AndDeclaredBonus()
+    {
+        var op = new MyExchange { Country = "United States", Continent = "NA", Power = "QRP", BonusPoints = 1500 };
+        Qso Q(string call, string band, string mode) => new()
+        {
+            Callsign = call, Band = band, Mode = mode,
+            Station = new StationInfo(), Contest = new ContestInfo(),
+        };
+
+        var summary = ContestScoringEngine.Recompute(Seed("winter-field-day"), op, new[]
+        {
+            Q("W1A", "40M", "CW"),    // 2 pts, mult CW@40
+            Q("W2B", "20M", "CW"),    // 2 pts, mult CW@20
+            Q("W3C", "20M", "SSB"),   // 1 pt,  mult PH@20
+            Q("W4D", "20M", "USB"),   // 1 pt,  PH@20 already claimed (USB/LSB = one Phone mult)
+            Q("W5E", "20M", "FT8"),   // 2 pts, mult DIGI@20
+            Q("W6F", "20M", "RTTY"),  // 2 pts, DIGI@20 already claimed (RTTY folds into Digital)
+        });
+
+        summary.Qsos.Should().Be(6);
+        summary.Points.Should().Be(2 + 2 + 1 + 1 + 2 + 2);         // 10
+        summary.Multipliers.Should().Be(4);                        // CW@40, CW@20, PH@20, DIGI@20
+        summary.BonusPoints.Should().Be(1500);
+        // (points × mults) × QRP(×4) + declared bonus = (10 × 4) × 4 + 1500
+        summary.Score.Should().Be(10 * 4 * 4 + 1500);
+    }
+
+    [Fact]
+    public void WinterFieldDay_LowPower_NoBonusEnteredScoresPointsTimesMults()
+    {
+        var op = new MyExchange { Country = "United States", Continent = "NA", Power = "LOW" };
+        Qso Q(string call, string band, string mode) => new()
+        {
+            Callsign = call, Band = band, Mode = mode,
+            Station = new StationInfo(), Contest = new ContestInfo(),
+        };
+
+        var summary = ContestScoringEngine.Recompute(Seed("winter-field-day"), op, new[]
+        {
+            Q("W1A", "40M", "CW"),   // 2 pts, CW@40
+            Q("W2B", "40M", "SSB"),  // 1 pt,  PH@40
+        });
+
+        summary.Points.Should().Be(3);
+        summary.Multipliers.Should().Be(2);
+        summary.BonusPoints.Should().Be(0);
+        summary.Score.Should().Be(3 * 2 * 2);   // × LOW(×2)
+    }
+
+    [Fact]
+    public void WinterFieldDay_DeclaredBonusIgnoredWithNoQsos()
+    {
+        var op = new MyExchange { Country = "United States", Continent = "NA", Power = "LOW", BonusPoints = 1500 };
+        var summary = ContestScoringEngine.Recompute(Seed("winter-field-day"), op, Array.Empty<Qso>());
+        summary.BonusPoints.Should().Be(0);   // no valid QSO → no bonus credited
+        summary.Score.Should().Be(0);
+    }
 }

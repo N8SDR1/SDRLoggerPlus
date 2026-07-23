@@ -77,6 +77,15 @@ export function ContestScorePlugin() {
           <Cell label="Mults" value={contestState.multipliers} />
         </div>
 
+        {/* Self-declared objective/bonus points (e.g. Winter Field Day), folded
+            into the claimed score above. */}
+        {contestState.bonusPoints > 0 && (
+          <div className="flex items-center justify-between text-xs px-1 -mt-1">
+            <span className="text-gray-500">Bonus points</span>
+            <span className="font-mono text-emerald-300">+{contestState.bonusPoints.toLocaleString()}</span>
+          </div>
+        )}
+
         {/* Rate + session stats */}
         <div className="grid grid-cols-2 gap-px bg-glass-100 border border-glass-100 rounded-lg overflow-hidden text-center">
           <Cell label="Rate / hr" value={contestState.rateLastHour} />

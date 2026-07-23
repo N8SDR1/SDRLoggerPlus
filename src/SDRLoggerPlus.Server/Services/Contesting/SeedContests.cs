@@ -197,9 +197,17 @@ public static class SeedContests
         yield return fieldDay;
 
         // WFDA: Category + Class + ARRL/RAC Section (or MX/DX). Phone 1 / CW & digital 2.
-        yield return D("winter-field-day", "Winter Field Day", "WFD", Hf6, new[] { "CW", "SSB", "RTTY", "FT8" },
+        // Multiplier: one per mode (Phone/CW/Digital) per band. Final score is scaled
+        // by a power multiplier — QRP (≤5 W) ×4, Low (≤100 W) ×2, High ×1 (WFD caps at
+        // 100 W PEP) — then the operator's declared objective/bonus points are added.
+        // WFD restructures its objective bonuses year to year, so those are entered as
+        // a self-declared total (see current WFDA rules) rather than auto-derived.
+        var wfd = D("winter-field-day", "Winter Field Day", "WFD", Hf6, new[] { "CW", "SSB", "RTTY", "FT8" },
             new[] { Txt("class", "Cat", 4), Txt("section", "Sec", 5) }, new[] { Txt("class", "Cat", 4), Txt("section", "Sec", 5) },
-            Pm(1, 2, 2), Array.Empty<MultRule>());
+            Pm(1, 2, 2), new[] { M(MultSource.BandMode, perBand: true) });
+        wfd.PowerMultipliers = new() { ["HIGH"] = 1, ["LOW"] = 2, ["QRP"] = 4 };
+        wfd.BonusPointsHint = "WFD objective bonuses (see current WFDA rules)";
+        yield return wfd;
 
         // Per-band points: 50/144 MHz = 1, 222/432 MHz = 2.
         yield return D("arrl-vhf", "ARRL VHF", "ARRL-VHF", VhfBands, new[] { "CW", "SSB", "FT8" },

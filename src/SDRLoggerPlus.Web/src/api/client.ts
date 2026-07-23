@@ -1278,6 +1278,9 @@ export interface ContestDefinition {
   // Present ⇒ setup shows a power-class picker.
   powerMultipliers?: Record<string, number>;
   scoringStrategyId?: string;
+  // Present ⇒ setup shows a "claimed bonus points" input (self-declared objective
+  // bonuses, e.g. Winter Field Day); the string is the input's hint.
+  bonusPointsHint?: string;
 }
 
 export interface ContestMyExchange {
@@ -1293,6 +1296,8 @@ export interface ContestMyExchange {
   category?: string;
   power?: string;
   name?: string;
+  // Operator-declared bonus/objective points, added to the final score (WFD).
+  bonusPoints?: number;
   // Operator-declared role, overriding the location-based guess: "InArea"/"OutArea"
   // for a StateCounty-kind contest, "InArea"/"Dx" for a WVE-kind one. Undefined =
   // auto-derive from state.

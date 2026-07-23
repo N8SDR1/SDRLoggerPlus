@@ -410,6 +410,19 @@ function SetupView({
               ))}
             </select>
           )}
+          {/* Self-declared objective/bonus points (Winter Field Day), added to the
+              final score. WFD's objective table changes yearly, so it's entered as a
+              total rather than auto-derived from the log. */}
+          {selected.bonusPointsHint && (
+            <input
+              type="number"
+              min={0}
+              placeholder={selected.bonusPointsHint}
+              className="glass-input w-full text-sm px-2 py-1.5"
+              value={myEx.bonusPoints ?? ''}
+              onChange={(e) => setMyEx((p) => ({ ...p, bonusPoints: parseInt(e.target.value) || undefined }))}
+            />
+          )}
           {/* My-exchange fields relevant to the sent exchange */}
           <div className="grid grid-cols-2 gap-2">
             {selected.sentExchange.some((f) => isType(f.type, 'zone')) && (

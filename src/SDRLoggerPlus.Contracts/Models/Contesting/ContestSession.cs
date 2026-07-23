@@ -75,4 +75,13 @@ public class MyExchange
     /// portable, or on a border, can pick correctly. Null (or All) means auto-derive.
     /// </summary>
     public ContestRole? RoleOverride { get; set; }
+
+    /// <summary>
+    /// Operator-declared bonus/objective points, added to the final score after the
+    /// power multiplier. Only collected when the definition sets
+    /// <see cref="ContestDefinition.BonusPointsHint"/> (e.g. Winter Field Day's
+    /// alternate-power / away / satellite objectives, which are self-declared, not
+    /// derived from the QSO log). Null ⇒ none claimed.
+    /// </summary>
+    public int? BonusPoints { get; set; }
 }

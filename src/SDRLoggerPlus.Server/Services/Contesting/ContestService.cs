@@ -529,6 +529,7 @@ public class ContestService
             Dupes: summary.Dupes,
             Points: summary.Points,
             Multipliers: summary.Multipliers,
+            BonusPoints: summary.BonusPoints,
             Score: summary.Score,
             RateLastHour: lastHour,
             RateLast10: Math.Round(rate10, 1),

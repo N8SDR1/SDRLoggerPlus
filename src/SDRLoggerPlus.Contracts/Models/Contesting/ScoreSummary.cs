@@ -31,7 +31,14 @@ public class ScoreSummary
     /// <summary>Distinct multiplier count across all rules.</summary>
     public int Multipliers { get; set; }
 
-    /// <summary>Final claimed score (Points × Multipliers).</summary>
+    /// <summary>
+    /// Operator-declared bonus/objective points folded into <see cref="Score"/>
+    /// (0 for contests without self-declared bonuses). Surfaced separately so the
+    /// score panel can show "… + N bonus".
+    /// </summary>
+    public int BonusPoints { get; set; }
+
+    /// <summary>Final claimed score (Points × Multipliers × power factor + BonusPoints).</summary>
     public int Score { get; set; }
 
     /// <summary>Distinct multiplier values worked, grouped by source (for the mult panel).</summary>

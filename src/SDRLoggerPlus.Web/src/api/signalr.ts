@@ -734,6 +734,7 @@ export interface ContestStateEvent {
   dupes: number;
   points: number;
   multipliers: number;
+  bonusPoints: number;
   score: number;
   rateLastHour: number;
   rateLast10: number;
