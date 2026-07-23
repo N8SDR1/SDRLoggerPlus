@@ -250,6 +250,21 @@ export function LogEntryPlugin() {
   // UI: show a "rig control paused" indicator and disable the tune-the-rig dropdowns.
   const rigControlLocked = !!satState?.active;
 
+  // Auto-switch the Log Entry to SAT mode when the S.A.T. controller goes active,
+  // and back to General when it stops — a pass drops you straight into satellite
+  // logging and returns you afterward. Edge-triggered (only on the active↔inactive
+  // transition) so you can still change tabs manually during a pass if you want.
+  const prevSatActiveRef = useRef(false);
+  useEffect(() => {
+    const active = !!satState?.active;
+    if (active && !prevSatActiveRef.current) {
+      setLogMode('sat');
+    } else if (!active && prevSatActiveRef.current) {
+      setLogMode('general');
+    }
+    prevSatActiveRef.current = active;
+  }, [satState?.active]);
+
   // Timestamp state - locked means it follows system time
   const [timeLocked, setTimeLocked] = useState(true);
   const [qsoDate, setQsoDate] = useState(() => formatDateForInput(new Date()));
