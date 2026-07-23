@@ -355,4 +355,27 @@ public class ContestScoringEngineTests
         Pt("arrl-vhf", Worked("W9X", "6M", 291, "NA", "United States")).Should().Be(1);
         Pt("arrl-vhf", Worked("W9X", "70CM", 291, "NA", "United States")).Should().Be(2);
     }
+
+    [Fact]
+    public void Arrl160m_AnyDxCountsFive_NotJustOtherContinent()
+    {
+        Pt("arrl-160m", Worked("XE1X", "160M", 50, "NA", "Mexico")).Should().Be(5);       // same-continent DX
+        Pt("arrl-160m", Worked("DL1A", "160M", 230, "EU", "Germany")).Should().Be(5);     // trans-Atlantic DX
+        Pt("arrl-160m", Worked("W1AW", "160M", 291, "NA", "United States")).Should().Be(2); // W/VE
+        Pt("arrl-160m", Worked("VE3X", "160M", 1, "NA", "Canada")).Should().Be(2);          // VE = home area
+    }
+
+    [Fact]
+    public void TenTen_MemberScoresTwo_NonMemberOne()
+    {
+        Qso WithNr(string? nr)
+        {
+            var q = Worked("W5X", "10M", 291, "NA", "United States");
+            q.Contest = new ContestInfo { RcvdFields = new() { ["nr"] = nr ?? "" } };
+            return q;
+        }
+        Pt("ten-ten", WithNr("5678")).Should().Be(2); // member (non-zero 10-10 number)
+        Pt("ten-ten", WithNr("0")).Should().Be(1);    // non-member logs 0
+        Pt("ten-ten", WithNr("")).Should().Be(1);     // no number given
+    }
 }

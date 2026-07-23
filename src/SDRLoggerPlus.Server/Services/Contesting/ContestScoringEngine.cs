@@ -296,6 +296,22 @@ public static class ContestScoringEngine
             && rule.ByBand.TryGetValue(qso.Band.ToUpperInvariant(), out var byBand))
             return byBand;
 
+        // Member vs non-member points (10-10: a non-zero 10-10 number = member).
+        if (!string.IsNullOrEmpty(rule.MemberField) && rule.MemberPoints.HasValue)
+        {
+            var v = qso.Contest?.RcvdFields is { } rf && rf.TryGetValue(rule.MemberField, out var mv)
+                ? mv?.Trim() : null;
+            return !string.IsNullOrEmpty(v) && v != "0" ? rule.MemberPoints.Value : rule.Default;
+        }
+
+        // "Any DX" points (ARRL 160 m): a station OUTSIDE the W/VE home area scores
+        // DxPoints on any continent, so a same-continent DX entity (Mexico, the
+        // Caribbean) counts the same as a trans-Atlantic one — not the continent
+        // value it would otherwise fall into.
+        if (rule.DxPoints.HasValue && eff.Home?.Kind == HomeAreaKind.WVE
+            && !IsUsOrCanada(qso.Country ?? qso.Station?.Country, qso.Continent))
+            return rule.DxPoints.Value;
+
         var (points, sameCountry) = BasePoints(rule, me, qso);
 
         // Low-band weighting (CQ WPX): distance points double on 160/80/40 m, but

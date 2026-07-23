@@ -125,11 +125,27 @@ public class PointsRule
     public int? SameContinentNa { get; set; }
 
     /// <summary>
+    /// Points for working any DX station — one OUTSIDE the definition's W/VE
+    /// home area, on any continent (ARRL 160 m: W/VE↔W/VE = 2, anyone else = 5).
+    /// Takes precedence over the continent relations; only meaningful for a
+    /// contest with a W/VE <see cref="HomeArea"/>. Null = not used.
+    /// </summary>
+    public int? DxPoints { get; set; }
+
+    /// <summary>
     /// Multiplier applied to a QSO's *distance* points (anything except the
     /// same-country value) on the low bands 160/80/40 m — CQ WPX doubles those
     /// bands. Null / 1 = no band weighting.
     /// </summary>
     public int? LowBandFactor { get; set; }
+
+    /// <summary>
+    /// Received-exchange field key whose presence marks the worked station as a
+    /// "member" — 10-10 scores 2 points for a member (a non-zero 10-10 number in
+    /// the "nr" field) and <see cref="Default"/> for everyone else. Null = not used.
+    /// </summary>
+    public string? MemberField { get; set; }
+    public int? MemberPoints { get; set; }
 
     /// <summary>
     /// Flat points per band (band → value), e.g. VHF+ contests where 6 m = 1 and

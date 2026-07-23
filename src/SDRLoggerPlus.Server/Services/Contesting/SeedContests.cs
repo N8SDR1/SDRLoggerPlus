@@ -56,9 +56,9 @@ public static class SeedContests
     }
 
     private static PointsRule Pts(int def, int? sameCountry = null, int? sameCont = null, int? otherCont = null,
-        int? sameZone = null, int? sameContNa = null, int? lowBandFactor = null)
+        int? sameZone = null, int? sameContNa = null, int? lowBandFactor = null, int? dxPoints = null)
         => new() { Default = def, SameCountry = sameCountry, SameContinent = sameCont, OtherContinent = otherCont,
-            SameZone = sameZone, SameContinentNa = sameContNa, LowBandFactor = lowBandFactor };
+            SameZone = sameZone, SameContinentNa = sameContNa, LowBandFactor = lowBandFactor, DxPoints = dxPoints };
 
     // Flat per-band points (VHF+ contests). e.g. PtsBand(("6M",1),("2M",2)).
     private static PointsRule PtsBand(params (string band, int pts)[] rows)
@@ -172,7 +172,7 @@ public static class SeedContests
         // stations send an ARRL/RAC section; DX stations send a signal report only.
         var oneSixty = D("arrl-160m", "ARRL 160 Meter", "ARRL-160", new() { "160M" }, new[] { "CW" },
             new[] { Rst(), Section() }, new[] { Rst(), When(Section(), ContestRole.InArea) },
-            Pts(2, otherCont: 5), new[] { M(MultSource.Section), M(MultSource.Dxcc) },
+            Pts(2, dxPoints: 5), new[] { M(MultSource.Section), M(MultSource.Dxcc) },
             dupe: DupeRule.PerContest);
         oneSixty.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
         yield return oneSixty;
@@ -260,9 +260,10 @@ public static class SeedContests
                 dupe: DupeRule.PerBand, serial: SerialMode.AllBand);
 
         // 10m only, worked once per event; no location multiplier (score = QSO points).
+        // Member (non-zero 10-10 number) = 2 points, non-member = 1.
         yield return D("ten-ten", "10-10 QSO Party", "TEN-TEN", new() { "10M" }, new[] { "CW", "SSB" },
             new[] { Name(), Txt("nr", "10-10#", 6, false), StateF("S/P/C") }, new[] { Name(), Txt("nr", "10-10#", 6, false), StateF("S/P/C") },
-            Pts(1), Array.Empty<MultRule>(), dupe: DupeRule.PerContest);
+            new PointsRule { Default = 1, MemberField = "nr", MemberPoints = 2 }, Array.Empty<MultRule>(), dupe: DupeRule.PerContest);
     }
 
     // -- mode-variant expansion --------------------------------------------
