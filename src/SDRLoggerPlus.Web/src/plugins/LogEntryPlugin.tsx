@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Swords, Radio as RadioIcon, Pencil, Megaphone, ArrowUp, ArrowDown, AlertTriangle } from 'lucide-react';
 import { api, CreateQsoRequest, QsoResponse, SatState } from '../api/client';
 import { formatDupeWarning, MIN_CALLSIGN_LENGTH } from '../utils/dupeWarning';
-import { signalRService, setTciMetersCallback, clearTciMetersCallback, type TciMetersEvent } from '../api/signalr';
+import { signalRService, setTciMetersCallback, clearTciMetersCallback, addSatStateCallback, removeSatStateCallback, type TciMetersEvent } from '../api/signalr';
 import { S9_DBM, DB_PER_S_UNIT } from '../utils/smeter';
 import { spotKhzToMhzString, spotKhzToHz, formMhzToStoredKhz, rigHzToStoredKhz } from '../utils/frequency';
 import { useSignalR } from '../hooks/useSignalR';
@@ -240,8 +240,9 @@ export function LogEntryPlugin() {
   });
   useEffect(() => {
     if (logMode !== 'sat' || !satEnabled) return;
-    signalRService.setHandlers({ onSatState: (s) => setLiveSatState(s) });
-    return () => signalRService.setHandlers({ onSatState: undefined });
+    const cb = (s: SatState) => setLiveSatState(s);
+    addSatStateCallback(cb);
+    return () => removeSatStateCallback(cb);
   }, [logMode, satEnabled]);
   const satState = liveSatState ?? polledSatState ?? null;
   const satTracking = !!(satState?.active && satState?.satellite);

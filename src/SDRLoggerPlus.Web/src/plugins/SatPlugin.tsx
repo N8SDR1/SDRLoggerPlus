@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Satellite, Power } from 'lucide-react';
 import { api, SatState } from '../api/client';
 import { GlassPanel } from '../components/GlassPanel';
-import { signalRService } from '../api/signalr';
+import { addSatStateCallback, removeSatStateCallback } from '../api/signalr';
 import { useSettingsStore } from '../store/settingsStore';
 import { formatDistance, distanceUnitFor } from '../utils/units';
 
@@ -69,8 +69,9 @@ export function SatPlugin() {
   });
 
   useEffect(() => {
-    signalRService.setHandlers({ onSatState: (state) => setLiveState(state) });
-    return () => signalRService.setHandlers({ onSatState: undefined });
+    const cb = (state: SatState) => setLiveState(state);
+    addSatStateCallback(cb);
+    return () => removeSatStateCallback(cb);
   }, []);
 
   const state = liveState ?? polled ?? null;

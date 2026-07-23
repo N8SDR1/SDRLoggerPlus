@@ -719,6 +719,21 @@ export function clearTciMetersCallback(cb: (evt: TciMetersEvent) => void): void 
   tciMetersCallbacks.remove(cb);
 }
 
+// S.A.T. controller state — a SET, not a single slot, so the S.A.T. panel AND the
+// Log Entry (which auto-switches to SAT mode + pauses rig control on state change)
+// both receive it. A single handler let them clobber each other, so whichever
+// mounted last won and the auto-switch worked only intermittently / after a restart.
+const satStateCallbacks = createCallbackSet<SatState>();
+
+export function addSatStateCallback(cb: (state: SatState) => void): void {
+  satStateCallbacks.add(cb);
+}
+
+/** Removes just this callback — an unmounting panel can't kill another's feed. */
+export function removeSatStateCallback(cb: (state: SatState) => void): void {
+  satStateCallbacks.remove(cb);
+}
+
 export interface LightningStrikeMsg { lat: number; lon: number; timestampUtc: string; local: boolean }
 export interface LightningStrikesEvent { strikes: LightningStrikeMsg[] }
 
@@ -1065,7 +1080,8 @@ class SignalRService {
     });
 
     this.connection.on('OnSatState', (state: SatState) => {
-      this.handlers.onSatState?.(state);
+      satStateCallbacks.emit(state);        // all subscribers (SAT panel + Log Entry)
+      this.handlers.onSatState?.(state);    // legacy single-handler slot (if any)
     });
 
     this.connection.on('OnSpotReceived', (evt: SpotReceivedEvent) => {
