@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using SDRLoggerPlus.Contracts.Events;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Services;
+using SDRLoggerPlus.Server.Services.Rig;
 using SDRLoggerPlus.Server.Core.Database;
 using SDRLoggerPlus.Server.Native.Hamlib;
 
@@ -92,6 +93,7 @@ public class LogHub : Hub<ILogHubClient>
     private readonly TciRadioService _tciRadioService;
     private readonly HamlibService _hamlibService;
     private readonly FlrigService _flrigService;
+    private readonly IRigRegistry _rigRegistry;
     private readonly RotatorService _rotatorService;
     private readonly IQrzService _qrzService;
     private readonly IHamQthService _hamQthService;
@@ -109,6 +111,7 @@ public class LogHub : Hub<ILogHubClient>
         TciRadioService tciRadioService,
         HamlibService hamlibService,
         FlrigService flrigService,
+        IRigRegistry rigRegistry,
         RotatorService rotatorService,
         IQrzService qrzService,
         IHamQthService hamQthService,
@@ -127,6 +130,7 @@ public class LogHub : Hub<ILogHubClient>
         _tciRadioService = tciRadioService;
         _hamlibService = hamlibService;
         _flrigService = flrigService;
+        _rigRegistry = rigRegistry;
         _rotatorService = rotatorService;
         _qrzService = qrzService;
         _hamQthService = hamQthService;
@@ -496,76 +500,23 @@ public class LogHub : Hub<ILogHubClient>
         // Convert spot frequency from kHz to Hz
         var frequencyHz = (long)(evt.Frequency * 1000);
 
-        // Try to tune connected radio (TCI first, then Hamlib).
-        // ORDER MATTERS and is protocol-specific:
-        //   - Hamlib / flrig: mode BEFORE frequency (their rigs apply a CW
-        //     pitch offset when you change mode, and doing mode-after-freq
-        //     produces a ±700 Hz shift on the dial).
-        //   - TCI (Lyra / Thetis / ExpertSDR3): frequency BEFORE mode. TCI's
-        //     mode enum has no CW sideband distinction — the sender collapses
-        //     CWU/CWL → "CW" and expects the receiver to re-derive CWU/CWL
-        //     from the CURRENT dial (CWU above 10 MHz, CWL below). If we
-        //     send mode first with the OLD dial position, Lyra picks the
-        //     wrong sideband and the user has to click the spot a second
-        //     time. Freq-first-then-mode makes the correct sideband stick
-        //     on the first click. Same principle for USB↔LSB across 10 MHz.
-        var tciRadios = _tciRadioService.GetRadioStates().ToList();
-        if (tciRadios.Any())
+        // Tune the active rig. Registry precedence is TCI → Hamlib → flrig; the
+        // per-protocol freq/mode ORDER lives inside each backend's TuneAsync:
+        //   - TCI (Lyra / Thetis / ExpertSDR3): frequency BEFORE mode — TCI collapses
+        //     CWU/CWL → "CW" and re-derives the sideband from the CURRENT dial (CWU
+        //     above 10 MHz, CWL below; same for USB↔LSB), so the new frequency must be
+        //     set first or the wrong sideband sticks and the spot needs a second click.
+        //   - Hamlib / flrig: mode BEFORE frequency — their rigs apply a CW pitch
+        //     offset on mode change that would shift the dial ±700 Hz if done after.
+        if (_rigRegistry.ActiveTuner() is { } target)
         {
-            var radioId = tciRadios.First().RadioId;
-
-            var tuned = await _tciRadioService.SetFrequencyAsync(radioId, frequencyHz);
+            var mode = string.IsNullOrEmpty(evt.Mode) ? null : evt.Mode;
+            var tuned = await target.Backend.TuneAsync(target.RadioId, frequencyHz, mode);
             if (tuned)
             {
-                _logger.LogInformation("Tuned TCI radio {RadioId} to {FrequencyMHz} MHz", radioId, frequencyHz / 1000000.0);
-            }
-
-            if (!string.IsNullOrEmpty(evt.Mode))
-            {
-                var modeSet = await _tciRadioService.SetModeAsync(radioId, evt.Mode, frequencyHz);
-                if (modeSet)
-                {
-                    _logger.LogInformation("Set TCI radio {RadioId} mode to {Mode}", radioId, evt.Mode);
-                }
-            }
-        }
-        else if (_hamlibService.IsConnected)
-        {
-            // Set mode first to avoid frequency shift when crossing CW/SSB boundary
-            if (!string.IsNullOrEmpty(evt.Mode))
-            {
-                var modeSet = await _hamlibService.SetModeAsync(evt.Mode, frequencyHz);
-                if (modeSet)
-                {
-                    _logger.LogInformation("Set Hamlib radio mode to {Mode}", evt.Mode);
-                }
-            }
-
-            var tuned = await _hamlibService.SetFrequencyAsync(frequencyHz);
-            if (tuned)
-            {
-                _logger.LogInformation("Tuned Hamlib radio to {FrequencyMHz} MHz", frequencyHz / 1000000.0);
-            }
-        }
-        else if (_flrigService.IsConnected)
-        {
-            // Set mode first to avoid CW/SSB frequency shift, then tune. flrig's
-            // XML-RPC mode names get translated by FlrigService (USB-D vs DATA-U
-            // etc.), so the app-normalized mode string from the spot goes in
-            // as-is.
-            if (!string.IsNullOrEmpty(evt.Mode))
-            {
-                var modeSet = await _flrigService.SetModeAsync(evt.Mode);
-                if (modeSet)
-                {
-                    _logger.LogInformation("Set flrig radio mode to {Mode}", evt.Mode);
-                }
-            }
-
-            var tuned = await _flrigService.SetFrequencyAsync(frequencyHz);
-            if (tuned)
-            {
-                _logger.LogInformation("Tuned flrig radio to {FrequencyMHz} MHz", frequencyHz / 1000000.0);
+                _logger.LogInformation("Tuned {Type} radio {RadioId} to {FrequencyMHz} MHz{Mode}",
+                    target.Backend.Type, target.RadioId, frequencyHz / 1000000.0,
+                    mode is null ? "" : $" ({mode})");
             }
         }
     }
@@ -598,31 +549,14 @@ public class LogHub : Hub<ILogHubClient>
     {
         _logger.LogInformation("Tune to frequency: {FrequencyMHz} MHz", frequencyHz / 1000000.0);
 
-        // Try TCI first, then Hamlib (frequency-only, no mode change)
-        var tciRadios = _tciRadioService.GetRadioStates().ToList();
-        if (tciRadios.Any())
+        // Active rig, frequency only (no mode change). Registry precedence TCI → Hamlib → flrig.
+        if (_rigRegistry.ActiveTuner() is { } target)
         {
-            var radioId = tciRadios.First().RadioId;
-            var tuned = await _tciRadioService.SetFrequencyAsync(radioId, frequencyHz);
+            var tuned = await target.Backend.SetFrequencyAsync(target.RadioId, frequencyHz);
             if (tuned)
             {
-                _logger.LogInformation("Tuned TCI radio {RadioId} to {FrequencyMHz} MHz", radioId, frequencyHz / 1000000.0);
-            }
-        }
-        else if (_hamlibService.IsConnected)
-        {
-            var tuned = await _hamlibService.SetFrequencyAsync(frequencyHz);
-            if (tuned)
-            {
-                _logger.LogInformation("Tuned Hamlib radio to {FrequencyMHz} MHz", frequencyHz / 1000000.0);
-            }
-        }
-        else if (_flrigService.IsConnected)
-        {
-            var tuned = await _flrigService.SetFrequencyAsync(frequencyHz);
-            if (tuned)
-            {
-                _logger.LogInformation("Tuned flrig radio to {FrequencyMHz} MHz", frequencyHz / 1000000.0);
+                _logger.LogInformation("Tuned {Type} radio {RadioId} to {FrequencyMHz} MHz",
+                    target.Backend.Type, target.RadioId, frequencyHz / 1000000.0);
             }
         }
     }
@@ -639,21 +573,14 @@ public class LogHub : Hub<ILogHubClient>
         if (string.IsNullOrWhiteSpace(mode)) return;
         _logger.LogInformation("Set radio mode: {Mode}", mode);
 
-        var tciRadios = _tciRadioService.GetRadioStates().ToList();
-        if (tciRadios.Any())
+        // Active rig, mode only. Registry precedence TCI → Hamlib → flrig. Pass the
+        // active radio's CURRENT dial so TCI can pick the CW/SSB sideband; it's the
+        // frequency the rig is already on, so Hamlib/flrig don't move (flrig ignores it).
+        if (_rigRegistry.ActiveTuner() is { } target)
         {
-            var radio = tciRadios.First();
-            await _tciRadioService.SetModeAsync(radio.RadioId, mode, radio.FrequencyHz);
-        }
-        else if (_hamlibService.IsConnected)
-        {
-            // hamlib takes an optional freq for CW/SSB offset compensation;
-            // passing 0 tells it "leave freq alone."
-            await _hamlibService.SetModeAsync(mode, 0);
-        }
-        else if (_flrigService.IsConnected)
-        {
-            await _flrigService.SetModeAsync(mode);
+            var currentHz = target.Backend.GetRadioStates()
+                .FirstOrDefault(s => s.RadioId == target.RadioId)?.FrequencyHz ?? 0;
+            await target.Backend.SetModeAsync(target.RadioId, mode, currentHz);
         }
     }
 
