@@ -282,33 +282,65 @@ public static class ContestScoringEngine
 
     // -- points -------------------------------------------------------------
 
+    // Low bands that CQ WPX (and similar) double the QSO points on.
+    private static readonly HashSet<string> LowBands =
+        new(StringComparer.OrdinalIgnoreCase) { "160M", "80M", "40M" };
+
     private static int Points(Effective eff, MyExchange me, Qso qso)
     {
         var rule = eff.Points;
 
-        // Precedence: same country > same zone > same continent > other continent.
-        // The first relation that both holds AND has a value configured wins.
+        // Flat per-band points (VHF+ contests: 6 m = 1, 2 m / 222 / 432 = 2) win
+        // outright — no relationship or mode logic applies.
+        if (rule.ByBand is not null && !string.IsNullOrEmpty(qso.Band)
+            && rule.ByBand.TryGetValue(qso.Band.ToUpperInvariant(), out var byBand))
+            return byBand;
+
+        var (points, sameCountry) = BasePoints(rule, me, qso);
+
+        // Low-band weighting (CQ WPX): distance points double on 160/80/40 m, but
+        // the same-country value is flat across all bands.
+        if (!sameCountry && rule.LowBandFactor is > 1
+            && !string.IsNullOrEmpty(qso.Band) && LowBands.Contains(qso.Band))
+            points *= rule.LowBandFactor.Value;
+
+        return points;
+    }
+
+    // The relationship base value, plus whether it is the (never band-weighted)
+    // same-country case.
+    private static (int Points, bool SameCountry) BasePoints(PointsRule rule, MyExchange me, Qso qso)
+    {
+        // Precedence: same country > same zone > same continent (NA-aware) > other continent.
         if (rule.SameCountry.HasValue && SameCountry(me, qso))
-            return rule.SameCountry.Value;
+            return (rule.SameCountry.Value, true);
 
         if (rule.SameZone.HasValue && me.CqZone.HasValue && qso.Station?.CqZone.HasValue == true
             && qso.Station.CqZone == me.CqZone)
-            return rule.SameZone.Value;
+            return (rule.SameZone.Value, false);
 
         var sameContinent = !string.IsNullOrEmpty(me.Continent)
             && string.Equals(me.Continent, qso.Continent, StringComparison.OrdinalIgnoreCase);
 
-        if (sameContinent && rule.SameContinent.HasValue)
-            return rule.SameContinent.Value;
+        if (sameContinent)
+        {
+            // North America exception: a NA operator working another NA station
+            // scores the NA value (CQ WW = 2), not the plain same-continent value.
+            if (rule.SameContinentNa.HasValue
+                && string.Equals(me.Continent, "NA", StringComparison.OrdinalIgnoreCase))
+                return (rule.SameContinentNa.Value, false);
+            if (rule.SameContinent.HasValue)
+                return (rule.SameContinent.Value, false);
+        }
 
         if (!sameContinent && !string.IsNullOrEmpty(qso.Continent) && rule.OtherContinent.HasValue)
-            return rule.OtherContinent.Value;
+            return (rule.OtherContinent.Value, false);
 
         // No relationship override: per-mode base if configured, else Default.
         if (rule.ByMode is not null && rule.ByMode.TryGetValue(ModeClass(qso.Mode), out var byMode))
-            return byMode;
+            return (byMode, false);
 
-        return rule.Default;
+        return (rule.Default, false);
     }
 
     // Normalized mode class for per-mode points ("CW", "PH", "RTTY", "DIGI").

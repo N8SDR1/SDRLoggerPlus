@@ -55,8 +55,14 @@ public static class SeedContests
         return new PointsRule { Default = ph, ByMode = by };
     }
 
-    private static PointsRule Pts(int def, int? sameCountry = null, int? sameCont = null, int? otherCont = null, int? sameZone = null)
-        => new() { Default = def, SameCountry = sameCountry, SameContinent = sameCont, OtherContinent = otherCont, SameZone = sameZone };
+    private static PointsRule Pts(int def, int? sameCountry = null, int? sameCont = null, int? otherCont = null,
+        int? sameZone = null, int? sameContNa = null, int? lowBandFactor = null)
+        => new() { Default = def, SameCountry = sameCountry, SameContinent = sameCont, OtherContinent = otherCont,
+            SameZone = sameZone, SameContinentNa = sameContNa, LowBandFactor = lowBandFactor };
+
+    // Flat per-band points (VHF+ contests). e.g. PtsBand(("6M",1),("2M",2)).
+    private static PointsRule PtsBand(params (string band, int pts)[] rows)
+        => new() { ByBand = rows.ToDictionary(r => r.band, r => r.pts, StringComparer.OrdinalIgnoreCase) };
     private static MultRule M(MultSource s, bool perBand = false, bool perMode = false)
         => new() { Source = s, PerBand = perBand, PerMode = perMode };
 
@@ -86,16 +92,19 @@ public static class SeedContests
     // ---- CQ ---------------------------------------------------------------
     private static IEnumerable<ContestDefinition> CqContests()
     {
+        // Different continent 3, same continent 1, same country 0; NA↔NA = 2.
         foreach (var (m, cab) in New("CQ-WW"))
             yield return D($"cq-ww-{m.L}", $"CQ WW DX {m.N}", cab, HfBands, m.Modes,
                 new[] { Rst(), Zone() }, new[] { Rst(), Zone() },
-                Pts(1, sameCountry: 0, sameCont: 1, otherCont: 3),
+                Pts(1, sameCountry: 0, sameCont: 1, otherCont: 3, sameContNa: 2),
                 new[] { M(MultSource.Dxcc, true), M(MultSource.CqZone, true) });
 
+        // Band-weighted: 40/80/160 m double. Diff cont 3/6, same cont 1/2,
+        // NA↔NA 2/4, same country 1 (flat, all bands).
         foreach (var (m, cab) in New("CQ-WPX"))
             yield return D($"cq-wpx-{m.L}", $"CQ WPX {m.N}", cab, HfBands, m.Modes,
                 new[] { Rst(), Serial() }, new[] { Rst(), Serial() },
-                Pts(1, sameCountry: 1, sameCont: 1, otherCont: 3),
+                Pts(1, sameCountry: 1, sameCont: 1, otherCont: 3, sameContNa: 2, lowBandFactor: 2),
                 new[] { M(MultSource.WpxPrefix) }, serial: SerialMode.AllBand);
 
         // Own country = 2, same continent (diff country) = 5, different continent = 10.
@@ -105,10 +114,9 @@ public static class SeedContests
                 Pts(5, sameCountry: 2, otherCont: 10),
                 new[] { M(MultSource.State), M(MultSource.Dxcc) });
 
-        // NOTE: 2m QSOs officially count 2 points (6m = 1); the flat Pts model can't
-        // express per-band points yet — tracked in the contest-scoring audit issue.
+        // Per-band points: 6 m = 1, 2 m = 2.
         yield return D("cq-vhf", "CQ VHF", "CQ-VHF", new() { "6M", "2M" }, new[] { "CW", "SSB", "FM", "FT8" },
-            new[] { Grid() }, new[] { Grid() }, Pts(1),
+            new[] { Grid() }, new[] { Grid() }, PtsBand(("6M", 1), ("2M", 2)),
             new[] { M(MultSource.Grid, true) });
 
         // Five bands (no 160m). Same country 1 / same continent 2 / diff continent 3.
@@ -193,8 +201,10 @@ public static class SeedContests
             new[] { Txt("class", "Cat", 4), Txt("section", "Sec", 5) }, new[] { Txt("class", "Cat", 4), Txt("section", "Sec", 5) },
             Pm(1, 2, 2), Array.Empty<MultRule>());
 
+        // Per-band points: 50/144 MHz = 1, 222/432 MHz = 2.
         yield return D("arrl-vhf", "ARRL VHF", "ARRL-VHF", VhfBands, new[] { "CW", "SSB", "FT8" },
-            new[] { Grid() }, new[] { Grid() }, Pts(1), new[] { M(MultSource.Grid, true) });
+            new[] { Grid() }, new[] { Grid() },
+            PtsBand(("6M", 1), ("2M", 1), ("1.25M", 2), ("70CM", 2)), new[] { M(MultSource.Grid, true) });
 
         // RTTY is explicitly EXCLUDED from the ARRL International Digital Contest.
         // NOTE: points are officially distance-based (1 + 1/500 km) — the flat Pts

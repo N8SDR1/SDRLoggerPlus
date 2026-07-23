@@ -310,4 +310,49 @@ public class ContestScoringEngineTests
         ContestScoringEngine.Evaluate(def, Me, Array.Empty<Qso>(), MakeQso("N8SDR", mode: "SSB"))
             .Points.Should().Be(1);
     }
+
+    // ---- band-weighted points + NA exception (audit #23) — real seed defs ---
+
+    private static ContestDefinition Seed(string id) =>
+        System.Linq.Enumerable.First(SeedContests.All, d => d.Id == id);
+
+    private static readonly MyExchange UsOp = new()
+    { Dxcc = 291, Continent = "NA", CqZone = 5, Country = "United States" };
+
+    private static Qso Worked(string call, string band, int? dxcc, string cont, string country) =>
+        new()
+        {
+            Callsign = call, Band = band, Mode = "CW", Dxcc = dxcc, Continent = cont, Country = country,
+            Station = new StationInfo(), Contest = new ContestInfo(),
+        };
+
+    private static int Pt(string id, Qso q) =>
+        ContestScoringEngine.Evaluate(Seed(id), UsOp, Array.Empty<Qso>(), q).Points;
+
+    [Fact]
+    public void CqWwDx_NorthAmericaExceptionCountsTwo()
+    {
+        Pt("cq-ww-cw", Worked("VE3X", "20M", 1, "NA", "Canada")).Should().Be(2);        // NA↔NA
+        Pt("cq-ww-cw", Worked("DL1A", "20M", 230, "EU", "Germany")).Should().Be(3);     // diff continent
+        Pt("cq-ww-cw", Worked("W1AW", "20M", 291, "NA", "United States")).Should().Be(0); // same country
+    }
+
+    [Fact]
+    public void CqWpx_LowBandsDouble_AndNaException_ButNotSameCountry()
+    {
+        Pt("cq-wpx-cw", Worked("DL1A", "20M", 230, "EU", "Germany")).Should().Be(3);   // DX high
+        Pt("cq-wpx-cw", Worked("DL1A", "40M", 230, "EU", "Germany")).Should().Be(6);   // DX low → ×2
+        Pt("cq-wpx-cw", Worked("VE3X", "20M", 1, "NA", "Canada")).Should().Be(2);      // NA high
+        Pt("cq-wpx-cw", Worked("VE3X", "40M", 1, "NA", "Canada")).Should().Be(4);      // NA low → ×2
+        Pt("cq-wpx-cw", Worked("W1AW", "40M", 291, "NA", "United States")).Should().Be(1); // same country flat
+    }
+
+    [Fact]
+    public void Vhf_PerBandPoints()
+    {
+        Pt("cq-vhf", Worked("W9X", "6M", 291, "NA", "United States")).Should().Be(1);
+        Pt("cq-vhf", Worked("W9X", "2M", 291, "NA", "United States")).Should().Be(2);
+        Pt("arrl-vhf", Worked("W9X", "6M", 291, "NA", "United States")).Should().Be(1);
+        Pt("arrl-vhf", Worked("W9X", "70CM", 291, "NA", "United States")).Should().Be(2);
+    }
 }

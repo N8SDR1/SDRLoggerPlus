@@ -117,6 +117,28 @@ public class PointsRule
     public int Default { get; set; } = 1;
 
     /// <summary>
+    /// Same-continent value when BOTH stations are in North America — the
+    /// CQ WW / WPX exception (NA↔NA counts more than other same-continent QSOs).
+    /// Applied only when the operator's own continent is NA; otherwise
+    /// <see cref="SameContinent"/> is used. Null = no NA special-case.
+    /// </summary>
+    public int? SameContinentNa { get; set; }
+
+    /// <summary>
+    /// Multiplier applied to a QSO's *distance* points (anything except the
+    /// same-country value) on the low bands 160/80/40 m — CQ WPX doubles those
+    /// bands. Null / 1 = no band weighting.
+    /// </summary>
+    public int? LowBandFactor { get; set; }
+
+    /// <summary>
+    /// Flat points per band (band → value), e.g. VHF+ contests where 6 m = 1 and
+    /// 2 m / 222 / 432 = 2. When the worked band is listed here it wins outright
+    /// (no relationship/mode logic). Keys are upper-case band labels ("2M").
+    /// </summary>
+    public Dictionary<string, int>? ByBand { get; set; }
+
+    /// <summary>
     /// Base points per mode class ("CW", "PH", "RTTY"). Used when no relationship
     /// override (SameCountry/SameContinent/…) matches; falls back to
     /// <see cref="Default"/> when the mode isn't listed. Lets a contest score e.g.
