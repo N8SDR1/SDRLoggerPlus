@@ -164,6 +164,13 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<HamlibService>());
 builder.Services.AddSingleton<FlrigService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FlrigService>());
 
+// Rig backend abstraction (v2.8.0). The registry replaces LogHub's per-action
+// TCI→Hamlib→flrig ladders. Backends register themselves as IRigBackend in
+// precedence order in Stage 1; until then the injected sequence is empty and the
+// registry simply reports "nothing connected". See docs/design/rig-backend-abstraction.md.
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigRegistry,
+    SDRLoggerPlus.Server.Services.Rig.RigRegistry>();
+
 
 // Club Log realtime QSO upload (singleton so the one-strike auth block persists)
 // Club Log's one-strike auth block, persisted beside the database so a
