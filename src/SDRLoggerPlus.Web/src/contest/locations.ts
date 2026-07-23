@@ -36,3 +36,31 @@ export const STATE_PROV_UNIVERSE: string[] = [
   ...[...CA_PROVINCES].sort(),
 ];
 
+// ARRL/RAC Sections — the multiplier set for Sweepstakes, ARRL 160, Field Day and
+// HPM (71 US + 12 RAC). The ARRL revises this list occasionally; verify against the
+// current ARRL Contest Multipliers List each season. Used for the Multipliers-Needed
+// "sections" universe and a soft (non-blocking) validity hint on section fields.
+export const ARRL_SECTIONS = new Set([
+  // US
+  'CT', 'EMA', 'ME', 'NH', 'RI', 'VT', 'WMA',
+  'ENY', 'NLI', 'NNJ', 'NNY', 'SNJ', 'WNY',
+  'DE', 'EPA', 'MDC', 'WPA',
+  'AL', 'GA', 'KY', 'NC', 'NFL', 'SC', 'SFL', 'TN', 'VA', 'WCF', 'PR', 'VI',
+  'AR', 'LA', 'MS', 'NM', 'NTX', 'OK', 'STX', 'WTX',
+  'EB', 'LAX', 'ORG', 'SB', 'SCV', 'SDG', 'SF', 'SJV', 'SV', 'PAC',
+  'AZ', 'EWA', 'ID', 'MT', 'NV', 'OR', 'UT', 'WWA', 'WY',
+  'AK', 'MI', 'OH', 'WV',
+  'IL', 'IN', 'WI',
+  'CO', 'IA', 'KS', 'MN', 'MO', 'ND', 'NE', 'SD',
+  // RAC (Canada)
+  'MAR', 'NL', 'QC', 'ONE', 'ONN', 'ONS', 'GTA', 'MB', 'SK', 'AB', 'BC', 'NT',
+]);
+
+/** True if the value is a known ARRL/RAC section (case-insensitive). */
+export function isValidSection(value: string): boolean {
+  return ARRL_SECTIONS.has(value.trim().toUpperCase());
+}
+
+/** All sections alphabetically, for a "needed sections" universe display. */
+export const SECTION_UNIVERSE: string[] = [...ARRL_SECTIONS].sort();
+

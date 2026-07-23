@@ -3,7 +3,7 @@ import { Grid3x3 } from 'lucide-react';
 import { api } from '../api/client';
 import { useAppStore } from '../store/appStore';
 import { GlassPanel } from '../components/GlassPanel';
-import { STATE_PROV_UNIVERSE } from '../contest/locations';
+import { STATE_PROV_UNIVERSE, SECTION_UNIVERSE } from '../contest/locations';
 
 const BAND_ORDER = ['160m', '80m', '40m', '30m', '20m', '17m', '15m', '10m', '6m', '2m'];
 
@@ -49,11 +49,11 @@ function columnKey(band: string | null, mode: string | null): string {
 
 // The fixed "universe" of possible values for a source, so unworked entries read
 // as gaps rather than being invisible. Only sources with a knowable, finite,
-// contest-independent universe qualify. (Section is intentionally omitted until an
-// authoritative ARRL/RAC section table is wired in from the backend.)
+// contest-independent universe qualify.
 function universeFor(source: string): string[] | null {
   if (source === 'CqZone') return Array.from({ length: 40 }, (_, i) => String(i + 1));
   if (source === 'State') return STATE_PROV_UNIVERSE;
+  if (source === 'Section') return SECTION_UNIVERSE;
   return null;
 }
 

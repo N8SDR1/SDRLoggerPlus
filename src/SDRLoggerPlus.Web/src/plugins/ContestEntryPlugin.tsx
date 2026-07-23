@@ -15,7 +15,7 @@ import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { ContestEditor } from '../components/ContestEditor';
-import { isValidStateProv } from '../contest/locations';
+import { isValidStateProv, isValidSection } from '../contest/locations';
 import { useRegisterShortcuts } from '../hooks/useRegisterShortcuts';
 import type { Shortcut } from '../utils/shortcuts';
 
@@ -814,6 +814,14 @@ function EntryView() {
                 value={exchange[f.key] ?? ''}
                 onChange={(v) => setExchange((p) => ({ ...p, [f.key]: v }))}
               />
+            ) : isType(f.type, 'section') ? (
+              <SectionField
+                key={f.key}
+                label={f.label}
+                width={f.width}
+                value={exchange[f.key] ?? ''}
+                onChange={(v) => setExchange((p) => ({ ...p, [f.key]: v }))}
+              />
             ) : (
               <div key={f.key} style={{ width: `${Math.max(f.width, 4)}rem` }}>
                 <input
@@ -1219,6 +1227,39 @@ function LocationField({
         title={badStateProv ? 'Not a valid state/province' : undefined}
         className={`glass-input w-full font-mono text-lg px-2 py-2 uppercase ${
           badStateProv ? 'border-red-500/70 text-red-400' : ''
+        }`}
+      />
+      <div className="h-4" />
+    </div>
+  );
+}
+
+// The received ARRL/RAC section field (Sweepstakes, ARRL 160, Field Day, HPM).
+// Unlike the state field this validation is SOFT: an unknown section is highlighted
+// amber (the roster drifts as ARRL revises sections, so a stale list must never
+// block a genuinely valid section from being logged).
+function SectionField({
+  value, onChange, label, width,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  width: number;
+}) {
+  const v = value.trim().toUpperCase();
+  const unknown = v.length > 0 && !isValidSection(v);
+
+  return (
+    <div className="relative" style={{ width: `${Math.max(width, 4)}rem` }}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={label}
+        spellCheck={false}
+        title={unknown ? 'Not a known ARRL/RAC section — check the spelling' : undefined}
+        className={`glass-input w-full font-mono text-lg px-2 py-2 uppercase ${
+          unknown ? 'border-amber-500/60 text-amber-300' : ''
         }`}
       />
       <div className="h-4" />
