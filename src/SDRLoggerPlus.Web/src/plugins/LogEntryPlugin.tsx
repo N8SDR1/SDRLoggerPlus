@@ -245,6 +245,10 @@ export function LogEntryPlugin() {
   }, [logMode, satEnabled]);
   const satState = liveSatState ?? polledSatState ?? null;
   const satTracking = !!(satState?.active && satState?.satellite);
+  // While the CSN S.A.T. controller is active it owns the radio — the backend
+  // suppresses all outbound rig control (see LogHub.SatOwnsRig). Mirror that in the
+  // UI: show a "rig control paused" indicator and disable the tune-the-rig dropdowns.
+  const rigControlLocked = !!satState?.active;
 
   // Timestamp state - locked means it follows system time
   const [timeLocked, setTimeLocked] = useState(true);
@@ -830,28 +834,38 @@ export function LogEntryPlugin() {
               Lyra Combo
             </span>
           )}
-          <button
-            type="button"
-            onClick={toggleFollowRadio}
-            className={`flex items-center gap-1.5 px-2 py-1 text-xs font-ui rounded transition-all ${
-              followRadio
-                ? 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30'
-                : 'bg-dark-600 text-dark-300 hover:bg-dark-500'
-            }`}
-            title={followRadio ? 'Following radio frequency' : 'Not following radio'}
-          >
-            {followRadio ? (
-              <>
-                <Link className="w-3.5 h-3.5" />
-                <span>Following</span>
-              </>
-            ) : (
-              <>
-                <Unlink className="w-3.5 h-3.5" />
-                <span>Manual</span>
-              </>
-            )}
-          </button>
+          {rigControlLocked ? (
+            <span
+              className="flex items-center gap-1.5 px-2 py-1 text-xs font-ui rounded bg-accent-primary/20 text-accent-primary border border-accent-primary/40"
+              title="The CSN S.A.T. controller is driving the radio. SDRLogger+ rig control is paused until tracking stops."
+            >
+              <span>🛰</span>
+              <span>S.A.T. controlling radio — rig control paused</span>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={toggleFollowRadio}
+              className={`flex items-center gap-1.5 px-2 py-1 text-xs font-ui rounded transition-all ${
+                followRadio
+                  ? 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30'
+                  : 'bg-dark-600 text-dark-300 hover:bg-dark-500'
+              }`}
+              title={followRadio ? 'Following radio frequency' : 'Not following radio'}
+            >
+              {followRadio ? (
+                <>
+                  <Link className="w-3.5 h-3.5" />
+                  <span>Following</span>
+                </>
+              ) : (
+                <>
+                  <Unlink className="w-3.5 h-3.5" />
+                  <span>Manual</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       }
     >
@@ -1121,6 +1135,8 @@ export function LogEntryPlugin() {
             </label>
             <select
               value={formData.band}
+              disabled={rigControlLocked}
+              title={rigControlLocked ? 'S.A.T. is controlling the radio — rig control paused' : undefined}
               onChange={(e) => {
                 const newBand = e.target.value;
                 setFormData(prev => ({ ...prev, band: newBand }));
@@ -1128,13 +1144,14 @@ export function LogEntryPlugin() {
                 // frequency in the new band. Without this, the follow-radio
                 // effect would snap the dropdown back to the rig's current
                 // band on the next poll and the user would be unable to
-                // change the band from the Log Entry form.
-                if (followRadio && currentRadioState) {
+                // change the band from the Log Entry form. Skipped while the
+                // S.A.T. controller owns the radio.
+                if (!rigControlLocked && followRadio && currentRadioState) {
                   tuneToBand(newBand, formData.mode).catch(() => {});
                 }
               }}
               className={`glass-input w-full text-sm font-mono ${
-                followRadio && currentRadioState ? 'border-accent-success/30' : ''
+                rigControlLocked ? 'opacity-50 cursor-not-allowed' : followRadio && currentRadioState ? 'border-accent-success/30' : ''
               }`}
             >
               {BANDS.map(band => (
@@ -1151,18 +1168,21 @@ export function LogEntryPlugin() {
             </label>
             <select
               value={formData.mode}
+              disabled={rigControlLocked}
+              title={rigControlLocked ? 'S.A.T. is controlling the radio — rig control paused' : undefined}
               onChange={(e) => {
                 const newMode = e.target.value;
                 setFormData(prev => ({ ...prev, mode: newMode }));
                 // Same rationale as the band handler above — push the mode
                 // change back to whichever rig is active so the follow-radio
                 // effect doesn't fight the user's selection every 1.5 s poll.
-                if (followRadio && currentRadioState) {
+                // Skipped while the S.A.T. controller owns the radio.
+                if (!rigControlLocked && followRadio && currentRadioState) {
                   setRadioMode(newMode).catch(() => {});
                 }
               }}
               className={`glass-input w-full text-sm font-mono ${
-                followRadio && currentRadioState ? 'border-accent-success/30' : ''
+                rigControlLocked ? 'opacity-50 cursor-not-allowed' : followRadio && currentRadioState ? 'border-accent-success/30' : ''
               }`}
             >
               {MODE_GROUPS.map(group => (

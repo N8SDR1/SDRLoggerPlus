@@ -94,6 +94,7 @@ public class LogHub : Hub<ILogHubClient>
     private readonly HamlibService _hamlibService;
     private readonly FlrigService _flrigService;
     private readonly IRigRegistry _rigRegistry;
+    private readonly SDRLoggerPlus.Server.Services.Sat.SatControllerService _satController;
     private readonly RotatorService _rotatorService;
     private readonly IQrzService _qrzService;
     private readonly IHamQthService _hamQthService;
@@ -112,6 +113,7 @@ public class LogHub : Hub<ILogHubClient>
         HamlibService hamlibService,
         FlrigService flrigService,
         IRigRegistry rigRegistry,
+        SDRLoggerPlus.Server.Services.Sat.SatControllerService satController,
         RotatorService rotatorService,
         IQrzService qrzService,
         IHamQthService hamQthService,
@@ -131,6 +133,7 @@ public class LogHub : Hub<ILogHubClient>
         _hamlibService = hamlibService;
         _flrigService = flrigService;
         _rigRegistry = rigRegistry;
+        _satController = satController;
         _rotatorService = rotatorService;
         _qrzService = qrzService;
         _hamQthService = hamQthService;
@@ -508,7 +511,7 @@ public class LogHub : Hub<ILogHubClient>
         //     set first or the wrong sideband sticks and the spot needs a second click.
         //   - Hamlib / flrig: mode BEFORE frequency — their rigs apply a CW pitch
         //     offset on mode change that would shift the dial ±700 Hz if done after.
-        if (_rigRegistry.ActiveTuner() is { } target)
+        if (!SatOwnsRig && _rigRegistry.ActiveTuner() is { } target)
         {
             var mode = string.IsNullOrEmpty(evt.Mode) ? null : evt.Mode;
             var tuned = await target.Backend.TuneAsync(target.RadioId, frequencyHz, mode);
@@ -520,6 +523,12 @@ public class LogHub : Hub<ILogHubClient>
             }
         }
     }
+
+    // While the CSN S.A.T. controller is actively tracking a pass, IT owns the radio
+    // that's wired to it — SDRLogger+ must not send competing tune/mode/band commands
+    // (it only reads freq/mode from the S.A.T. output for the log). Every outbound
+    // rig-control path checks this. Between passes (not active) normal control resumes.
+    private bool SatOwnsRig => _satController.IsActive;
 
     /// <summary>
     /// Send a spot to the operator-picked primary DX cluster. Returns a
@@ -550,7 +559,7 @@ public class LogHub : Hub<ILogHubClient>
         _logger.LogInformation("Tune to frequency: {FrequencyMHz} MHz", frequencyHz / 1000000.0);
 
         // Active rig, frequency only (no mode change). Registry precedence TCI → Hamlib → flrig.
-        if (_rigRegistry.ActiveTuner() is { } target)
+        if (!SatOwnsRig && _rigRegistry.ActiveTuner() is { } target)
         {
             var tuned = await target.Backend.SetFrequencyAsync(target.RadioId, frequencyHz);
             if (tuned)
@@ -576,7 +585,7 @@ public class LogHub : Hub<ILogHubClient>
         // Active rig, mode only. Registry precedence TCI → Hamlib → flrig. Pass the
         // active radio's CURRENT dial so TCI can pick the CW/SSB sideband; it's the
         // frequency the rig is already on, so Hamlib/flrig don't move (flrig ignores it).
-        if (_rigRegistry.ActiveTuner() is { } target)
+        if (!SatOwnsRig && _rigRegistry.ActiveTuner() is { } target)
         {
             var currentHz = target.Backend.GetRadioStates()
                 .FirstOrDefault(s => s.RadioId == target.RadioId)?.FrequencyHz ?? 0;
