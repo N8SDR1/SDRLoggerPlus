@@ -236,14 +236,19 @@ export function LogEntryPlugin() {
     queryKey: ['sat-status'],
     queryFn: () => api.getSatStatus(),
     refetchInterval: 5000,
-    enabled: satEnabled && logMode === 'sat',
+    // Poll whenever SAT is enabled (any log mode) — NOT only in SAT mode. The
+    // auto-switch below must detect active↔inactive while you're still in General,
+    // otherwise it could never switch you INTO SAT mode (chicken-and-egg).
+    enabled: satEnabled,
   });
   useEffect(() => {
-    if (logMode !== 'sat' || !satEnabled) return;
+    // Subscribe whenever SAT is enabled, regardless of the current log mode, so the
+    // auto-switch/rig-lock react to the controller from General mode too.
+    if (!satEnabled) return;
     const cb = (s: SatState) => setLiveSatState(s);
     addSatStateCallback(cb);
     return () => removeSatStateCallback(cb);
-  }, [logMode, satEnabled]);
+  }, [satEnabled]);
   const satState = liveSatState ?? polledSatState ?? null;
   const satTracking = !!(satState?.active && satState?.satellite);
   // While the CSN S.A.T. controller is active it owns the radio — the backend
