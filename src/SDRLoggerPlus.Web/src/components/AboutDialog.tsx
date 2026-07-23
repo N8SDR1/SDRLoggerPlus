@@ -311,7 +311,7 @@ function HelpTab() {
           <ul className="ml-4 list-disc space-y-1.5">
             <li><B>General</B> — daily logging. Type a call → callbook fills name / QTH / grid / country. With a rig connected, <B>Follow Radio</B> keeps frequency + mode tracking the dial.</li>
             <li><B>POTA</B> — park activations. Set your activating park (rides as <span className="font-mono text-[11px] text-dark-100">my_pota_ref</span>) and an optional P2P park for park-to-park. Self-spot to POTA with <P>Settings → Web Logbooks → POTA</P> credentials.</li>
-            <li><B>SAT</B> — satellite QSOs. Auto-fills satellite + uplink/downlink freq &amp; mode from a connected CSN S.A.T. controller (<P>Settings → S.A.T.</P>); writes ADIF sat fields for LoTW credit.</li>
+            <li><B>SAT</B> — satellite QSOs. Auto-fills satellite, band, and uplink/downlink freq &amp; mode from a connected CSN S.A.T. controller (<P>Settings → S.A.T.</P>); writes ADIF sat fields for LoTW credit. The <B>S.A.T.</B> panel tracks the live pass — azimuth/elevation, range, altitude, footprint, Doppler-shifted up/downlink, sub-satellite point and signal — in both <B>miles and km</B>. It <em>follows the live (Doppler-corrected) frequency on screen but logs the nominal</em> transponder frequency, which is what LoTW expects.</li>
           </ul>
           <p>RST defaults sensibly per mode (599 CW / 59 phone). With the Combo link on, the received <B>S</B> can auto-fill from the meter (see above).</p>
         </Section>
@@ -320,11 +320,11 @@ function HelpTab() {
           <p>The <B>contest suite</B> turns SDRLogger+ into a rule-aware contest logger for the ARRL and CQ majors (CQ WW / WPX / 160 / RTTY, ARRL DX / Sweepstakes / 10 m / 160 m / RTTY Roundup / Field Day, NAQP, NA Sprint and more). Pick a contest and it drives the exchange fields, dupe checking, and scoring for you.</p>
           <ul className="ml-4 list-disc space-y-1.5">
             <li><B>Contest Entry</B> — a focused entry window with the right exchange fields for the contest (and for each worked station, e.g. a state vs a serial), live <B>dupe</B> flagging, a running <B>score</B>, serial numbers, and quick-edit / delete of a logged QSO with logbook sync. Open it from the <B>Contest</B> tab in Log Entry.</li>
-            <li><B>Contest Score</B> and <B>Multipliers</B> panels — standalone running-score and needed-multiplier displays.</li>
+            <li><B>Contest Score</B> and <B>Multipliers</B> panels — standalone running-score and needed-multiplier displays. When a contest's multiplier has a fixed universe — CQ zones, states/provinces, or <B>ARRL/RAC sections</B> — the Multipliers panel shows <em>worked / total</em> and lists the ones you still need.</li>
             <li><B>Bandmap</B> — cluster spots coloured by dupe / new-multiplier for the running contest.</li>
-            <li><B>Power class</B> sets the final-score multiplier where the rules use one (e.g. Field Day QRP ×5).</li>
+            <li><B>Power class &amp; bonuses.</B> Set your <B>power class</B> and the final-score power multiplier is applied where the rules use one (Field Day QRP ×5, Winter Field Day QRP ×4 / Low ×2, Stew Perry, …). For contests with self-declared objective bonuses (Winter Field Day), a <B>bonus-points</B> box adds them to your score.</li>
           </ul>
-          <p className="text-xs text-dark-300">Built-in definitions are read-only — <B>clone</B> one to tweak a ruleset, or author your own. Exchanges, dupes and multipliers are correct across the catalog; scoring is exact for the well-known contests, and a few that use band-weighted or distance-based points are still being refined.</p>
+          <p className="text-xs text-dark-300">Built-in definitions are read-only — <B>clone</B> one to tweak a ruleset, or author your own. Exchanges, dupes, multipliers <em>and scoring</em> are correct across the catalog — including the band-weighted (CQ WPX low bands, VHF per-band), distance-based (Stew Perry, ARRL Digital), North-America-exception (CQ WW / WPX), per-mode-multiplier (ARRL 10 m) and Winter Field Day rules.</p>
         </Section>
 
         <Section id="spots" title="DX Spots & the Map">

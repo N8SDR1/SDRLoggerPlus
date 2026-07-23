@@ -3,6 +3,44 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-23 — v2.7.0 "Vega" 🛰️
+
+Contest scoring is now exact across the entire catalog, a big Satellite-panel
+overhaul, and a batch of logbook-integrity features.
+
+### New
+- **Winter Field Day scoring** — QSO points by mode, a power multiplier
+  (QRP ×4 / Low ×2 / High ×1), one multiplier per mode (Phone/CW/Digital) per
+  band, and a self-declared **objective-bonus** box that adds to the final score.
+- **ARRL/RAC section roster** — the Multipliers panel now shows **worked / total**
+  sections and lists the ones you still need; the section field flags an unknown
+  section as you type.
+- **Satellite panel overhaul** — following a connected CSN S.A.T. controller, the
+  Log Entry auto-fills satellite, **band**, and up/downlink frequency & mode, and
+  the S.A.T. panel shows the live pass in **both miles and km**: azimuth/elevation,
+  range, **altitude, footprint**, Doppler-shifted up/downlink, sub-satellite point,
+  and signal. It follows the live (Doppler-corrected) frequency on screen but
+  **logs the nominal** transponder frequency (what LoTW expects).
+- **US Counties Award (USA-CA)** — county tracking and award progress, with county
+  capture from ADIF import. *(Brent, N9BC)*
+- **Duplicate-QSO warning** on log entry, and a **QSL sync ledger** with credential
+  redaction in logs. *(Brent, N9BC)*
+- **Credential encryption at rest** + a settings migration framework and a
+  frequency-repair pass for older logs. *(Brent, N9BC)*
+
+### Changed
+- Contest **Power class** now covers every ruleset that uses a power multiplier
+  (Field Day, Winter Field Day, Stew Perry, …), shown in the setup picker.
+- Help guide updated for the contest, section, and satellite changes.
+
+### Fixed
+- **Contest scoring is now exact across the whole catalog** (issue #23). Newly
+  correct: CQ WPX low-band ×2 + North-America exception, CQ WW DX NA↔NA = 2,
+  CQ WW / ARRL VHF per-band points, ARRL 160 m any-DX = 5, 10-10 member points,
+  distance scoring for Stew Perry & ARRL International Digital, and ARRL 10 m
+  multipliers counted once per mode. Exchanges, dupes and multipliers were already
+  correct; this closes the remaining scoring gaps.
+
 ## 2026-07-19 — v2.6.0 "Vega+" 🌟
 
 Contest release: a rule-aware contest logger for the ARRL & CQ majors, plus a
