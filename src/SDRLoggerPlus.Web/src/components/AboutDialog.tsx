@@ -194,6 +194,7 @@ const HELP_SECTIONS = [
   { id: 'radio',    title: 'Your Radio' },
   { id: 'combo',    title: 'The Lyra Combo Link' },
   { id: 'logging',  title: 'Logging QSOs' },
+  { id: 'sat',      title: 'Satellites' },
   { id: 'contest',  title: 'Contest Logging' },
   { id: 'spots',    title: 'DX Spots & the Map' },
   { id: 'decodes',  title: 'Digital Decodes & Grid' },
@@ -322,12 +323,27 @@ function HelpTab() {
           <ul className="ml-4 list-disc space-y-1.5">
             <li><B>General</B> — daily logging. Type a call → callbook fills name / QTH / grid / country. With a rig connected, <B>Follow Radio</B> keeps frequency + mode tracking the dial.</li>
             <li><B>POTA</B> — park activations. Set your activating park (rides as <span className="font-mono text-[11px] text-dark-100">my_pota_ref</span>) and an optional P2P park for park-to-park. Self-spot to POTA with <P>Settings → Web Logbooks → POTA</P> credentials.</li>
-            <li><B>SAT</B> — satellite QSOs. Auto-fills satellite, band, and uplink/downlink freq &amp; mode from a connected CSN S.A.T. controller (<P>Settings → S.A.T.</P>); writes ADIF sat fields for LoTW credit. The <B>S.A.T.</B> panel tracks the live pass — azimuth/elevation, range, altitude, footprint, Doppler-shifted up/downlink, sub-satellite point and signal — in both <B>miles and km</B>. It <em>follows the live (Doppler-corrected) frequency on screen but logs the nominal</em> transponder frequency, which is what LoTW expects. <B>While a pass is being tracked the controller owns the radio</B> — SDRLogger+ pauses its own rig control (a <B>🛰 rig-control-paused</B> badge shows, Band/Mode grey out) so it never fights the controller, and the Log Entry auto-switches to SAT mode for the pass and back to General after. Add the <B>S.A.T. Web</B> panel to dock your controller's <em>own</em> interface right in the app — next passes, picking a satellite to track, TLE and frequency-database updates, rotator and pass log — using the controller address from <P>Settings → S.A.T.</P></li>
-            <li>
-              <B>Manual or automatic?</B> By default the S.A.T. Controller panel's <B>Activate</B> button is <B>manual</B> — you press it to go on-pass and press it again afterwards. Switch on <P>Settings → S.A.T. → Follow the controller</P> and SDRLogger+ instead watches your controller and <B>activates itself</B> once AOS is inside your lead time (90 s by default), then <B>deactivates after LOS</B> — taking the Log Entry into SAT mode and back to General with it. For that to fire, your controller must actually be running passes (a satellite selected, or its <em>Continuous</em>/<em>Schedule</em> mode on) — SDRLogger+ follows the controller, it doesn't predict passes itself. <B>You can always override:</B> click Activate any time and it stays on until you turn it off, and if you switch off mid-pass it stays off — automation re-arms for the next pass rather than fighting you. While idle this only makes a light check of the controller; the UDP listener ports stay free.
-            </li>
+            <li><B>SAT</B> — satellite QSOs, with the pass details filled in for you. See <em>Satellites</em> below.</li>
           </ul>
           <p>RST defaults sensibly per mode (599 CW / 59 phone). With the Combo link on, the received <B>S</B> can auto-fill from the meter (see above).</p>
+        </Section>
+
+        <Section id="sat" title="Satellites">
+          <p>Everything here works with a <B>CSN Technologies S.A.T.</B> controller. Put its address in <P>Settings → S.A.T.</P> and the pieces below light up.</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>Log Entry → SAT</B> — auto-fills satellite, band and uplink/downlink frequency &amp; mode from the controller, and writes the ADIF satellite fields LoTW needs for credit. It <em>follows the live Doppler-corrected frequency on screen but logs the nominal</em> transponder frequency, which is what LoTW expects. Don't forget the worked station's <B>grid</B> — satellite credit depends on it.</li>
+            <li><B>S.A.T. Controller panel</B> — the live pass: azimuth/elevation, range, altitude, footprint, Doppler-shifted up/downlink, sub-satellite point and signal, in both <B>miles and km</B>.</li>
+            <li><B>S.A.T. Web panel</B> — your controller's <em>own</em> web interface docked inside SDRLogger+: next passes, picking a satellite to track, TLE and frequency-database updates, rotator and pass log. It's the real controller with your real data, so nothing here can drift out of date.</li>
+            <li><B>The controller owns the radio during a pass.</B> SDRLogger+ pauses its own rig control while tracking — a <B>🛰 rig-control-paused</B> badge appears and Band/Mode grey out — so the two never fight over the rig.</li>
+          </ul>
+          <p className="mt-3"><B>Manual or automatic?</B> By default the S.A.T. Controller panel's <B>Activate</B> button is <B>manual</B> — press it to go on-pass, press it again afterwards.</p>
+          <p>Switch on <P>Settings → S.A.T. → Follow the controller</P> and SDRLogger+ watches the controller instead: it <B>activates itself</B> once AOS falls inside your lead time (90 s by default), then <B>deactivates after LOS</B> — taking the Log Entry into SAT mode and back to General with it. A few things worth knowing:</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li>Your controller has to actually be running passes — a satellite selected, or its <em>Continuous</em>/<em>Schedule</em> mode on. SDRLogger+ <em>follows</em> the controller; it doesn't predict passes itself.</li>
+            <li>The lead time is <B>ours</B>, not the controller's AOS alarm. The 90 s default is chosen to line up with it, but changing one doesn't change the other.</li>
+            <li><B>You always win.</B> Click Activate any time and it stays on until you turn it off. Switch off mid-pass and it stays off — the automation re-arms for the <em>next</em> pass rather than fighting you. Stopping tracking on the controller releases it too.</li>
+            <li>While idle it only makes a light check of the controller — the UDP listener ports stay free for other software.</li>
+          </ul>
         </Section>
 
         <Section id="contest" title="Contest Logging">
