@@ -3,6 +3,72 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-24 — v2.9.0 "Altair" 🛰️
+
+Satellite operating gets hands-free, radio setup gets a lot friendlier, and the
+FlexRadio detection problem testers hit is fixed.
+
+### New
+- **S.A.T. Web panel** — dock your CSN S.A.T. controller's *own* web interface right
+  inside SDRLogger+: next passes, pick a satellite to track, TLE and frequency-database
+  updates, rotator and pass log. Add the panel, put your controller's address in
+  **Settings → S.A.T.**, and you're looking at your real controller with your real data.
+- **Follow the controller (auto-activate)** — optional, off by default. SDRLogger+ watches
+  your controller and switches itself on when AOS comes inside your lead time (90 s by
+  default), then off after LOS — taking the Log Entry into **SAT** mode and back to
+  **General** with it, and handing rig control to the controller for the pass. Clicking
+  **Activate** yourself always wins: switch it off mid-pass and it stays off. Verified on a
+  live AO-07 pass.
+- **Popular Radios** — pick your radio by the name on its front panel (IC-7300, IC-705,
+  FT-710, TS-590SG, K4 …) and the speed, bits and PTT settings are filled in, leaving only
+  the port to choose. It also tells you the one setting **on the radio** that has to
+  agree — Icom's CI-V baud, Yaesu's CAT RATE — which is what most "it won't connect" cases
+  turn out to be. The full searchable Hamlib list is one click away.
+- **Serial ports now say what they are** — "COM3 — Silicon Labs CP210x USB to UART Bridge"
+  instead of a bare "COM3", with real USB hardware sorted above virtual ports. Bluetooth
+  radios (IC-705 and similar) are labelled as such: pair in Windows and pick the port,
+  nothing else needed.
+
+### Fixed
+- **FlexRadio wasn't detected after the first run.** A Flex announces itself about a second
+  after the backend starts — usually before the app's window has finished connecting — so
+  that announcement went nowhere, and the radio was never mentioned again for the rest of
+  the session. The app also had no way to ask what the backend had already found. Both
+  fixed: it no longer matters whether the radio speaks up before or after the window opens.
+  *(Thanks to Andrew O'Brien for the report and the "worked once, then never again" detail
+  that pinned it down.)*
+- **Digital decodes never showed stations as already worked.** A decode carries a
+  one-character mode code (`~` for FT8, `+` for FT4) rather than a mode name, and it went
+  straight into the worked-before lookup — which could never match a logged "FT8". Every
+  station you'd already worked on that band and mode showed as un-worked.
+- **Settings were saved over and over when a configured radio was switched off.** With the
+  Settings window open and the rig powered down, the app rewrote its settings several times
+  a second — visible as the Save button flickering.
+- **The S.A.T. Activate button was unreliable until a restart**, and the Log Entry didn't
+  always follow it. Satellite state now stays in step with the controller across restarts
+  and reconnects.
+
+### Changed
+- **PTT is presented honestly.** SDRLogger+ only ever *reads* PTT, to show whether you're
+  transmitting — it never keys your radio. That setting now lives under **Advanced** with
+  two choices (read over CAT, or don't). DTR and RTS are gone: they gain nothing when
+  nothing transmits, and they're the lines many interfaces key from.
+- **The Settings → S.A.T. "Controller Tools" section is gone** — the embedded S.A.T. Web
+  panel shows the same information live from the controller, so a second copy that could
+  drift was worse than none.
+- **Help guide updated throughout** — including a new section on running alongside
+  **WSJT-X / JTDX / MSHV / VarAC** without a COM-port splitter, and a plain statement that
+  radio control needs **no separate Hamlib install** (with the two exceptions: rotators,
+  and Linux).
+
+### Still experimental
+- **FlexRadio 6000** remains 🧪 experimental. The detection fault above explains the mixed
+  tester reports, but no one has yet confirmed a Flex surviving a close-and-reopen cycle —
+  that's the case to prove. Inert unless you own a Flex.
+- **Popular Radios** starting values come from each radio's documentation, not a bench.
+  They're marked 🧪 in the app until an operator confirms them on the actual rig — if one
+  works, or needs a change, please tell us.
+
 ## 2026-07-23 — v2.8.1 "Rigel" 📡
 
 The stable **2.8** release. Promotes the rebuilt rig engine + satellite / flrig
