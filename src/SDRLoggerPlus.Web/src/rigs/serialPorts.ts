@@ -17,3 +17,21 @@ export function portLabel(p: SerialPortDetail): string {
   const needsVendor = vendor && !name.toLowerCase().includes(vendor.toLowerCase());
   return `${p.port} — ${needsVendor ? `${vendor} ` : ''}${name}`;
 }
+
+/**
+ * Port numbers that more than one device claims.
+ *
+ * Windows assigns Bluetooth serial ports the next number IT believes is free, but
+ * virtual-port software (VSPE/ELTIMA, com0com, …) often doesn't register with the COM
+ * name arbiter — so a paired radio can land on a number already in use. Opening it then
+ * reaches whichever driver wins, which looks exactly like the radio refusing to connect.
+ */
+export function duplicatePorts(ports: SerialPortDetail[]): Set<string> {
+  const seen = new Set<string>();
+  const dupes = new Set<string>();
+  for (const p of ports) {
+    if (seen.has(p.port)) dupes.add(p.port);
+    seen.add(p.port);
+  }
+  return dupes;
+}

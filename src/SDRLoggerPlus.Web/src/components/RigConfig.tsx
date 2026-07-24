@@ -5,7 +5,7 @@ import { useSettingsStore } from "../store/settingsStore";
 import { useSignalR } from "../hooks/useSignalR";
 import { signalRService } from "../api/signalr";
 import { resolvePopularRigs, type ResolvedPopularRig } from "../rigs/popularRigs";
-import { portLabel } from "../rigs/serialPorts";
+import { portLabel, duplicatePorts } from "../rigs/serialPorts";
 import type {
   HamlibRigModelInfo,
   HamlibRigCapabilities,
@@ -479,6 +479,7 @@ export function RigConfig() {
   };
 
   // Shortcut list, narrowed to what the installed Hamlib actually offers.
+  const clashingPorts = useMemo(() => duplicatePorts(portDetails), [portDetails]);
   const popularRigs = useMemo(() => resolvePopularRigs(hamlibRigs), [hamlibRigs]);
 
   // An already-configured rig that isn't on the shortcut list has to stay visible —
@@ -878,10 +879,24 @@ export function RigConfig() {
                       className="w-full px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-mono focus:outline-none focus:border-accent-primary/50"
                     >
                       <option value="">Select port...</option>
-                      {portDetails.map((p) => (
-                        <option key={p.port} value={p.port}>{portLabel(p)}</option>
+                      {/* Keyed by port AND device: two drivers really can claim the same
+                          COM number — Windows hands Bluetooth an unused number, but
+                          virtual-port software often doesn't register with the name
+                          arbiter, so both end up as "COM5". The port alone is not unique. */}
+                      {portDetails.map((p, i) => (
+                        <option key={`${p.port}|${p.description ?? ''}|${i}`} value={p.port}>{portLabel(p)}</option>
                       ))}
                     </select>
+                    {/* A collision is silent otherwise: the port opens, the wrong driver
+                        answers, and it reads as the radio refusing to connect. */}
+                    {clashingPorts.size > 0 && (
+                      <p className="mt-1 text-[11px] text-accent-warning">
+                        ⚠ {[...clashingPorts].join(', ')} {clashingPorts.size === 1 ? 'is claimed' : 'are claimed'} by more than
+                        one device — usually virtual-port software sitting on a number Windows then gave to
+                        something else. Renumber one of them in Device Manager (Port Settings → Advanced),
+                        or connecting may reach the wrong device.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs text-dark-300 mb-1 font-ui">Baud Rate</label>
