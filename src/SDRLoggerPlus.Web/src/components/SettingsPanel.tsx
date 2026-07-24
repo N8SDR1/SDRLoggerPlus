@@ -2775,6 +2775,10 @@ function AppearanceSettingsSection() {
 // the same place they change themes and appearance settings. Uses the
 // layoutStore's setLayout to persist swaps (which flows through the
 // normal hasEverLoaded-gated auto-save path).
+// Keep in step with MaxSavedLayouts in SettingsController.cs. The server is the
+// real gate (it 409s past the cap); this just drives the copy and the warning.
+const MAX_SAVED_LAYOUTS = 10;
+
 function LayoutPresetsSubsection() {
   const { layout, setLayout, resetLayout } = useLayoutStore();
   const [savedLayouts, setSavedLayouts] = useState<SavedLayoutSlot[]>([]);
@@ -2874,7 +2878,7 @@ function LayoutPresetsSubsection() {
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-semibold font-ui text-dark-200">Layout Presets</h4>
           <p className="text-xs text-dark-300 mt-0.5">
-            Save up to 3 named panel arrangements (POTA, Contest, DXpedition, etc.) and swap between them with one click. The one you loaded last also comes back automatically on the next restart.
+            Save up to {MAX_SAVED_LAYOUTS} named panel arrangements (POTA, Contest, DXpedition, etc.) and swap between them with one click. The one you loaded last also comes back automatically on the next restart.
           </p>
         </div>
         {!naming && (
@@ -2918,9 +2922,9 @@ function LayoutPresetsSubsection() {
           </button>
         </div>
       )}
-      {naming && savedLayouts.length >= 3 && (
+      {naming && savedLayouts.length >= MAX_SAVED_LAYOUTS && (
         <p className="text-xs text-accent-warning font-ui mb-1 px-1">
-          You have 3 saved layouts (the max) — enter an existing name to overwrite it.
+          You have {MAX_SAVED_LAYOUTS} saved layouts (the max) — enter an existing name to overwrite it.
         </p>
       )}
 
@@ -2945,7 +2949,7 @@ function LayoutPresetsSubsection() {
           No saved layouts yet. Arrange your panels how you like them and click <b>Save Current</b>.
         </p>
       ) : (
-        <div className="space-y-1.5 mt-3">
+        <div className="space-y-1.5 mt-3 max-h-72 overflow-y-auto pr-1">
           {savedLayouts.map((slot) => (
             <div
               key={slot.name}

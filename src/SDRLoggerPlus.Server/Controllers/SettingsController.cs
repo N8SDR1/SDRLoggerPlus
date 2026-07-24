@@ -276,7 +276,7 @@ public class SettingsController : ControllerBase
     // through the normal auto-save path so the newly-applied preset
     // becomes the live layout too.
 
-    private const int MaxSavedLayouts = 3;
+    private const int MaxSavedLayouts = 10;
 
     public record SaveLayoutRequest(string Name, string LayoutJson);
 
