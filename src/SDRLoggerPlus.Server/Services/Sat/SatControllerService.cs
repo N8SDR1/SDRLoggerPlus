@@ -85,6 +85,9 @@ public class SatControllerService : BackgroundService
     // True only when the auto-activate logic turned us on, so a manual Activate is
     // never auto-deactivated out from under the operator.
     private volatile bool _autoActivated;
+    // Set when the operator manually deactivates: holds auto-activation off until the
+    // controller is idle again, so switching off mid-pass isn't instantly undone.
+    private volatile bool _autoSuppressed;
     // Controller's tracking state from /track: 1 = tracking a pass, 0 = idle.
     private volatile int _trackMode;
     private UdpClient? _satSocket;
@@ -123,12 +126,20 @@ public class SatControllerService : BackgroundService
 
     public bool IsActive => _active;
 
-    public async Task SetActiveAsync(bool active)
+    /// <summary>Operator-driven Activate/Deactivate (the panel button / API).</summary>
+    public Task SetActiveAsync(bool active) => SetActiveAsync(active, automatic: false);
+
+    private async Task SetActiveAsync(bool active, bool automatic)
     {
         _active = active;
-        // Any explicit call (i.e. the operator's Activate/Deactivate button) hands
-        // ownership back to them; the auto path re-flags itself right after calling this.
-        _autoActivated = false;
+        if (!automatic)
+        {
+            // The operator took control. Turning it OFF by hand must stick: suppress
+            // auto-activation until the controller goes idle again, otherwise the next
+            // probe would see the pass still running and switch it straight back on.
+            _autoActivated = false;
+            _autoSuppressed = !active;
+        }
         if (!active)
         {
             CloseSockets();
@@ -182,10 +193,17 @@ public class SatControllerService : BackgroundService
                         DateTime.UtcNow - lastPassProbe > TimeSpan.FromSeconds(10))
                     {
                         lastPassProbe = DateTime.UtcNow;
-                        if (await IsPassImminentAsync(settings.Sat.ControllerIp, settings.Sat.AutoActivateLeadSeconds, stoppingToken))
+                        var imminent = await IsPassImminentAsync(settings.Sat.ControllerIp, settings.Sat.AutoActivateLeadSeconds, stoppingToken);
+                        if (_autoSuppressed)
+                        {
+                            // Operator switched off by hand — stay off for this pass, then
+                            // re-arm once the controller is idle so the NEXT pass works.
+                            if (!imminent) _autoSuppressed = false;
+                        }
+                        else if (imminent)
                         {
                             _logger.LogInformation("S.A.T. auto-activating — controller has a pass in progress or imminent");
-                            await SetActiveAsync(true);
+                            await SetActiveAsync(true, automatic: true);
                             _autoActivated = true;
                         }
                     }
@@ -199,7 +217,7 @@ public class SatControllerService : BackgroundService
                 {
                     _logger.LogInformation("S.A.T. auto-deactivating — pass complete");
                     _autoActivated = false;
-                    await SetActiveAsync(false);
+                    await SetActiveAsync(false, automatic: true);
                     continue;
                 }
 
