@@ -78,7 +78,18 @@ export const POPULAR_RIGS: PopularRig[] = [
   { id: 'ic7300',   label: 'IC-7300',   manufacturer: 'Icom', aliases: ['IC-7300'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
   { id: 'ic7610',   label: 'IC-7610',   manufacturer: 'Icom', aliases: ['IC-7610'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
   { id: 'ic9700',   label: 'IC-9700',   manufacturer: 'Icom', aliases: ['IC-9700'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
-  { id: 'ic705',    label: 'IC-705',    manufacturer: 'Icom', aliases: ['IC-705'],    defaults: ICOM_SERIAL, setupHint: ICOM_HINT + ' Over Bluetooth (unconfirmed): pair in Windows and the port appears here, but the radio must accept a data connection — on our test it took the audio profiles and refused the serial one.' },
+  {
+    id: 'ic705', label: 'IC-705', manufacturer: 'Icom', aliases: ['IC-705'],
+    defaults: ICOM_SERIAL,
+    // Confirmed over USB by N8SDR, 2026-07-24.
+    verified: true,
+    setupHint:
+      'The IC-705 shows up as TWO USB ports — the lower-numbered one is CI-V; the other ' +
+      'never answers, so if nothing happens, try the other port. CI-V USB Baud Rate can stay ' +
+      'on Auto (it matched 9600 through 115200 on test), and CI-V USB Echo Back can be left ' +
+      'on. Over Bluetooth (unconfirmed): pairing works and the port appears here, but the ' +
+      'radio also has to accept a data connection.',
+  },
   { id: 'ic7100',   label: 'IC-7100',   manufacturer: 'Icom', aliases: ['IC-7100'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
   { id: 'ic7851',   label: 'IC-7851',   manufacturer: 'Icom', aliases: ['IC-7851'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
 
