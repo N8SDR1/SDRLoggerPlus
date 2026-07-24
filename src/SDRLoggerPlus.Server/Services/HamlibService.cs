@@ -330,8 +330,14 @@ public partial class HamlibService : BackgroundService
             _rig?.Dispose();
             _rig = null;
 
+            var failedRadioId = _radioId;
+            // The id was set when the attempt began. Leaving it set after a failure makes
+            // the service look like it owns a radio it never opened, which callers then
+            // read as "already connected".
+            _radioId = null;
+
             await _hubContext.BroadcastRadioConnectionStateChanged(
-                new RadioConnectionStateChangedEvent(_radioId!, RadioConnectionState.Error, ex.Message));
+                new RadioConnectionStateChangedEvent(failedRadioId!, RadioConnectionState.Error, ex.Message));
 
             throw;
         }

@@ -793,22 +793,30 @@ public class LogHub : Hub<ILogHubClient>
 
             await _tciRadioService.ConnectDirectAsync(host, port, !string.IsNullOrEmpty(name) ? name : null);
         }
-        else if (cmd.RadioId == _hamlibService.RadioId)
+        else if (cmd.RadioId.StartsWith("hamlib-"))
         {
-            _logger.LogDebug("Hamlib radio {RadioId} is already connected", cmd.RadioId);
-        }
-        else if (cmd.RadioId.StartsWith("hamlib-") && !_hamlibService.IsConnected)
-        {
-            // Saved Hamlib rig that's disconnected — load config and reconnect
-            var config = await _hamlibService.LoadConfigAsync();
-            if (config != null)
+            // "Is this the same radio?" is not the same question as "is it connected?".
+            // The id is set when a connect is ATTEMPTED and survives a failed open, so
+            // matching on the id alone turned every retry after a failure into a silent
+            // no-op — the operator clicks Connect and nothing whatsoever happens, with no
+            // log line above Debug, until the app is restarted.
+            if (_hamlibService.IsConnected && cmd.RadioId == _hamlibService.RadioId)
             {
-                _logger.LogInformation("Reconnecting to saved Hamlib rig: {ModelName}", config.ModelName);
-                await _hamlibService.ConnectAsync(config);
+                _logger.LogInformation("Hamlib radio {RadioId} is already connected", cmd.RadioId);
             }
             else
             {
-                _logger.LogWarning("No saved Hamlib config found for {RadioId}", cmd.RadioId);
+                // Saved Hamlib rig that isn't connected — load config and (re)connect.
+                var config = await _hamlibService.LoadConfigAsync();
+                if (config != null)
+                {
+                    _logger.LogInformation("Connecting to saved Hamlib rig: {ModelName}", config.ModelName);
+                    await _hamlibService.ConnectAsync(config);
+                }
+                else
+                {
+                    _logger.LogWarning("No saved Hamlib config found for {RadioId}", cmd.RadioId);
+                }
             }
         }
         else if (cmd.RadioId.StartsWith("flex-"))
