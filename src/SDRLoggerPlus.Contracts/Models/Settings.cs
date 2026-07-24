@@ -1000,6 +1000,22 @@ public class SatSettings
 
     [BsonElement("adifPort")]
     public int AdifPort { get; set; } = 1100;
+
+    /// <summary>
+    /// Follow the controller: activate automatically when it starts tracking a pass
+    /// (or one is imminent) and deactivate again after LOS. While idle this costs a
+    /// light HTTP poll of /track only — no UDP listeners are bound, so the ports stay
+    /// free exactly as they do today. Off by default.
+    /// </summary>
+    [BsonElement("autoActivate")]
+    public bool AutoActivate { get; set; }
+
+    /// <summary>
+    /// How far ahead of AOS to activate, in seconds — mirrors the controller's own AOS
+    /// alarm so SDRLogger+ is ready before the bird arrives. Default 90 s (01:30).
+    /// </summary>
+    [BsonElement("autoActivateLeadSeconds")]
+    public int AutoActivateLeadSeconds { get; set; } = 90;
 }
 
 public class WeatherSettings

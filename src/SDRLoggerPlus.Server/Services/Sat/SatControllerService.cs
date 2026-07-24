@@ -82,6 +82,11 @@ public class SatControllerService : BackgroundService
     private readonly ILogger<SatControllerService> _logger;
 
     private volatile bool _active;
+    // True only when the auto-activate logic turned us on, so a manual Activate is
+    // never auto-deactivated out from under the operator.
+    private volatile bool _autoActivated;
+    // Controller's tracking state from /track: 1 = tracking a pass, 0 = idle.
+    private volatile int _trackMode;
     private UdpClient? _satSocket;
     private UdpClient? _adifSocket;
     private readonly object _stateLock = new();
@@ -121,6 +126,9 @@ public class SatControllerService : BackgroundService
     public async Task SetActiveAsync(bool active)
     {
         _active = active;
+        // Any explicit call (i.e. the operator's Activate/Deactivate button) hands
+        // ownership back to them; the auto path re-flags itself right after calling this.
+        _autoActivated = false;
         if (!active)
         {
             CloseSockets();
@@ -157,6 +165,7 @@ public class SatControllerService : BackgroundService
         _logger.LogInformation("S.A.T. controller service starting (inactive until enabled)");
 
         var lastTrackPoll = DateTime.MinValue;
+        var lastPassProbe = DateTime.MinValue;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -165,7 +174,32 @@ public class SatControllerService : BackgroundService
                 if (!_active || !settings.Sat.Enabled)
                 {
                     CloseSockets();
+                    // Follow-the-controller: while idle, optionally probe /track over HTTP
+                    // (no UDP listeners bound, so the ports stay free) and activate when the
+                    // controller starts a pass — or one is inside the AOS lead window.
+                    if (settings.Sat.Enabled && settings.Sat.AutoActivate &&
+                        !string.IsNullOrWhiteSpace(settings.Sat.ControllerIp) &&
+                        DateTime.UtcNow - lastPassProbe > TimeSpan.FromSeconds(10))
+                    {
+                        lastPassProbe = DateTime.UtcNow;
+                        if (await IsPassImminentAsync(settings.Sat.ControllerIp, settings.Sat.AutoActivateLeadSeconds, stoppingToken))
+                        {
+                            _logger.LogInformation("S.A.T. auto-activating — controller has a pass in progress or imminent");
+                            await SetActiveAsync(true);
+                            _autoActivated = true;
+                        }
+                    }
                     await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                    continue;
+                }
+
+                // Auto-deactivate after the pass — but only if WE activated. A manual
+                // Activate stays on until the operator turns it off.
+                if (_autoActivated && settings.Sat.AutoActivate && _trackMode == 0 && !IsAosWithin(settings.Sat.AutoActivateLeadSeconds))
+                {
+                    _logger.LogInformation("S.A.T. auto-deactivating — pass complete");
+                    _autoActivated = false;
+                    await SetActiveAsync(false);
                     continue;
                 }
 
@@ -440,6 +474,42 @@ public class SatControllerService : BackgroundService
         }
     }
 
+    /// <summary>True when the last /track poll shows AOS inside the lead window.</summary>
+    private bool IsAosWithin(int leadSeconds)
+        => _ttAosSec is > 0 && _ttAosSec <= leadSeconds;
+
+    /// <summary>
+    /// Lightweight idle probe: is the controller tracking a pass right now (mode==1), or
+    /// is AOS inside the lead window? HTTP only — deliberately binds no UDP sockets, so
+    /// running this while "inactive" still leaves the listener ports free.
+    /// </summary>
+    private async Task<bool> IsPassImminentAsync(string controllerIp, int leadSeconds, CancellationToken ct)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(3);
+            var json = await client.GetStringAsync($"http://{controllerIp}/track", ct);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("mode", out var m) && m.ValueKind == JsonValueKind.Number && m.GetInt32() == 1)
+                return true;
+            if (root.TryGetProperty("ttaos", out var t) && t.ValueKind == JsonValueKind.Number)
+            {
+                var ttaos = t.GetDouble();
+                return ttaos > 0 && ttaos <= leadSeconds;
+            }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // Controller off/unreachable while idle is normal — stay inactive quietly.
+            _logger.LogDebug(ex, "S.A.T. pass probe failed");
+            return false;
+        }
+    }
+
     internal async Task PollTrackAsync(string controllerIp, UserSettings settings, CancellationToken ct)
     {
         try
@@ -449,6 +519,10 @@ public class SatControllerService : BackgroundService
             var json = await client.GetStringAsync($"http://{controllerIp}/track", ct);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+
+            // Controller's own tracking flag — drives auto-deactivate after a pass.
+            if (root.TryGetProperty("mode", out var trackMode) && trackMode.ValueKind == JsonValueKind.Number)
+                _trackMode = trackMode.GetInt32();
 
             lock (_stateLock)
             {

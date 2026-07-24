@@ -4441,6 +4441,8 @@ function SatSettingsSection() {
     (udpPort) => updateSatSettings({ udpPort }));
   const adifPortField = useNumericDraft(sat.adifPort, 1, 65535,
     (adifPort) => updateSatSettings({ adifPort }));
+  const autoLeadField = useNumericDraft(sat.autoActivateLeadSeconds, 0, 900,
+    (autoActivateLeadSeconds) => updateSatSettings({ autoActivateLeadSeconds }));
 
   return (
     <div className="space-y-6">
@@ -4509,6 +4511,39 @@ function SatSettingsSection() {
         </div>
       </div>
 
+      <div className="p-3 bg-dark-700 rounded-lg space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="pr-4">
+            <label className="text-sm font-medium text-dark-200">Follow the controller (auto-activate)</label>
+            <p className="text-xs text-dark-400 mt-0.5">
+              Activate on its own when the controller starts tracking a pass — or one is
+              about to start — and deactivate again after LOS. The Log Entry switches to
+              SAT mode and rig control pauses for the pass, then returns to General. While
+              idle this only makes a light check of the controller; the UDP listener ports
+              stay free. Activating manually still works and won't be switched off for you.
+            </p>
+          </div>
+          <button
+            onClick={() => updateSatSettings({ autoActivate: !sat.autoActivate })}
+            className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${sat.autoActivate ? 'bg-accent-primary' : 'bg-dark-500'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${sat.autoActivate ? 'translate-x-5' : ''}`} />
+          </button>
+        </div>
+        {sat.autoActivate && (
+          <div>
+            <label className="block text-sm font-medium text-dark-200 mb-1">Activate this long before AOS</label>
+            <div className="flex items-center gap-2">
+              <input type="number" min={0} max={900} {...autoLeadField} className="glass-input w-24" />
+              <span className="text-xs text-dark-400">seconds</span>
+            </div>
+            <p className="text-xs text-dark-400 mt-1">
+              Default 90 s — matches the controller's own AOS alarm, so you're logging-ready
+              before the bird clears the horizon.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

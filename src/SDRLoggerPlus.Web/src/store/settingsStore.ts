@@ -379,6 +379,10 @@ export interface SatControllerSettings {
   controllerIp?: string | null;
   udpPort: number;
   adifPort: number;
+  /** Activate automatically when the controller starts (or is about to start) a pass. */
+  autoActivate: boolean;
+  /** How far ahead of AOS to activate, in seconds (mirrors the controller's AOS alarm). */
+  autoActivateLeadSeconds: number;
 }
 
 /** One WSJT-X/JTDX UDP listener (a decoder app reporting to a host:port). */
@@ -844,6 +848,8 @@ const defaultSettings: Settings = {
     controllerIp: '',
     udpPort: 9932,
     adifPort: 1100,
+    autoActivate: false,
+    autoActivateLeadSeconds: 90,
   },
   contest: {
     n1mmUdpEnabled: false,
