@@ -621,6 +621,8 @@ export interface HamlibRigConfigDto {
 
 export interface HamlibRigListEvent {
   rigs: HamlibRigModelInfo[];
+  /** Why the list is empty, when it is — so the UI never shows a blank dropdown unexplained. */
+  error?: string | null;
 }
 
 export interface HamlibRigCapsEvent {

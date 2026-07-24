@@ -391,8 +391,8 @@ function StationSettingsSection() {
       <div className="pt-6 mt-6 border-t border-glass-100">
         <h4 className="text-sm font-semibold font-ui text-dark-200">Radio</h4>
         <p className="text-xs text-dark-300 mt-0.5 mb-3">
-          Add and configure radios (Hamlib, flrig or TCI). Connect and switch between
-          them from the rig selector in the status bar.
+          Add and configure radios (Hamlib, flrig, TCI or FlexRadio). Connect and switch
+          between them from the rig selector in the status bar.
         </p>
         <RigConfig />
       </div>
@@ -1058,8 +1058,14 @@ function RotatorSettingsSection() {
             <div>
               <h4 className="text-sm font-semibold text-blue-300 mb-2 flex items-center gap-2">
                 <Download className="w-4 h-4" />
-                Installation
+                Installing Hamlib — for rotators only
               </h4>
+              <p className="text-sm text-gray-400 mb-2">
+                This applies to <strong className="text-gray-300">rotator</strong> control, which talks to the
+                rotctld daemon. <strong className="text-gray-300">Radio</strong> control needs none of it —
+                SDRLoggerPlus carries its own copy of the Hamlib library, so a rig connects straight from
+                <span className="font-mono text-xs text-gray-300"> Settings → Station</span> with nothing to install.
+              </p>
               <div className="space-y-2 text-sm text-gray-400">
                 <div>
                   <p className="font-medium text-gray-300 mb-1">Windows:</p>

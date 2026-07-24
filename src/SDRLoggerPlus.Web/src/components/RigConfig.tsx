@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Radio, Wifi, WifiOff, Power, PowerOff, Plus, Pencil, Settings, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { Radio, Wifi, WifiOff, Power, PowerOff, Plus, Pencil, Settings, ChevronDown, ChevronUp, RefreshCw, ExternalLink } from "lucide-react";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { useSignalR } from "../hooks/useSignalR";
@@ -100,6 +100,9 @@ export function RigConfig() {
   const [showHamlibForm, setShowHamlibForm] = useState(false);
   const [isConnectingHamlib, setIsConnectingHamlib] = useState(false);
   const [hamlibRigs, setHamlibRigs] = useState<HamlibRigModelInfo[]>([]);
+  // Why the model list is empty, when it is — a blank dropdown with no reason is
+  // indistinguishable from a broken app.
+  const [rigListError, setRigListError] = useState<string | null>(null);
   const [hamlibCaps, setHamlibCaps] = useState<HamlibRigCapabilities | null>(null);
   // Same ports with the device name behind each — "COM5" alone is not enough to choose
   // from when one radio exposes two of them.
@@ -118,6 +121,7 @@ export function RigConfig() {
       onHamlibRigList: (evt) => {
         console.log('Hamlib rig list received:', evt.rigs.length, 'rigs');
         setHamlibRigs(evt.rigs);
+        setRigListError(evt.error ?? null);
       },
       onHamlibRigCaps: (evt) => {
         console.log('Hamlib rig caps received:', evt.modelId);
@@ -717,6 +721,25 @@ export function RigConfig() {
             <div className="text-xs text-accent-primary uppercase tracking-wider font-ui">
               Hamlib Rig Configuration
             </div>
+
+            {/* No models at all — say why, and how to fix it, rather than showing an
+                empty picker the operator can only read as "this app is broken". */}
+            {hamlibRigs.length === 0 && rigListError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                <div className="text-xs uppercase tracking-wider text-red-300 font-ui mb-1">
+                  No radio models available
+                </div>
+                <p className="text-xs text-dark-200">{rigListError}</p>
+                <a
+                  href="https://hamlib.github.io/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 text-xs text-accent-primary hover:underline font-ui"
+                >
+                  Get Hamlib <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
 
             {/* Popular radios — pick by the name on the front panel. Everything else
                 (baud, bits, PTT) is filled in, leaving only the port to choose. */}

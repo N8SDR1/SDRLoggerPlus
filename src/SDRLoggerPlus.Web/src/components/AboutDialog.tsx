@@ -269,7 +269,7 @@ function HelpTab() {
           <ol className="ml-4 list-decimal space-y-1.5">
             <li><B>Set your station.</B> <P>Settings → Station</P> — callsign, name, grid. Callbook lookups need your call.</li>
             <li><B>Add a callbook.</B> <P>Settings → Web Logbooks → QRZ</P> (or HamQTH). Auto-fills name / country / grid / coords on every lookup. Each has a Test Credentials button.</li>
-            <li><B>Connect a radio</B> (optional) — from the <B>Rig</B> panel, pick TCI, Hamlib, or flrig (see <em>Your Radio</em>).</li>
+            <li><B>Connect a radio</B> (optional) — in <P>Settings → Station</P>, pick TCI, Hamlib, flrig or FlexRadio (see <em>Your Radio</em>).</li>
             <li><B>Pick a log mode</B> — the Log Entry panel has General / POTA / SAT tabs (remembered across sessions).</li>
             <li><B>Log it.</B> Type a callsign, let the callbook fill the rest, adjust freq / mode / RST, and hit <span className="font-mono text-accent-secondary text-[11px]">Log QSO</span>.</li>
           </ol>
@@ -277,6 +277,7 @@ function HelpTab() {
 
         <Section id="radio" title="Your Radio">
           <p>Set up radios in <B>Settings → Station</B> (or right-click the status-bar rig selector) — four connection paths, and more than one can run at once:</p>
+          <p className="text-xs text-dark-300"><B>Nothing to install.</B> SDRLoggerPlus carries its own copy of the Hamlib library, so an Icom, Yaesu or Kenwood connects straight out of the box — no separate Hamlib download, no <span className="font-mono text-[11px] text-dark-100">rigctld</span> daemon to start, nothing to configure outside the app. (Two exceptions: <B>rotator</B> control talks to rotctld and does want Hamlib's tools installed, and on <B>Linux</B> we use your distribution's Hamlib — install <span className="font-mono text-[11px] text-dark-100">libhamlib4</span> if the model list comes up empty.)</p>
           <ul className="ml-4 list-disc space-y-1.5">
             <li>
               <B>TCI</B> — works with{' '}
@@ -287,6 +288,8 @@ function HelpTab() {
             <li><B>flrig</B> — XML-RPC bridge to flrig's rig database (auto-detects data-mode names). Tunes + reads the rig; no panadapter.</li>
             <li><B>FlexRadio</B> <span className="text-accent-secondary">(new)</span> — native support for FlexRadio 6000-series (SmartSDR). Flex radios are <B>auto-discovered</B> on your LAN (no host/port to enter) and appear in the list; SDRLogger+ connects to the radio's control API <B>alongside SmartSDR</B> (or Aether), follows the active slice, and tunes freq/mode. <em>New in this build and still being verified on hardware — please report anything odd.</em></li>
           </ul>
+          <p className="text-xs text-dark-300 mt-3"><B>Picking the right COM port.</B> The port list names the device behind each one — "COM3 — Silicon Labs CP210x USB to UART Bridge" — and sorts real USB hardware above virtual ports. Worth knowing: many modern Icom and Yaesu radios present <B>two</B> ports over a single USB cable, and the wrong one behaves exactly like a dead cable. If the first doesn't answer, try the other before suspecting anything else.</p>
+          <p className="text-xs text-dark-300"><B>PTT.</B> SDRLoggerPlus only ever <em>reads</em> PTT, to show whether you're transmitting — it never keys your radio. So there's a single setting, under <B>Advanced</B>: read it over CAT, or don't. There's deliberately no DTR/RTS option: those gain nothing when nothing transmits, and they're the lines many interfaces key from.</p>
           <p className="mt-3"><B>Running alongside WSJT-X / JTDX / MSHV / VarAC</B> — you do <em>not</em> need a COM-port splitter, and we'd steer you away from one: a splitter copies bytes, but CAT is request-and-response, so two apps polling one radio get each other's replies. There are two clean ways instead:</p>
           <ul className="ml-4 list-disc space-y-1.5">
             <li><B>Let the digital app own the radio (simplest, and best for FT8/FT4).</B> Give WSJT-X / JTDX / MSHV the CAT port and don't connect a rig here at all. SDRLogger+ follows along over UDP — it reads the dial frequency and mode from the decoder, so the log entry stays right — and <B>double-clicking a decode</B> asks your decoder to call that station, so <em>it</em> does the tuning on the port it already owns. Nothing to share, nothing to conflict.</li>

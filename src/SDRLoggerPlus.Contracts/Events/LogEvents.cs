@@ -689,7 +689,10 @@ public record HamlibRigConfigDto(
 /// Hamlib rig list response
 /// </summary>
 public record HamlibRigListEvent(
-    List<HamlibRigModelInfo> Rigs
+    List<HamlibRigModelInfo> Rigs,
+    // Why the list is empty, when it is. An empty dropdown with no explanation is the
+    // worst outcome — the operator cannot tell a missing library from a broken app.
+    string? Error = null
 );
 
 /// <summary>

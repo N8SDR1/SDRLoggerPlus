@@ -871,17 +871,30 @@ public class LogHub : Hub<ILogHubClient>
             rigs = new List<HamlibRigModelInfo>();
         }
 
-        // If no rigs found, check for errors
+        // An empty list needs a reason. SDRLoggerPlus ships the Hamlib library for
+        // Windows and macOS, so empty there means something genuinely went wrong; on
+        // Linux we fall back to the system copy, and its absence is both the likely
+        // cause and something the operator can fix in one command.
+        string? listError = null;
         if (rigs.Count == 0)
         {
-            var error = Native.Hamlib.HamlibRigList.InitError;
-            if (!string.IsNullOrEmpty(error))
+            var initError = Native.Hamlib.HamlibRigList.InitError;
+            if (!string.IsNullOrEmpty(initError))
             {
-                _logger.LogWarning("Hamlib initialization error: {Error}", error);
+                _logger.LogWarning("Hamlib initialization error: {Error}", initError);
             }
+
+            listError = OperatingSystem.IsLinux()
+                ? "The Hamlib library could not be loaded. Install your distribution's Hamlib runtime " +
+                  "(Debian/Ubuntu: sudo apt install libhamlib4 · Fedora: sudo dnf install hamlib), then reopen this form. " +
+                  (initError ?? "")
+                : $"The Hamlib library could not be loaded. {initError ?? "No radio models were reported."} " +
+                  "This copy of SDRLoggerPlus ships with Hamlib, so this usually means the install is incomplete — " +
+                  "reinstalling should fix it.";
+            listError = listError.Trim();
         }
 
-        await Clients.Caller.OnHamlibRigList(new HamlibRigListEvent(rigs));
+        await Clients.Caller.OnHamlibRigList(new HamlibRigListEvent(rigs, listError));
     }
 
     /// <summary>
