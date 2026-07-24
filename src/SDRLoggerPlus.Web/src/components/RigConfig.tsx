@@ -4,6 +4,7 @@ import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { useSignalR } from "../hooks/useSignalR";
 import { signalRService } from "../api/signalr";
+import { resolvePopularRigs, type ResolvedPopularRig } from "../rigs/popularRigs";
 import type {
   HamlibRigModelInfo,
   HamlibRigCapabilities,
@@ -102,6 +103,9 @@ export function RigConfig() {
   const [hamlibConfig, setHamlibConfig] = useState<HamlibRigConfigDto>(defaultHamlibConfig);
   const [rigSearch, setRigSearch] = useState("");
   const [showRigDropdown, setShowRigDropdown] = useState(false);
+  // Which shortcut entry is selected, if any — drives the radio-side setup hint.
+  const [pickedPopularId, setPickedPopularId] = useState<string | null>(null);
+  const [showAllRigs, setShowAllRigs] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Set up Hamlib event handlers
@@ -436,6 +440,27 @@ export function RigConfig() {
     });
     setRigSearch(rig.displayName);
     setShowRigDropdown(false);
+    setPickedPopularId(null);
+  };
+
+  // Shortcut list, narrowed to what the installed Hamlib actually offers.
+  const popularRigs = useMemo(() => resolvePopularRigs(hamlibRigs), [hamlibRigs]);
+
+  // An already-configured rig that isn't on the shortcut list has to stay visible —
+  // otherwise loading that config would show a shortcut grid with nothing selected on it.
+  useEffect(() => {
+    if (hamlibConfig.modelId <= 0 || popularRigs.length === 0) return;
+    const onShortlist = popularRigs.some((r) => r.modelId === hamlibConfig.modelId);
+    if (!onShortlist) setShowAllRigs(true);
+  }, [hamlibConfig.modelId, popularRigs]);
+
+  const handlePopularSelect = (rig: ResolvedPopularRig) => {
+    // Fill the whole serial setup, not just the model — picking a radio by its front-panel
+    // name should leave nothing but the port to choose.
+    updateHamlibConfig({ modelId: rig.modelId, modelName: rig.modelName, ...rig.defaults });
+    setRigSearch(rig.modelName);
+    setShowRigDropdown(false);
+    setPickedPopularId(rig.id);
   };
 
 
@@ -662,8 +687,61 @@ export function RigConfig() {
               Hamlib Rig Configuration
             </div>
 
-            {/* Rig Model Selector */}
-            <div className="relative">
+            {/* Popular radios — pick by the name on the front panel. Everything else
+                (baud, bits, PTT) is filled in, leaving only the port to choose. */}
+            {popularRigs.length > 0 && !showAllRigs && (
+              <div>
+                <label className="block text-xs text-dark-300 mb-1 font-ui">Popular Radios</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {popularRigs.map((rig) => (
+                    <button
+                      key={rig.id}
+                      onClick={() => handlePopularSelect(rig)}
+                      title={`${rig.manufacturer} ${rig.label} — ${rig.modelName}`}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-medium font-ui border transition-all ${
+                        pickedPopularId === rig.id
+                          ? "bg-accent-primary/20 text-accent-primary border-accent-primary/30"
+                          : "bg-dark-800 text-dark-200 border-glass-100 hover:bg-dark-700"
+                      }`}
+                    >
+                      {rig.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setShowAllRigs(true)}
+                  className="mt-2 text-xs text-accent-primary hover:underline font-ui"
+                >
+                  My radio isn't listed — show all {hamlibRigs.length} models
+                </button>
+                <p className="mt-1 text-[11px] text-dark-300">
+                  A shortcut, not a compatibility list — Hamlib drives many more radios than these.
+                </p>
+              </div>
+            )}
+
+            {/* Radio-side setup: the menu item on the rig that has to agree. This is what
+                most "it won't connect" reports turn out to be, and we can't detect it. */}
+            {pickedPopularId && (
+              <div className="rounded-lg border border-accent-secondary/30 bg-accent-secondary/5 p-2.5">
+                <div className="text-[11px] uppercase tracking-wider text-accent-secondary font-ui mb-1">
+                  Check on the radio
+                </div>
+                <p className="text-xs text-dark-200">
+                  {popularRigs.find((r) => r.id === pickedPopularId)?.setupHint}
+                </p>
+              </div>
+            )}
+
+            {/* What's actually selected, while the full list is collapsed. */}
+            {!showAllRigs && popularRigs.length > 0 && hamlibConfig.modelId > 0 && (
+              <div className="text-xs text-dark-300 font-ui">
+                Selected: <span className="text-dark-100 font-mono">{hamlibConfig.modelName}</span>
+              </div>
+            )}
+
+            {/* Rig Model Selector — the full searchable Hamlib list. */}
+            <div className={`relative ${popularRigs.length > 0 && !showAllRigs ? 'hidden' : ''}`}>
               <label className="block text-xs text-dark-300 mb-1 font-ui">Rig Model</label>
               <input
                 type="text"
