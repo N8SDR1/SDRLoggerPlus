@@ -90,6 +90,9 @@ public class SatControllerService : BackgroundService
     private volatile bool _autoSuppressed;
     // Controller's tracking state from /track: 1 = tracking a pass, 0 = idle.
     private volatile int _trackMode;
+    // When /track last answered (any caller). Auto-deactivate refuses to decide on
+    // stale data — "no reading yet" is not the same as "the pass is over".
+    private long _lastTrackAtTicks;
     private UdpClient? _satSocket;
     private UdpClient? _adifSocket;
     private readonly object _stateLock = new();
@@ -212,8 +215,13 @@ public class SatControllerService : BackgroundService
                 }
 
                 // Auto-deactivate after the pass — but only if WE activated. A manual
-                // Activate stays on until the operator turns it off.
-                if (_autoActivated && settings.Sat.AutoActivate && _trackMode == 0 && !IsAosWithin(settings.Sat.AutoActivateLeadSeconds))
+                // Activate stays on until the operator turns it off. Judged only on a
+                // recent /track reading: before the first poll lands we know nothing about
+                // the pass, and treating that as "over" would drop us straight back to idle
+                // for the probe to re-activate 10 s later, flapping the whole way to AOS.
+                if (_autoActivated && settings.Sat.AutoActivate &&
+                    TrackDataFresh(TimeSpan.FromSeconds(15)) &&
+                    !PassInPlay(settings.Sat.AutoActivateLeadSeconds))
                 {
                     _logger.LogInformation("S.A.T. auto-deactivating — pass complete");
                     _autoActivated = false;
@@ -492,9 +500,30 @@ public class SatControllerService : BackgroundService
         }
     }
 
-    /// <summary>True when the last /track poll shows AOS inside the lead window.</summary>
-    private bool IsAosWithin(int leadSeconds)
-        => _ttAosSec is > 0 && _ttAosSec <= leadSeconds;
+    /// <summary>
+    /// True while a pass is actually in play, per the last /track reading. Covers the whole
+    /// arc as one state — armed inside the AOS lead window, then on the bird until LOS — so
+    /// auto-activation holds across it instead of toggling per sub-state.
+    ///
+    /// The controller reports mode 1 as soon as a satellite is *loaded*, which can be hours
+    /// ahead, so mode is only a gate (something is loaded to follow); the trigger is the
+    /// pass timing. On the bird the controller zeroes time-to-AOS and counts time-to-LOS.
+    /// </summary>
+    private bool PassInPlay(int leadSeconds)
+    {
+        if (_trackMode != 1) return false;
+        lock (_stateLock)
+            return _ttAosSec is null or <= 0
+                ? _ttLosSec is > 0            // AOS passed, bird still up
+                : _ttAosSec <= leadSeconds;   // armed, AOS inside the lead window
+    }
+
+    /// <summary>True when /track has answered recently enough to judge the pass state on.</summary>
+    private bool TrackDataFresh(TimeSpan within)
+    {
+        var ticks = Interlocked.Read(ref _lastTrackAtTicks);
+        return ticks != 0 && DateTime.UtcNow - new DateTime(ticks, DateTimeKind.Utc) < within;
+    }
 
     /// <summary>
     /// Lightweight idle probe: is the controller tracking a pass right now (mode==1), or
@@ -511,14 +540,20 @@ public class SatControllerService : BackgroundService
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            if (root.TryGetProperty("mode", out var m) && m.ValueKind == JsonValueKind.Number && m.GetInt32() == 1)
-                return true;
-            if (root.TryGetProperty("ttaos", out var t) && t.ValueKind == JsonValueKind.Number)
+            // Record what we read, so the moment we activate the pass-state check has real
+            // data to work with rather than deciding the pass is over before the first poll.
+            if (root.TryGetProperty("mode", out var m) && m.ValueKind == JsonValueKind.Number)
+                _trackMode = m.GetInt32();
+            var ttaos = root.TryGetProperty("ttaos", out var t) && t.ValueKind == JsonValueKind.Number ? t.GetDouble() : -1;
+            var ttlos = root.TryGetProperty("ttlos", out var l) && l.ValueKind == JsonValueKind.Number ? l.GetDouble() : -1;
+            lock (_stateLock)
             {
-                var ttaos = t.GetDouble();
-                return ttaos > 0 && ttaos <= leadSeconds;
+                _ttAosSec = ttaos >= 0 ? ttaos : null;
+                _ttLosSec = ttlos >= 0 ? ttlos : null;
             }
-            return false;
+            Interlocked.Exchange(ref _lastTrackAtTicks, DateTime.UtcNow.Ticks);
+
+            return PassInPlay(leadSeconds);
         }
         catch (Exception ex)
         {
@@ -541,6 +576,7 @@ public class SatControllerService : BackgroundService
             // Controller's own tracking flag — drives auto-deactivate after a pass.
             if (root.TryGetProperty("mode", out var trackMode) && trackMode.ValueKind == JsonValueKind.Number)
                 _trackMode = trackMode.GetInt32();
+            Interlocked.Exchange(ref _lastTrackAtTicks, DateTime.UtcNow.Ticks);
 
             lock (_stateLock)
             {
