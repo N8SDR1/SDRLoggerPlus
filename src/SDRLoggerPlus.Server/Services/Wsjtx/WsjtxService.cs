@@ -121,6 +121,9 @@ public class WsjtxService : BackgroundService
         // Latest dial frequency reported by a Status message; decodes carry only
         // the audio offset, so we add this to reconstruct the real RF frequency.
         public ulong LastDialFreqHz;
+        // Latest mode reported by a Status message ("FT8", "FT4", …). Decodes carry
+        // only a one-character mode code, so Status is the authoritative source.
+        public string? LastMode;
         // Where this decoder's datagrams came from — the target for outbound
         // Reply ("call this station") messages.
         public IPEndPoint? LastRemoteEndpoint;
@@ -356,6 +359,10 @@ public class WsjtxService : BackgroundService
                 {
                     lock (l.StateLock) l.LastDialFreqHz = status.DialFrequencyHz;
                 }
+                if (!string.IsNullOrWhiteSpace(status.Mode))
+                {
+                    lock (l.StateLock) l.LastMode = status.Mode.Trim();
+                }
                 await HandleDxCallAsync(l, status);
                 break;
 
@@ -383,9 +390,17 @@ public class WsjtxService : BackgroundService
         if (parsed?.Callsign is not { Length: > 0 } call) return;
 
         ulong dialHz;
-        lock (l.StateLock) dialHz = l.LastDialFreqHz;
+        string? statusMode;
+        lock (l.StateLock)
+        {
+            dialHz = l.LastDialFreqHz;
+            statusMode = l.LastMode;
+        }
         // Decode carries the audio offset only; add the tracked dial frequency.
         var freqHz = dialHz > 0 ? dialHz + decode.DeltaFrequencyHz : 0UL;
+        // …and a one-character mode code, not a mode name. Resolve it to something a
+        // worked-before lookup can actually match.
+        var mode = ResolveDecodeMode(statusMode, decode.Mode);
         var freqKhz = freqHz > 0 ? freqHz / 1000.0 : 0.0;
         var band = freqHz > 0 ? BandHelper.GetBand((long)freqHz) : null;
 
@@ -406,7 +421,7 @@ public class WsjtxService : BackgroundService
         string? spotStatus = null, zoneStatus = null, gridStatus = null;
         if (freqKhz > 0)
         {
-            try { spotStatus = _spotStatus.GetSpotStatus(call, country, freqKhz, decode.Mode); }
+            try { spotStatus = _spotStatus.GetSpotStatus(call, country, freqKhz, mode); }
             catch (Exception ex) { _logger.LogDebug(ex, "GetSpotStatus failed for {Call}", call); }
             try { (_, zoneStatus) = _spotStatus.GetZoneStatus(call, freqKhz); }
             catch (Exception ex) { _logger.LogDebug(ex, "GetZoneStatus failed for {Call}", call); }
@@ -425,7 +440,7 @@ public class WsjtxService : BackgroundService
             Callsign: call,
             DxCall: parsed.DxCall,
             Grid: parsed.Grid,
-            Mode: decode.Mode,
+            Mode: mode,
             Snr: decode.Snr,
             DeltaTimeSeconds: decode.DeltaTimeSeconds,
             AudioOffsetHz: decode.DeltaFrequencyHz,
@@ -450,6 +465,36 @@ public class WsjtxService : BackgroundService
         }
 
         await _hubContext.Clients.All.OnWsjtxDecode(evt);
+    }
+
+    /// <summary>
+    /// Decode messages carry a one-character mode CODE ("~", "+", …), not a mode name,
+    /// so passing it straight through produced worked-before keys like "USA:20m:~" that
+    /// could never match a logged "USA:20m:FT8" — every already-worked station showed as
+    /// un-worked in the Decodes panel.
+    ///
+    /// The Status message carries the real mode name, so prefer it. Failing that, map the
+    /// codes we are sure of, and return null rather than guess — an unknown mode is
+    /// already handled as "no verdict" downstream, which is honest; a wrong one is not.
+    /// Forks that send a full name in the decode (rather than a code) are passed through.
+    /// </summary>
+    private static string? ResolveDecodeMode(string? statusMode, string? decodeMode)
+    {
+        if (!string.IsNullOrWhiteSpace(statusMode)) return statusMode.Trim();
+
+        var code = decodeMode?.Trim();
+        if (string.IsNullOrEmpty(code)) return null;
+        if (code.Length > 1) return code;   // already a name, not a code
+
+        return code switch
+        {
+            "~" => "FT8",
+            "+" => "FT4",
+            "#" => "JT65",
+            "@" => "JT9",
+            "&" => "MSK144",
+            _ => null,
+        };
     }
 
     /// <summary>

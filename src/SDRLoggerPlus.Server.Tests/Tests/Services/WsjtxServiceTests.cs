@@ -148,6 +148,41 @@ public class WsjtxServiceTests
     }
 
     [Fact]
+    public async Task Decode_ModeCode_ResolvedFromStatus()
+    {
+        // On the wire a Decode carries a one-character mode CODE, not a name — "~" is
+        // FT8. Status carries the real name, and that is what has to reach the
+        // worked-before lookup, or the key ("USA:20m:~") can never match a logged QSO.
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000, mode: "FT8"));
+        await _service.HandleDatagramAsync(BuildDecodeDatagram("CQ K1ABC FN42", audioOffsetHz: 1500, mode: "~"));
+
+        _decodes.Should().ContainSingle();
+        _decodes[0].Mode.Should().Be("FT8");
+        _spotStatus.Verify(s => s.GetSpotStatus("K1ABC", It.IsAny<string?>(), It.IsAny<double>(), "FT8"), Times.Once);
+    }
+
+    [Fact]
+    public async Task Decode_ModeCode_MappedWhenNoStatusYet()
+    {
+        // No Status yet, so fall back to mapping the code: "+" is FT4.
+        await _service.HandleDatagramAsync(BuildDecodeDatagram("CQ DL1XYZ JO31", audioOffsetHz: 800, mode: "+"));
+
+        _decodes.Should().ContainSingle();
+        _decodes[0].Mode.Should().Be("FT4");
+    }
+
+    [Fact]
+    public async Task Decode_UnknownModeCode_ReportsNoMode()
+    {
+        // An unrecognised code yields no mode rather than a guess — downstream already
+        // treats an unknown mode as "no verdict", which is honest; a wrong one is not.
+        await _service.HandleDatagramAsync(BuildDecodeDatagram("CQ VK2DEF QF56", audioOffsetHz: 900, mode: "§"));
+
+        _decodes.Should().ContainSingle();
+        _decodes[0].Mode.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Decode_WithoutStatus_StillBroadcastsWithoutBand()
     {
         // No Status yet → no dial frequency → decode still surfaces (call/grid),
