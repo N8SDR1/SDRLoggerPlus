@@ -132,7 +132,14 @@ export function RigConfig() {
       onHamlibConfigLoaded: (evt) => {
         console.log('Hamlib config loaded:', evt.config?.modelName);
         if (evt.config) {
-          setHamlibConfig(evt.config);
+          // A config saved when DTR/RTS were offered would otherwise display as
+          // "Don't read" while still handing Hamlib a line-based PTT type. Since we
+          // only ever read PTT, CAT is both the accurate reading and the one that
+          // leaves the serial control lines alone.
+          const cfg = evt.config.pttType === "Dtr" || evt.config.pttType === "Rts"
+            ? { ...evt.config, pttType: "Rig" as HamlibPttType, pttPort: undefined }
+            : evt.config;
+          setHamlibConfig(cfg);
           // Also load caps for this model
           getHamlibRigCaps(evt.config.modelId);
         }
@@ -911,37 +918,6 @@ export function RigConfig() {
                   </div>
                 </div>
 
-                {/* PTT Configuration */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-dark-300 mb-1 font-ui">PTT Type</label>
-                    <select
-                      value={hamlibConfig.pttType}
-                      onChange={(e) => updateHamlibConfig({ pttType: e.target.value as HamlibPttType })}
-                      className="w-full px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-mono focus:outline-none focus:border-accent-primary/50"
-                    >
-                      <option value="None">None</option>
-                      <option value="Rig">CAT (RIG)</option>
-                      <option value="Dtr">DTR</option>
-                      <option value="Rts">RTS</option>
-                    </select>
-                  </div>
-                  {(hamlibConfig.pttType === "Dtr" || hamlibConfig.pttType === "Rts") && (
-                    <div>
-                      <label className="block text-xs text-dark-300 mb-1 font-ui">PTT Port</label>
-                      <select
-                        value={hamlibConfig.pttPort || ""}
-                        onChange={(e) => updateHamlibConfig({ pttPort: e.target.value })}
-                        className="w-full px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-mono focus:outline-none focus:border-accent-primary/50"
-                      >
-                        <option value="">Same as data</option>
-                        {portDetails.map((p) => (
-                          <option key={p.port} value={p.port}>{portLabel(p)}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 
@@ -983,6 +959,26 @@ export function RigConfig() {
             {/* Advanced Options */}
             {showAdvanced && (
               <div className="space-y-3 pt-2 border-t border-glass-100">
+                {/* PTT: read-only for us. Lives here, beside the "Get PTT" toggle that
+                    governs it, rather than in the main form where it looked like
+                    something you had to set up before the rig would work. */}
+                <div>
+                  <label className="block text-xs text-dark-300 mb-1 font-ui">PTT Reporting</label>
+                  <select
+                    value={hamlibConfig.pttType === "Rig" ? "Rig" : "None"}
+                    onChange={(e) => updateHamlibConfig({ pttType: e.target.value as HamlibPttType, pttPort: undefined })}
+                    className="w-full px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-mono focus:outline-none focus:border-accent-primary/50"
+                  >
+                    <option value="Rig">Read over CAT</option>
+                    <option value="None">Don't read</option>
+                  </select>
+                  <p className="mt-1 text-[11px] text-dark-300">
+                    SDRLogger+ only <em>reads</em> PTT, to show whether you're transmitting — it never keys your radio.
+                    That's why there's no DTR/RTS option here: those line-based methods gain you nothing when nothing
+                    transmits, and they're what many interfaces key the rig from. Turn this off with <span className="text-dark-100">Get PTT</span> below.
+                  </p>
+                </div>
+
                 <div className="text-xs text-dark-300 mb-2 font-ui">Feature Toggles</div>
                 <div className="grid grid-cols-2 gap-2">
                   <FeatureToggle
