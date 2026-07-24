@@ -11,31 +11,15 @@ public sealed record SatConfiguredTransponder(
     string DownlinkMode,
     string Name);
 
-/// <summary>A built-in TLE source the controller can pull from.</summary>
-public sealed record SatTleSource(string Label, string Url);
-
 /// <summary>
-/// CSN S.A.T. controller management — reads the configured transponder list and
-/// triggers the controller's own TLE / frequency-database updates. These reproduce
-/// exactly what the controller's built-in web UI does:
-///   - configured list: HTTP GET /f.txt  (fixed-width transponder table)
-///   - update TLE:       HTTP GET /cmd?a=Y|&lt;http-url&gt;
-///   - update freq DB:   HTTP GET /cmd?a=Z|f|
-/// The command protocol is undocumented — derived from the controller's web-UI
-/// JavaScript. HTTPS TLE URLs are rejected by the controller (http only). The
-/// destructive "factory reset freq DB" command (Z|h|) is deliberately NOT exposed.
+/// Reads the CSN S.A.T. controller's configured transponder table (HTTP GET /f.txt,
+/// a fixed-width table). Changing the controller's state — TLE / frequency-database
+/// updates, picking a satellite to track — is deliberately NOT done here: SDRLogger+
+/// embeds the controller's own web UI (S.A.T. Web panel), which does all of that
+/// natively with the operator's real data and no undocumented command guesswork.
 /// </summary>
 public partial class SatControllerService
 {
-    /// <summary>The TLE sources the controller's own web UI offers (http only).</summary>
-    public static readonly IReadOnlyList<SatTleSource> TleSources = new[]
-    {
-        new SatTleSource("AMSAT (nasabare)", "http://www.amsat.org/tle/current/nasabare.txt"),
-        new SatTleSource("CSN nasabare", "http://www.csntechnologies.net/SAT/nasabare.txt"),
-        new SatTleSource("CSN bare", "http://www.csntechnologies.net/SAT/csnbare.txt"),
-        new SatTleSource("CSN active", "http://www.csntechnologies.net/SAT/csnactive.txt"),
-    };
-
     /// <summary>Fetch and parse the controller's configured transponder table (/f.txt).</summary>
     public async Task<IReadOnlyList<SatConfiguredTransponder>> GetConfiguredTranspondersAsync(CancellationToken ct = default)
     {
@@ -54,22 +38,6 @@ public partial class SatControllerService
             return Array.Empty<SatConfiguredTransponder>();
         }
     }
-
-    /// <summary>Tell the controller to pull fresh TLEs from a source URL (http only).</summary>
-    public async Task<bool> UpdateTleAsync(string sourceUrl, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(sourceUrl)) return false;
-        if (sourceUrl.StartsWith("https", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogWarning("S.A.T. TLE update rejected: controller does not support HTTPS URLs");
-            return false;
-        }
-        return await SendControllerCommandAsync($"Y|{sourceUrl}", ct);
-    }
-
-    /// <summary>Tell the controller to update its frequency database from the internet.</summary>
-    public Task<bool> UpdateFreqDbAsync(CancellationToken ct = default)
-        => SendControllerCommandAsync("Z|f|", ct);
 
     // -- internals ----------------------------------------------------------
 
@@ -105,28 +73,6 @@ public partial class SatControllerService
 
     private static string Field(string s, int start, int end)
         => start >= s.Length ? "" : s[start..Math.Min(end, s.Length)];
-
-    private async Task<bool> SendControllerCommandAsync(string command, CancellationToken ct)
-    {
-        var ip = await GetControllerIpAsync();
-        if (string.IsNullOrWhiteSpace(ip)) return false;
-        try
-        {
-            var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(15);
-            // The controller URL-decodes the query, so encoding the pipe-delimited
-            // command is safe and matches how the web UI's XHR sends it.
-            var resp = await client.GetAsync($"http://{ip}/cmd?a={Uri.EscapeDataString(command)}", ct);
-            if (resp.IsSuccessStatusCode) return true;
-            _logger.LogWarning("S.A.T. command '{Command}' returned {Status}", command, (int)resp.StatusCode);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "S.A.T. command '{Command}' failed", command);
-            return false;
-        }
-    }
 
     private async Task<string?> GetControllerIpAsync()
     {

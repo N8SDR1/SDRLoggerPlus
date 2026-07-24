@@ -11,12 +11,6 @@ export interface SatConfiguredTransponder {
   name: string;
 }
 
-/** A built-in TLE source the controller can pull from. */
-export interface SatTleSource {
-  label: string;
-  url: string;
-}
-
 const API_BASE = '/api';
 
 export interface QsoResponse {
@@ -706,24 +700,10 @@ class ApiClient {
     });
   }
 
-  // S.A.T. controller management (configured list + TLE / freq-DB updates)
+  // The satellites/transponders configured on the CSN controller. TLE / freq-DB updates
+  // and satellite selection are handled by the controller's own UI (S.A.T. Web panel).
   async getConfiguredSats(): Promise<SatConfiguredTransponder[]> {
     return this.fetch('/sat/configured');
-  }
-
-  async getSatTleSources(): Promise<SatTleSource[]> {
-    return this.fetch('/sat/tle-sources');
-  }
-
-  async updateSatTle(sourceUrl: string): Promise<void> {
-    await this.fetch('/sat/update-tle', {
-      method: 'POST',
-      body: JSON.stringify({ sourceUrl }),
-    });
-  }
-
-  async updateSatFreqDb(): Promise<void> {
-    await this.fetch('/sat/update-freqdb', { method: 'POST' });
   }
 
   // Weather alerts

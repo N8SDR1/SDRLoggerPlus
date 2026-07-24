@@ -59,7 +59,7 @@ import {
 } from 'lucide-react';
 import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type AiProvider } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
-import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot, type SatConfiguredTransponder, type SatTleSource } from '../api/client';
+import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot, type SatConfiguredTransponder } from '../api/client';
 import { useToastStore } from '../store/toastStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { useAppStore } from '../store/appStore';
@@ -4478,7 +4478,11 @@ function SatSettingsSection() {
           className="glass-input w-64 font-mono"
           placeholder="e.g. 192.168.200.194"
         />
-        <p className="text-xs text-dark-400 mt-1">Used to poll the controller's /track endpoint for live pass data</p>
+        <p className="text-xs text-dark-400 mt-1">
+          The address your CSN S.A.T. controller serves its web page on. Used for live pass
+          data, and to show the controller's full interface in the <strong className="text-dark-300">S.A.T. Web</strong> panel
+          (next passes, satellite tracking, TLE &amp; frequency database).
+        </p>
       </div>
 
       <div className="flex gap-6">
@@ -4517,16 +4521,6 @@ function SatControllerTools() {
   const pushToast = useToastStore((s) => s.push);
   const [sats, setSats] = useState<SatConfiguredTransponder[] | null>(null);
   const [loadingSats, setLoadingSats] = useState(false);
-  const [tleSources, setTleSources] = useState<SatTleSource[]>([]);
-  const [tleUrl, setTleUrl] = useState('');
-  const [busyTle, setBusyTle] = useState(false);
-  const [busyFreq, setBusyFreq] = useState(false);
-
-  useEffect(() => {
-    api.getSatTleSources()
-      .then((s) => { setTleSources(s); if (s.length > 0) setTleUrl(s[0].url); })
-      .catch(() => {});
-  }, []);
 
   const loadSats = async () => {
     setLoadingSats(true);
@@ -4538,31 +4532,6 @@ function SatControllerTools() {
       pushToast('Could not read the configured satellite list from the controller', 'error');
     } finally {
       setLoadingSats(false);
-    }
-  };
-
-  const doUpdateTle = async () => {
-    if (!tleUrl) return;
-    setBusyTle(true);
-    try {
-      await api.updateSatTle(tleUrl);
-      pushToast('TLE update requested — the controller is fetching fresh elements', 'success');
-    } catch {
-      pushToast('TLE update failed (controller unreachable, or an https URL)', 'error');
-    } finally {
-      setBusyTle(false);
-    }
-  };
-
-  const doUpdateFreqDb = async () => {
-    setBusyFreq(true);
-    try {
-      await api.updateSatFreqDb();
-      pushToast('Frequency-DB update requested from the internet', 'success');
-    } catch {
-      pushToast('Frequency-DB update failed (controller unreachable)', 'error');
-    } finally {
-      setBusyFreq(false);
     }
   };
 
@@ -4581,45 +4550,18 @@ function SatControllerTools() {
   return (
     <div className="border-t border-glass-100 pt-5 space-y-5">
       <div>
-        <h4 className="text-sm font-semibold font-ui text-dark-200">Controller Tools</h4>
+        <h4 className="text-sm font-semibold font-ui text-dark-200">My Satellites</h4>
         <p className="text-xs text-dark-400 mt-0.5">
-          Update the controller's TLE and frequency database, and browse the satellites you've
-          configured on it. These run the controller's own updaters (http only).
+          The satellites and transponders configured on your controller. To update the TLE or
+          frequency database — or to pick a satellite to track — use the{' '}
+          <span className="text-dark-300">S.A.T. Web</span> panel, which shows the controller's
+          own interface.
         </p>
-      </div>
-
-      {/* Update TLE */}
-      <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <label className="block text-xs font-medium text-dark-300 mb-1">Update TLE from</label>
-          <select
-            value={tleUrl}
-            onChange={(e) => setTleUrl(e.target.value)}
-            className="glass-input text-sm px-2 py-1.5 w-64"
-          >
-            {tleSources.map((s) => <option key={s.url} value={s.url}>{s.label}</option>)}
-          </select>
-        </div>
-        <button
-          onClick={doUpdateTle}
-          disabled={busyTle || !tleUrl}
-          className="px-3 py-1.5 text-sm rounded-lg bg-accent-primary/20 border border-accent-primary/40 text-accent-primary hover:bg-accent-primary/30 disabled:opacity-50"
-        >
-          {busyTle ? 'Requesting…' : 'Update TLE'}
-        </button>
-        <button
-          onClick={doUpdateFreqDb}
-          disabled={busyFreq}
-          className="px-3 py-1.5 text-sm rounded-lg bg-dark-700 border border-glass-200 text-dark-200 hover:bg-dark-600 disabled:opacity-50"
-        >
-          {busyFreq ? 'Requesting…' : 'Update Freq DB'}
-        </button>
       </div>
 
       {/* My Satellites */}
       <div>
         <div className="flex items-center gap-3 mb-2">
-          <span className="text-xs font-medium text-dark-300">My Satellites</span>
           <button
             onClick={loadSats}
             disabled={loadingSats}
