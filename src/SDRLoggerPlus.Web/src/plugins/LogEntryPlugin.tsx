@@ -8,6 +8,7 @@ import { S9_DBM, DB_PER_S_UNIT } from '../utils/smeter';
 import { spotKhzToMhzString, spotKhzToHz, formMhzToStoredKhz, rigHzToStoredKhz } from '../utils/frequency';
 import { useSignalR } from '../hooks/useSignalR';
 import { useAppStore } from '../store/appStore';
+import { activeLayoutRef, applyLayoutRef, layoutRefLabel, liveLayoutDiffersFromActive, saveLiveToActiveSlot } from '../layouts/applyLayout';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
@@ -185,6 +186,23 @@ export function LogEntryPlugin() {
   useEffect(() => {
     try { localStorage.setItem('sdrl_log_mode', logMode); } catch { /* no-op */ }
   }, [logMode]);
+
+  // Per-mode "home" layout: when the operator switches modes and that mode has a
+  // bound layout that isn't already on screen, offer to load it — always a prompt,
+  // never a silent swap. `canSave` is only true when there are unsaved changes AND
+  // the active layout is one of the operator's own slots (a read-only starter has
+  // nothing of theirs to save — decision B).
+  const modeLayouts = settings.modeLayouts;
+  const [layoutPrompt, setLayoutPrompt] = useState<
+    { mode: string; ref: string; canSave: boolean } | null
+  >(null);
+  const offerModeLayout = useCallback(async (mode: keyof typeof modeLayouts) => {
+    const ref = modeLayouts?.[mode];
+    if (!ref || activeLayoutRef() === ref) return;
+    const dirty = await liveLayoutDiffersFromActive();
+    const activeIsSaved = activeLayoutRef()?.startsWith('saved:') ?? false;
+    setLayoutPrompt({ mode, ref, canSave: dirty && activeIsSaved });
+  }, [modeLayouts]);
 
   // POTA "activating" park — the park YOU'RE at (my_pota_ref on the QSO).
   // Persisted across sessions so a multi-hour activation doesn't need
@@ -859,7 +877,7 @@ export function LogEntryPlugin() {
     return (
       <button
         type="button"
-        onClick={() => { setLogMode(id); markAutoEnteredSat(false); }}
+        onClick={() => { setLogMode(id); markAutoEnteredSat(false); void offerModeLayout(id); }}
         title={disabledTitle}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t border-b-2 font-ui text-xs font-semibold transition-colors ${
           isActive
@@ -876,7 +894,53 @@ export function LogEntryPlugin() {
     );
   };
 
+  const closeLayoutPrompt = () => setLayoutPrompt(null);
+  const applyPromptLayout = async (save: boolean) => {
+    const p = layoutPrompt;
+    setLayoutPrompt(null);
+    if (!p) return;
+    if (save) { try { await saveLiveToActiveSlot(); } catch { /* best effort */ } }
+    await applyLayoutRef(p.ref);
+  };
+
   return (
+    <>
+    {layoutPrompt && (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60" onClick={closeLayoutPrompt}>
+        <div className="glass-panel border border-glass-200 rounded-xl p-5 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+          <h3 className="text-sm font-semibold font-ui text-dark-100 mb-1">
+            Switch to your “{layoutRefLabel(layoutPrompt.ref)}” layout?
+          </h3>
+          <p className="text-xs text-dark-300 mb-4">
+            {layoutPrompt.canSave
+              ? 'You have unsaved changes to the current layout. Save them first, or discard them and switch.'
+              : 'This replaces your current panel arrangement.'}
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={closeLayoutPrompt}
+              className="px-3 py-1.5 rounded text-xs font-ui border border-glass-100 text-dark-300 hover:bg-dark-600/50 transition-colors"
+            >
+              Stay
+            </button>
+            {layoutPrompt.canSave && (
+              <button
+                onClick={() => void applyPromptLayout(true)}
+                className="px-3 py-1.5 rounded text-xs font-ui border border-accent-success/40 text-accent-success hover:bg-accent-success/10 transition-colors"
+              >
+                Save &amp; switch
+              </button>
+            )}
+            <button
+              onClick={() => void applyPromptLayout(false)}
+              className="px-3 py-1.5 rounded text-xs font-ui border border-accent-primary/40 text-accent-primary hover:bg-accent-primary/10 transition-colors"
+            >
+              {layoutPrompt.canSave ? 'Discard & switch' : 'Switch'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <GlassPanel
       title="Log Entry"
       icon={<NotebookPen className="w-5 h-5" />}
@@ -944,7 +1008,7 @@ export function LogEntryPlugin() {
             mode would persist to localStorage and reopen on restart. */}
         <button
           type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent('open-panel', { detail: 'contest-entry' }))}
+          onClick={() => { window.dispatchEvent(new CustomEvent('open-panel', { detail: 'contest-entry' })); void offerModeLayout('contest'); }}
           title="Open the Contest Entry panel — contest QSOs are logged there, with serials, dupe checking and scoring"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-t border-b-2 border-transparent font-ui text-xs font-semibold text-dark-300 transition-colors hover:text-accent-primary hover:bg-dark-700/20"
         >
@@ -1694,5 +1758,6 @@ export function LogEntryPlugin() {
         )}
       </form>
     </GlassPanel>
+    </>
   );
 }

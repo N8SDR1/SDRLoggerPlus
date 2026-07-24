@@ -503,6 +503,15 @@ export interface Settings {
   sat: SatControllerSettings;
   contest: ContestSettings;
   gridStates: Record<string, string>;
+  modeLayouts: ModeLayouts;
+}
+
+/** Per-log-mode "home" layout: a ref ("starter:Name"/"saved:Name") or null. */
+export interface ModeLayouts {
+  general: string | null;
+  pota: string | null;
+  sat: string | null;
+  contest: string | null;
 }
 
 export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'decodealerts' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'dxcoach' | 'voice' | 'about';
@@ -556,6 +565,7 @@ interface SettingsState {
   updateDecodeAlertsSettings: (decodeAlerts: Partial<DecodeAlertsSettings>) => void;
   updateWeatherSettings: (weather: Partial<WeatherSettings>) => void;
   updateSatSettings: (sat: Partial<SatControllerSettings>) => void;
+  setModeLayout: (mode: keyof ModeLayouts, ref: string | null) => void;
   updateContestSettings: (contest: Partial<ContestSettings>) => void;
   updateSpotStatusSettings: (spotStatus: Partial<SpotStatusSettings>) => void;
   addClusterConnection: () => void;
@@ -863,6 +873,7 @@ const defaultSettings: Settings = {
     hiddenContestIds: [],
   },
   gridStates: {},
+  modeLayouts: { general: null, pota: null, sat: null, contest: null },
 };
 
 // Settings are persisted on the backend (LiteDB) via the API, not localStorage
@@ -1163,6 +1174,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       isDirty: true,
     })),
 
+  setModeLayout: (mode, ref) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        modeLayouts: { ...state.settings.modeLayouts, [mode]: ref },
+      },
+      isDirty: true,
+    })),
+
   // Contest interop settings (N1MM UDP / online score)
   updateContestSettings: (contest) =>
     set((state) => ({
@@ -1388,6 +1408,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           sat: { ...defaultSettings.sat, ...settings.sat },
           contest: { ...defaultSettings.contest, ...settings.contest },
           gridStates: { ...defaultSettings.gridStates, ...settings.gridStates },
+          modeLayouts: { ...defaultSettings.modeLayouts, ...settings.modeLayouts },
         };
         // One-time migration: clear the legacy "United States" spotter-country
         // default so existing installs receive worldwide spots (and a full

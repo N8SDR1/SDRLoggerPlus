@@ -100,9 +100,16 @@ public class UserSettings
     // (POTA setup, DXpedition setup, contest setup, etc.) and click to
     // switch between them. Separate from LayoutJson, which is the
     // auto-saved "current live arrangement" that persists across restarts.
-    // Enforced max 3 on the write path (SettingsController).
+    // Enforced max 10 on the write path (SettingsController).
     [BsonElement("savedLayouts")]
     public List<SavedLayoutSlot> SavedLayouts { get; set; } = new();
+
+    // Optional per-log-mode "home" layout: when the operator switches to a mode,
+    // SDRLogger+ offers to load the bound layout. Each value is a layout ref
+    // ("starter:Satellite" / "saved:MyContest") or null/absent for "leave the
+    // layout alone". Persisted as part of settings; the switch itself is manual.
+    [BsonElement("modeLayouts")]
+    public ModeLayoutSettings? ModeLayouts { get; set; }
 
     [BsonElement("gridStates")]
     public Dictionary<string, string>? GridStates { get; set; }
@@ -985,6 +992,25 @@ public class BackupSettings
     /// <summary>Empty/null → default: &lt;config dir&gt;/backups</summary>
     [BsonElement("destinationPath")]
     public string? DestinationPath { get; set; }
+}
+
+/// <summary>
+/// Per-mode "home" layout bindings. Each is a layout ref ("starter:Name" /
+/// "saved:Name") or null for "don't change the layout for this mode".
+/// </summary>
+public class ModeLayoutSettings
+{
+    [BsonElement("general")]
+    public string? General { get; set; }
+
+    [BsonElement("pota")]
+    public string? Pota { get; set; }
+
+    [BsonElement("sat")]
+    public string? Sat { get; set; }
+
+    [BsonElement("contest")]
+    public string? Contest { get; set; }
 }
 
 public class SatSettings

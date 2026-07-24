@@ -10,7 +10,7 @@ import { STARTER_LAYOUTS, findStarterLayout } from '../layouts/starterLayouts';
 // stores the presets but not which one is in use (the live layout is persisted
 // as JSON, not by name), so track it here. Stored as "starter:Contest" /
 // "saved:Contest" because a built-in and a user preset may share a name.
-const ACTIVE_KEY = 'sdrl_active_layout';
+export const ACTIVE_KEY = 'sdrl_active_layout';
 
 /** Tell the rest of the app the saved-layout list changed, so the menu refreshes. */
 export const LAYOUTS_CHANGED_EVENT = 'sdrl-layouts-changed';

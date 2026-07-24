@@ -61,6 +61,7 @@ import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type A
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
 import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
 import { useLayoutStore } from '../store/layoutStore';
+import { STARTER_LAYOUTS } from '../layouts/starterLayouts';
 import { useAppStore } from '../store/appStore';
 import { notifyLayoutsChanged } from '../hooks/useLayoutMenu';
 import { RigConfig } from './RigConfig';
@@ -2781,6 +2782,7 @@ const MAX_SAVED_LAYOUTS = 10;
 
 function LayoutPresetsSubsection() {
   const { layout, setLayout, resetLayout } = useLayoutStore();
+  const { settings, setModeLayout, saveSettings } = useSettingsStore();
   const [savedLayouts, setSavedLayouts] = useState<SavedLayoutSlot[]>([]);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -2988,6 +2990,46 @@ function LayoutPresetsSubsection() {
           {message.text}
         </p>
       )}
+
+      {/* Per-mode "home" layouts: when you switch the Log Entry to a mode, offer to
+          load a chosen layout. The switch is always a prompt — never silent. */}
+      <div className="pt-4 mt-4 border-t border-glass-100">
+        <h4 className="text-sm font-semibold font-ui text-dark-200">Layout for each log mode</h4>
+        <p className="text-xs text-dark-300 mt-0.5 mb-2">
+          Bind a layout to a log mode and SDRLogger+ will offer to load it when you switch to that mode. It always asks first — your current arrangement is never replaced without a prompt.
+        </p>
+        <div className="space-y-1.5">
+          {([
+            ['general', 'General'],
+            ['pota', 'POTA'],
+            ['sat', 'SAT'],
+            ['contest', 'Contest'],
+          ] as const).map(([modeKey, modeLabel]) => (
+            <div key={modeKey} className="flex items-center gap-2">
+              <span className="text-xs text-dark-300 font-ui w-20 shrink-0">{modeLabel}</span>
+              <select
+                value={settings.modeLayouts[modeKey] ?? ''}
+                onChange={(e) => { setModeLayout(modeKey, e.target.value || null); void saveSettings(); }}
+                className="glass-input flex-1 text-xs py-1.5"
+              >
+                <option value="">Don't change the layout</option>
+                <optgroup label="Built-in">
+                  {STARTER_LAYOUTS.map((s) => (
+                    <option key={`starter:${s.name}`} value={`starter:${s.name}`}>{s.name}</option>
+                  ))}
+                </optgroup>
+                {savedLayouts.length > 0 && (
+                  <optgroup label="Your saved layouts">
+                    {savedLayouts.map((s) => (
+                      <option key={`saved:${s.name}`} value={`saved:${s.name}`}>{s.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
