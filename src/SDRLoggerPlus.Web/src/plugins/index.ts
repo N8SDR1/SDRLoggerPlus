@@ -26,4 +26,5 @@ export { PropagationPanelPlugin } from './PropagationPanelPlugin';
 export { PanadapterPlugin } from './PanadapterPlugin';
 export { StatisticsPlugin } from './StatisticsPlugin';
 export { SatPlugin } from './SatPlugin';
+export { SatWebPlugin } from './SatWebPlugin';
 export { MeterPlugin } from './MeterPlugin';

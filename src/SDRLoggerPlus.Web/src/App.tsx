@@ -10,7 +10,7 @@ import { SetupWizard } from './components/SetupWizard';
 import { PluginErrorBoundary } from './components/PluginErrorBoundary';
 import { ShortcutOverlay } from './components/ShortcutOverlay';
 import { useSignalRConnection } from './hooks/useSignalR';
-import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, QrzProfilePlugin, ContestsPlugin, ContestEntryPlugin, MultNeededPlugin, ContestBandmapPlugin, ContestScorePlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, MeterPlugin, MapPlugin, DecodesPlugin, GridTrackerPlugin } from './plugins';
+import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, QrzProfilePlugin, ContestsPlugin, ContestEntryPlugin, MultNeededPlugin, ContestBandmapPlugin, ContestScorePlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, SatWebPlugin, MeterPlugin, MapPlugin, DecodesPlugin, GridTrackerPlugin } from './plugins';
 import { useLayoutStore, defaultLayout } from './store/layoutStore';
 import { useSettingsStore, type SettingsSection } from './store/settingsStore';
 import { useSetupStore } from './store/setupStore';
@@ -140,6 +140,13 @@ const PLUGINS: Record<string, PluginDef> = {
     component: SatPlugin,
     category: 'Radio & Equipment',
     tags: ['satellite', 'sat', 'csn'],
+  },
+  'sat-web': {
+    name: 'S.A.T. Web',
+    icon: <Satellite className="w-4 h-4" />,
+    component: SatWebPlugin,
+    category: 'Radio & Equipment',
+    tags: ['satellite', 'sat', 'csn', 'passes', 'tracking', 'tle', 'controller'],
   },
   'dxpeditions': {
     name: 'DXpeditions',
