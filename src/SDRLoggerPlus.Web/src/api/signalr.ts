@@ -628,8 +628,20 @@ export interface HamlibRigCapsEvent {
   capabilities: HamlibRigCapabilities;
 }
 
+export interface SerialPortDetail {
+  port: string;
+  /** Device name behind the port, e.g. "Silicon Labs CP210x USB to UART Bridge". */
+  description?: string | null;
+  /** Recognised USB vendor, when we know it. */
+  vendor?: string | null;
+  /** USB device — radios are; a built-in COM1 is not. */
+  isUsb: boolean;
+}
+
 export interface HamlibSerialPortsEvent {
   ports: string[];
+  /** Optional: older servers send only `ports`. */
+  details?: SerialPortDetail[] | null;
 }
 
 export interface HamlibConfigLoadedEvent {

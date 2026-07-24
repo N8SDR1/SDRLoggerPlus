@@ -919,8 +919,9 @@ public class LogHub : Hub<ILogHubClient>
     {
         _logger.LogDebug("Client requested serial ports list");
 
-        var ports = _hamlibService.GetSerialPorts();
-        await Clients.Caller.OnHamlibSerialPorts(new HamlibSerialPortsEvent(ports));
+        var details = _hamlibService.GetSerialPortDetails();
+        await Clients.Caller.OnHamlibSerialPorts(
+            new HamlibSerialPortsEvent(details.Select(d => d.Port).ToList(), details));
     }
 
     /// <summary>

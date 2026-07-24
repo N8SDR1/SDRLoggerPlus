@@ -5,6 +5,7 @@ import { useSettingsStore } from "../store/settingsStore";
 import { useSignalR } from "../hooks/useSignalR";
 import { signalRService } from "../api/signalr";
 import { resolvePopularRigs, type ResolvedPopularRig } from "../rigs/popularRigs";
+import { portLabel } from "../rigs/serialPorts";
 import type {
   HamlibRigModelInfo,
   HamlibRigCapabilities,
@@ -14,6 +15,7 @@ import type {
   HamlibFlowControl,
   HamlibParity,
   HamlibPttType,
+  SerialPortDetail,
 } from "../api/signalr";
 import { HAMLIB_BAUD_RATES } from "../api/signalr";
 
@@ -99,7 +101,9 @@ export function RigConfig() {
   const [isConnectingHamlib, setIsConnectingHamlib] = useState(false);
   const [hamlibRigs, setHamlibRigs] = useState<HamlibRigModelInfo[]>([]);
   const [hamlibCaps, setHamlibCaps] = useState<HamlibRigCapabilities | null>(null);
-  const [serialPorts, setSerialPorts] = useState<string[]>([]);
+  // Same ports with the device name behind each — "COM5" alone is not enough to choose
+  // from when one radio exposes two of them.
+  const [portDetails, setPortDetails] = useState<SerialPortDetail[]>([]);
   const [hamlibConfig, setHamlibConfig] = useState<HamlibRigConfigDto>(defaultHamlibConfig);
   const [rigSearch, setRigSearch] = useState("");
   const [showRigDropdown, setShowRigDropdown] = useState(false);
@@ -121,7 +125,9 @@ export function RigConfig() {
       },
       onHamlibSerialPorts: (evt) => {
         console.log('Serial ports received:', evt.ports);
-        setSerialPorts(evt.ports);
+        // Older servers send only the bare names; fall back to those rather than
+        // showing nothing.
+        setPortDetails(evt.details ?? evt.ports.map((p) => ({ port: p, isUsb: false })));
       },
       onHamlibConfigLoaded: (evt) => {
         console.log('Hamlib config loaded:', evt.config?.modelName);
@@ -833,8 +839,8 @@ export function RigConfig() {
                       className="w-full px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-mono focus:outline-none focus:border-accent-primary/50"
                     >
                       <option value="">Select port...</option>
-                      {serialPorts.map((port) => (
-                        <option key={port} value={port}>{port}</option>
+                      {portDetails.map((p) => (
+                        <option key={p.port} value={p.port}>{portLabel(p)}</option>
                       ))}
                     </select>
                   </div>
@@ -929,8 +935,8 @@ export function RigConfig() {
                         className="w-full px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-mono focus:outline-none focus:border-accent-primary/50"
                       >
                         <option value="">Same as data</option>
-                        {serialPorts.map((port) => (
-                          <option key={port} value={port}>{port}</option>
+                        {portDetails.map((p) => (
+                          <option key={p.port} value={p.port}>{portLabel(p)}</option>
                         ))}
                       </select>
                     </div>

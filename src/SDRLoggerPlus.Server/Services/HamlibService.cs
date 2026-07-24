@@ -5,6 +5,7 @@ using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Core.Database;
 using SDRLoggerPlus.Server.Hubs;
 using SDRLoggerPlus.Server.Native.Hamlib;
+using SDRLoggerPlus.Server.Native.Serial;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -199,16 +200,28 @@ public partial class HamlibService : BackgroundService
     /// <summary>
     /// Get list of available serial ports
     /// </summary>
-    public List<string> GetSerialPorts()
+    public List<string> GetSerialPorts() => GetSerialPortDetails().Select(p => p.Port).ToList();
+
+    /// <summary>
+    /// Serial ports with the device name behind each — so the operator can tell a radio
+    /// from a GPS, and tell a radio's two ports apart.
+    /// </summary>
+    public List<SerialPortDetail> GetSerialPortDetails()
     {
         try
         {
-            return SerialPort.GetPortNames().OrderBy(p => p).ToList();
+            return SerialPortEnumerator.List()
+                .Select(p => new SerialPortDetail(
+                    p.PortName,
+                    p.Description,
+                    SerialPortEnumerator.VendorFor(p.HardwareId),
+                    p.IsUsb))
+                .ToList();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to enumerate serial ports");
-            return new List<string>();
+            return new List<SerialPortDetail>();
         }
     }
 

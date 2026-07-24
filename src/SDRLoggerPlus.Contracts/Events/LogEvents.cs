@@ -704,7 +704,21 @@ public record HamlibRigCapsEvent(
 /// Available serial ports
 /// </summary>
 public record HamlibSerialPortsEvent(
-    List<string> Ports
+    List<string> Ports,
+    // Same ports with the device name behind each one. Bare "COM5" is not enough to
+    // choose from when a radio exposes two ports over one cable.
+    List<SerialPortDetail>? Details = null
+);
+
+/// <param name="Port">"COM5"</param>
+/// <param name="Description">Device name, e.g. "Silicon Labs CP210x USB to UART Bridge".</param>
+/// <param name="Vendor">Recognised USB vendor, when we know it.</param>
+/// <param name="IsUsb">USB device — radios are; a built-in COM1 is not.</param>
+public record SerialPortDetail(
+    string Port,
+    string? Description,
+    string? Vendor,
+    bool IsUsb
 );
 
 /// <summary>
