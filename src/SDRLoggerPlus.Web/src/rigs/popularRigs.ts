@@ -78,7 +78,7 @@ export const POPULAR_RIGS: PopularRig[] = [
   { id: 'ic7300',   label: 'IC-7300',   manufacturer: 'Icom', aliases: ['IC-7300'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
   { id: 'ic7610',   label: 'IC-7610',   manufacturer: 'Icom', aliases: ['IC-7610'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
   { id: 'ic9700',   label: 'IC-9700',   manufacturer: 'Icom', aliases: ['IC-9700'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
-  { id: 'ic705',    label: 'IC-705',    manufacturer: 'Icom', aliases: ['IC-705'],    defaults: ICOM_SERIAL, setupHint: ICOM_HINT + ' The IC-705 can also reach you over Bluetooth: pair it in Windows first and it appears here as an ordinary port.' },
+  { id: 'ic705',    label: 'IC-705',    manufacturer: 'Icom', aliases: ['IC-705'],    defaults: ICOM_SERIAL, setupHint: ICOM_HINT + ' Over Bluetooth (unconfirmed): pair in Windows and the port appears here, but the radio must accept a data connection — on our test it took the audio profiles and refused the serial one.' },
   { id: 'ic7100',   label: 'IC-7100',   manufacturer: 'Icom', aliases: ['IC-7100'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
   { id: 'ic7851',   label: 'IC-7851',   manufacturer: 'Icom', aliases: ['IC-7851'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
 
