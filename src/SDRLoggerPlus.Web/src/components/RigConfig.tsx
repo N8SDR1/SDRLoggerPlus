@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Radio, Wifi, WifiOff, Power, PowerOff, Plus, Pencil, Settings, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
@@ -79,7 +79,7 @@ export function RigConfig() {
   const { settings, updateRadioSettings, updateTciSettings, updateFlrigSettings, saveSettings } = useSettingsStore();
   const tciSettings = settings.radio.tci;
   const flrigSettings = settings.radio.flrig;
-  const { autoReconnect, autoConnectRigId, reconnectLastOnStartup } = settings.radio;
+  const { autoReconnect, autoConnectRigId, activeRigType, reconnectLastOnStartup } = settings.radio;
 
   // TCI form state
   const [showTciForm, setShowTciForm] = useState(false);
@@ -179,8 +179,9 @@ export function RigConfig() {
     ).slice(0, 50);
   }, [hamlibRigs, rigSearch]);
 
-  // Convert Map to array for rendering
-  const radios = Array.from(discoveredRadios.values());
+  // Convert Map to array for rendering. Memoised because the auto-connect effect below
+  // depends on it: a fresh array every render made that effect fire every render.
+  const radios = useMemo(() => Array.from(discoveredRadios.values()), [discoveredRadios]);
   const selectedConnectionState = selectedRadioId
     ? radioConnectionStates.get(selectedRadioId)
     : null;
@@ -202,7 +203,7 @@ export function RigConfig() {
   const handleConnect = useCallback(async (radioId: string) => {
     setSelectedRadio(radioId);
     await connectRadio(radioId);
-    // Auto-save this as the reconnect target when reconnectLastOnStartup is enabled
+    // Remember this as the reconnect target when reconnectLastOnStartup is enabled.
     if (reconnectLastOnStartup) {
       const radio = discoveredRadios.get(radioId);
       const rigType = radio?.type === "Hamlib" || radioId.startsWith("hamlib-")
@@ -210,10 +211,21 @@ export function RigConfig() {
         : radio?.type === "Tci" || radioId.startsWith("tci-")
           ? "tci" as const
           : null;
-      updateRadioSettings({ autoReconnect: true, autoConnectRigId: radioId, activeRigType: rigType });
-      saveSettings();
+      // Only when it actually changes. Writing unconditionally persisted the same three
+      // values on every connect ATTEMPT — and a rig that is switched off is retried
+      // forever, so an unreachable radio turned into an endless stream of settings saves.
+      const alreadyStored = autoReconnect && autoConnectRigId === radioId && activeRigType === rigType;
+      if (!alreadyStored) {
+        updateRadioSettings({ autoReconnect: true, autoConnectRigId: radioId, activeRigType: rigType });
+        saveSettings();
+      }
     }
-  }, [setSelectedRadio, connectRadio, reconnectLastOnStartup, discoveredRadios, updateRadioSettings, saveSettings]);
+  }, [setSelectedRadio, connectRadio, reconnectLastOnStartup, discoveredRadios,
+      autoReconnect, autoConnectRigId, activeRigType, updateRadioSettings, saveSettings]);
+
+  // Last (rig, connection-state) the auto-connect effect acted on, so it fires on
+  // transitions rather than on every render.
+  const lastAutoAttemptRef = useRef<string | null>(null);
 
   // Auto-connect to saved rig if autoReconnect is enabled and we have a discovered radio.
   // IMPORTANT: We must wait for connection state to arrive before deciding whether to connect.
@@ -230,6 +242,12 @@ export function RigConfig() {
     if (!targetRadio) return;
 
     const connState = radioConnectionStates.get(targetRadio.id);
+
+    // Act once per state transition, not once per render. Without this, any re-render
+    // while the target rig is switched off re-fires the connect attempt immediately.
+    const attempt = `${targetRadio.id}:${connState ?? "unknown"}`;
+    if (lastAutoAttemptRef.current === attempt) return;
+    lastAutoAttemptRef.current = attempt;
 
     if (connState === "Connected" || connState === "Monitoring") {
       // Backend already has this rig connected — just select it, no reconnect needed
