@@ -1223,30 +1223,23 @@ public class LogHub : Hub<ILogHubClient>
     {
         _logger.LogDebug("Client requested radio status");
 
-        // Send all discovered radios
-        foreach (var radio in await _tciRadioService.GetDiscoveredRadiosAsync())
+        // Ask the registry, not a hand-written list of backends. This method used to
+        // name TCI and Hamlib explicitly, which silently left FlexRadio out: a Flex
+        // announces itself on its own schedule, so if that broadcast landed before the
+        // UI connected, nothing ever told the UI the radio existed and it stayed
+        // invisible for the rest of the session. Going through the registry means a
+        // backend cannot be forgotten here again.
+        foreach (var radio in await _rigRegistry.AllDiscoveredRadiosAsync())
         {
             await Clients.Caller.OnRadioDiscovered(radio);
         }
 
-        foreach (var radio in await _hamlibService.GetDiscoveredRadiosAsync())
-        {
-            await Clients.Caller.OnRadioDiscovered(radio);
-        }
-
-        // Send current radio states
-        foreach (var state in _tciRadioService.GetRadioStates())
+        foreach (var state in _rigRegistry.AllRadioStates())
         {
             await Clients.Caller.OnRadioStateChanged(state);
         }
 
-        foreach (var state in _hamlibService.GetRadioStates())
-        {
-            await Clients.Caller.OnRadioStateChanged(state);
-        }
-
-        // Send current connection states so UI reflects actual connection status
-        foreach (var connState in _tciRadioService.GetConnectionStates())
+        foreach (var connState in _rigRegistry.AllConnectionStates())
         {
             await Clients.Caller.OnRadioConnectionStateChanged(connState);
         }

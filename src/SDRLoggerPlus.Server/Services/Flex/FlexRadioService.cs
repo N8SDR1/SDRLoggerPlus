@@ -33,6 +33,9 @@ public sealed class FlexRadioService : BackgroundService, IRigBackend, ISupports
     private readonly IHubContext<LogHub, ILogHubClient> _hub;
 
     private readonly ConcurrentDictionary<string, (FlexProtocol.FlexRadioInfo Info, DateTime SeenUtc)> _discovered = new();
+    // Radios we have actually told the UI about — deliberately not the same thing as
+    // the radios we have seen. See HandleDiscoveryDatagram.
+    private readonly HashSet<string> _announced = new();
     private volatile bool _discoveryOn = true;
 
     // Single active connection (one Flex at a time in v1).
@@ -156,7 +159,17 @@ public sealed class FlexRadioService : BackgroundService, IRigBackend, ISupports
 
     // ================= ISupportsDiscovery =================
 
-    public Task StartDiscoveryAsync() { _discoveryOn = true; return Task.CompletedTask; }
+    public Task StartDiscoveryAsync()
+    {
+        _discoveryOn = true;
+        // Announce what we already know. A Flex beacons on its own schedule, so by the
+        // time discovery is switched on the radio has usually already been seen — and
+        // without this it would never be announced again, because it is no longer new.
+        foreach (var (info, _) in _discovered.Values)
+            _ = _hub.BroadcastRadioDiscovered(ToDiscoveredEvent(info));
+        return Task.CompletedTask;
+    }
+
     public Task StopDiscoveryAsync() { _discoveryOn = false; return Task.CompletedTask; }
 
     // ================= discovery listener =================
@@ -194,9 +207,12 @@ public sealed class FlexRadioService : BackgroundService, IRigBackend, ISupports
         var info = FlexProtocol.ParseDiscoveryPayload(payload);
         if (info is null) return;
         var radioId = FlexProtocol.RadioId(info.Serial);
-        var isNew = !_discovered.ContainsKey(radioId);
         _discovered[radioId] = (info, DateTime.UtcNow);
-        if (_discoveryOn && isNew)
+        // "Announced" is tracked separately from "seen", and is only set when we actually
+        // announce. Deriving it from the cache meant a beacon that arrived before anyone
+        // was listening still counted as the one and only announcement, after which the
+        // radio was never mentioned again for the life of the process.
+        if (_discoveryOn && _announced.Add(radioId))
         {
             _ = _hub.BroadcastRadioDiscovered(ToDiscoveredEvent(info));
             _logger.LogInformation("Flex discovered: {Name} ({RadioId}) at {Ip}:{Port}",
@@ -211,7 +227,12 @@ public sealed class FlexRadioService : BackgroundService, IRigBackend, ISupports
         {
             if (kv.Value.SeenUtc >= cutoff || kv.Key == _connectedRadioId) continue;
             if (_discovered.TryRemove(kv.Key, out _))
+            {
+                // Forget that we announced it, so a radio that comes back is announced
+                // again rather than silently staying absent from the list.
+                _announced.Remove(kv.Key);
                 _ = _hub.BroadcastRadioRemoved(new RadioRemovedEvent(kv.Key));
+            }
         }
     }
 

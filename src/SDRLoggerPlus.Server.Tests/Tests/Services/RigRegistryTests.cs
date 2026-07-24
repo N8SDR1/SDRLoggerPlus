@@ -29,7 +29,34 @@ public class RigRegistryTests
         public Task<bool> SetModeAsync(string radioId, string mode, long hz = 0, CancellationToken ct = default) => Task.FromResult(true);
         public IEnumerable<RadioStateChangedEvent> GetRadioStates() => Array.Empty<RadioStateChangedEvent>();
         public IEnumerable<RadioConnectionStateChangedEvent> GetConnectionStates() => Array.Empty<RadioConnectionStateChangedEvent>();
-        public Task<IEnumerable<RadioDiscoveredEvent>> GetDiscoveredRadiosAsync() => Task.FromResult<IEnumerable<RadioDiscoveredEvent>>(Array.Empty<RadioDiscoveredEvent>());
+        /// <summary>Radios this backend would report to the UI on request.</summary>
+        public List<RadioDiscoveredEvent> Discovered { get; } = new();
+        public Task<IEnumerable<RadioDiscoveredEvent>> GetDiscoveredRadiosAsync() => Task.FromResult<IEnumerable<RadioDiscoveredEvent>>(Discovered);
+    }
+
+    [Fact]
+    public async Task AllDiscoveredRadios_IncludesEveryBackend()
+    {
+        // The hub hydrates the UI from this. It used to ask TCI and Hamlib by name,
+        // which silently omitted FlexRadio — a Flex announces itself on its own
+        // schedule, so if that landed before the UI connected there was nothing left to
+        // tell the UI it existed and the radio stayed invisible all session. Going
+        // through the registry is what stops a backend being forgotten, so prove every
+        // backend is represented.
+        var tci = new FakeBackend(RadioType.Tci, "tci-");
+        var hamlib = new FakeBackend(RadioType.Hamlib, "hamlib-");
+        var flrig = new FakeBackend(RadioType.Flrig, "flrig");
+        var flex = new FakeBackend(RadioType.Flex, "flex-");
+        tci.Discovered.Add(new RadioDiscoveredEvent("tci-1", RadioType.Tci, "Lyra", "127.0.0.1", 40001, null));
+        hamlib.Discovered.Add(new RadioDiscoveredEvent("hamlib-3073", RadioType.Hamlib, "IC-7300", "", 0, null));
+        flrig.Discovered.Add(new RadioDiscoveredEvent("flrig", RadioType.Flrig, "flrig", "127.0.0.1", 12345, null));
+        flex.Discovered.Add(new RadioDiscoveredEvent("flex-1234", RadioType.Flex, "FLEX-8400", "192.168.1.9", 4992, null));
+
+        var registry = new RigRegistry(new IRigBackend[] { tci, hamlib, flrig, flex });
+
+        var all = (await registry.AllDiscoveredRadiosAsync()).ToList();
+
+        all.Select(r => r.Id).Should().BeEquivalentTo(new[] { "tci-1", "hamlib-3073", "flrig", "flex-1234" });
     }
 
     [Fact]
