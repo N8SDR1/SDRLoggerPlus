@@ -37,14 +37,23 @@ public partial class HamlibService : BackgroundService
     private int _consecutiveErrors;
     private const int MaxConsecutiveErrors = 3;
 
+    private readonly Sat.SatControllerService _satController;
+    // Cached "release the rig while the controller is active" setting, refreshed only
+    // while a pass is on, so the poll loop costs nothing extra in the normal case.
+    private bool _releaseRigWhileControllerActive;
+    private DateTime _releaseSettingCheckedUtc = DateTime.MinValue;
+    private bool _rigReleasedToController;
+
     public HamlibService(
         ILogger<HamlibService> logger,
         IHubContext<LogHub, ILogHubClient> hubContext,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        Sat.SatControllerService satController)
     {
         _logger = logger;
         _hubContext = hubContext;
         _scopeFactory = scopeFactory;
+        _satController = satController;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -78,10 +87,55 @@ public partial class HamlibService : BackgroundService
         {
             if (_rig?.IsOpen == true && _config != null)
             {
-                await PollRigStateAsync();
+                if (await ControllerOwnsRigAsync())
+                {
+                    // Controller has the radio — go silent on the control bus. We read
+                    // frequency/mode from its /track feed during the pass, so there is
+                    // nothing to gain by polling and, on a shared CI-V bus, real harm.
+                    if (!_rigReleasedToController)
+                    {
+                        _rigReleasedToController = true;
+                        _logger.LogInformation("Hamlib: pausing rig polling — S.A.T. controller has the radio");
+                    }
+                }
+                else
+                {
+                    if (_rigReleasedToController)
+                    {
+                        _rigReleasedToController = false;
+                        _logger.LogInformation("Hamlib: resuming rig polling — controller released the radio");
+                    }
+                    await PollRigStateAsync();
+                }
             }
             await Task.Delay(_config?.PollIntervalMs ?? 250, stoppingToken);
         }
+    }
+
+    /// <summary>
+    /// True when the S.A.T. controller is active AND the operator has opted to hand it the
+    /// radio outright. The setting is only read while a pass is on (a rare, in-memory-gated
+    /// window), and even then at most every few seconds — so the normal poll loop pays
+    /// nothing for this.
+    /// </summary>
+    private async Task<bool> ControllerOwnsRigAsync()
+    {
+        if (!_satController.IsActive) return false;
+        if (DateTime.UtcNow - _releaseSettingCheckedUtc > TimeSpan.FromSeconds(5))
+        {
+            _releaseSettingCheckedUtc = DateTime.UtcNow;
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var settings = await scope.ServiceProvider.GetRequiredService<ISettingsRepository>().GetAsync();
+                _releaseRigWhileControllerActive = settings?.Sat?.ReleaseRigWhileControllerActive ?? false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Hamlib: could not read S.A.T. release setting");
+            }
+        }
+        return _releaseRigWhileControllerActive;
     }
 
     private async Task TryAutoConnectAsync()

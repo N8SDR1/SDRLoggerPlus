@@ -1016,6 +1016,19 @@ public class SatSettings
     /// </summary>
     [BsonElement("autoActivateLeadSeconds")]
     public int AutoActivateLeadSeconds { get; set; } = 90;
+
+    /// <summary>
+    /// While the controller has the radio (S.A.T. active), stop SDRLogger+'s own direct
+    /// CAT polling of the rig so it makes no traffic on the radio's control bus. Meant for
+    /// a hardware sat controller (CSN) wired straight to the rig's CI-V: on older radios
+    /// like the IC-9100 a second master on that bus fights the tracker. Only affects a
+    /// DIRECT Hamlib connection — an flrig bridge polls the radio itself, out of our reach.
+    /// The serial port stays open (that's passive); we just stop being a bus master until
+    /// after LOS, reading frequency/mode from the controller's /track feed meanwhile. Off
+    /// by default.
+    /// </summary>
+    [BsonElement("releaseRigWhileControllerActive")]
+    public bool ReleaseRigWhileControllerActive { get; set; }
 }
 
 public class WeatherSettings

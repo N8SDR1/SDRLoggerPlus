@@ -4554,6 +4554,29 @@ function SatSettingsSection() {
           </div>
         )}
       </div>
+
+      <div className="p-3 bg-dark-700 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div className="pr-4">
+            <label className="text-sm font-medium text-dark-200">Release the radio while the controller has it</label>
+            <p className="text-xs text-dark-400 mt-0.5">
+              While S.A.T. is active, stop SDRLogger+'s own <span className="text-dark-200">direct CAT</span> polling of the rig
+              so it makes no traffic on the radio's control bus. For a hardware controller (CSN)
+              wired straight to the rig's CI-V — on older radios like the <span className="text-dark-200">IC-9100</span> a second
+              device on that bus fights the tracker. The serial port stays open; we just stop
+              polling and read frequency/mode from the controller instead, resuming after LOS.
+              <br />
+              <span className="text-dark-500">Only affects a direct <span className="text-dark-400">Hamlib</span> connection — an flrig bridge polls the radio itself, which we can't pause from here.</span>
+            </p>
+          </div>
+          <button
+            onClick={() => updateSatSettings({ releaseRigWhileControllerActive: !sat.releaseRigWhileControllerActive })}
+            className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${sat.releaseRigWhileControllerActive ? 'bg-accent-primary' : 'bg-dark-500'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${sat.releaseRigWhileControllerActive ? 'translate-x-5' : ''}`} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

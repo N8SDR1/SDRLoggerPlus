@@ -383,6 +383,8 @@ export interface SatControllerSettings {
   autoActivate: boolean;
   /** How far ahead of AOS to activate, in seconds (mirrors the controller's AOS alarm). */
   autoActivateLeadSeconds: number;
+  /** While the controller has the radio, stop our own direct CAT polling (shared-CI-V rigs). */
+  releaseRigWhileControllerActive: boolean;
 }
 
 /** One WSJT-X/JTDX UDP listener (a decoder app reporting to a host:port). */
@@ -850,6 +852,7 @@ const defaultSettings: Settings = {
     adifPort: 1100,
     autoActivate: false,
     autoActivateLeadSeconds: 90,
+    releaseRigWhileControllerActive: false,
   },
   contest: {
     n1mmUdpEnabled: false,
