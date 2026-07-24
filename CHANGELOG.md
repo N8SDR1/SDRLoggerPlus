@@ -3,6 +3,40 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-24 — v2.9.1 "Altair"
+
+A same-day follow-up to v2.9.0: one real connection bug, a serial-port warning,
+and honest corrections after a long session on the bench with an IC-705.
+
+### Fixed
+- **A failed Hamlib connect made every later attempt silently do nothing.** After
+  one failed connect, clicking Connect again produced no error, no log line and no
+  change for the rest of the session — it read as "Hamlib is broken" when the radio
+  and port were fine. The service marked itself as owning a radio it had never
+  opened; it now clears that on failure and actually retries.
+
+### New
+- **Serial-port collision warning.** Windows can hand a paired radio a COM number
+  that virtual-port software (VSPE/ELTIMA, com0com) already holds, because such
+  software often doesn't register with the Windows COM name arbiter — and the port
+  then opens the wrong device. The port picker now flags any number claimed by more
+  than one device and tells you how to fix it.
+
+### Verified
+- **IC-705 over USB confirmed** and marked as such (the first bench-verified
+  Popular Radios entry). Its setup hint now reflects what the radio actually does:
+  two USB ports with only the lower one answering CI-V, baud rate that can stay on
+  Auto, and echo-back that can be left on.
+
+### Corrected
+- **Bluetooth CAT is documented as unconfirmed, not working.** v2.9.0 said it worked;
+  a controlled test told a different story. An IC-705 pairs, Windows builds the
+  outgoing port, and the port then won't open — at every baud rate, with the radio
+  registered as a data device, USB unplugged, and no duplicate COM registrations,
+  and the same from a bare serial open with SDRLoggerPlus not running. So the radio
+  isn't accepting the serial connection; we don't know why, and the docs now say only
+  that. USB is the confirmed path.
+
 ## 2026-07-24 — v2.9.0 "Altair" 🛰️
 
 Satellite operating gets hands-free, radio setup gets a lot friendlier, and the
