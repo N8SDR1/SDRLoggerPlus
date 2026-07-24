@@ -227,7 +227,9 @@ export function RigConfig() {
         ? "hamlib" as const
         : radio?.type === "Tci" || radioId.startsWith("tci-")
           ? "tci" as const
-          : null;
+          : radio?.type === "Flex" || radioId.startsWith("flex-")
+            ? "flex" as const
+            : null;
       // Only when it actually changes. Writing unconditionally persisted the same three
       // values on every connect ATTEMPT — and a rig that is switched off is retried
       // forever, so an unreachable radio turned into an endless stream of settings saves.
@@ -298,7 +300,9 @@ export function RigConfig() {
         ? "hamlib" as const
         : radio?.type === "Tci" || radioId.startsWith("tci-")
           ? "tci" as const
-          : null;
+          : radio?.type === "Flex" || radioId.startsWith("flex-")
+            ? "flex" as const
+            : null;
       updateRadioSettings({
         autoReconnect: true,
         autoConnectRigId: radioId,

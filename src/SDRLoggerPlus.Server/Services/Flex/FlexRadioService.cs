@@ -3,7 +3,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
 using SDRLoggerPlus.Contracts.Events;
+using SDRLoggerPlus.Server.Core.Database;
 using SDRLoggerPlus.Server.Hubs;
 using SDRLoggerPlus.Server.Services.Rig;
 
@@ -49,10 +51,19 @@ public sealed class FlexRadioService : BackgroundService, IRigBackend, ISupports
     private long _lastFreqHz;
     private string _lastMode = "";
 
-    public FlexRadioService(ILogger<FlexRadioService> logger, IHubContext<LogHub, ILogHubClient> hub)
+    private readonly IServiceScopeFactory _scopeFactory;
+    // Auto-reconnect is one-shot per session, like Hamlib/TCI — but it can't fire until
+    // the radio is discovered, so it's driven off discovery rather than run once at boot.
+    private volatile bool _autoReconnectSettled;
+
+    public FlexRadioService(
+        ILogger<FlexRadioService> logger,
+        IHubContext<LogHub, ILogHubClient> hub,
+        IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _hub = hub;
+        _scopeFactory = scopeFactory;
     }
 
     // ================= IRigBackend =================
@@ -217,6 +228,44 @@ public sealed class FlexRadioService : BackgroundService, IRigBackend, ISupports
             _ = _hub.BroadcastRadioDiscovered(ToDiscoveredEvent(info));
             _logger.LogInformation("Flex discovered: {Name} ({RadioId}) at {Ip}:{Port}",
                 info.Name, radioId, info.Ip, info.Port);
+        }
+
+        // Reconnect the saved radio once it shows up. Unlike Hamlib/TCI (which connect to a
+        // stored address at boot), a Flex has to be discovered first — so this is the point
+        // it becomes possible, not app start.
+        if (!_autoReconnectSettled && _connectedRadioId is null)
+            _ = MaybeAutoReconnectAsync(radioId);
+    }
+
+    /// <summary>
+    /// If the operator left auto-reconnect on for this Flex, connect it now that it's been
+    /// discovered. One-shot: once we've either connected the target or established that the
+    /// saved radio isn't a Flex, we stop checking for the rest of the session.
+    /// </summary>
+    private async Task MaybeAutoReconnectAsync(string radioId)
+    {
+        if (_autoReconnectSettled || _connectedRadioId is not null) return;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var settings = await scope.ServiceProvider.GetRequiredService<ISettingsRepository>().GetAsync();
+            var radio = settings?.Radio;
+            if (radio is not { AutoReconnect: true, ActiveRigType: "flex" })
+            {
+                // The saved rig isn't a Flex (or reconnect is off) — nothing for us to do.
+                _autoReconnectSettled = true;
+                return;
+            }
+            // Right feature, wrong radio — keep waiting for the saved one to appear.
+            if (radio.AutoConnectRigId != radioId) return;
+
+            _autoReconnectSettled = true;
+            _logger.LogInformation("Flex auto-reconnecting to saved radio {RadioId}", radioId);
+            await ConnectAsync(radioId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Flex auto-reconnect check failed");
         }
     }
 

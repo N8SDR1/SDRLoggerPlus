@@ -214,7 +214,7 @@ export interface FlrigSettings {
   rttyMode: string;
 }
 
-export type RigType = 'tci' | 'hamlib' | 'flrig' | null;
+export type RigType = 'tci' | 'hamlib' | 'flrig' | 'flex' | null;
 
 export interface RadioSettings {
   followRadio: boolean;
