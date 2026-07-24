@@ -88,7 +88,7 @@ export const POPULAR_RIGS: PopularRig[] = [
       'never answers, so if nothing happens, try the other port. CI-V USB Baud Rate can stay ' +
       'on Auto (it matched 9600 through 115200 on test), and CI-V USB Echo Back can be left ' +
       'on. Over Bluetooth (unconfirmed): pairing works and the port appears here, but the ' +
-      'radio also has to accept a data connection.',
+      'radio also has to accept the serial connection, and on our test it did not.',
   },
   { id: 'ic7100',   label: 'IC-7100',   manufacturer: 'Icom', aliases: ['IC-7100'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
   { id: 'ic7851',   label: 'IC-7851',   manufacturer: 'Icom', aliases: ['IC-7851'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
