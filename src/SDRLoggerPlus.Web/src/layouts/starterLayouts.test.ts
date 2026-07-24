@@ -7,7 +7,7 @@ import { STARTER_LAYOUTS, findStarterLayout } from './starterLayouts';
 const KNOWN_PANELS = new Set([
   'log-entry', 'log-history', 'cluster', 'wsjtx-decodes', 'grid-tracker', 'rotator',
   'globe-3d', 'qrz-profile', 'contests', 'contest-entry', 'contest-mults',
-  'contest-bandmap', 'contest-score', 'header-bar', 'sat-controller', 'dxpeditions',
+  'contest-bandmap', 'contest-score', 'header-bar', 'sat-controller', 'sat-web', 'dxpeditions',
   'chat-ai', 'pota', 'dx-coach', 'propagation', 'meters', 'panadapter',
   'statistics', 'map',
 ]);

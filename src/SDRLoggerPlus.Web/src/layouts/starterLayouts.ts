@@ -100,7 +100,8 @@ export const STARTER_LAYOUTS: StarterLayout[] = [
     description: 'Working birds — pass control, rotator and entry',
     layout: build([
       { weight: 32, tabs: [['log-entry', 'Log Entry'], ['sat-controller', 'SAT Controller']] },
-      { weight: 40, tabs: [['rotator', 'Rotator'], ['log-history', 'Log History']] },
+      // S.A.T. Web first in the widest column — the controller's own UI wants the room.
+      { weight: 40, tabs: [['sat-web', 'S.A.T. Web'], ['rotator', 'Rotator'], ['log-history', 'Log History']] },
       { weight: 28, tabs: [['globe-3d', '3D Globe'], ['grid-tracker', 'Grid Tracker']] },
     ]),
   },
