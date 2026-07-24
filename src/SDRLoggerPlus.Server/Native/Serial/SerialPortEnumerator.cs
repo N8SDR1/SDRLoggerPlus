@@ -101,9 +101,12 @@ public static class SerialPortEnumerator
 
                 // FTDI's VCP driver enumerates under FTDIBUS rather than USB, so matching
                 // "USB\" alone files a perfectly ordinary USB rig interface as non-USB.
+                // BTHENUM is a paired Bluetooth serial device — the IC-705 and friends
+                // present CAT that way, so it is real radio hardware too, not a virtual port.
                 var isUsb = hardwareId is not null &&
                     (hardwareId.StartsWith("USB\\", StringComparison.OrdinalIgnoreCase) ||
-                     hardwareId.StartsWith("FTDIBUS\\", StringComparison.OrdinalIgnoreCase));
+                     hardwareId.StartsWith("FTDIBUS\\", StringComparison.OrdinalIgnoreCase) ||
+                     hardwareId.StartsWith("BTHENUM\\", StringComparison.OrdinalIgnoreCase));
                 results.Add(new SerialPortInfo(portName, string.IsNullOrEmpty(description) ? null : description,
                                                hardwareId, isUsb));
             }
@@ -124,6 +127,10 @@ public static class SerialPortEnumerator
     public static string? VendorFor(string? hardwareId)
     {
         if (string.IsNullOrEmpty(hardwareId)) return null;
+        // Worth calling out by itself: a radio reached over Bluetooth (IC-705 and
+        // similar) is an ordinary serial port here, and saying so saves the operator
+        // wondering which of several look-alike entries is the rig.
+        if (hardwareId.StartsWith("BTHENUM\\", StringComparison.OrdinalIgnoreCase)) return "Bluetooth";
         var m = Regex.Match(hardwareId, @"VID_([0-9A-Fa-f]{4})");
         return m.Success && KnownUsbVendors.TryGetValue(m.Groups[1].Value, out var vendor) ? vendor : null;
     }

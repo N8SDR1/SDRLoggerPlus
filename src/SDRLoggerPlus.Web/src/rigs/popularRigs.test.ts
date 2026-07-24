@@ -70,6 +70,15 @@ describe('POPULAR_RIGS catalogue', () => {
     }
   });
 
+  it('treats an entry as unverified unless it says otherwise', () => {
+    // The UI warns on anything not yet confirmed against real hardware, so the default
+    // has to be "unverified" — a missing flag must never read as a confirmation.
+    for (const r of POPULAR_RIGS) {
+      expect(r.verified === undefined || r.verified === true || r.verified === false).toBe(true);
+      if (r.verified !== true) expect(Boolean(r.verified)).toBe(false);
+    }
+  });
+
   it('has no alias claimed by two different radios', () => {
     const seen = new Map<string, string>();
     for (const r of POPULAR_RIGS) {

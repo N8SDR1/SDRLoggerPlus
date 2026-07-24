@@ -784,6 +784,15 @@ export function RigConfig() {
                 <p className="text-xs text-dark-200">
                   {popularRigs.find((r) => r.id === pickedPopularId)?.setupHint}
                 </p>
+                {/* Say plainly which defaults are still documentation rather than bench —
+                    the same honesty the FlexRadio backend ships with. */}
+                {!popularRigs.find((r) => r.id === pickedPopularId)?.verified && (
+                  <p className="mt-1.5 text-[11px] text-dark-300">
+                    🧪 These starting values come from the radio's documentation and haven't been confirmed
+                    on this model yet. If it connects — or if you had to change something — please let us know
+                    so we can mark it verified.
+                  </p>
+                )}
               </div>
             )}
 

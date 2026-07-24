@@ -32,6 +32,14 @@ export interface PopularRig {
    * front rather than let it become a support email.
    */
   setupHint: string;
+  /**
+   * True once an operator has confirmed these defaults against the actual radio.
+   * The values come from documentation, and documentation is not a bench — so until
+   * someone with the rig in front of them says it worked, the UI says so rather than
+   * implying a confidence we have not earned. Flip to true on a confirmed report,
+   * naming the confirming station in the commit.
+   */
+  verified?: boolean;
 }
 
 /** Uppercase, letters and digits only: "FT-DX 10" and "ftdx10" both become "FTDX10". */
@@ -70,7 +78,7 @@ export const POPULAR_RIGS: PopularRig[] = [
   { id: 'ic7300',   label: 'IC-7300',   manufacturer: 'Icom', aliases: ['IC-7300'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
   { id: 'ic7610',   label: 'IC-7610',   manufacturer: 'Icom', aliases: ['IC-7610'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
   { id: 'ic9700',   label: 'IC-9700',   manufacturer: 'Icom', aliases: ['IC-9700'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
-  { id: 'ic705',    label: 'IC-705',    manufacturer: 'Icom', aliases: ['IC-705'],    defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
+  { id: 'ic705',    label: 'IC-705',    manufacturer: 'Icom', aliases: ['IC-705'],    defaults: ICOM_SERIAL, setupHint: ICOM_HINT + ' The IC-705 can also reach you over Bluetooth: pair it in Windows first and it appears here as an ordinary port.' },
   { id: 'ic7100',   label: 'IC-7100',   manufacturer: 'Icom', aliases: ['IC-7100'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
   { id: 'ic7851',   label: 'IC-7851',   manufacturer: 'Icom', aliases: ['IC-7851'],   defaults: ICOM_SERIAL, setupHint: ICOM_HINT },
 
