@@ -1,16 +1,6 @@
 import type { SatState, ContestStateEvent, WsjtxDecodeEvent } from './signalr';
 export type { SatState } from './signalr';
 
-/** A configured transponder read from the CSN controller's /f.txt table. */
-export interface SatConfiguredTransponder {
-  catalogNumber: string;
-  uplinkHz: number;
-  downlinkHz: number;
-  uplinkMode: string;
-  downlinkMode: string;
-  name: string;
-}
-
 const API_BASE = '/api';
 
 export interface QsoResponse {
@@ -700,11 +690,6 @@ class ApiClient {
     });
   }
 
-  // The satellites/transponders configured on the CSN controller. TLE / freq-DB updates
-  // and satellite selection are handled by the controller's own UI (S.A.T. Web panel).
-  async getConfiguredSats(): Promise<SatConfiguredTransponder[]> {
-    return this.fetch('/sat/configured');
-  }
 
   // Weather alerts
   async getLightningStatus(): Promise<LightningStatus> {

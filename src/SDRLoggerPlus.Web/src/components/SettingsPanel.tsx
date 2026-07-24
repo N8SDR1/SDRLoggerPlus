@@ -59,8 +59,7 @@ import {
 } from 'lucide-react';
 import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type AiProvider } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
-import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot, type SatConfiguredTransponder } from '../api/client';
-import { useToastStore } from '../store/toastStore';
+import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
 import { useLayoutStore } from '../store/layoutStore';
 import { useAppStore } from '../store/appStore';
 import { notifyLayoutsChanged } from '../hooks/useLayoutMenu';
@@ -4510,92 +4509,6 @@ function SatSettingsSection() {
         </div>
       </div>
 
-      {sat.controllerIp && <SatControllerTools />}
-    </div>
-  );
-}
-
-// CSN S.A.T. controller tools: browse the configured transponder list and trigger the
-// controller's own TLE / freq-DB updates. These mirror the controller's built-in web UI.
-function SatControllerTools() {
-  const pushToast = useToastStore((s) => s.push);
-  const [sats, setSats] = useState<SatConfiguredTransponder[] | null>(null);
-  const [loadingSats, setLoadingSats] = useState(false);
-
-  const loadSats = async () => {
-    setLoadingSats(true);
-    try {
-      const list = await api.getConfiguredSats();
-      setSats(list);
-      if (list.length === 0) pushToast('No configured satellites returned by the controller', 'info');
-    } catch {
-      pushToast('Could not read the configured satellite list from the controller', 'error');
-    } finally {
-      setLoadingSats(false);
-    }
-  };
-
-  // Group transponders by catalog number for display. (Uses a plain object because the
-  // lucide `Map` icon is imported into this module and shadows the global Map.)
-  const groups = useMemo(() => {
-    const byId: Record<string, SatConfiguredTransponder[]> = {};
-    for (const t of sats ?? []) {
-      (byId[t.catalogNumber] ??= []).push(t);
-    }
-    return Object.entries(byId);
-  }, [sats]);
-
-  const mhz = (hz: number) => hz > 0 ? (hz / 1e6).toFixed(4) : '—';
-
-  return (
-    <div className="border-t border-glass-100 pt-5 space-y-5">
-      <div>
-        <h4 className="text-sm font-semibold font-ui text-dark-200">My Satellites</h4>
-        <p className="text-xs text-dark-400 mt-0.5">
-          The satellites and transponders configured on your controller. To update the TLE or
-          frequency database — or to pick a satellite to track — use the{' '}
-          <span className="text-dark-300">S.A.T. Web</span> panel, which shows the controller's
-          own interface.
-        </p>
-      </div>
-
-      {/* My Satellites */}
-      <div>
-        <div className="flex items-center gap-3 mb-2">
-          <button
-            onClick={loadSats}
-            disabled={loadingSats}
-            className="px-2 py-1 text-xs rounded bg-dark-700 border border-glass-200 text-dark-300 hover:text-dark-100 disabled:opacity-50"
-          >
-            {loadingSats ? 'Loading…' : sats ? 'Reload' : 'Load from controller'}
-          </button>
-          {sats && <span className="text-xs text-dark-400">{groups.length} sats · {sats.length} transponders</span>}
-        </div>
-        {sats && groups.length > 0 && (
-          <div className="max-h-64 overflow-y-auto rounded-lg border border-glass-100 divide-y divide-glass-100">
-            {groups.map(([catno, trs]) => (
-              <div key={catno} className="p-2">
-                <div className="text-xs font-mono text-accent-secondary mb-1">#{catno}</div>
-                <div className="space-y-0.5">
-                  {trs.map((t, i) => (
-                    <div key={i} className="text-xs text-dark-300 flex justify-between gap-2">
-                      <span className="truncate">{t.name || '(unnamed)'}</span>
-                      <span className="font-mono text-dark-400 whitespace-nowrap">
-                        {mhz(t.uplinkHz)}{t.uplinkMode ? ` ${t.uplinkMode}` : ''} ↑ / {mhz(t.downlinkHz)}{t.downlinkMode ? ` ${t.downlinkMode}` : ''} ↓
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <p className="text-[11px] text-dark-500">
-        Controller integration is community-reverse-engineered; it reproduces the actions of the
-        controller's own web interface at its IP.
-      </p>
     </div>
   );
 }
