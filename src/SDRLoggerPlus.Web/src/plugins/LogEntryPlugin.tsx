@@ -241,14 +241,26 @@ export function LogEntryPlugin() {
     // otherwise it could never switch you INTO SAT mode (chicken-and-egg).
     enabled: satEnabled,
   });
+  const lastPushAtRef = useRef(0);
   useEffect(() => {
     // Subscribe whenever SAT is enabled, regardless of the current log mode, so the
     // auto-switch/rig-lock react to the controller from General mode too.
     if (!satEnabled) return;
-    const cb = (s: SatState) => setLiveSatState(s);
+    const cb = (s: SatState) => {
+      lastPushAtRef.current = Date.now();
+      setLiveSatState(s);
+    };
     addSatStateCallback(cb);
     return () => removeSatStateCallback(cb);
   }, [satEnabled]);
+  // Pushes win while they're flowing, but they must not win forever: the backend only
+  // broadcasts on a state CHANGE, so a restarted (or reconnected) server never announces
+  // the state it came up in, and the last push would otherwise shadow the poll for good.
+  // Once pushes go quiet, let the poll take over.
+  useEffect(() => {
+    if (!polledSatState) return;
+    if (Date.now() - lastPushAtRef.current > 7000) setLiveSatState(polledSatState);
+  }, [polledSatState]);
   const satState = liveSatState ?? polledSatState ?? null;
   const satTracking = !!(satState?.active && satState?.satellite);
   // While the CSN S.A.T. controller is active it owns the radio — the backend
@@ -261,15 +273,41 @@ export function LogEntryPlugin() {
   // logging and returns you afterward. Edge-triggered (only on the active↔inactive
   // transition) so you can still change tabs manually during a pass if you want.
   const prevSatActiveRef = useRef(false);
+  // Whether the current SAT tab was entered BY the auto-switch rather than by the
+  // operator. Persisted, because the distinction has to survive a page reload — see
+  // the reconcile below.
+  const autoEnteredSatRef = useRef(
+    (() => { try { return localStorage.getItem('sdrl_log_mode_auto') === '1'; } catch { return false; } })()
+  );
+  const markAutoEnteredSat = useCallback((auto: boolean) => {
+    autoEnteredSatRef.current = auto;
+    try { localStorage.setItem('sdrl_log_mode_auto', auto ? '1' : '0'); } catch { /* no-op */ }
+  }, []);
   useEffect(() => {
     const active = !!satState?.active;
     if (active && !prevSatActiveRef.current) {
       setLogMode('sat');
+      markAutoEnteredSat(true);
     } else if (!active && prevSatActiveRef.current) {
       setLogMode('general');
+      markAutoEnteredSat(false);
     }
     prevSatActiveRef.current = active;
-  }, [satState?.active]);
+  }, [satState?.active, markAutoEnteredSat]);
+
+  // Reconcile once, on mount. The auto-switch above is edge-triggered, so a page load
+  // that restores a persisted 'sat' tab has no transition to correct it and would sit in
+  // SAT mode with no pass running. Only undo what WE set — a deliberately chosen SAT tab
+  // stays put.
+  const satReconciledRef = useRef(false);
+  useEffect(() => {
+    if (satReconciledRef.current || !satEnabled || !satState) return;
+    satReconciledRef.current = true;
+    if (!satState.active && autoEnteredSatRef.current) {
+      setLogMode((m) => (m === 'sat' ? 'general' : m));
+      markAutoEnteredSat(false);
+    }
+  }, [satEnabled, satState, markAutoEnteredSat]);
 
   // Timestamp state - locked means it follows system time
   const [timeLocked, setTimeLocked] = useState(true);
@@ -821,7 +859,7 @@ export function LogEntryPlugin() {
     return (
       <button
         type="button"
-        onClick={() => setLogMode(id)}
+        onClick={() => { setLogMode(id); markAutoEnteredSat(false); }}
         title={disabledTitle}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t border-b-2 font-ui text-xs font-semibold transition-colors ${
           isActive
