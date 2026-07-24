@@ -74,7 +74,7 @@ public record SatMapInfo(double Lat, double Lon, double AltKm, double FootprintR
 /// so LoTW satellite credit survives export. Sockets are bound only while
 /// active so the ports stay free for other tools (ported behavior).
 /// </summary>
-public class SatControllerService : BackgroundService
+public partial class SatControllerService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IHubContext<LogHub, ILogHubClient> _hubContext;

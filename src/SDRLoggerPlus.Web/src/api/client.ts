@@ -1,6 +1,22 @@
 import type { SatState, ContestStateEvent, WsjtxDecodeEvent } from './signalr';
 export type { SatState } from './signalr';
 
+/** A configured transponder read from the CSN controller's /f.txt table. */
+export interface SatConfiguredTransponder {
+  catalogNumber: string;
+  uplinkHz: number;
+  downlinkHz: number;
+  uplinkMode: string;
+  downlinkMode: string;
+  name: string;
+}
+
+/** A built-in TLE source the controller can pull from. */
+export interface SatTleSource {
+  label: string;
+  url: string;
+}
+
 const API_BASE = '/api';
 
 export interface QsoResponse {
@@ -688,6 +704,26 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ active }),
     });
+  }
+
+  // S.A.T. controller management (configured list + TLE / freq-DB updates)
+  async getConfiguredSats(): Promise<SatConfiguredTransponder[]> {
+    return this.fetch('/sat/configured');
+  }
+
+  async getSatTleSources(): Promise<SatTleSource[]> {
+    return this.fetch('/sat/tle-sources');
+  }
+
+  async updateSatTle(sourceUrl: string): Promise<void> {
+    await this.fetch('/sat/update-tle', {
+      method: 'POST',
+      body: JSON.stringify({ sourceUrl }),
+    });
+  }
+
+  async updateSatFreqDb(): Promise<void> {
+    await this.fetch('/sat/update-freqdb', { method: 'POST' });
   }
 
   // Weather alerts

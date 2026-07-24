@@ -59,7 +59,8 @@ import {
 } from 'lucide-react';
 import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type AiProvider } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
-import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
+import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot, type SatConfiguredTransponder, type SatTleSource } from '../api/client';
+import { useToastStore } from '../store/toastStore';
 import { useLayoutStore } from '../store/layoutStore';
 import { useAppStore } from '../store/appStore';
 import { notifyLayoutsChanged } from '../hooks/useLayoutMenu';
@@ -4504,6 +4505,155 @@ function SatSettingsSection() {
           <p className="text-xs text-dark-400 mt-1">Default: 1100 (S.A.T. QSO LOG TYPE)</p>
         </div>
       </div>
+
+      {sat.controllerIp && <SatControllerTools />}
+    </div>
+  );
+}
+
+// CSN S.A.T. controller tools: browse the configured transponder list and trigger the
+// controller's own TLE / freq-DB updates. These mirror the controller's built-in web UI.
+function SatControllerTools() {
+  const pushToast = useToastStore((s) => s.push);
+  const [sats, setSats] = useState<SatConfiguredTransponder[] | null>(null);
+  const [loadingSats, setLoadingSats] = useState(false);
+  const [tleSources, setTleSources] = useState<SatTleSource[]>([]);
+  const [tleUrl, setTleUrl] = useState('');
+  const [busyTle, setBusyTle] = useState(false);
+  const [busyFreq, setBusyFreq] = useState(false);
+
+  useEffect(() => {
+    api.getSatTleSources()
+      .then((s) => { setTleSources(s); if (s.length > 0) setTleUrl(s[0].url); })
+      .catch(() => {});
+  }, []);
+
+  const loadSats = async () => {
+    setLoadingSats(true);
+    try {
+      const list = await api.getConfiguredSats();
+      setSats(list);
+      if (list.length === 0) pushToast('No configured satellites returned by the controller', 'info');
+    } catch {
+      pushToast('Could not read the configured satellite list from the controller', 'error');
+    } finally {
+      setLoadingSats(false);
+    }
+  };
+
+  const doUpdateTle = async () => {
+    if (!tleUrl) return;
+    setBusyTle(true);
+    try {
+      await api.updateSatTle(tleUrl);
+      pushToast('TLE update requested — the controller is fetching fresh elements', 'success');
+    } catch {
+      pushToast('TLE update failed (controller unreachable, or an https URL)', 'error');
+    } finally {
+      setBusyTle(false);
+    }
+  };
+
+  const doUpdateFreqDb = async () => {
+    setBusyFreq(true);
+    try {
+      await api.updateSatFreqDb();
+      pushToast('Frequency-DB update requested from the internet', 'success');
+    } catch {
+      pushToast('Frequency-DB update failed (controller unreachable)', 'error');
+    } finally {
+      setBusyFreq(false);
+    }
+  };
+
+  // Group transponders by catalog number for display. (Uses a plain object because the
+  // lucide `Map` icon is imported into this module and shadows the global Map.)
+  const groups = useMemo(() => {
+    const byId: Record<string, SatConfiguredTransponder[]> = {};
+    for (const t of sats ?? []) {
+      (byId[t.catalogNumber] ??= []).push(t);
+    }
+    return Object.entries(byId);
+  }, [sats]);
+
+  const mhz = (hz: number) => hz > 0 ? (hz / 1e6).toFixed(4) : '—';
+
+  return (
+    <div className="border-t border-glass-100 pt-5 space-y-5">
+      <div>
+        <h4 className="text-sm font-semibold font-ui text-dark-200">Controller Tools</h4>
+        <p className="text-xs text-dark-400 mt-0.5">
+          Update the controller's TLE and frequency database, and browse the satellites you've
+          configured on it. These run the controller's own updaters (http only).
+        </p>
+      </div>
+
+      {/* Update TLE */}
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <label className="block text-xs font-medium text-dark-300 mb-1">Update TLE from</label>
+          <select
+            value={tleUrl}
+            onChange={(e) => setTleUrl(e.target.value)}
+            className="glass-input text-sm px-2 py-1.5 w-64"
+          >
+            {tleSources.map((s) => <option key={s.url} value={s.url}>{s.label}</option>)}
+          </select>
+        </div>
+        <button
+          onClick={doUpdateTle}
+          disabled={busyTle || !tleUrl}
+          className="px-3 py-1.5 text-sm rounded-lg bg-accent-primary/20 border border-accent-primary/40 text-accent-primary hover:bg-accent-primary/30 disabled:opacity-50"
+        >
+          {busyTle ? 'Requesting…' : 'Update TLE'}
+        </button>
+        <button
+          onClick={doUpdateFreqDb}
+          disabled={busyFreq}
+          className="px-3 py-1.5 text-sm rounded-lg bg-dark-700 border border-glass-200 text-dark-200 hover:bg-dark-600 disabled:opacity-50"
+        >
+          {busyFreq ? 'Requesting…' : 'Update Freq DB'}
+        </button>
+      </div>
+
+      {/* My Satellites */}
+      <div>
+        <div className="flex items-center gap-3 mb-2">
+          <span className="text-xs font-medium text-dark-300">My Satellites</span>
+          <button
+            onClick={loadSats}
+            disabled={loadingSats}
+            className="px-2 py-1 text-xs rounded bg-dark-700 border border-glass-200 text-dark-300 hover:text-dark-100 disabled:opacity-50"
+          >
+            {loadingSats ? 'Loading…' : sats ? 'Reload' : 'Load from controller'}
+          </button>
+          {sats && <span className="text-xs text-dark-400">{groups.length} sats · {sats.length} transponders</span>}
+        </div>
+        {sats && groups.length > 0 && (
+          <div className="max-h-64 overflow-y-auto rounded-lg border border-glass-100 divide-y divide-glass-100">
+            {groups.map(([catno, trs]) => (
+              <div key={catno} className="p-2">
+                <div className="text-xs font-mono text-accent-secondary mb-1">#{catno}</div>
+                <div className="space-y-0.5">
+                  {trs.map((t, i) => (
+                    <div key={i} className="text-xs text-dark-300 flex justify-between gap-2">
+                      <span className="truncate">{t.name || '(unnamed)'}</span>
+                      <span className="font-mono text-dark-400 whitespace-nowrap">
+                        {mhz(t.uplinkHz)}{t.uplinkMode ? ` ${t.uplinkMode}` : ''} ↑ / {mhz(t.downlinkHz)}{t.downlinkMode ? ` ${t.downlinkMode}` : ''} ↓
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <p className="text-[11px] text-dark-500">
+        Controller integration is community-reverse-engineered; it reproduces the actions of the
+        controller's own web interface at its IP.
+      </p>
     </div>
   );
 }
