@@ -34,6 +34,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Data\cty.dat" />
     <EmbeddedResource Include="Data\us_counties.csv" />
+    <EmbeddedResource Include="Data\ffma_grids.txt" />
   </ItemGroup>
 
   <!-- Native Hamlib libraries - copy to output preserving directory structure -->

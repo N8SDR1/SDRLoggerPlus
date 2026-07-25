@@ -206,6 +206,22 @@ export interface VuccFilters {
   toDate?: string;
 }
 
+// FFMA (Fred Fish Memorial Award) — 488 grids on 6m, confirmed by LoTW/paper QSL.
+export interface FfmaStatistics {
+  totalRequired: number;
+  worked: number;
+  confirmed: number;
+  listComplete: boolean;
+  grids: FfmaGridStatus[];
+}
+
+export interface FfmaGridStatus {
+  grid: string;
+  status: 'confirmed' | 'worked' | 'needed';
+  qsoCount: number;
+  lastWorked?: string | null;
+}
+
 // POTA Statistics Types
 export interface PotaStatistics {
   uniqueParksActivated: number;
@@ -427,6 +443,10 @@ class ApiClient {
     if (filters?.toDate) params.append('toDate', filters.toDate);
     const qs = params.toString();
     return this.fetch<VuccStatistics>(`/statistics/vucc${qs ? `?${qs}` : ''}`);
+  }
+
+  async getFfmaStatistics(): Promise<FfmaStatistics> {
+    return this.fetch<FfmaStatistics>('/statistics/ffma');
   }
 
   async getPotaStatistics(filters?: PotaFilters): Promise<PotaStatistics> {

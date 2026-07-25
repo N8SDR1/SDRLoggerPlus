@@ -170,6 +170,18 @@ public class StatisticsController : ControllerBase
         => Ok(await _awardsService.GetCountyDetailsAsync(state, new StatisticsFilters(Band: band, Mode: mode)));
 
     /// <summary>
+    /// FFMA (Fred Fish Memorial Award): 6 m, all 488 grids of the contiguous 48
+    /// states, confirmed by LoTW or paper QSL. Band and mode are fixed by the award;
+    /// only an optional date range is honoured.
+    /// </summary>
+    [HttpGet("ffma")]
+    [ProducesResponseType(typeof(FfmaStatistics), StatusCodes.Status200OK)]
+    public async Task<ActionResult<FfmaStatistics>> GetFfmaStatistics(
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null)
+        => Ok(await _awardsService.GetFfmaStatisticsAsync(new StatisticsFilters(FromDate: fromDate, ToDate: toDate)));
+
+    /// <summary>
     /// Get WAZ (Worked All Zones) statistics
     /// </summary>
     [HttpGet("waz")]

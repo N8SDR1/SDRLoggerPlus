@@ -62,6 +62,32 @@ public record GridDetail(
 );
 
 /// <summary>
+/// FFMA (Fred Fish Memorial Award) progress: work all 488 four-char grids in the
+/// contiguous 48 states on 6 m, confirmed by LoTW or paper QSL. Reported as a
+/// checklist — every required grid with its status — because chasing the last few
+/// is the point. <c>ListComplete</c> is false while the loaded roster isn't the
+/// full official 488 (e.g. the shipped placeholder).
+/// </summary>
+public record FfmaStatistics(
+    int TotalRequired,
+    int Worked,
+    int Confirmed,
+    bool ListComplete,
+    List<FfmaGridStatus> Grids
+);
+
+/// <summary>
+/// One required FFMA grid. <c>Status</c> is "confirmed", "worked" (worked on 6 m but
+/// not yet confirmed), or "needed" (never worked on 6 m).
+/// </summary>
+public record FfmaGridStatus(
+    string Grid,
+    string Status,
+    int QsoCount,
+    DateTime? LastWorked
+);
+
+/// <summary>
 /// Satellite operating summary. Grids/states/entities are counted over
 /// satellite QSOs only, which is what makes them awards in their own right:
 /// ARRL runs VUCC Satellite as a separate award at 100 grids, and the same

@@ -427,7 +427,8 @@ function HelpTab() {
 
         <Section id="awards" title="Awards & Statistics">
           <ul className="ml-4 list-disc space-y-1.5">
-            <li><B>Statistics</B> panel — DXCC, WAS, WAZ, WPX, WAC, 5-band awards, VUCC, POTA, IOTA; worked vs. confirmed, filterable by band / continent.</li>
+            <li><B>Statistics</B> panel — DXCC, WAS, WAZ, WPX, WAC, 5-band awards, VUCC, <B>FFMA</B>, POTA, IOTA; worked vs. confirmed, filterable by band / continent.</li>
+            <li><B>FFMA</B> (Fred Fish Memorial Award) — all 488 six-metre grids of the lower 48, confirmed by LoTW or paper QSL. Shown as a checklist grouped by grid field: confirmed (green), worked-but-unconfirmed (amber), and still-needed — filter to <em>Needed</em> to see exactly what's left to chase.</li>
             <li><B>Propagation</B> panel — HF band conditions (from N0NBH) as a 24-hour heatmap by band and UTC hour.</li>
             <li><B>Rotator</B> panel — azimuth / elevation readout + preset headings; configure the hamlib rotctld / serial connection in <P>Settings → Rotator</P>.</li>
           </ul>

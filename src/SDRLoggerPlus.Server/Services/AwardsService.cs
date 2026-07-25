@@ -20,6 +20,7 @@ public interface IAwardsService
     Task<SatelliteStatistics> GetSatelliteStatisticsAsync(StatisticsFilters? filters = null);
     Task<CountiesStatistics> GetCountiesStatisticsAsync(StatisticsFilters? filters = null);
     Task<List<CountyDetail>> GetCountyDetailsAsync(string state, StatisticsFilters? filters = null);
+    Task<FfmaStatistics> GetFfmaStatisticsAsync(StatisticsFilters? filters = null);
 }
 
 public partial class AwardsService : IAwardsService
