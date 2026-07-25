@@ -582,6 +582,16 @@ class ApiClient {
     });
   }
 
+  async getQrzPendingCount(): Promise<{ pending: number }> {
+    return this.fetch('/qrz/pending-count');
+  }
+
+  async markAllQrzSynced(): Promise<{ marked: number }> {
+    return this.fetch('/qrz/mark-all-synced', {
+      method: 'POST',
+    });
+  }
+
   async uploadToLotw(filter: LotwUploadFilter = {}): Promise<LotwUploadResult> {
     return this.fetch('/lotw/upload', {
       method: 'POST',

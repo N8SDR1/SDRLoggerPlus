@@ -392,6 +392,27 @@ public class LiteQsoRepository : IQsoRepository
         return Task.FromResult(success);
     }
 
+    public Task<int> MarkAllQrzSyncedAsync()
+    {
+        var pending = _context.Qsos.Find(q =>
+            q.QrzSyncStatus == SyncStatus.NotSynced ||
+            q.QrzSyncStatus == SyncStatus.Modified)
+            .ToList();
+
+        var now = DateTime.UtcNow;
+        foreach (var qso in pending)
+        {
+            qso.QrzSyncStatus = SyncStatus.Synced;
+            qso.QrzSyncedAt = now;
+            qso.UpdatedAt = now;
+            // Leave QrzLogId as-is; we didn't get one from QRZ (nothing was uploaded).
+            _context.Qsos.Update(qso);
+        }
+
+        if (pending.Count > 0) Commit();
+        return Task.FromResult(pending.Count);
+    }
+
     public Task<long> DeleteAllAsync()
     {
         var count = _context.Qsos.DeleteAll();

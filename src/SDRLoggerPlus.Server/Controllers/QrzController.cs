@@ -325,6 +325,31 @@ public class QrzController : ControllerBase
     }
 
     /// <summary>
+    /// How many QSOs are currently pending upload to QRZ (NotSynced or Modified).
+    /// </summary>
+    [HttpGet("pending-count")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPendingCount()
+    {
+        var pending = await _qsoRepository.GetPendingSyncCountAsync();
+        return Ok(new { Pending = pending });
+    }
+
+    /// <summary>
+    /// Mark every pending QSO as already synced to QRZ WITHOUT uploading. For operators who
+    /// imported their existing QRZ log — stops those QSOs re-uploading as duplicates on every
+    /// sync. Does not touch QRZ; only flips the local sync flag.
+    /// </summary>
+    [HttpPost("mark-all-synced")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MarkAllSynced()
+    {
+        var marked = await _qsoRepository.MarkAllQrzSyncedAsync();
+        _logger.LogInformation("Marked {Count} QSOs as already synced to QRZ (no upload)", marked);
+        return Ok(new { Marked = marked });
+    }
+
+    /// <summary>
     /// Lookup a callsign on QRZ (requires XML subscription)
     /// </summary>
     [HttpGet("lookup/{callsign}")]

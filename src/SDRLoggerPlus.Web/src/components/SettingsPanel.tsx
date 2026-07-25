@@ -410,9 +410,41 @@ function QrzSettingsSection() {
   const [testMessage, setTestMessage] = useState('');
   const [hasXmlSubscription, setHasXmlSubscription] = useState<boolean | null>(null);
 
+  // "Mark all as already synced" maintenance — for operators who imported their existing QRZ log.
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [markState, setMarkState] = useState<'idle' | 'confirming' | 'working' | 'done'>('idle');
+  const [markResult, setMarkResult] = useState('');
+
   const qrz = settings.qrz;
   const password = qrz.password;
   const apiKey = qrz.apiKey;
+
+  const refreshPendingCount = useCallback(async () => {
+    try {
+      const { pending } = await api.getQrzPendingCount();
+      setPendingCount(pending);
+    } catch {
+      setPendingCount(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshPendingCount();
+  }, [refreshPendingCount]);
+
+  const handleMarkAllSynced = async () => {
+    setMarkState('working');
+    setMarkResult('');
+    try {
+      const { marked } = await api.markAllQrzSynced();
+      setMarkResult(`Marked ${marked.toLocaleString()} QSO${marked === 1 ? '' : 's'} as already in QRZ.`);
+      setMarkState('done');
+      await refreshPendingCount();
+    } catch {
+      setMarkResult('Failed to mark QSOs. Is the log service running?');
+      setMarkState('idle');
+    }
+  };
 
   const handleTestConnection = async () => {
     setTestStatus('testing');
@@ -579,6 +611,59 @@ function QrzSettingsSection() {
               . Required for uploading QSOs to QRZ.
             </p>
           </div>
+        </div>
+
+        {/* Logbook maintenance — mark all as already synced (no upload).
+            Placed above Test so it's the first thing an operator hit by the
+            import-duplicate storm sees. */}
+        <div className="pt-4 border-t border-glass-100">
+          <h4 className="text-sm font-medium font-ui text-dark-200 mb-1">Logbook Maintenance</h4>
+          <p className="text-xs text-dark-300 mb-3">
+            {pendingCount === null
+              ? 'QSOs pending upload to QRZ: unknown (service not reachable).'
+              : `${pendingCount.toLocaleString()} QSO${pendingCount === 1 ? '' : 's'} currently pending upload to QRZ.`}
+          </p>
+          <p className="text-xs text-dark-300 mb-3">
+            If you imported your existing QRZ log, those QSOs are flagged for upload and will bounce
+            back as duplicates on every sync. This marks them all <span className="text-dark-200">already synced</span>{' '}
+            locally — nothing is uploaded to QRZ.
+          </p>
+
+          {markState === 'confirming' ? (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-accent-warning">
+                Mark {pendingCount?.toLocaleString() ?? 'all'} pending QSO
+                {pendingCount === 1 ? '' : 's'} as already in QRZ?
+              </span>
+              <button
+                onClick={handleMarkAllSynced}
+                className="glass-button px-3 py-1.5 text-sm text-accent-warning"
+              >
+                Yes, mark them
+              </button>
+              <button
+                onClick={() => setMarkState('idle')}
+                className="glass-button px-3 py-1.5 text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setMarkState('confirming')}
+              disabled={markState === 'working' || pendingCount === 0}
+              className="glass-button px-4 py-2 flex items-center gap-2 text-sm disabled:opacity-50"
+            >
+              {markState === 'working' && <Loader2 className="w-4 h-4 animate-spin" />}
+              <span>Mark all as already synced to QRZ</span>
+            </button>
+          )}
+
+          {markResult && (
+            <p className={`text-sm mt-2 ${markState === 'done' ? 'text-accent-success' : 'text-accent-danger'}`}>
+              {markResult}
+            </p>
+          )}
         </div>
 
         {/* Test connection */}

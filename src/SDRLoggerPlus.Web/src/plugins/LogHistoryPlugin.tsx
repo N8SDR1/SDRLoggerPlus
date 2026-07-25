@@ -1427,9 +1427,11 @@ export function LogHistoryPlugin() {
                   className="w-4 h-4 rounded border-glass-200 text-accent-primary focus:ring-accent-primary/40"
                 />
                 <div>
-                  <p className="text-sm text-dark-200 font-ui">Mark as already synced to QRZ</p>
+                  <p className="text-sm text-dark-200 font-ui">These QSOs are already in QRZ</p>
                   <p className="text-xs text-dark-300">
-                    Recommended when importing from QRZ.com export (prevents re-uploading)
+                    Check this when importing your own QRZ.com export — otherwise every QSO
+                    re-uploads and QRZ rejects it as a duplicate. Leave unchecked for logs from
+                    other apps (JTDX, MSHV, etc.) that still need uploading.
                   </p>
                 </div>
               </label>

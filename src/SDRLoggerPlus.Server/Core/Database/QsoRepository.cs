@@ -47,6 +47,13 @@ public interface IQsoRepository
     Task<int> GetPendingSyncCountAsync();
 
     /// <summary>
+    /// Mark every NotSynced/Modified QSO as already synced to QRZ, without uploading anything.
+    /// For operators who imported their existing QRZ log and don't want those QSOs re-uploaded
+    /// as duplicates. Returns the number of QSOs marked.
+    /// </summary>
+    Task<int> MarkAllQrzSyncedAsync();
+
+    /// <summary>
     /// Persist the Club Log / HRDLog / eQSL ledger for one QSO without
     /// touching any other field. Separate from UpdateAsync on purpose — see
     /// the implementation for why.
