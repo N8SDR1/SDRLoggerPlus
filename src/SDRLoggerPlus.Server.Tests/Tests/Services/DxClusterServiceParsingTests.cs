@@ -12,14 +12,10 @@ namespace SDRLoggerPlus.Server.Tests.Tests.Services;
 [Trait("Category", "Unit")]
 public class DxClusterServiceParsingTests
 {
-    // Replicate the DX spot regex from ClusterConnectionHandler (it's private, so we re-define for testing)
-    private static readonly Regex DxSpotRegex = new(
-        @"^DX de ([A-Z0-9/]+):\s+(\d+\.?\d*)\s+([A-Z0-9/]+)\s+(.*?)\s+(\d{4})Z(?:\s+([A-Z]{2}\d{2}))?",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    private static readonly Regex CcSpotRegex = new(
-        @"^CC\d+\^(\d+\.?\d*)\^([A-Z0-9/]+(?:-[A-Z0-9]+)?)\^[^\^]+\^(\d{4})Z?\^([^\^]*)\^([A-Z0-9/]+(?:-[#0-9]+)?)\^[^\^]*\^[^\^]*\^([^\^]*)\^[^\^]*\^[^\^]*\^[^\^]*\^[^\^]*\^[^\^]*\^[^\^]*\^([^\^]*)\^[^\^]*\^([^\^]*)\^",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    // The REAL patterns from ClusterConnectionHandler (internal, visible to the test
+    // assembly) — so these tests can't pass against a stale copy that drifted from the code.
+    private static readonly Regex DxSpotRegex = ClusterConnectionHandler.DxSpotRegex;
+    private static readonly Regex CcSpotRegex = ClusterConnectionHandler.CcSpotRegex;
 
     #region Standard DX Spot Format
 
@@ -36,6 +32,21 @@ public class DxClusterServiceParsingTests
         match.Groups[3].Value.Should().Be("EA8TJ");          // DX callsign
         match.Groups[5].Value.Should().Be("1847");           // time
         match.Groups[6].Value.Should().Be("FN20");           // grid
+    }
+
+    [Theory]
+    // CW Skimmer / RBN post with a "-#" (or "-<digits>") suffix on the spotter to mark an
+    // automated spot. These lines were dropped before the spotter group allowed the suffix.
+    [InlineData("DX de K3UK-#:    14036.1  N4BP           24 dB  28 WPM  CQ            1241Z", "K3UK-#", "14036.1", "N4BP")]
+    [InlineData("DX de K3UK-#:    14032.9  VE9KK           9 dB  30 WPM  CQ            1242Z", "K3UK-#", "14032.9", "VE9KK")]
+    [InlineData("DX de W3LPL-2:    7005.0  DL8AAA         12 dB  22 WPM  CQ            1242Z", "W3LPL-2", "7005.0", "DL8AAA")]
+    public void DxSpotRegex_SkimmerSuffix_MatchesCorrectly(string line, string spotter, string freq, string dx)
+    {
+        var match = DxSpotRegex.Match(line);
+        match.Success.Should().BeTrue();
+        match.Groups[1].Value.Should().Be(spotter);
+        match.Groups[2].Value.Should().Be(freq);
+        match.Groups[3].Value.Should().Be(dx);
     }
 
     [Fact]

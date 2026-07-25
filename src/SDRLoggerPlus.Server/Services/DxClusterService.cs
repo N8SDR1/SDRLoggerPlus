@@ -669,13 +669,16 @@ internal class ClusterConnectionHandler
     private const int ReconnectDelayMs = 10000;
     private const int ReadTimeoutMs = 120000;
 
-    // VE7CC cluster format regex
-    private static readonly Regex DxSpotRegex = new(
-        @"^DX de ([A-Z0-9/]+):\s+(\d+\.?\d*)\s+([A-Z0-9/]+)\s+(.*?)\s+(\d{4})Z(?:\s+([A-Z]{2}\d{2}))?",
+    // "DX de <spotter>:" line format. The spotter may carry a skimmer suffix — CW Skimmer
+    // and RBN post as "K3UK-#" (also "-2", "-14") to mark an automated spot — so the
+    // spotter group allows a trailing "-<#|digits>", or those lines drop silently.
+    // internal so the parsing tests exercise the REAL pattern rather than a copy that can drift.
+    internal static readonly Regex DxSpotRegex = new(
+        @"^DX de ([A-Z0-9/]+(?:-[#0-9]+)?):\s+(\d+\.?\d*)\s+([A-Z0-9/]+)\s+(.*?)\s+(\d{4})Z(?:\s+([A-Z]{2}\d{2}))?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // VE7CC CC cluster extended format (CC11 format)
-    private static readonly Regex CcSpotRegex = new(
+    internal static readonly Regex CcSpotRegex = new(
         @"^CC\d+\^(\d+\.?\d*)\^([A-Z0-9/]+(?:-[A-Z0-9]+)?)\^[^\^]+\^(\d{4})Z?\^([^\^]*)\^([A-Z0-9/]+(?:-[#0-9]+)?)\^[^\^]*\^[^\^]*\^([^\^]*)\^[^\^]*\^[^\^]*\^[^\^]*\^[^\^]*\^[^\^]*\^[^\^]*\^([^\^]*)\^[^\^]*\^([^\^]*)\^",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -797,7 +800,9 @@ internal class ClusterConnectionHandler
         await tcpClient.ConnectAsync(_host, _port, ct);
 
         using var stream = tcpClient.GetStream();
-        using var writer = new StreamWriter(stream, Encoding.ASCII) { AutoFlush = true };
+        // Explicit CRLF: telnet line endings, and CW Skimmer's login in particular wants a
+        // carriage return after the callsign — don't leave it to Environment.NewLine.
+        using var writer = new StreamWriter(stream, Encoding.ASCII) { AutoFlush = true, NewLine = "\r\n" };
         _writer = writer;
         try
         {
