@@ -26,7 +26,7 @@ A new award, more flexible layouts, and a FlexRadio reconnect fix.
 - **FlexRadio didn't reconnect on startup.** A Flex connected manually but never came
   back after a restart, even with "Reconnect last radio on startup" on — the Flex backend
   had no startup reconnect, and the saved rig type wasn't recorded. Both fixed; it now
-  reconnects once the radio's discovery beacon arrives. *(Reported by WK2X.)*
+  reconnects once the radio's discovery beacon arrives.
 
 ## 2026-07-24 — v2.9.1 "Altair"
 
