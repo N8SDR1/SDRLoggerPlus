@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Map as MapIcon, Target, Maximize2, ZoomIn, ZoomOut, Layers, Satellite, Radio, Sun, Zap, Play } from 'lucide-react';
+import { Map as MapIcon, Target, Maximize2, ZoomIn, ZoomOut, Layers, Satellite, Radio, Sun, Zap, Play, Grid3x3 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { useAppStore, Spot } from '../store/appStore';
@@ -13,6 +13,8 @@ import { GrayLineOverlay } from '../components/GrayLineOverlay';
 import { AuroraOverlay } from '../components/AuroraOverlay';
 import { PskReporterOverlay } from '../components/PskReporterOverlay';
 import { RbnHeardMeOverlay } from '../components/RbnHeardMeOverlay';
+import { GridSquareOverlay } from '../components/GridSquareOverlay';
+import { TILE_LAYERS, type TileLayerKey } from '../geo/tileLayers';
 import { gridToLatLon, calculateDistance, calculateBearing, getAnimationDuration } from '../utils/maidenhead';
 import { formatDistance } from '../utils/units';
 import { fetchTLEData, calculateSatellitePosition, calculateOrbitTrack, type SatellitePosition, type SatelliteTLE } from '../utils/satellite';
@@ -166,32 +168,6 @@ function createCallsignImageIcon(imageUrl: string | undefined | null, callsign: 
     iconAnchor: [0, 0],
   });
 }
-
-// Tile layer options for different map styles
-const TILE_LAYERS = {
-  osm: {
-    name: 'OpenStreetMap',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  },
-  dark: {
-    name: 'Dark',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-  },
-  satellite: {
-    name: 'Satellite',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; Esri',
-  },
-  terrain: {
-    name: 'Terrain',
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
-  },
-};
-
-type TileLayerKey = keyof typeof TILE_LAYERS;
 
 // Map click handler component
 function MapClickHandler({
@@ -862,6 +838,11 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
           {/* Aurora oval (NOAA OVATION) */}
           {settings.map.showAuroraOverlay && <AuroraOverlay />}
 
+          {/* Worked Maidenhead grids (GridTracker-style) */}
+          {settings.map.showGridOverlay && (
+            <GridSquareOverlay band={settings.map.gridOverlayBand} />
+          )}
+
           {/* PSK Reporter reception paths */}
           {settings.map.showPskOverlay && (
             <PskReporterOverlay
@@ -1456,6 +1437,47 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
                   </span>
                   {settings.map.show2dHeardMeRbn && <Radio className="w-3 h-3" />}
                 </button>
+
+                {/* Grid Layer — worked/confirmed Maidenhead squares painted on the map */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateMapSettings({ showGridOverlay: !settings.map.showGridOverlay });
+                    saveSettings();
+                  }}
+                  className="w-full text-left px-2 py-1 text-sm rounded hover:bg-dark-600 flex items-center justify-between"
+                >
+                  <span className={settings.map.showGridOverlay ? 'text-accent-primary' : 'text-gray-300'}>
+                    Grid Layer
+                  </span>
+                  {settings.map.showGridOverlay && <Grid3x3 className="w-3 h-3" />}
+                </button>
+
+                {/* Band filter for the worked-grid overlay */}
+                {settings.map.showGridOverlay && (
+                  <div className="px-2 py-1 space-y-1 border-t border-dark-600 mt-1" onClick={(e) => e.stopPropagation()}>
+                    <label className="flex items-center justify-between gap-2 text-xs text-gray-400">
+                      <span>Grid band</span>
+                      <select
+                        value={settings.map.gridOverlayBand}
+                        onChange={(e) => { updateMapSettings({ gridOverlayBand: e.target.value }); saveSettings(); }}
+                        className="bg-dark-800 border border-glass-100 rounded px-1 py-0.5 text-xs font-mono text-gray-200"
+                      >
+                        {['all', '160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '70cm'].map((b) => (
+                          <option key={b} value={b}>{b === 'all' ? 'All bands' : b}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex items-center gap-3 text-xs text-gray-400 pt-0.5">
+                      <span className="flex items-center gap-1">
+                        <span style={{ background: '#2f9e44' }} className="inline-block w-2.5 h-2.5 rounded-sm" /> confirmed
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span style={{ background: '#2e6b34' }} className="inline-block w-2.5 h-2.5 rounded-sm" /> worked
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Shared band + timeframe for the Heard-Me overlays */}
                 {(settings.map.showPskOverlay || settings.map.show2dHeardMeRbn) && (

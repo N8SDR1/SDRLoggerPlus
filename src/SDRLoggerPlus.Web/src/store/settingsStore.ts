@@ -262,6 +262,9 @@ export interface MapSettings {
   showPskOverlay: boolean;
   pskCallsign: string; // callsign to look up on PSK Reporter; empty = use station callsign
   showAuroraOverlay: boolean;
+  // Maidenhead worked-grid overlay (GridTracker-style grids painted on the map).
+  showGridOverlay: boolean;
+  gridOverlayBand: string; // 'all' or a band key like '20m'
   // Long-path great-circle overlay on the 3D globe. Short path (red-orange)
   // is always drawn when a callsign is focused; the cyan long-path arc is
   // opt-in so operators who only care about SP get a cleaner view.
@@ -754,6 +757,8 @@ const defaultSettings: Settings = {
     showPskOverlay: false,
     pskCallsign: '',
     showAuroraOverlay: false,
+    showGridOverlay: false,
+    gridOverlayBand: 'all',
     showLongPath: false, // default OFF (user call) — opt-in via Settings > Map
     showIonosphereHops: false, // opt-in — tilts the globe when on
     showGlobeHeardMePsk: false,
