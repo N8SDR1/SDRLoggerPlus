@@ -3079,10 +3079,25 @@ function CollapsibleGroup({
 function MapSettingsSection() {
   const { settings, updateMapSettings } = useSettingsStore();
   const map = settings.map;
-  const [availableSatellites] = useState([
-    'ISS', 'AO-91', 'AO-92', 'SO-50', 'PO-101', 'RS-44', 'IO-117',
-    'TEVEL-1', 'TEVEL-2', 'TEVEL-3', 'TEVEL-4', 'TEVEL-5', 'TEVEL-6', 'TEVEL-7', 'TEVEL-8'
-  ]);
+  // The choosable list comes from the LIVE amateur-satellite feed, not a hardcoded roster,
+  // so decayed birds (the old TEVEL constellation, AO-92, …) drop off on their own and new
+  // launches appear without a code change. Anything the operator has already selected is
+  // shown even if today's feed omits it, so a pick never silently disappears.
+  const [feedSatellites, setFeedSatellites] = useState<string[]>([]);
+  const [satFeedError, setSatFeedError] = useState(false);
+  const [customSat, setCustomSat] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    api.getAvailableSatellites()
+      .then(list => { if (!cancelled) { setFeedSatellites(list.map(s => s.name)); setSatFeedError(list.length === 0); } })
+      .catch(() => { if (!cancelled) setSatFeedError(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const availableSatellites = useMemo(() => {
+    const selected = map.selectedSatellites || [];
+    return [...new Set([...feedSatellites, ...selected])].sort((a, b) => a.localeCompare(b));
+  }, [feedSatellites, map.selectedSatellites]);
 
   const toggleSatellite = (satellite: string) => {
     const selected = map.selectedSatellites || [];
@@ -3090,6 +3105,14 @@ function MapSettingsSection() {
       ? selected.filter(s => s !== satellite)
       : [...selected, satellite];
     updateMapSettings({ selectedSatellites: newSelected });
+  };
+
+  const addCustomSatellite = () => {
+    const name = customSat.trim().toUpperCase();
+    if (!name) return;
+    const selected = map.selectedSatellites || [];
+    if (!selected.includes(name)) updateMapSettings({ selectedSatellites: [...selected, name] });
+    setCustomSat('');
   };
 
   return (
@@ -3261,8 +3284,27 @@ function MapSettingsSection() {
                 );
               })}
             </div>
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="text"
+                value={customSat}
+                onChange={(e) => setCustomSat(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addCustomSatellite(); }}
+                placeholder="Add by name or NORAD #"
+                className="flex-1 px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-mono placeholder:text-dark-400 focus:outline-none focus:border-accent-primary/50"
+              />
+              <button
+                onClick={addCustomSatellite}
+                disabled={!customSat.trim()}
+                className="px-3 py-2 rounded-lg text-sm font-ui border border-accent-primary/40 text-accent-primary hover:bg-accent-primary/10 transition-colors disabled:opacity-40"
+              >
+                Add
+              </button>
+            </div>
             <p className="text-xs text-dark-300">
-              Select which amateur radio satellites to track on the map. TLE data is fetched from Celestrak.
+              {satFeedError
+                ? "Couldn't reach the satellite list feed — showing your selected satellites only. You can still add one by name or NORAD number, and the map pulls its orbital data (Celestrak, then AMSAT) when it can reach the internet."
+                : 'The list is the current amateur-satellite feed (Celestrak / AMSAT) — dead satellites drop off automatically. Add anything else by name or NORAD catalog number.'}
             </p>
           </div>
         )}

@@ -17,25 +17,6 @@ public class SatellitesController : ControllerBase
     private static readonly TimeSpan CacheExpiration = TimeSpan.FromHours(6);
 
     // Popular amateur radio satellites with their NORAD catalog numbers
-    private static readonly Dictionary<string, int> AmateurSatellites = new()
-    {
-        { "ISS", 25544 },
-        { "AO-91", 43017 },
-        { "AO-92", 43137 },
-        { "SO-50", 27607 },
-        { "PO-101", 43678 },
-        { "RS-44", 44909 },
-        { "IO-117", 52934 },
-        { "TEVEL-1", 50988 },
-        { "TEVEL-2", 50989 },
-        { "TEVEL-3", 50990 },
-        { "TEVEL-4", 50991 },
-        { "TEVEL-5", 50992 },
-        { "TEVEL-6", 50993 },
-        { "TEVEL-7", 50994 },
-        { "TEVEL-8", 50995 },
-    };
-
     public SatellitesController(ILogger<SatellitesController> logger, IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
@@ -53,21 +34,16 @@ public class SatellitesController : ControllerBase
     {
         try
         {
-            // Return cached data if still valid
-            if (_cachedTLEData != null && DateTime.UtcNow - _lastFetch < CacheExpiration)
+            var catalog = await GetCachedCatalogAsync();
+
+            // Match each requested name (or NORAD number) against the live feed, keyed by
+            // exactly what was requested so the client maps positions back onto its selection.
+            var result = new Dictionary<string, TLEData>();
+            foreach (var requested in request.Satellites ?? new List<string>())
             {
-                var cachedResult = FilterTLEData(_cachedTLEData, request.Satellites);
-                return Ok(cachedResult);
+                var match = MatchRequested(catalog, requested);
+                if (match != null) result[requested] = match;
             }
-
-            // Fetch fresh TLE data from Celestrak
-            var tleData = await FetchTLEDataFromCelestrak();
-
-            // Update cache
-            _cachedTLEData = tleData;
-            _lastFetch = DateTime.UtcNow;
-
-            var result = FilterTLEData(tleData, request.Satellites);
             return Ok(result);
         }
         catch (Exception ex)
@@ -82,15 +58,25 @@ public class SatellitesController : ControllerBase
     /// </summary>
     [HttpGet("list")]
     [ProducesResponseType(typeof(List<SatelliteInfo>), StatusCodes.Status200OK)]
-    public ActionResult<List<SatelliteInfo>> GetAvailableSatellites()
+    public async Task<ActionResult<List<SatelliteInfo>>> GetAvailableSatellites()
     {
-        var satellites = AmateurSatellites.Select(kvp => new SatelliteInfo
+        // The current amateur-satellite feed IS the list — dead birds fall off it and new
+        // ones appear, so there's no hardcoded roster to go stale. Empty on total fetch
+        // failure; the UI then falls back to whatever the operator already has selected.
+        try
         {
-            Name = kvp.Key,
-            NoradId = kvp.Value
-        }).ToList();
-
-        return Ok(satellites);
+            var catalog = await GetCachedCatalogAsync();
+            var satellites = catalog.Values
+                .Select(t => new SatelliteInfo { Name = t.Name, NoradId = NoradOf(t.Line1) })
+                .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return Ok(satellites);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not list satellites from the live feed");
+            return Ok(new List<SatelliteInfo>());
+        }
     }
 
     // Amateur TLEs live at Celestrak; AMSAT publishes the same set and is reachable when
@@ -99,28 +85,39 @@ public class SatellitesController : ControllerBase
     private const string CelestrakGroupUrl = "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=tle";
     private const string AmsatTleUrl = "https://www.amsat.org/tle/current/nasabare.txt";
 
-    private async Task<Dictionary<string, TLEData>> FetchTLEDataFromCelestrak()
+    /// <summary>The full current amateur-satellite catalog, cached for 6 h and shared by /list and /tle.</summary>
+    private async Task<Dictionary<string, TLEData>> GetCachedCatalogAsync()
     {
-        var tleData = new Dictionary<string, TLEData>();
+        if (_cachedTLEData != null && DateTime.UtcNow - _lastFetch < CacheExpiration)
+            return _cachedTLEData;
 
-        var celestrakOk = false;
+        var catalog = await FetchFullCatalogAsync();
+        _cachedTLEData = catalog;
+        _lastFetch = DateTime.UtcNow;
+        return catalog;
+    }
+
+    /// <summary>Fetch the whole amateur feed — every satellite, not a fixed roster.</summary>
+    private async Task<Dictionary<string, TLEData>> FetchFullCatalogAsync()
+    {
+        var catalog = new Dictionary<string, TLEData>(StringComparer.OrdinalIgnoreCase);
+
         try
         {
-            ParseTleInto(await _httpClient.GetStringAsync(CelestrakGroupUrl), tleData);
-            celestrakOk = true;
+            ParseTleInto(await _httpClient.GetStringAsync(CelestrakGroupUrl), catalog);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Celestrak amateur-group TLE fetch failed; trying AMSAT");
         }
 
-        // Fall back to AMSAT for anything Celestrak didn't provide (or everything, if
-        // Celestrak was unreachable). Same three-line TLE format, so the same parser.
-        if (tleData.Count < AmateurSatellites.Count)
+        // AMSAT carries the same set and is reachable when Celestrak is blocked. Only needed
+        // if Celestrak gave us nothing (it's the more complete feed when it works).
+        if (catalog.Count == 0)
         {
             try
             {
-                ParseTleInto(await _httpClient.GetStringAsync(AmsatTleUrl), tleData);
+                ParseTleInto(await _httpClient.GetStringAsync(AmsatTleUrl), catalog);
             }
             catch (Exception ex)
             {
@@ -128,83 +125,59 @@ public class SatellitesController : ControllerBase
             }
         }
 
-        // The per-satellite CATNR lookups also hit Celestrak, so only bother when Celestrak
-        // is actually reachable — otherwise each one just burns the 30 s timeout.
-        if (celestrakOk && tleData.Count < AmateurSatellites.Count)
-        {
-            await FetchMissingSatellites(tleData);
-        }
-
-        if (tleData.Count == 0)
+        if (catalog.Count == 0)
             throw new InvalidOperationException("No TLE data available from Celestrak or AMSAT");
 
-        return tleData;
+        return catalog;
     }
 
-    /// <summary>Parse a three-line-group TLE feed and add any of our known satellites into the map.</summary>
-    private void ParseTleInto(string response, Dictionary<string, TLEData> tleData)
+    /// <summary>
+    /// Parse a TLE feed and add EVERY satellite to the catalog, keyed by its feed name.
+    /// Line-anchored (find "1 …"/"2 …" pairs and take the preceding name line) so it
+    /// survives blank lines or odd spacing rather than assuming clean 3-line groups.
+    /// </summary>
+    private static void ParseTleInto(string response, Dictionary<string, TLEData> catalog)
     {
         var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        for (int i = 0; i < lines.Length - 2; i += 3)
+        for (int i = 1; i + 1 < lines.Length; i++)
         {
-            var name = lines[i].Trim();
-            var line1 = lines[i + 1].Trim();
-            var line2 = lines[i + 2].Trim();
+            var l1 = lines[i].Trim();
+            var l2 = lines[i + 1].Trim();
+            if (!l1.StartsWith("1 ", StringComparison.Ordinal) || !l2.StartsWith("2 ", StringComparison.Ordinal))
+                continue;
 
-            foreach (var sat in AmateurSatellites)
-            {
-                if (tleData.ContainsKey(sat.Key)) continue; // keep the first (Celestrak) hit
-                if (name.Contains(sat.Key, StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains(sat.Value.ToString()))
-                {
-                    tleData[sat.Key] = new TLEData { Name = sat.Key, Line1 = line1, Line2 = line2 };
-                    break;
-                }
-            }
+            var name = lines[i - 1].Trim();
+            if (name.Length == 0 || name.StartsWith("1 ", StringComparison.Ordinal)) continue;
+            catalog.TryAdd(name, new TLEData { Name = name, Line1 = l1, Line2 = l2 });
         }
     }
 
-    private async Task FetchMissingSatellites(Dictionary<string, TLEData> tleData)
+    /// <summary>
+    /// Resolve a requested satellite (name or NORAD number) against the live catalog:
+    /// exact name, then a name that starts-with / contains it (so "ISS" finds
+    /// "ISS (ZARYA)"), then the NORAD catalog number.
+    /// </summary>
+    private static TLEData? MatchRequested(Dictionary<string, TLEData> catalog, string? requested)
     {
-        // Try to fetch specific satellites by NORAD ID
-        var missingSatellites = AmateurSatellites.Where(kvp => !tleData.ContainsKey(kvp.Key)).ToList();
+        var r = requested?.Trim();
+        if (string.IsNullOrEmpty(r)) return null;
 
-        foreach (var sat in missingSatellites)
-        {
-            try
-            {
-                var url = $"https://celestrak.org/NORAD/elements/gp.php?CATNR={sat.Value}&FORMAT=tle";
-                var response = await _httpClient.GetStringAsync(url);
-                var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        if (catalog.TryGetValue(r, out var exact)) return exact;
 
-                if (lines.Length >= 3)
-                {
-                    tleData[sat.Key] = new TLEData
-                    {
-                        Name = sat.Key,
-                        Line1 = lines[1].Trim(),
-                        Line2 = lines[2].Trim()
-                    };
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to fetch TLE for {Satellite}", sat.Key);
-            }
-        }
+        var ru = r.ToUpperInvariant();
+        var byName = catalog.Values.FirstOrDefault(t => t.Name.ToUpperInvariant().StartsWith(ru, StringComparison.Ordinal))
+                  ?? catalog.Values.FirstOrDefault(t => t.Name.ToUpperInvariant().Contains(ru));
+        if (byName != null) return byName;
+
+        if (int.TryParse(r, out var norad))
+            return catalog.Values.FirstOrDefault(t => NoradOf(t.Line1) == norad);
+
+        return null;
     }
 
-    private Dictionary<string, TLEData> FilterTLEData(Dictionary<string, TLEData> allData, List<string> requestedSatellites)
-    {
-        if (requestedSatellites == null || requestedSatellites.Count == 0)
-        {
-            return allData;
-        }
-
-        return allData
-            .Where(kvp => requestedSatellites.Contains(kvp.Key, StringComparer.OrdinalIgnoreCase))
-            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-    }
+    /// <summary>NORAD catalog number from TLE line 1 (columns 3–7), or -1 if unparseable.</summary>
+    private static int NoradOf(string? line1) =>
+        line1 != null && line1.Length >= 7 && int.TryParse(line1.Substring(2, 5), out var n) ? n : -1;
 }
 
 public class TLERequest

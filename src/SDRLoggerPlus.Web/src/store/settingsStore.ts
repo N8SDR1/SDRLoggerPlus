@@ -727,7 +727,7 @@ const defaultSettings: Settings = {
   map: {
     tileLayer: 'dark',
     showSatellites: false,
-    selectedSatellites: ['ISS', 'AO-91', 'SO-50'],
+    selectedSatellites: ['ISS', 'SO-50', 'RS-44'],
     rbn: {
       enabled: false,
       opacity: 0.7,

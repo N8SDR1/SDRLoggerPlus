@@ -445,6 +445,11 @@ class ApiClient {
     return this.fetch<VuccStatistics>(`/statistics/vucc${qs ? `?${qs}` : ''}`);
   }
 
+  /** Current amateur satellites from the live TLE feed (name + NORAD). Empty if the feed is unreachable. */
+  async getAvailableSatellites(): Promise<{ name: string; noradId: number }[]> {
+    return this.fetch('/satellites/list');
+  }
+
   async getFfmaStatistics(): Promise<FfmaStatistics> {
     return this.fetch<FfmaStatistics>('/statistics/ffma');
   }
