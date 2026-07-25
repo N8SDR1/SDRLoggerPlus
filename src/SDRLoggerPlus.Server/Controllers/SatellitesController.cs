@@ -16,6 +16,13 @@ public class SatellitesController : ControllerBase
     private static DateTime _lastFetch = DateTime.MinValue;
     private static readonly TimeSpan CacheExpiration = TimeSpan.FromHours(6);
 
+    // NORAD ids SatNOGS reports as re-entered or dead — hidden from the picker so the list
+    // isn't cluttered with the provably-gone. Refreshed daily; empty if SatNOGS is
+    // unreachable, in which case nothing is hidden (the full in-orbit feed shows).
+    private static HashSet<int>? _hiddenNorads;
+    private static DateTime _satnogsFetch = DateTime.MinValue;
+    private static readonly TimeSpan SatnogsCacheExpiration = TimeSpan.FromHours(24);
+
     // Popular amateur radio satellites with their NORAD catalog numbers
     public SatellitesController(ILogger<SatellitesController> logger, IHttpClientFactory httpClientFactory)
     {
@@ -66,8 +73,12 @@ public class SatellitesController : ControllerBase
         try
         {
             var catalog = await GetCachedCatalogAsync();
+            var hidden = await GetHiddenNoradsAsync();
             var satellites = catalog.Values
                 .Select(t => new SatelliteInfo { Name = t.Name, NoradId = NoradOf(t.Line1) })
+                // Keep unknown-NORAD entries (can't judge them); drop the ones SatNOGS
+                // confirms are re-entered or dead.
+                .Where(s => s.NoradId <= 0 || !hidden.Contains(s.NoradId))
                 .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             return Ok(satellites);
@@ -84,6 +95,41 @@ public class SatellitesController : ControllerBase
     // VPN egress ranges). Try Celestrak first, fall back to AMSAT — either fills the map.
     private const string CelestrakGroupUrl = "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=tle";
     private const string AmsatTleUrl = "https://www.amsat.org/tle/current/nasabare.txt";
+
+    /// <summary>
+    /// NORAD ids SatNOGS marks re-entered or dead, cached 24 h. SatNOGS reliably tracks what
+    /// has decayed; it's conservative about calling a still-orbiting bird "dead", so this
+    /// trims the provably-gone, not every silent satellite (hence the picker's caution).
+    /// Returns empty if SatNOGS is unreachable — then nothing is hidden.
+    /// </summary>
+    private async Task<HashSet<int>> GetHiddenNoradsAsync()
+    {
+        if (_hiddenNorads != null && DateTime.UtcNow - _satnogsFetch < SatnogsCacheExpiration)
+            return _hiddenNorads;
+
+        var hidden = new HashSet<int>();
+        foreach (var status in new[] { "re-entered", "dead" })
+        {
+            try
+            {
+                var json = await _httpClient.GetStringAsync($"https://db.satnogs.org/api/satellites/?status={status}&format=json");
+                using var doc = JsonDocument.Parse(json);
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    if (el.TryGetProperty("norad_cat_id", out var n) && n.ValueKind == JsonValueKind.Number)
+                        hidden.Add(n.GetInt32());
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "SatNOGS '{Status}' status fetch failed", status);
+            }
+        }
+
+        _hiddenNorads = hidden;
+        _satnogsFetch = DateTime.UtcNow;
+        return hidden;
+    }
 
     /// <summary>The full current amateur-satellite catalog, cached for 6 h and shared by /list and /tle.</summary>
     private async Task<Dictionary<string, TLEData>> GetCachedCatalogAsync()
