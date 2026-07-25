@@ -3304,8 +3304,13 @@ function MapSettingsSection() {
             <p className="text-xs text-dark-300">
               {satFeedError
                 ? "Couldn't reach the satellite list feed — showing your selected satellites only. You can still add one by name or NORAD number, and the map pulls its orbital data (Celestrak, then AMSAT) when it can reach the internet."
-                : 'The list is the live in-orbit amateur-satellite feed (Celestrak / AMSAT). Re-entered satellites drop off automatically, but a bird can still be in orbit with its radio dead — so pick the ones you actually work. Add anything else by name or NORAD catalog number.'}
+                : 'The list is the live amateur-satellite feed (Celestrak / AMSAT); re-entered satellites drop off automatically. Add anything else by name or NORAD catalog number.'}
             </p>
+            {!satFeedError && (
+              <p className="text-xs text-accent-warning/90">
+                ⚠ Being listed means the satellite is in orbit — <em>not</em> that it's currently active. Some may be silent (dead radio); pick the ones you actually work.
+              </p>
+            )}
           </div>
         )}
 
