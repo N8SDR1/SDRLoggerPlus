@@ -294,6 +294,15 @@ public class LotwService : ILotwService
 
     private async Task<List<Qso>> GetEligibleQsosAsync(LotwUploadFilter filter)
     {
+        // Explicit hand-picked selection wins over everything: upload exactly these QSOs,
+        // ignoring band/mode/date and the not-yet-sent rule, so a deliberate re-send works.
+        var ids = filter.QsoIds?.Where(s => !string.IsNullOrWhiteSpace(s)).ToHashSet();
+        if (ids is { Count: > 0 })
+        {
+            var (all, _) = await _qsoRepository.SearchAsync(new QsoSearchRequest(Limit: 100_000));
+            return all.Where(q => q.Id != null && ids.Contains(q.Id)).ToList();
+        }
+
         var searchRequest = new QsoSearchRequest(
             FromDate: filter.DateFrom,
             ToDate: filter.DateTo,

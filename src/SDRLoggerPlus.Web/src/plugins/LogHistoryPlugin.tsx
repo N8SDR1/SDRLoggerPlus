@@ -409,6 +409,39 @@ export function LogHistoryPlugin() {
     }
   }, [selectedQsos, isDeleting, queryClient, clearSelection]);
 
+  // Upload just the selected rows to a web logbook. QRZ has a QSO-id endpoint already;
+  // LoTW takes an explicit id list on its filter (bypasses the not-yet-sent rule so a
+  // deliberate re-send works). One shared busy/result state keeps the toolbar simple.
+  const [uploadingSelectedTo, setUploadingSelectedTo] = useState<'lotw' | 'qrz' | null>(null);
+  const [selectedUploadResult, setSelectedUploadResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const handleUploadSelected = useCallback(async (target: 'lotw' | 'qrz') => {
+    if (selectedQsos.length === 0 || uploadingSelectedTo) return;
+    const ids = selectedQsos.map(q => q.id);
+    setUploadingSelectedTo(target);
+    setSelectedUploadResult(null);
+    try {
+      if (target === 'qrz') {
+        const r = await api.uploadToQrz(ids);
+        setSelectedUploadResult({
+          ok: r.failedCount === 0,
+          text: `QRZ: ${r.successCount} uploaded${r.failedCount ? `, ${r.failedCount} failed` : ''}`,
+        });
+      } else {
+        const r = await api.uploadToLotw({ qsoIds: ids });
+        setSelectedUploadResult({
+          ok: r.success,
+          text: r.success ? `LoTW: ${r.qsoCount} signed & uploaded` : `LoTW: ${r.message}`,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['qsos'] });
+    } catch (error) {
+      setSelectedUploadResult({ ok: false, text: error instanceof Error ? error.message : 'Upload failed' });
+    } finally {
+      setUploadingSelectedTo(null);
+    }
+  }, [selectedQsos, uploadingSelectedTo, queryClient]);
+
   const handleSaveEdit = useCallback(async (updates: UpdateQsoRequest) => {
     if (!editingQso || isSaving) return;
     setIsSaving(true);
@@ -1103,12 +1136,36 @@ export function LogHistoryPlugin() {
         {/* Selection action bar — only rendered while rows are checked, so it
             costs no vertical space during normal browsing. */}
         {selectedQsos.length > 0 && (
-          <div className="shrink-0 flex items-center justify-between gap-3 mb-2 px-3 py-2 rounded-lg bg-accent-danger/10 border border-accent-danger/30">
+          <div className="shrink-0 flex items-center justify-between gap-3 mb-2 px-3 py-2 rounded-lg bg-accent-primary/10 border border-accent-primary/30">
             <span className="text-sm text-dark-200 font-ui">
               <span className="font-mono font-semibold text-white">{selectedQsos.length}</span>
               {selectedQsos.length === 1 ? ' QSO selected' : ' QSOs selected'} on this page
+              {selectedUploadResult && (
+                <span className={`ml-3 text-xs ${selectedUploadResult.ok ? 'text-accent-success' : 'text-accent-danger'}`}>
+                  {selectedUploadResult.ok ? '✓ ' : '⚠ '}{selectedUploadResult.text}
+                </span>
+              )}
             </span>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleUploadSelected('qrz')}
+                disabled={!!uploadingSelectedTo}
+                title="Upload the selected QSOs to your QRZ logbook"
+                className="text-xs bg-glass-100 hover:bg-glass-200 text-dark-100 px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors font-ui disabled:opacity-50"
+              >
+                {uploadingSelectedTo === 'qrz' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CloudUpload className="w-3.5 h-3.5" />}
+                QRZ
+              </button>
+              <button
+                onClick={() => handleUploadSelected('lotw')}
+                disabled={!!uploadingSelectedTo}
+                title="Sign and upload the selected QSOs to LoTW via TQSL"
+                className="text-xs bg-glass-100 hover:bg-glass-200 text-dark-100 px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors font-ui disabled:opacity-50"
+              >
+                {uploadingSelectedTo === 'lotw' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CloudUpload className="w-3.5 h-3.5" />}
+                LoTW
+              </button>
+              <span className="w-px h-5 bg-glass-200" />
               <button
                 onClick={clearSelection}
                 className="text-xs text-dark-300 hover:text-white px-2 py-1 rounded hover:bg-glass-100 transition-colors font-ui"

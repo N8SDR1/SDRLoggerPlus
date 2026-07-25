@@ -1216,6 +1216,8 @@ export interface LotwUploadFilter {
   modes?: string[];
   includeIgnored?: boolean;
   includeNotSent?: boolean;
+  /** Hand-picked QSO ids — upload exactly these, bypassing the other filters. */
+  qsoIds?: string[];
 }
 
 export interface LotwUploadResult {

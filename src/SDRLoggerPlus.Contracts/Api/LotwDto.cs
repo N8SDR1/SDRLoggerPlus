@@ -9,8 +9,13 @@ public record LotwUploadFilter(
     // Adds lotw_qsl_sent='I' (Ignored) to the eligible set. Default: skipped.
     bool IncludeIgnored = false,
     // Adds lotw_qsl_sent='N' (explicit No) to the eligible set. Default: skipped.
-    bool IncludeNotSent = false
+    bool IncludeNotSent = false,
     // Always eligible: null (never sent), 'R' (re-send requested), 'Q' (queued).
+
+    // An explicit hand-picked selection (from Log History). When set, exactly these QSOs
+    // are uploaded — the band/mode/date filters and the not-yet-sent eligibility rule are
+    // bypassed, because a deliberate re-send of specific QSOs must not be silently dropped.
+    IEnumerable<string>? QsoIds = null
 );
 
 public record LotwUploadResult(
