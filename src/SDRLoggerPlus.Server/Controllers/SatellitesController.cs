@@ -93,54 +93,74 @@ public class SatellitesController : ControllerBase
         return Ok(satellites);
     }
 
+    // Amateur TLEs live at Celestrak; AMSAT publishes the same set and is reachable when
+    // Celestrak is blocked or rate-limiting (which it does aggressively to ham IPs and some
+    // VPN egress ranges). Try Celestrak first, fall back to AMSAT — either fills the map.
+    private const string CelestrakGroupUrl = "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=tle";
+    private const string AmsatTleUrl = "https://www.amsat.org/tle/current/nasabare.txt";
+
     private async Task<Dictionary<string, TLEData>> FetchTLEDataFromCelestrak()
     {
         var tleData = new Dictionary<string, TLEData>();
 
-        // Fetch amateur radio satellites TLE data from Celestrak
-        var url = "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=tle";
-
+        var celestrakOk = false;
         try
         {
-            var response = await _httpClient.GetStringAsync(url);
-            var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            // Parse TLE format (3-line groups: name, line1, line2)
-            for (int i = 0; i < lines.Length - 2; i += 3)
-            {
-                var name = lines[i].Trim();
-                var line1 = lines[i + 1].Trim();
-                var line2 = lines[i + 2].Trim();
-
-                // Match name with our known satellites
-                foreach (var sat in AmateurSatellites)
-                {
-                    if (name.Contains(sat.Key, StringComparison.OrdinalIgnoreCase) ||
-                        name.Contains(sat.Value.ToString()))
-                    {
-                        tleData[sat.Key] = new TLEData
-                        {
-                            Name = sat.Key,
-                            Line1 = line1,
-                            Line2 = line2
-                        };
-                        break;
-                    }
-                }
-            }
-
-            // If we couldn't find some satellites in amateur group, try other sources
-            if (tleData.Count < AmateurSatellites.Count)
-            {
-                await FetchMissingSatellites(tleData);
-            }
-
-            return tleData;
+            ParseTleInto(await _httpClient.GetStringAsync(CelestrakGroupUrl), tleData);
+            celestrakOk = true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to fetch TLE data from Celestrak");
-            throw;
+            _logger.LogWarning(ex, "Celestrak amateur-group TLE fetch failed; trying AMSAT");
+        }
+
+        // Fall back to AMSAT for anything Celestrak didn't provide (or everything, if
+        // Celestrak was unreachable). Same three-line TLE format, so the same parser.
+        if (tleData.Count < AmateurSatellites.Count)
+        {
+            try
+            {
+                ParseTleInto(await _httpClient.GetStringAsync(AmsatTleUrl), tleData);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "AMSAT TLE fallback fetch failed");
+            }
+        }
+
+        // The per-satellite CATNR lookups also hit Celestrak, so only bother when Celestrak
+        // is actually reachable — otherwise each one just burns the 30 s timeout.
+        if (celestrakOk && tleData.Count < AmateurSatellites.Count)
+        {
+            await FetchMissingSatellites(tleData);
+        }
+
+        if (tleData.Count == 0)
+            throw new InvalidOperationException("No TLE data available from Celestrak or AMSAT");
+
+        return tleData;
+    }
+
+    /// <summary>Parse a three-line-group TLE feed and add any of our known satellites into the map.</summary>
+    private void ParseTleInto(string response, Dictionary<string, TLEData> tleData)
+    {
+        var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < lines.Length - 2; i += 3)
+        {
+            var name = lines[i].Trim();
+            var line1 = lines[i + 1].Trim();
+            var line2 = lines[i + 2].Trim();
+
+            foreach (var sat in AmateurSatellites)
+            {
+                if (tleData.ContainsKey(sat.Key)) continue; // keep the first (Celestrak) hit
+                if (name.Contains(sat.Key, StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains(sat.Value.ToString()))
+                {
+                    tleData[sat.Key] = new TLEData { Name = sat.Key, Line1 = line1, Line2 = line2 };
+                    break;
+                }
+            }
         }
     }
 

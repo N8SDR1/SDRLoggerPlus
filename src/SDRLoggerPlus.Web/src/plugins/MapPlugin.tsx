@@ -702,11 +702,16 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
   }, []);
 
   // Fetch TLE data and initialize satellite tracking
+  // True when satellites are on but no orbital data could be loaded — so the map can
+  // say so instead of silently showing nothing (the usual cause is the TLE source being
+  // unreachable; the backend already falls back from Celestrak to AMSAT).
+  const [satelliteDataFailed, setSatelliteDataFailed] = useState(false);
   useEffect(() => {
     if (!settings.map.showSatellites || settings.map.selectedSatellites.length === 0) {
       setSatelliteTLEs(new Map());
       setSatellitePositions(new Map());
       setSatelliteOrbits(new Map());
+      setSatelliteDataFailed(false);
       return;
     }
 
@@ -714,8 +719,10 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
       try {
         const tleData = await fetchTLEData(settings.map.selectedSatellites);
         setSatelliteTLEs(tleData);
+        setSatelliteDataFailed(tleData.size === 0);
       } catch (error) {
         console.error('Failed to load TLE data:', error);
+        setSatelliteDataFailed(true);
       }
     };
 
@@ -1317,6 +1324,13 @@ export function MapCore({ children, flyToOffsetX = 0 }: { children?: React.React
             );
           })}
         </MapContainer>
+
+        {/* Satellites are on but no orbital data loaded — say why rather than show nothing. */}
+        {settings.map.showSatellites && satelliteDataFailed && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] px-3 py-1.5 rounded-lg bg-dark-800/90 border border-accent-warning/40 text-accent-warning text-xs font-ui shadow-lg max-w-[80%] text-center">
+            ⚠ Couldn't load satellite orbital data — the TLE source (Celestrak / AMSAT) is unreachable. Check this PC's internet / firewall.
+          </div>
+        )}
 
         {/* Map controls overlay - positioned outside MapContainer to avoid event conflicts */}
         <div className="absolute top-2 right-2 z-[1000] flex flex-col gap-1">
