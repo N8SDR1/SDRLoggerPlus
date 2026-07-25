@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { RadioTower, Map, Settings, Plus, Trash2, X, Search, Crosshair, Eraser } from 'lucide-react';
+import { RadioTower, Map, Settings, Plus, Trash2, X, Search, Crosshair, Eraser, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, ICellRendererParams, RowClickedEvent, CellMouseOverEvent, CellMouseOutEvent, RowStyle } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -20,6 +20,18 @@ const STATUS_OPTIONS: MultiSelectOption[] = [
   { value: 'newBand', label: 'New Band' },
   { value: 'worked', label: 'Worked' },
   { value: 'none', label: 'Unknown' },
+];
+
+// Continent options for the spotter/DX continent filters — the seven Maidenhead
+// continents, matching what cty.dat resolves onto each spot.
+const CONTINENT_OPTIONS: MultiSelectOption[] = [
+  { value: 'NA', label: 'North America' },
+  { value: 'SA', label: 'South America' },
+  { value: 'EU', label: 'Europe' },
+  { value: 'AF', label: 'Africa' },
+  { value: 'AS', label: 'Asia' },
+  { value: 'OC', label: 'Oceania' },
+  { value: 'AN', label: 'Antarctica' },
 ];
 
 
@@ -470,6 +482,13 @@ export function ClusterPlugin() {
   const [selectedModes, setSelectedModes] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  // "More filters" (collapsible) — the geo/source set restored from v1, all filtering
+  // over data cty.dat already resolves onto each spot, so no backend involvement.
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [selectedSpotterContinents, setSelectedSpotterContinents] = useState<string[]>([]);
+  const [selectedDxContinents, setSelectedDxContinents] = useState<string[]>([]);
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [cqZoneFilter, setCqZoneFilter] = useState('');
   const [showSettings, setShowSettings] = useState(false);
 
   // Get spots from app store (ephemeral, in-memory only)
@@ -534,6 +553,18 @@ export function ClusterPlugin() {
     return statuses;
   }, [clusterStatusesFromStore]);
 
+  // CQ-zone filter parsed to a set of numbers, e.g. "3, 4,5" -> [3,4,5].
+  const cqZones = useMemo(
+    () => cqZoneFilter.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)),
+    [cqZoneFilter]);
+
+  // Source options built from the sources actually present, so the dropdown always
+  // matches the connected feeds (Cluster / RBN / POTA / SpotHole / …).
+  const sourceOptions = useMemo<MultiSelectOption[]>(() => {
+    const seen = [...new Set((spots ?? []).map(s => s.source).filter(Boolean) as string[])].sort();
+    return seen.map(s => ({ value: s, label: s }));
+  }, [spots]);
+
   // Filter spots based on selected bands, modes, statuses, and search query.
   // When "follow rig" is active, the rig's live band/mode override the manual
   // Band/Mode dropdowns (the manual selections are preserved but ignored).
@@ -595,9 +626,32 @@ export function ClusterPlugin() {
         if (!selectedStatuses.includes(spotStatus)) return false;
       }
 
+      // Spotter continent — "who's hearing this, and from where".
+      if (selectedSpotterContinents.length > 0) {
+        const c = spot.spotterStation?.continent;
+        if (!c || !selectedSpotterContinents.includes(c)) return false;
+      }
+
+      // DX-station continent.
+      if (selectedDxContinents.length > 0) {
+        const c = spot.dxStation?.continent;
+        if (!c || !selectedDxContinents.includes(c)) return false;
+      }
+
+      // Source (Cluster / RBN / POTA / …).
+      if (selectedSources.length > 0) {
+        if (!spot.source || !selectedSources.includes(spot.source)) return false;
+      }
+
+      // DX CQ zone — comma-separated list, e.g. "3,4,5".
+      if (cqZones.length > 0) {
+        if (spot.cqZone == null || !cqZones.includes(spot.cqZone)) return false;
+      }
+
       return true;
     });
-  }, [spots, selectedBands, selectedModes, selectedStatuses, searchQuery, bandTracking, modeTracking, rigFreqHz, rigMode]);
+  }, [spots, selectedBands, selectedModes, selectedStatuses, searchQuery, bandTracking, modeTracking, rigFreqHz, rigMode,
+      selectedSpotterContinents, selectedDxContinents, selectedSources, cqZones]);
 
   // Row style callback for status coloring
   const hotListEnabled = useSettingsStore(state => state.settings.hotList.enabled);
@@ -664,6 +718,10 @@ export function ClusterPlugin() {
     setSelectedModes([]);
     setSelectedStatuses([]);
     setSearchQuery('');
+    setSelectedSpotterContinents([]);
+    setSelectedDxContinents([]);
+    setSelectedSources([]);
+    setCqZoneFilter('');
   };
 
   const handleToggleFollowBand = () => {
@@ -675,8 +733,9 @@ export function ClusterPlugin() {
     saveSettings();
   };
 
-  const hasActiveFilters = selectedBands.length > 0 || selectedModes.length > 0 || selectedStatuses.length > 0 || searchQuery.trim().length > 0;
-  const totalActiveFilters = selectedBands.length + selectedModes.length + selectedStatuses.length + (searchQuery.trim() ? 1 : 0);
+  const moreFilterCount = selectedSpotterContinents.length + selectedDxContinents.length + selectedSources.length + (cqZones.length > 0 ? 1 : 0);
+  const hasActiveFilters = selectedBands.length > 0 || selectedModes.length > 0 || selectedStatuses.length > 0 || searchQuery.trim().length > 0 || moreFilterCount > 0;
+  const totalActiveFilters = selectedBands.length + selectedModes.length + selectedStatuses.length + (searchQuery.trim() ? 1 : 0) + moreFilterCount;
 
   // Count connected clusters
   const connectedCount = Object.values(clusterStatuses).filter(s => s === 'connected').length;
@@ -1112,6 +1171,22 @@ export function ClusterPlugin() {
               className="w-32"
             />
 
+            {/* More filters — spotter/DX continent, source, CQ zone. Collapsed by default
+                to keep the row clean; the badge shows how many are active while hidden. */}
+            <button
+              onClick={() => setShowMoreFilters(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-ui border transition-colors whitespace-nowrap ${
+                showMoreFilters || moreFilterCount > 0
+                  ? 'bg-accent-primary/15 text-accent-primary border-accent-primary/30'
+                  : 'bg-dark-800 text-dark-300 border-glass-100 hover:text-dark-200'
+              }`}
+              title="More spot filters"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>Filters{moreFilterCount > 0 ? ` (${moreFilterCount})` : ''}</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMoreFilters ? 'rotate-180' : ''}`} />
+            </button>
+
             {/* Clear All Filters Button */}
             {hasActiveFilters && (
               <button
@@ -1124,6 +1199,42 @@ export function ClusterPlugin() {
               </button>
             )}
           </div>
+
+          {/* Collapsible "more filters" row — geo/source set restored from v1. */}
+          {showMoreFilters && (
+            <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-glass-100">
+              <MultiSelectDropdown
+                options={CONTINENT_OPTIONS}
+                selected={selectedSpotterContinents}
+                onChange={setSelectedSpotterContinents}
+                placeholder="Spotter continent"
+                className="w-44"
+              />
+              <MultiSelectDropdown
+                options={CONTINENT_OPTIONS}
+                selected={selectedDxContinents}
+                onChange={setSelectedDxContinents}
+                placeholder="DX continent"
+                className="w-40"
+              />
+              <MultiSelectDropdown
+                options={sourceOptions}
+                selected={selectedSources}
+                onChange={setSelectedSources}
+                placeholder="Source"
+                className="w-36"
+              />
+              <input
+                type="text"
+                inputMode="numeric"
+                value={cqZoneFilter}
+                onChange={(e) => setCqZoneFilter(e.target.value)}
+                placeholder="CQ zones e.g. 3,4,5"
+                className="w-40 px-3 py-2 bg-dark-800 border border-glass-100 rounded-lg text-sm text-dark-200 font-ui placeholder:text-dark-400 focus:outline-none focus:border-accent-primary/50"
+                title="Filter by DX-station CQ zone — comma-separated"
+              />
+            </div>
+          )}
         </div>
 
         {/* AG Grid Table */}
