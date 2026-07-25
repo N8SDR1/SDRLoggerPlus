@@ -1,7 +1,7 @@
 {
   "name": "sdrloggerplus-desktop",
   "productName": "SDRLoggerPlus",
-  "version": "2.9.2",
+  "version": "2.9.3",
   "description": "SDRLoggerPlus - Amateur Radio Logging Desktop Application",
   "homepage": "https://github.com/N8SDR1/SDRLoggerPlus",
   "repository": {

@@ -3,6 +3,35 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-25 — v2.9.3 "Altair"
+
+A GridTracker-style map view, a fix for the digital double-click-to-call, and a
+one-click cure for the imported-log QRZ upload storm.
+
+### New
+- **Grid Tracker gets a real map view.** A new **Map / Chart** toggle in the Grid Tracker
+  panel. **Chart** is unchanged and stays the default; **Map** paints the same
+  worked/confirmed grids on a real slippy basemap (Dark, OpenStreetMap, Satellite,
+  Terrain) with pan/zoom — the GridTracker-app look. Grid designators label the squares
+  as you zoom in, live decodes carry over (cyan active, red-pulse "chase now") and their
+  **callsigns show in the tooltip**, plus **Fit-to-worked** and a **Chase** overlay that
+  outlines the unworked grids in view. Your view + basemap choice are remembered.
+- **Worked-grid layer on the 2D map.** The main Map plugin can now paint your worked grids
+  as a toggleable overlay with its own band filter.
+- **"Mark all as already synced to QRZ."** New maintenance action in **Settings → QRZ**
+  (above Test & Save) that flips every pending QSO to already-synced **without uploading
+  anything** — the clean fix if an imported QRZ export left thousands of QSOs re-uploading
+  as duplicates. The import "already in QRZ" checkbox now spells out exactly when to use it.
+
+### Fixed
+- **Double-click to call a station stopped working with WSJT-X / JTDX.** A v2.9.2 change
+  that resolved the decode's mode code for the "worked-before" colouring also changed the
+  mode sent in the reply, so WSJT-X and JTDX no longer recognised it and silently ignored
+  the call. The reply now echoes the decoder's original fields verbatim; double-click
+  answers a CQ again. *(Reminder: the decoder needs "Accept UDP requests" enabled.)*
+- **Imported QSOs no longer trigger a duplicate-upload storm** on every sync — see the new
+  QRZ maintenance action above.
+
 ## 2026-07-24 — v2.9.2 "Altair"
 
 A new award, more flexible layouts, and a FlexRadio reconnect fix.
