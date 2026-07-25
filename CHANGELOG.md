@@ -3,6 +3,31 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-24 — v2.9.2 "Altair"
+
+A new award, more flexible layouts, and a FlexRadio reconnect fix.
+
+### New
+- **FFMA award (Fred Fish Memorial Award).** Track all **488** six-metre grid squares
+  of the contiguous 48 states, confirmed by LoTW or paper QSL, in **Statistics → FFMA**.
+  Shown as a checklist grouped by grid field — confirmed, worked-but-unconfirmed, and
+  still-needed — with a **Needed** filter so you can see exactly what's left to chase.
+- **A layout for each log mode.** In **Settings → Appearance → Layout for each log mode**
+  you can bind a layout (a starter or one of your own) to **General / POTA / SAT /
+  Contest**. Switch to that mode and SDRLogger+ *offers* to load it — always a prompt,
+  never a silent swap, and it lets you save or discard unsaved arrangement changes first.
+- **Up to 10 saved layouts** (was 3) — enough to keep a personalised version of each
+  starter plus a few of your own.
+- **Release the radio to a hardware sat controller.** New opt-in in **Settings → S.A.T.**
+  stops SDRLogger+'s own direct CAT polling while the controller has the radio, so it
+  makes no traffic on a shared CI-V bus (older rigs like the IC-9100). Direct Hamlib only.
+
+### Fixed
+- **FlexRadio didn't reconnect on startup.** A Flex connected manually but never came
+  back after a restart, even with "Reconnect last radio on startup" on — the Flex backend
+  had no startup reconnect, and the saved rig type wasn't recorded. Both fixed; it now
+  reconnects once the radio's discovery beacon arrives. *(Reported by WK2X.)*
+
 ## 2026-07-24 — v2.9.1 "Altair"
 
 A same-day follow-up to v2.9.0: one real connection bug, a serial-port warning,
