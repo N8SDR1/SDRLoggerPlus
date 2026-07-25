@@ -135,9 +135,13 @@ public record WsjtxDecodeEvent(
     DateTime DecodedAtUtc,
     // Raw decode fields echoed back in a Reply ("call this station"): the
     // decoder needs Time/message/low-confidence to identify the transmission.
+    // RawMode is the ORIGINAL one-character wire mode code ("~"/"+"); a Reply
+    // must echo the decode's fields verbatim, so it sends this, NOT the
+    // human-readable Mode we resolve for display/worked-before matching.
     uint TimeMsSinceMidnight = 0,
     string? RawMessage = null,
-    bool LowConfidence = false
+    bool LowConfidence = false,
+    string? RawMode = null
 );
 
 /// <summary>

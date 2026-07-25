@@ -456,7 +456,9 @@ public class WsjtxService : BackgroundService
             DecodedAtUtc: DateTime.UtcNow,
             TimeMsSinceMidnight: decode.TimeMsSinceMidnight,
             RawMessage: decode.Message,
-            LowConfidence: decode.LowConfidence);
+            LowConfidence: decode.LowConfidence,
+            // Verbatim wire mode for the Reply echo — NOT the resolved display Mode above.
+            RawMode: decode.Mode);
 
         lock (_decodesLock)
         {

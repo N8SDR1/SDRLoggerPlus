@@ -110,6 +110,9 @@ export interface WsjtxDecodeEvent {
   timeMsSinceMidnight?: number;
   rawMessage?: string;
   lowConfidence?: boolean;
+  // Original one-char wire mode code ("~"/"+"); the Reply must echo this, not the
+  // resolved display `mode`, or the decoder won't recognise the transmission.
+  rawMode?: string;
 }
 
 export interface SatPassQso {

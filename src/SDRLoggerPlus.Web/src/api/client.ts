@@ -706,7 +706,9 @@ class ApiClient {
         snr: d.snr,
         deltaTime: d.deltaTimeSeconds,
         deltaFreq: d.audioOffsetHz,
-        mode: d.mode,
+        // Echo the ORIGINAL wire mode code — a Reply must mirror the decode WSJT-X/JTDX
+        // sent, or it silently ignores it. Fall back to the display mode for older events.
+        mode: d.rawMode ?? d.mode,
         message: d.rawMessage,
         lowConfidence: d.lowConfidence ?? false,
       }),
