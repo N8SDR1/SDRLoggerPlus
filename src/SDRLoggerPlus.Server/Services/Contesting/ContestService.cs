@@ -351,7 +351,11 @@ public class ContestService
 
         var qsos = await _qsos.GetByContestSessionAsync(session.Id);
         var settings = await _settings.GetSettingsAsync();
-        var call = settings.Station.Callsign;
+        // The Cabrillo entrant identity is the call OPERATED under this session (club /P / special),
+        // NOT the operator's global station call — else a club Field Day is mis-headed as the op.
+        var call = !string.IsNullOrWhiteSpace(session.OperatingCallsign)
+            ? session.OperatingCallsign!
+            : settings.Station.Callsign;
         if (string.IsNullOrWhiteSpace(call))
             throw new ContestDefinitionException("Set your station callsign in Settings before exporting Cabrillo.");
 
@@ -394,6 +398,9 @@ public class ContestService
             {
                 ContestId = def.Id,
                 SessionId = session.Id,
+                // Stamp the session's operating call on every contest QSO (store-always, even when
+                // it equals the personal call, so Stage-2 filtering by call is clean).
+                StationCallsign = session.OperatingCallsign,
                 SerialRcvd = Ex("serial"),
                 RcvdZone = Ex("zone"),
                 // Uppercased like RcvdGrid below: state/province codes are canonically

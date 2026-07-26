@@ -89,7 +89,10 @@ public record QsoResponse(
     // "not sent", because for those QSOs we genuinely do not know.
     QslSyncDto? QslSync = null,
     // The QSO's QTH (City, State) as logged — used for call-history prefill.
-    string? Qth = null
+    string? Qth = null,
+    // The operating callsign this QSO was made under (contest sessions); null = personal/global.
+    // Non-null + != station call → Log History badges it and it's excluded from personal upload/awards.
+    string? StationCallsign = null
 );
 
 /// <summary>Upload state for one QSL service, as shown in Log History.</summary>

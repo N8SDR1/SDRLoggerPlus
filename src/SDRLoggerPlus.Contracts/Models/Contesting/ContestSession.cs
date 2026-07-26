@@ -16,6 +16,14 @@ public class ContestSession
     /// <summary>Operator-facing label, e.g. "CQ WW CW 2026".</summary>
     public string Label { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The callsign operated under for this session (own / /P / club / special-event). Stamped
+    /// onto every QSO's <see cref="Qso.Contest"/>.StationCallsign. Defaults to the station call
+    /// at start; when it differs from the personal call, those QSOs stay out of personal
+    /// uploads and awards. Locked for the session's life (a call change = a new session).
+    /// </summary>
+    public string? OperatingCallsign { get; set; }
+
     /// <summary>The operator's own exchange / station facts, used for scoring relations.</summary>
     public MyExchange MyExchange { get; set; } = new();
 

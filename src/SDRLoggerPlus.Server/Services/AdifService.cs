@@ -792,9 +792,11 @@ public partial class AdifService : IAdifService
                 AppendAdifField(sb, "SRX_STRING", qso.Contest.SerialRcvd);
         }
 
-        // Station callsign
-        if (!string.IsNullOrEmpty(stationCallsign))
-            AppendAdifField(sb, "STATION_CALLSIGN", stationCallsign);
+        // Station callsign — a contest QSO carries the call it was actually made under (club /P /
+        // special); fall back to the global export call for casual/legacy QSOs.
+        var qsoStationCall = qso.Contest?.StationCallsign ?? stationCallsign;
+        if (!string.IsNullOrEmpty(qsoStationCall))
+            AppendAdifField(sb, "STATION_CALLSIGN", qsoStationCall);
 
         // Export extra ADIF fields that were preserved during import
         if (qso.AdifExtra != null)

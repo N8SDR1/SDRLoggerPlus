@@ -97,7 +97,7 @@ public class ContestSuiteController : ControllerBase
     {
         try
         {
-            var session = await _sessions.StartAsync(request.DefinitionId, request.MyExchange, request.Label);
+            var session = await _sessions.StartAsync(request.DefinitionId, request.MyExchange, request.Label, request.OperatingCallsign);
             await _contest.BroadcastStateAsync();
             return Ok(session);
         }

@@ -184,7 +184,10 @@ public class QrzController : ControllerBase
         {
             // Get only QSOs that need syncing (NotSynced or Modified status)
             var unsyncedQsos = await _qsoRepository.GetUnsyncedToQrzAsync();
-            var qsoList = unsyncedQsos.ToList();
+            // Exclude QSOs logged under a different operating call (club/special contest) — they
+            // must never upload to the operator's PERSONAL QRZ account.
+            var myCall = (await _settingsRepository.GetAsync())?.Station?.Callsign;
+            var qsoList = unsyncedQsos.Where(q => QsoOwnership.IsPersonalQso(q, myCall)).ToList();
             totalToSync = qsoList.Count;
 
             if (qsoList.Count == 0)
@@ -331,7 +334,10 @@ public class QrzController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPendingCount()
     {
-        var pending = await _qsoRepository.GetPendingSyncCountAsync();
+        // Count only what will actually upload — exclude different-call (club/special) contest QSOs,
+        // matching the sync guard, so the badge doesn't overstate.
+        var myCall = (await _settingsRepository.GetAsync())?.Station?.Callsign;
+        var pending = (await _qsoRepository.GetUnsyncedToQrzAsync()).Count(q => QsoOwnership.IsPersonalQso(q, myCall));
         return Ok(new { Pending = pending });
     }
 

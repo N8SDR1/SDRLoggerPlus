@@ -153,6 +153,14 @@ function SetupView({
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [label, setLabel] = useState('');
+  // Operating callsign for the session — prefilled from the station call, editable for a
+  // club / /P / special-event call. When it differs, those QSOs are kept OUT of personal
+  // uploads/awards (Cabrillo only). See docs/design/contest-log-separation.md.
+  const stationCall = useSettingsStore((s) => s.settings.station.callsign);
+  const [operatingCall, setOperatingCall] = useState('');
+  useEffect(() => { if (!operatingCall && stationCall) setOperatingCall(stationCall); }, [stationCall]);
+  const opCallDiffers = operatingCall.trim().length > 0
+    && operatingCall.trim().toUpperCase() !== (stationCall || '').toUpperCase();
   // Default to a 100 W station, which is the Low-power class in every standard
   // contest tier (QRP ≤5 W, LOW ≤100–150 W, HIGH above). Pre-selecting it means the
   // correct power level/multiplier and Cabrillo CATEGORY-POWER are right by default.
@@ -225,6 +233,7 @@ function SetupView({
         definitionId: selected.id,
         myExchange: myEx,
         label: label || undefined,
+        operatingCallsign: operatingCall.trim() || undefined,
       });
       const state = await api.getContestState();
       setContestState(state);
@@ -374,6 +383,23 @@ function SetupView({
             placeholder={`${selected.name} ${new Date().getUTCFullYear()}`}
             className="glass-input w-full text-sm px-2 py-1.5"
           />
+          {/* Operating callsign — the call this contest is run under. */}
+          <div className="space-y-1">
+            <div className="text-[10px] uppercase tracking-wider text-gray-500">Operating callsign</div>
+            <input
+              type="text"
+              value={operatingCall}
+              onChange={(e) => setOperatingCall(e.target.value.toUpperCase())}
+              placeholder={stationCall || 'Your callsign'}
+              className="glass-input w-full text-sm px-2 py-1.5 font-mono tracking-wider"
+            />
+            {opCallDiffers && (
+              <div className="text-[11px] text-amber-400/90 leading-snug">
+                ⚠ QSOs under <span className="font-mono">{operatingCall.trim()}</span> will <b>not</b> upload
+                to your personal LoTW/QRZ or count toward your personal awards — Cabrillo export only.
+              </div>
+            )}
+          </div>
           {/* Role-split contests: the operator declares which side they're on —
               In-state/Out-of-state for a QSO party, W/VE or DX for ARRL DX & co.
               This drives which exchange is sent and the whole scoring role —

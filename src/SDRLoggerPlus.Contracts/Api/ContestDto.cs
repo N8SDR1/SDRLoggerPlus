@@ -6,7 +6,9 @@ namespace SDRLoggerPlus.Contracts.Api;
 public record StartContestSessionRequest(
     string DefinitionId,
     MyExchange MyExchange,
-    string? Label = null
+    string? Label = null,
+    // Operating callsign for this session (own / /P / club / special). Null → the station call.
+    string? OperatingCallsign = null
 );
 
 /// <summary>

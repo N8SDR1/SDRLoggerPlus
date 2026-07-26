@@ -210,14 +210,21 @@ public class QsoService : IQsoService
         // whole point of R-1 — after the June frequency incident, months of
         // wrong uploads to three services could not be repaired because nothing
         // recorded what had been sent.
-        if (_clubLog != null)
-            RecordUpload(created.Id, QslSyncLedger.ClubLogKey, () => _clubLog.UploadQsoAsync(created));
+        // Only auto-upload to the operator's PERSONAL QSL services when this QSO carries no distinct
+        // operating call. Casual QSOs (this path) always have a null station call, so this is a no-op
+        // today; it future-proofs the moment a different-call (club/special) QSO ever reaches here so
+        // it can't be silently uploaded under the personal identity. (== IsPersonalQso for this path.)
+        if (string.IsNullOrWhiteSpace(created.Contest?.StationCallsign))
+        {
+            if (_clubLog != null)
+                RecordUpload(created.Id, QslSyncLedger.ClubLogKey, () => _clubLog.UploadQsoAsync(created));
 
-        if (_hrdLog != null)
-            RecordUpload(created.Id, QslSyncLedger.HrdLogKey, () => _hrdLog.UploadQsoAsync(created));
+            if (_hrdLog != null)
+                RecordUpload(created.Id, QslSyncLedger.HrdLogKey, () => _hrdLog.UploadQsoAsync(created));
 
-        if (_eqsl != null)
-            RecordUpload(created.Id, QslSyncLedger.EqslKey, () => _eqsl.UploadQsoAsync(created));
+            if (_eqsl != null)
+                RecordUpload(created.Id, QslSyncLedger.EqslKey, () => _eqsl.UploadQsoAsync(created));
+        }
 
         // Update spot status cache incrementally — including the grid, so a grid
         // you just worked stops showing as "needed" on the next decode.
@@ -287,7 +294,15 @@ public class QsoService : IQsoService
 
     public async Task<QsoStatistics> GetStatisticsAsync()
     {
-        return await _repository.GetStatisticsAsync();
+        // Personal dashboard — exclude different-call (club/special) contest QSOs. myCall via a
+        // scope (this is a cold path; no per-QSO cost).
+        string? myCall = null;
+        if (_scopeFactory != null)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            myCall = (await scope.ServiceProvider.GetRequiredService<ISettingsRepository>().GetAsync())?.Station?.Callsign;
+        }
+        return await _repository.GetStatisticsAsync(myCall);
     }
 
     private static QsoResponse MapToResponse(Qso qso) => new(
@@ -321,7 +336,8 @@ public class QsoService : IQsoService
         string.Equals(qso.Qsl?.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         string.Equals(qso.Qsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         MapQslSync(qso.QslSync),
-        qso.Station?.Qth
+        qso.Station?.Qth,
+        qso.Contest?.StationCallsign
     );
 
     /// <summary>

@@ -36,10 +36,16 @@ public class ContestSessionService
     public Task<ContestSession?> GetAsync(string id) => _repo.GetByIdAsync(id);
 
     /// <summary>Start a new session for a definition and make it the active one.</summary>
-    public async Task<ContestSession> StartAsync(string definitionId, MyExchange me, string? label)
+    public async Task<ContestSession> StartAsync(string definitionId, MyExchange me, string? label, string? operatingCallsign = null)
     {
         var def = _definitions.Get(definitionId)
             ?? throw new ContestDefinitionException($"Unknown contest '{definitionId}'.");
+
+        // The call operated under this session — defaults to the operator's station call when the
+        // client didn't specify one, so ordinary contests behave exactly as before.
+        var opCall = string.IsNullOrWhiteSpace(operatingCallsign)
+            ? (await _settings.GetSettingsAsync()).Station?.Callsign
+            : operatingCallsign!.Trim();
 
         // Fill the operator's own entity from their callsign when the client didn't
         // supply it, so role resolution (W/VE vs DX) and same-country/zone points
@@ -64,6 +70,7 @@ public class ContestSessionService
             Label = string.IsNullOrWhiteSpace(label) ? $"{def.Name} {DateTime.UtcNow:yyyy}" : label!,
             MyExchange = me,
             Role = ContestScoringEngine.DetermineRole(def, me),
+            OperatingCallsign = opCall,
             StartedAt = DateTime.UtcNow,
             Active = true,
         };

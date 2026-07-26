@@ -224,6 +224,14 @@ public class ContestInfo
     [BsonElement("sessionId")]
     public string? SessionId { get; set; }
 
+    // The operating callsign this QSO was made under (ADIF STATION_CALLSIGN) — the session's
+    // operating call, which may differ from the operator's personal station call (club /P /
+    // special-event). NULL = personal/global call (all legacy + casual QSOs). A QSO under a
+    // NON-personal call is excluded from personal QRZ/LoTW upload and personal awards, and its
+    // exports (ADIF STATION_CALLSIGN, Cabrillo CALLSIGN) use this call, not the global one.
+    [BsonElement("stationCall")]
+    public string? StationCallsign { get; set; }
+
     [BsonElement("serialSent")]
     public string? SerialSent { get; set; }
 

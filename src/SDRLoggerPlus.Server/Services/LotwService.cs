@@ -294,13 +294,19 @@ public class LotwService : ILotwService
 
     private async Task<List<Qso>> GetEligibleQsosAsync(LotwUploadFilter filter)
     {
+        // A QSO made under a different operating call (club/special contest) cannot be signed with
+        // the operator's PERSONAL LoTW certificate — exclude it from every selection branch. (A
+        // per-callsign certificate mapping is a Stage-2 feature.)
+        var myCall = (await _settingsRepository.GetAsync())?.Station?.Callsign;
+
         // Explicit hand-picked selection wins over everything: upload exactly these QSOs,
         // ignoring band/mode/date and the not-yet-sent rule, so a deliberate re-send works.
         var ids = filter.QsoIds?.Where(s => !string.IsNullOrWhiteSpace(s)).ToHashSet();
         if (ids is { Count: > 0 })
         {
             var (all, _) = await _qsoRepository.SearchAsync(new QsoSearchRequest(Limit: 100_000));
-            return all.Where(q => q.Id != null && ids.Contains(q.Id)).ToList();
+            return all.Where(q => q.Id != null && ids.Contains(q.Id))
+                .Where(q => QsoOwnership.IsPersonalQso(q, myCall)).ToList();
         }
 
         var searchRequest = new QsoSearchRequest(
@@ -315,6 +321,7 @@ public class LotwService : ILotwService
             .Select(m => m.ToUpperInvariant()).ToHashSet();
 
         return qsos
+            .Where(q => QsoOwnership.IsPersonalQso(q, myCall))
             .Where(q => bands == null || bands.Count == 0 || (q.Band != null && bands.Contains(q.Band.ToUpperInvariant())))
             .Where(q => modes == null || modes.Count == 0 || (q.Mode != null && modes.Contains(q.Mode.ToUpperInvariant())))
             .Where(q => IsEligibleForUpload(q, filter))

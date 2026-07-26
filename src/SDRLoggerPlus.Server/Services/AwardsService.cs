@@ -29,21 +29,31 @@ public partial class AwardsService : IAwardsService
 
     private readonly QsoSnapshotCache? _snapshots;
 
-    public AwardsService(IQsoRepository repository, QsoSnapshotCache? snapshots = null)
+    private readonly ISettingsService? _settings;
+
+    public AwardsService(IQsoRepository repository, QsoSnapshotCache? snapshots = null, ISettingsService? settings = null)
     {
         _repository = repository;
         _snapshots = snapshots;
+        _settings = settings;
     }
 
     /// <summary>
-    /// Every QSO, from the shared snapshot when one is wired up. Awards are
-    /// pure read-only aggregations, so they can share instances; the snapshot
-    /// must never be mutated (see QsoSnapshotCache).
+    /// Every PERSONAL QSO, from the shared snapshot when one is wired up. Awards are pure
+    /// read-only aggregations, so they can share instances; the snapshot must never be mutated
+    /// (see QsoSnapshotCache) — so the personal-call exclusion is applied AFTER the snapshot
+    /// returns. QSOs logged under a different (club/special) operating call don't count toward
+    /// the operator's personal awards. myCall null (e.g. no settings) fail-safe EXCLUDES any
+    /// call-stamped QSO.
     /// </summary>
     private async Task<IEnumerable<Qso>> AllQsosAsync()
-        => _snapshots is null
+    {
+        var all = _snapshots is null
             ? await _repository.GetAllAsync()
             : await _snapshots.GetAsync(() => _repository.GetAllAsync());
+        var myCall = _settings is null ? null : (await _settings.GetSettingsAsync())?.Station?.Callsign;
+        return all.Where(q => QsoOwnership.IsPersonalQso(q, myCall));
+    }
 
     public async Task<DxccStatistics> GetDxccStatisticsAsync(StatisticsFilters? filters = null)
     {
@@ -179,7 +189,8 @@ public partial class AwardsService : IAwardsService
 
     public async Task<VuccStatistics> GetVuccStatisticsAsync(StatisticsFilters? filters = null)
     {
-        var allQsos = await _repository.GetAllAsync();
+        // Via the personal-only helper (was a direct GetAllAsync that bypassed the exclusion).
+        var allQsos = await AllQsosAsync();
 
         var filtered = allQsos.AsEnumerable();
         if (filters != null)

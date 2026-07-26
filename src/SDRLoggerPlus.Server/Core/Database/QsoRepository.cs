@@ -21,7 +21,7 @@ public interface IQsoRepository
     /// database checkpoint instead of one per row.
     /// </summary>
     Task<int> DeleteManyAsync(IEnumerable<string> ids);
-    Task<QsoStatistics> GetStatisticsAsync();
+    Task<QsoStatistics> GetStatisticsAsync(string? myCall = null);
     Task<int> GetCountAsync();
     Task<bool> ExistsAsync(string callsign, DateTime qsoDate, string timeOn, string band, string mode);
     Task<IEnumerable<Qso>> GetByIdsAsync(IEnumerable<string> ids);

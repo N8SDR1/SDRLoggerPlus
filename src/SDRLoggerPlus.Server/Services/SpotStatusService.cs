@@ -267,6 +267,9 @@ public class SpotStatusService : ISpotStatusService, IHostedService
             using var scope = _serviceProvider.CreateScope();
             var qsoRepo = scope.ServiceProvider.GetRequiredService<IQsoRepository>();
             var allQsos = await qsoRepo.GetAllAsync();
+            // Worked-before needed-status is a PERSONAL judgement — a club/special contest run must
+            // not mark your countries/zones/grids as worked. Exclude non-personal-call QSOs.
+            var myCall = (await scope.ServiceProvider.GetRequiredService<ISettingsService>().GetSettingsAsync())?.Station?.Callsign;
 
             var newCountries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var newCountryBands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -278,6 +281,7 @@ public class SpotStatusService : ISpotStatusService, IHostedService
 
             foreach (var qso in allQsos)
             {
+                if (!QsoOwnership.IsPersonalQso(qso, myCall)) continue;
                 var country = qso.Country ?? qso.Station?.Country;
                 var band = qso.Band;
                 var mode = NormalizeMode(qso.Mode);

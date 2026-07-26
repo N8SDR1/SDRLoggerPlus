@@ -23,6 +23,9 @@ export interface QsoResponse {
   createdAt: string;
   // Contest this QSO was logged under (ContestDefinition id), null for casual QSOs.
   contestId?: string;
+  // Operating call this QSO was made under (contest sessions); null = personal. When set and
+  // different from the station call, Log History badges it (excluded from personal upload/awards).
+  stationCallsign?: string;
   // The bird, for satellite QSOs (ADIF SAT_NAME).
   satellite?: string | null;
   confirmedLotw?: boolean;
@@ -1380,6 +1383,8 @@ export interface StartContestSessionRequest {
   definitionId: string;
   myExchange: ContestMyExchange;
   label?: string;
+  // Callsign operated under this session (own / /P / club / special). Omit → the station call.
+  operatingCallsign?: string;
 }
 
 export interface LogContestQsoRequest {

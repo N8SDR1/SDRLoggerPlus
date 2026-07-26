@@ -224,9 +224,12 @@ public class LiteQsoRepository : IQsoRepository
         return Task.FromResult(deleted);
     }
 
-    public Task<QsoStatistics> GetStatisticsAsync()
+    public Task<QsoStatistics> GetStatisticsAsync(string? myCall = null)
     {
-        var all = _context.Qsos.FindAll().ToList();
+        // Dashboard totals are a PERSONAL view — exclude QSOs logged under a different (club/
+        // special) operating call. myCall null keeps only null-station-call (casual/legacy) QSOs.
+        var all = _context.Qsos.FindAll()
+            .Where(q => SDRLoggerPlus.Server.Services.QsoOwnership.IsPersonalQso(q, myCall)).ToList();
 
         // "Today" = the operator's LOCAL calendar day. In-app QSOs (manual, FT8
         // auto-log, SAT) store a local QsoDate, so the old DateTime.UtcNow.Date

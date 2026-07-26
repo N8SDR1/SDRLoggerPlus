@@ -202,6 +202,7 @@ export function LogHistoryPlugin() {
   const queryClient = useQueryClient();
   const { qrzSyncProgress, setQrzSyncProgress, adifImportProgress, setAdifImportProgress, logHistoryCallsignFilter, lotwUploadProgress, setLotwUploadProgress } = useAppStore();
   const lotwEnabled = useSettingsStore((s) => s.settings.lotw.enabled);
+  const myStationCall = useSettingsStore((s) => s.settings.station.callsign);
   const [isLotwUploading, setIsLotwUploading] = useState(false);
 
   const handleSyncToQrz = useCallback(async () => {
@@ -546,6 +547,19 @@ export function LogHistoryPlugin() {
       resizable: true,
     },
     {
+      // Operating call — shown (amber) only when a QSO was logged under a different call than
+      // your station (club / /P / special-event contest); those stay out of personal upload/awards.
+      headerName: 'Op',
+      headerTooltip: 'Operating callsign (shown when different from your station call)',
+      valueGetter: (params) => {
+        const sc = params.data?.stationCallsign;
+        return sc && sc.toUpperCase() !== (myStationCall || '').toUpperCase() ? sc : '';
+      },
+      cellClass: 'text-amber-400 font-mono text-xs',
+      width: 72,
+      resizable: true,
+    },
+    {
       headerName: 'Band',
       field: 'band',
       cellClass: 'font-mono text-accent-info',
@@ -660,7 +674,7 @@ export function LogHistoryPlugin() {
       sortable: false,
       pinned: 'right',
     },
-  ], [contestNameById]);
+  ], [contestNameById, myStationCall]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
