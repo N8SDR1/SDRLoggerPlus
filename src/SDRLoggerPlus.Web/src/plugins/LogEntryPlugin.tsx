@@ -348,6 +348,34 @@ export function LogEntryPlugin() {
     try { localStorage.setItem('sdrl_auto_rst_s', autoRstEnabled ? '1' : '0'); } catch { /* no-op */ }
   }, [autoRstEnabled]);
   const [rstRcvdAuto, setRstRcvdAuto] = useState(true);  // field is AUTO vs operator-edited
+
+  // Super Check Partial: the merged call set (master.scp ∪ your logged calls), fetched once
+  // and matched locally as you type. Same source the Contest Entry uses.
+  const [scpAll, setScpAll] = useState<string[]>([]);
+  const [scpMatches, setScpMatches] = useState<string[]>([]);
+  const [scpOpen, setScpOpen] = useState(false);
+  const [scpIndex, setScpIndex] = useState(0);
+  // Enter still logs the QSO by default; it only accepts a suggestion once the operator has
+  // arrowed into the list (scpActive). Preserves the "type call, Enter = log" muscle memory.
+  const [scpActive, setScpActive] = useState(false);
+  useEffect(() => { api.getScpCalls().then(setScpAll).catch(() => setScpAll([])); }, []);
+
+  // Call-history prefill: fill empty name/grid from the most recent QSO with this call.
+  const applyCallHistory = useCallback(async (call: string) => {
+    const c = call.trim().toUpperCase();
+    if (c.length < 3) return;
+    try {
+      const qso = await api.getRecentByCallsign(c);
+      if (!qso) return;
+      const priorName = qso.station?.name ?? qso.name ?? '';
+      const priorGrid = qso.station?.grid ?? qso.grid ?? '';
+      setFormData(prev => ({
+        ...prev,
+        name: prev.name || priorName,
+        grid: prev.grid || priorGrid,
+      }));
+    } catch { /* best-effort prefill */ }
+  }, []);
   const peakRxDbmRef = useRef<number | null>(null);      // peak-hold of received dBm, this QSO
 
   // Update time every second when locked
@@ -627,6 +655,25 @@ export function LogEntryPlugin() {
     // Update log history filter to show matching entries
     setLogHistoryCallsignFilter(callsign.length > 0 ? callsign : null);
 
+    // Super Check Partial: local prefix-then-contains match, capped for the dropdown.
+    if (callsign.length >= 2 && scpAll.length > 0) {
+      const pre: string[] = [], con: string[] = [];
+      for (const c of scpAll) {
+        if (c === callsign) continue;
+        if (c.startsWith(callsign)) { if (pre.length < 8) pre.push(c); }
+        else if (c.includes(callsign)) { if (con.length < 8) con.push(c); }
+        if (pre.length >= 8 && con.length >= 8) break;
+      }
+      const m = [...pre, ...con].slice(0, 8);
+      setScpMatches(m);
+      setScpOpen(m.length > 0);
+      setScpIndex(0);
+      setScpActive(false);   // fresh typing → Enter still logs until the operator arrows in
+    } else {
+      setScpMatches([]);
+      setScpOpen(false);
+    }
+
     if (callsign.length >= 3) {
       await focusCallsign(callsign, 'log-entry');
     } else {
@@ -634,7 +681,17 @@ export function LogEntryPlugin() {
       setFocusedCallsign(null);
       setFocusedCallsignInfo(null);
     }
-  }, [focusCallsign, setFocusedCallsign, setFocusedCallsignInfo, setLogHistoryCallsignFilter]);
+  }, [focusCallsign, setFocusedCallsign, setFocusedCallsignInfo, setLogHistoryCallsignFilter, scpAll]);
+
+  // Accept an SCP suggestion: complete the call, close the list, run callbook + call-history prefill.
+  const acceptSuggestion = useCallback((call: string) => {
+    setScpOpen(false);
+    setScpMatches([]);
+    setFormData(prev => ({ ...prev, callsign: call }));
+    setLogHistoryCallsignFilter(call);
+    focusCallsign(call, 'log-entry');
+    applyCallHistory(call);
+  }, [focusCallsign, setLogHistoryCallsignFilter, applyCallHistory]);
 
   const handleClear = useCallback(() => {
     setFormData({
@@ -1228,7 +1285,7 @@ export function LogEntryPlugin() {
 
         {/* Callsign, Band, Mode on one line */}
         <div className="flex gap-2 items-end">
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <label className="text-xs font-ui text-dark-200 flex items-center gap-1 mb-1">
               {isLookingUpCallsign ? (
                 <Loader2 className="w-3 h-3 animate-spin text-accent-primary" />
@@ -1244,10 +1301,33 @@ export function LogEntryPlugin() {
               type="text"
               value={formData.callsign}
               onChange={(e) => handleCallsignChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (!scpOpen || scpMatches.length === 0) return;   // dropdown closed → Enter logs, Esc clears (form handles)
+                if (e.key === 'ArrowDown') { e.preventDefault(); setScpActive(true); setScpIndex(i => Math.min(i + 1, scpMatches.length - 1)); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); setScpActive(true); setScpIndex(i => Math.max(i - 1, 0)); }
+                else if (e.key === 'Tab') { e.preventDefault(); acceptSuggestion(scpMatches[scpIndex]); }
+                else if (e.key === 'Enter' && scpActive) { e.preventDefault(); e.stopPropagation(); acceptSuggestion(scpMatches[scpIndex]); }
+                else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setScpOpen(false); }
+              }}
+              onBlur={() => { applyCallHistory(formData.callsign); window.setTimeout(() => setScpOpen(false), 120); }}
               placeholder="Callsign"
               className="glass-input w-full font-mono font-bold tracking-wider uppercase"
               autoFocus
             />
+            {scpOpen && scpMatches.length > 0 && (
+              <ul className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-auto rounded-md border border-glass-200 bg-dark-800/98 shadow-xl">
+                {scpMatches.map((c, i) => (
+                  <li
+                    key={c}
+                    onMouseDown={(e) => { e.preventDefault(); acceptSuggestion(c); }}
+                    onMouseEnter={() => setScpIndex(i)}
+                    className={`px-2 py-1 font-mono text-sm cursor-pointer ${i === scpIndex ? 'bg-accent-primary/20 text-white' : 'text-dark-100 hover:bg-dark-700'}`}
+                  >
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <div className="w-28">
             <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
