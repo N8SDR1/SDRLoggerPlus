@@ -1,101 +1,47 @@
-# Super Check Partial (SCP) + Call History — design
+# Super Check Partial (SCP) + Call History — design & status
 
-**Status:** proposed (2026-07-26). Scoped after a competitive-gap review — SCP/call-history
-is standard in N1MM, Log4OM, Logger32 and absent here. Highest impact-per-effort of the
-identified gaps; helps casual logging *and* contesting, not just one.
+**Status:** v1 IMPLEMENTED (2026-07-26). Corrected after discovering SCP + N1MM-style
+call-history files **already existed for contests** — the real work was extending them to
+everyday logging + making them work out of the box.
 
-## What it is
+## What already existed (contest-only)
+- `Services/Contesting/ScpService` — loads `master.scp` from `%APPDATA%\SDRLoggerPlus\contests\`
+  and merges it with the operator's logged calls (`ContestService.GetScpCallsAsync`), served at
+  `GET /contest/scp`; the **Contest Entry** window matches partials locally.
+- `Services/Contesting/CallHistoryService` — N1MM-style `callhistory.txt` (header + comma rows,
+  `!!Order!!` handled) for contest **exchange** prefill. (This was the doc's original "Phase 2".)
 
-As the operator types a partial callsign, offer the likely full calls, drawn from two
-sources and clearly distinguished:
+## The gap (what was missing)
+1. None of it reached the **General Log Entry** — no suggestions, no prior-QSO prefill.
+2. No **bundled seed** — SCP was empty until the operator manually dropped in a file.
+3. No way to **refresh** the master list without a manual file drop.
 
-1. **Your own log (worked-before)** — calls you've actually worked. Most valuable: ranked
-   first, flagged, and carrying last-worked band/mode/date.
-2. **Master database (MASTER.SCP)** — the community list of ~50k active calls from
-   supercheckpartial.com. Fills in calls you *haven't* worked yet.
+## What was built (v1)
+**Backend**
+- `ScpService` now falls back to an **embedded `Data/master.scp` seed** when no user file exists
+  (fixes contest SCP being empty out of the box too). `ImportMaster()` + `UserFileUpdatedUtc`.
+- `POST /api/callsigns/scp/update` — server-side fetch of the full ~50k `MASTER.SCP` from
+  supercheckpartial.com → validate → save to the user file (which takes precedence) → reload.
+  `GET /api/callsigns/scp/status` reports count + last-updated.
+- `IQsoService.GetMostRecentByCallsignAsync` + `GET /api/qsos/recent-by-callsign` — for prefill.
 
-**Call History** is the companion: once a full call is entered/selected, pre-fill the entry
-form's empty fields from your most-recent prior QSO with that call (name / grid / state /
-QTH), before/around the callbook lookup.
+**Frontend**
+- **Log Entry**: as you type the call, a local prefix-then-contains dropdown over the merged
+  `getScpCalls()` set. **Enter still logs the QSO** — it only accepts a suggestion once the
+  operator arrows into the list; Tab/click accept, Esc closes. On accept/blur, name + grid
+  prefill from the most recent QSO with that call (empty fields only).
+- **Settings → Station → Callsign Suggestions**: "Update master list" button (count + date).
 
-## Why it fits cleanly here
+## Deferred / follow-ups
+- **Worked-before ranking + last-worked hint** in the dropdown — the merged `/contest/scp` set
+  is a flat `string[]` with no worked/master flag; richer ranking would need the suggest engine
+  shape (reverted earlier to avoid duplicating the contest services). Prefill already delivers
+  the "you've worked them" value.
+- **QTH/state prefill** (currently name+grid only).
+- Help-guide + wiki copy for the everyday SCP dropdown.
 
-Most of the plumbing already exists:
-
-- **Repo hooks:** `IQsoRepository.GetDistinctCallsignsAsync()` (worked-before universe) and
-  `GetMostRecentByCallsignAsync(call)` (call-history pre-fill) — both already implemented.
-- **Embedded-resource pattern:** `Data\cty.dat`, `us_counties.csv`, `ffma_grids.txt` are
-  `<EmbeddedResource>`s loaded via reflection + `Lazy<>` (see `CtyService`,
-  `FfmaGridReference`). **MASTER.SCP drops in as `Data\master.scp`** the same way.
-- **Entry points:** exactly two callsign inputs to wire — `LogEntryPlugin.tsx` (General/
-  POTA/SAT) and `ContestEntryPlugin.tsx`.
-
-## Architecture
-
-### Backend
-
-- **`Data\master.scp`** — bundled snapshot (embedded resource). Plain text, one call per
-  line (`#` comment/header lines skipped), same load style as the county/cty data.
-- **`CallHistoryService`** (new, singleton):
-  - `Lazy<HashSet<string>>` of master calls loaded once from the embedded resource.
-  - Worked-before set from `GetDistinctCallsignsAsync()`, cached with a short TTL and
-    invalidated on QSO create/import (reuse the existing invalidation signals).
-  - `Suggest(partial, limit)` → ranked candidates: worked-before matches first
-    (each decorated with last-worked via `GetMostRecentByCallsignAsync`), then master-only
-    matches. Match = **prefix first, then contains** (classic SCP matches the fragment
-    anywhere; we surface prefix hits above substring hits).
-- **Endpoint** `GET /api/callsigns/suggest?q=<partial>&limit=8` → `[{ call, worked,
-  lastWorked?: { date, band, mode }, source: 'log' | 'master' }]`. Debounced client-side;
-  cheap (in-memory sets).
-- **Master update (phase 1.5):** `POST /api/callsigns/scp/update` fetches the latest
-  MASTER.SCP from supercheckpartial.com into app-data, preferred over the embedded snapshot
-  when present. Offline-first: embedded snapshot always works with no network (cty.dat model).
-
-### Frontend
-
-- **`useCallsignSuggest(q)`** hook — debounced (~150 ms) fetch, cancels in-flight on new keys.
-- **Autocomplete dropdown** under the callsign input in `LogEntryPlugin` and
-  `ContestEntryPlugin`:
-  - Keyboard: ↑/↓ to move, Enter/Tab to accept, Esc to dismiss — must not fight existing
-    Enter-to-log behaviour (accept only when the list is open).
-  - Rows show the call with the **matched fragment highlighted**; worked-before rows styled
-    distinctly (e.g. green + a small "worked 20m · 3 mo ago" hint); master rows plain.
-  - Selecting a row completes the call and triggers **call-history pre-fill**.
-- **Call-history pre-fill** on commit: fetch most-recent QSO for the call, fill only *empty*
-  fields (name/grid/state/QTH). Precedence: prior-QSO first (fast, offline, personal) →
-  existing callbook gap-fill covers what's still blank. Never overwrite what the operator
-  typed.
-
-### Settings
-
-- **Settings → Logging → Super Check Partial**: on/off (default on), and an **"Update master
-  database"** button showing the current snapshot date + result.
-
-## Scope
-
-**v1 (this arc):**
-- Embedded MASTER.SCP + `CallHistoryService` + suggest endpoint.
-- Autocomplete on Log Entry + Contest Entry with worked-before ranking and last-worked hint.
-- Call-history pre-fill of empty name/grid/state/QTH from the prior QSO.
-- Settings toggle.
-
-**v1.5:** online "update master database" fetch.
-
-**Phase 2 (contest-grade, later):**
-- **Importable N1MM-style call-history files** (call → user-defined exchange fields: section,
-  zone, name, state, power) so the exchange auto-fills in contests — the piece serious
-  contesters expect. v1 already covers exchange-from-your-own-prior-contest-QSOs implicitly
-  via call history; external files are the add-on.
-- Per-contest exchange memory / "same exchange as last time" prompts.
-
-## Open decisions (for operator)
-
-1. **Match style** — prefix-then-contains (proposed) vs strict SCP anywhere-match with
-   highlight only. Prefix-first reads better for casual logging; contest purists expect
-   anywhere-match. (Proposed: do both, prefix ranked above contains.)
-2. **Where it appears** — Log Entry + Contest Entry for sure. Also the POTA/SAT tabs? (They
-   share the Log Entry callsign field, so likely free.)
-3. **Master snapshot cadence** — how often to refresh the bundled `master.scp` in releases
-   (it drifts; supercheckpartial.com updates ~weekly during contest season).
-4. **Worked-before "recency" display** — show last-worked band/mode/date inline, or only on
-   hover? (Proposed: compact inline hint, full detail on hover.)
+## Related, separately scoped
+Contest **log separation** (per-contest ADIF export, Log History contest filter, and the bigger
+**per-session operating callsign** → callsign-scoped storage for club/multi-op) is tracked in the
+contest-audit notes, to be its own design doc. The deciding principle there: *is the operating
+call the operator's own call or not.*

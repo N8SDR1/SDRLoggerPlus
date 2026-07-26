@@ -321,7 +321,7 @@ function HelpTab() {
         <Section id="logging" title="Logging QSOs">
           <p>The Log Entry panel has three modes (tabs), remembered across sessions:</p>
           <ul className="ml-4 list-disc space-y-1.5">
-            <li><B>General</B> — daily logging. Type a call → callbook fills name / QTH / grid / country. With a rig connected, <B>Follow Radio</B> keeps frequency + mode tracking the dial.</li>
+            <li><B>General</B> — daily logging. Type a call → a <B>Super Check Partial</B> dropdown suggests matching calls (your worked calls + a master list; arrow in and Tab/Enter to pick), the callbook fills name / QTH / grid / country, and <B>name + grid prefill from the last time you worked them</B>. With a rig connected, <B>Follow Radio</B> keeps frequency + mode tracking the dial. Keep the master list current under <P>Settings → Station → Callsign Suggestions</P>.</li>
             <li><B>POTA</B> — park activations. Set your activating park (rides as <span className="font-mono text-[11px] text-dark-100">my_pota_ref</span>) and an optional P2P park for park-to-park. Self-spot to POTA with <P>Settings → Web Logbooks → POTA</P> credentials.</li>
             <li><B>SAT</B> — satellite QSOs, with the pass details filled in for you. See <em>Satellites</em> below.</li>
           </ul>
