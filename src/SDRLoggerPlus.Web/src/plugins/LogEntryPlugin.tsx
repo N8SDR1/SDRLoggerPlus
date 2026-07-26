@@ -377,10 +377,16 @@ export function LogEntryPlugin() {
       if (!qso) return;
       const priorName = qso.station?.name ?? qso.name ?? '';
       const priorGrid = qso.station?.grid ?? qso.grid ?? '';
+      const priorQth = qso.qth ?? '';
+      const priorCounty = qso.station?.county ?? '';
+      // Prefill EMPTY fields only — anything the operator has already typed (e.g. a rover's
+      // new grid/QTH) always wins and is never overwritten.
       setFormData(prev => ({
         ...prev,
         name: prev.name || priorName,
         grid: prev.grid || priorGrid,
+        qth: prev.qth || priorQth,
+        county: prev.county || priorCounty,
       }));
     } catch { /* best-effort prefill */ }
   }, []);

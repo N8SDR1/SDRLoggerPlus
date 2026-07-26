@@ -320,7 +320,8 @@ public class QsoService : IQsoService
         string.Equals(qso.Qsl?.Eqsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         string.Equals(qso.Qsl?.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         string.Equals(qso.Qsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
-        MapQslSync(qso.QslSync)
+        MapQslSync(qso.QslSync),
+        qso.Station?.Qth
     );
 
     /// <summary>

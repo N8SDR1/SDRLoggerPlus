@@ -87,7 +87,9 @@ public record QsoResponse(
     // Upload state per QSL service for the Log History "Sync" column. Null
     // means the QSO predates upload tracking — deliberately distinct from
     // "not sent", because for those QSOs we genuinely do not know.
-    QslSyncDto? QslSync = null
+    QslSyncDto? QslSync = null,
+    // The QSO's QTH (City, State) as logged — used for call-history prefill.
+    string? Qth = null
 );
 
 /// <summary>Upload state for one QSL service, as shown in Log History.</summary>

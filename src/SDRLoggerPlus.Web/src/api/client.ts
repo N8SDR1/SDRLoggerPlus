@@ -17,6 +17,7 @@ export interface QsoResponse {
   name?: string;
   grid?: string;
   country?: string;
+  qth?: string;
   station?: StationInfo;
   comment?: string;
   createdAt: string;
