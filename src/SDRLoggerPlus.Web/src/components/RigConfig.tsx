@@ -610,9 +610,9 @@ export function RigConfig() {
               radio's control API <strong className="text-white">alongside SmartSDR</strong> (or
               Aether), so you don't have to close anything.
             </p>
-            <p className="text-xs text-amber-400/90">
-              ⚠ New in this build and not yet bench-verified against hardware — please report
-              any issues.
+            <p className="text-xs text-dark-300">
+              Control over the LAN — tune, mode, PTT and split. SmartLink (remote) and
+              panadapter/DAX audio streaming aren't included.
             </p>
           </div>
         )}
