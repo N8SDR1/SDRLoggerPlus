@@ -95,6 +95,13 @@ public class QsoService : IQsoService
         return qso is null ? null : MapToResponse(qso);
     }
 
+    public async Task<QsoResponse?> GetMostRecentByCallsignAsync(string callsign)
+    {
+        if (string.IsNullOrWhiteSpace(callsign)) return null;
+        var qso = await _repository.GetMostRecentByCallsignAsync(callsign.Trim());
+        return qso is null ? null : MapToResponse(qso);
+    }
+
     public async Task<PaginatedQsoResponse> GetQsosAsync(QsoSearchRequest request)
     {
         var (items, totalCount) = await _repository.SearchAsync(request);

@@ -68,6 +68,19 @@ public class QsosController : ControllerBase
     }
 
     /// <summary>
+    /// Most recent QSO with a callsign, any band/mode — the Log Entry uses it to prefill
+    /// name / QTH / grid from the last time you worked them. 204 when never worked.
+    /// </summary>
+    [HttpGet("recent-by-callsign")]
+    [ProducesResponseType(typeof(QsoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<ActionResult<QsoResponse>> RecentByCallsign([FromQuery] string callsign)
+    {
+        var qso = await _qsoService.GetMostRecentByCallsignAsync(callsign ?? "");
+        return qso is null ? NoContent() : Ok(qso);
+    }
+
+    /// <summary>
     /// Get a specific QSO by ID
     /// </summary>
     [HttpGet("{id}")]

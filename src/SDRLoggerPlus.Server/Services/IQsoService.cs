@@ -19,4 +19,7 @@ public interface IQsoService
     /// null. Advisory only: logging is never blocked.
     /// </summary>
     Task<QsoResponse?> CheckRecentDupeAsync(string callsign, string band, string mode);
+
+    /// <summary>Most recent QSO with a callsign (any band/mode) — for Log Entry call-history prefill.</summary>
+    Task<QsoResponse?> GetMostRecentByCallsignAsync(string callsign);
 }

@@ -2,10 +2,11 @@ namespace SDRLoggerPlus.Server.Services.Contesting;
 
 /// <summary>
 /// Super Check Partial: loads a master.scp callsign database (one call per line,
-/// '#' comments) from %APPDATA%\SDRLoggerPlus\contests\master.scp if present. The
-/// merged set (master file ∪ the operator's own logged calls) is served to the
-/// contest entry window, which matches partial calls locally for instant
-/// suggestions. Degrades silently (empty) when no file exists.
+/// '#' comments) from %APPDATA%\SDRLoggerPlus\contests\master.scp if present, else
+/// falls back to a bundled seed list (embedded <c>Data/master.scp</c>) so suggestions
+/// work out of the box. The merged set (master ∪ the operator's own logged calls) is
+/// served to both the contest entry window and the general Log Entry, which match
+/// partial calls locally for instant suggestions.
 /// </summary>
 public class ScpService
 {
@@ -35,7 +36,10 @@ public class ScpService
         {
             if (!File.Exists(_scpPath))
             {
-                lock (_lock) _calls = Array.Empty<string>();
+                // No user file — fall back to the bundled seed so suggestions work out of the box.
+                var seed = LoadEmbeddedSeed();
+                lock (_lock) _calls = seed;
+                _logger.LogInformation("No user master.scp; using bundled seed ({Count} calls)", seed.Count);
                 return;
             }
             var parsed = Parse(File.ReadAllLines(_scpPath));
@@ -45,8 +49,23 @@ public class ScpService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to load master.scp from {Path}", _scpPath);
-            lock (_lock) _calls = Array.Empty<string>();
+            lock (_lock) _calls = LoadEmbeddedSeed();
         }
+    }
+
+    /// <summary>The bundled fallback list from embedded <c>Data/master.scp</c>; empty if missing.</summary>
+    private static List<string> LoadEmbeddedSeed()
+    {
+        var assembly = typeof(ScpService).Assembly;
+        var resourceName = assembly.GetManifestResourceNames()
+            .FirstOrDefault(n => n.EndsWith("master.scp", StringComparison.OrdinalIgnoreCase));
+        if (resourceName is null) return new List<string>();
+
+        using var stream = assembly.GetManifestResourceStream(resourceName)!;
+        using var reader = new StreamReader(stream);
+        var lines = new List<string>();
+        while (reader.ReadLine() is { } line) lines.Add(line);
+        return Parse(lines);
     }
 
     /// <summary>Parse master.scp lines: skip '#' comments and blanks; uppercase; dedupe; sort.</summary>
