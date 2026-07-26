@@ -223,6 +223,58 @@ function useNumericDraft(
 }
 
 // Station Settings Section
+// Super Check Partial master-list maintenance. The bundled seed works out of the box;
+// this pulls the full ~50k-call list from supercheckpartial.com on demand.
+function ScpMaintenance() {
+  const [status, setStatus] = useState<{ count: number; updatedUtc: string | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => { api.getScpStatus().then(setStatus).catch(() => setStatus(null)); }, []);
+
+  const update = async () => {
+    setBusy(true);
+    setMsg('');
+    try {
+      const r = await api.updateScpMaster();
+      setStatus(r);
+      setMsg(`Updated — ${r.count.toLocaleString()} calls loaded.`);
+    } catch {
+      setMsg('Update failed — check your internet connection and try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updated = status?.updatedUtc ? new Date(status.updatedUtc).toLocaleDateString() : null;
+
+  return (
+    <div className="pt-6 mt-6 border-t border-glass-100">
+      <h4 className="text-sm font-semibold font-ui text-dark-200">Callsign Suggestions (Super Check Partial)</h4>
+      <p className="text-xs text-dark-300 mt-0.5 mb-3">
+        Suggests full callsigns as you type in the Log Entry and Contest Entry — your worked
+        calls plus a master list of active stations. A seed list ships built-in; update it here
+        for the full roster.
+      </p>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={update}
+          disabled={busy}
+          className="glass-button px-4 py-2 flex items-center gap-2 text-sm disabled:opacity-50"
+        >
+          {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+          <span>Update master list</span>
+        </button>
+        <span className="text-xs text-dark-300">
+          {status ? `${status.count.toLocaleString()} calls loaded` : 'status unavailable'}
+          {updated ? ` · updated ${updated}` : ' · bundled seed'}
+        </span>
+      </div>
+      {msg && <p className="text-xs mt-2 text-dark-200">{msg}</p>}
+    </div>
+  );
+}
+
 function StationSettingsSection() {
   const { settings, updateStationSettings } = useSettingsStore();
   const station = settings.station;
@@ -386,6 +438,8 @@ function StationSettingsSection() {
           </div>
         </div>
       </div>
+
+      <ScpMaintenance />
 
       {/* Radio setup — moved here from the standalone Rig panel so all station
           configuration lives in one place. */}

@@ -1062,6 +1062,22 @@ class ApiClient {
     return this.fetch<string[]>('/contest/scp');
   }
 
+  // SCP master-list maintenance: current status + one-click update from supercheckpartial.com.
+  async getScpStatus(): Promise<{ count: number; updatedUtc: string | null }> {
+    return this.fetch('/callsigns/scp/status');
+  }
+  async updateScpMaster(): Promise<{ count: number; updatedUtc: string | null }> {
+    return this.fetch('/callsigns/scp/update', { method: 'POST' });
+  }
+
+  // Most recent QSO with a callsign (any band/mode) — Log Entry call-history prefill. Null if never worked.
+  async getRecentByCallsign(callsign: string): Promise<QsoResponse | null> {
+    const res = await fetch(`${API_BASE}/qsos/recent-by-callsign?callsign=${encodeURIComponent(callsign)}`);
+    if (res.status === 204) return null;
+    if (!res.ok) return null;
+    return res.json();
+  }
+
   // Batch dupe/new-mult check for bandmap spots.
   async checkContestBatch(items: { call: string; band: string; mode: string }[]): Promise<BatchCheckEntry[]> {
     return this.fetch<BatchCheckEntry[]>('/contest/check-batch', {

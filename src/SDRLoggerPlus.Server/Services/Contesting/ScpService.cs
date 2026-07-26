@@ -53,6 +53,23 @@ public class ScpService
         }
     }
 
+    /// <summary>
+    /// Save a downloaded MASTER.SCP to the user file (which takes precedence over the bundled
+    /// seed) and reload. Returns the resulting call count. Creates the folder if needed.
+    /// </summary>
+    public int ImportMaster(string rawText)
+    {
+        var dir = Path.GetDirectoryName(_scpPath)!;
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(_scpPath, rawText);
+        Reload();
+        return MasterCalls.Count;
+    }
+
+    /// <summary>When the user master.scp was last written, or null if only the seed is in use.</summary>
+    public DateTime? UserFileUpdatedUtc =>
+        File.Exists(_scpPath) ? File.GetLastWriteTimeUtc(_scpPath) : null;
+
     /// <summary>The bundled fallback list from embedded <c>Data/master.scp</c>; empty if missing.</summary>
     private static List<string> LoadEmbeddedSeed()
     {
