@@ -591,6 +591,13 @@ export function LogHistoryPlugin() {
         'red needs attention. A dash means the QSO predates upload tracking.',
     },
     {
+      headerName: 'Grid',
+      valueGetter: (params) => params.data?.station?.grid || params.data?.grid || '-',
+      cellClass: 'text-dark-200 font-mono',
+      width: 80,
+      resizable: true,
+    },
+    {
       headerName: 'Name',
       valueGetter: (params) => params.data?.station?.name || params.data?.name || '-',
       cellClass: 'text-dark-200',
