@@ -20,6 +20,8 @@ public class CallsignsController : ControllerBase
         _scp = scp;
         _http = httpFactory.CreateClient();
         _http.Timeout = TimeSpan.FromSeconds(30);
+        // Some hosts reset connections that send no User-Agent — set one explicitly.
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("SDRLoggerPlus/2");
         _logger = logger;
     }
 
