@@ -1062,6 +1062,11 @@ class ApiClient {
     return this.fetch<string[]>('/contest/scp');
   }
 
+  // The operator's distinct worked calls — lets the Log Entry flag/rank worked-before suggestions.
+  async getWorkedCalls(): Promise<string[]> {
+    return this.fetch<string[]>('/callsigns/worked');
+  }
+
   // SCP master-list maintenance: current status + one-click update from supercheckpartial.com.
   async getScpStatus(): Promise<{ count: number; updatedUtc: string | null }> {
     return this.fetch('/callsigns/scp/status');

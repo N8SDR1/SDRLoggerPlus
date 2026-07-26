@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SDRLoggerPlus.Server.Core.Database;
 using SDRLoggerPlus.Server.Services.Contesting;
 
 namespace SDRLoggerPlus.Server.Controllers;
@@ -12,17 +13,33 @@ public class CallsignsController : ControllerBase
     private const string MasterScpUrl = "https://www.supercheckpartial.com/MASTER.SCP";
 
     private readonly ScpService _scp;
+    private readonly IQsoRepository _qsos;
     private readonly HttpClient _http;
     private readonly ILogger<CallsignsController> _logger;
 
-    public CallsignsController(ScpService scp, IHttpClientFactory httpFactory, ILogger<CallsignsController> logger)
+    public CallsignsController(ScpService scp, IQsoRepository qsos, IHttpClientFactory httpFactory, ILogger<CallsignsController> logger)
     {
         _scp = scp;
+        _qsos = qsos;
         _http = httpFactory.CreateClient();
         _http.Timeout = TimeSpan.FromSeconds(30);
         // Some hosts reset connections that send no User-Agent — set one explicitly.
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("SDRLoggerPlus/2");
         _logger = logger;
+    }
+
+    /// <summary>
+    /// The operator's distinct worked callsigns (uppercased) — the Log Entry fetches this once
+    /// so the SCP dropdown can flag and rank worked-before calls ahead of master-only calls.
+    /// </summary>
+    [HttpGet("worked")]
+    public async Task<ActionResult<List<string>>> WorkedCalls()
+    {
+        var calls = await _qsos.GetDistinctCallsignsAsync();
+        return Ok(calls.Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim().ToUpperInvariant())
+            .Distinct()
+            .ToList());
     }
 
     /// <summary>Current SCP status: how many calls are loaded and when the user file was last updated.</summary>
