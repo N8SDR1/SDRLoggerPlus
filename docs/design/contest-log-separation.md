@@ -44,6 +44,10 @@ another call. Minimum, bounded, ships with the SCP/grid release.
    from `Qso.StationCallsign ?? global`, not the global unconditionally.
 5. **Log History badge** — mark QSOs logged under a non-personal call (so they're visibly
    distinct, and the operator understands why they're not uploading personally).
+6. **Exclude from personal awards/stats** *(operator decision 2026-07-26)* — a different-call QSO
+   counts for NOTHING personal: not DXCC/WAS/grids/IOTA/counties/VUCC/FFMA, not statistics, and
+   not the live "worked-before" needed-status for spots/decodes. Central rule: a QSO is "personal"
+   iff `StationCallsign` is null or equals the operator's personal call.
 
 Stage 1 deliberately does NOT yet let you upload under the *club's* LoTW cert (that needs the
 club's TQSL cert/station location — Stage 2). It just stops the wrong upload. Cabrillo (the
