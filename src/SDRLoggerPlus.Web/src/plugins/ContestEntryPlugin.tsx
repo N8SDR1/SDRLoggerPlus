@@ -463,6 +463,11 @@ function SetupView({
               <input type="text" placeholder="My section" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, section: e.target.value.toUpperCase() || undefined }))} />
             )}
+            {selected.sentExchange.some((f) => f.key.toLowerCase() === 'class') && (
+              <input type="text" placeholder="My class (e.g. 1E)" className="glass-input text-sm px-2 py-1.5"
+                value={myEx.class ?? ''}
+                onChange={(e) => setMyEx((p) => ({ ...p, class: e.target.value.toUpperCase() || undefined }))} />
+            )}
             {selected.sentExchange.some((f) => isType(f.type, 'name')) && (
               <input type="text" placeholder="My name" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, name: e.target.value || undefined }))} />

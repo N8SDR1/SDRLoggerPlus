@@ -1361,6 +1361,8 @@ export interface ContestMyExchange {
   category?: string;
   power?: string;
   name?: string;
+  // Sent CLASS for Field Day / Winter Field Day ("1E", "2F", …).
+  class?: string;
   // Operator-declared bonus/objective points, added to the final score (WFD).
   bonusPoints?: number;
   // Operator-declared role, overriding the location-based guess: "InArea"/"OutArea"

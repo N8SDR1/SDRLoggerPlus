@@ -79,6 +79,10 @@ public static class CabrilloExporter
         // an in-area QSO-party operator sends its county rather than a blank token.
         if (f.Type == ContestFieldType.Text && f.Key.Equals("county", StringComparison.OrdinalIgnoreCase))
             return me.County ?? "";
+        // Class (Field Day / Winter Field Day "1E", "2F", …) is likewise a Text field emitted by
+        // key — without this the sent class was blank in Cabrillo ("· OH" instead of "1E OH").
+        if (f.Type == ContestFieldType.Text && f.Key.Equals("class", StringComparison.OrdinalIgnoreCase))
+            return me.Class ?? "";
         return f.Type switch
         {
             ContestFieldType.Rst => qso.RstSent ?? (IsCw(qso.Mode) ? "599" : "59"),

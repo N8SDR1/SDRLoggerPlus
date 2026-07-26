@@ -76,6 +76,12 @@ public class MyExchange
     public string? Name { get; set; }
 
     /// <summary>
+    /// The operator's sent CLASS for contests whose exchange is a class (Field Day / Winter
+    /// Field Day "1E", "2F", …). Emitted as the sent <c>class</c> exchange field in Cabrillo.
+    /// </summary>
+    public string? Class { get; set; }
+
+    /// <summary>
     /// Operator-declared role, overriding the location-based guess: InArea/OutArea
     /// for a StateCounty-kind contest, InArea/Dx for a WVE-kind one. When set,
     /// <c>ContestScoringEngine.DetermineRole</c> uses it instead of inferring from
