@@ -42,7 +42,11 @@ builder.Services.AddControllers(options =>
     // non-nullable reference types 400s the ENTIRE POST the moment any such
     // field is null in storage, blocking all settings saves.
     options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
-});
+})
+    // Round-trip Qso.AdifExtra (a BsonDocument of custom ADIF fields) faithfully through the entity
+    // API — without this the multi-op shared-log path silently corrupts those fields.
+    .AddJsonOptions(o =>
+        o.JsonSerializerOptions.Converters.Add(new SDRLoggerPlus.Server.Core.Serialization.BsonDocumentJsonConverter()));
 builder.Services.AddMemoryCache();
 
 // Add API Explorer and Swagger

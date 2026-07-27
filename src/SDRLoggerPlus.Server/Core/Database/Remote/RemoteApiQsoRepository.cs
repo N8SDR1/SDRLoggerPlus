@@ -1,7 +1,9 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using LiteDB;
 using SDRLoggerPlus.Contracts.Api;
 using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Core.Serialization;
 
 namespace SDRLoggerPlus.Server.Core.Database.Remote;
 
@@ -22,6 +24,13 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
     private readonly HttpClient _http; // pre-configured: BaseAddress = host, Authorization: Bearer <token>
     private readonly ILogger<RemoteApiQsoRepository> _log;
 
+    // Web defaults (camelCase, matching the API) PLUS the BsonDocument converter so Qso.AdifExtra
+    // (custom ADIF fields) round-trips faithfully instead of being mangled by System.Text.Json.
+    private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new BsonDocumentJsonConverter() }
+    };
+
     public RemoteApiQsoRepository(HttpClient http, ILogger<RemoteApiQsoRepository> log)
     {
         _http = http;
@@ -37,9 +46,9 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
         // Mint the origin id here if the caller didn't — this is the idempotency/dedup key the outbox
         // (S3) and multi-USB merge depend on, and the host's repo respects a provided id (S0.5).
         if (string.IsNullOrEmpty(qso.Id)) qso.Id = ObjectId.NewObjectId().ToString();
-        var res = await _http.PostAsJsonAsync("api/data/qsos", qso);
+        var res = await _http.PostAsJsonAsync("api/data/qsos", qso, _json);
         res.EnsureSuccessStatusCode();
-        return (await res.Content.ReadFromJsonAsync<Qso>())!;
+        return (await res.Content.ReadFromJsonAsync<Qso>(_json))!;
     }
 
     public async Task<IEnumerable<Qso>> CreateBulkAsync(IEnumerable<Qso> qsos)
@@ -47,9 +56,9 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
         var list = qsos.ToList();
         foreach (var q in list)
             if (string.IsNullOrEmpty(q.Id)) q.Id = ObjectId.NewObjectId().ToString();
-        var res = await _http.PostAsJsonAsync("api/data/qsos/bulk", list);
+        var res = await _http.PostAsJsonAsync("api/data/qsos/bulk", list, _json);
         res.EnsureSuccessStatusCode();
-        return (await res.Content.ReadFromJsonAsync<List<Qso>>()) ?? new();
+        return (await res.Content.ReadFromJsonAsync<List<Qso>>(_json)) ?? new();
     }
 
     public async Task<Qso?> GetByIdAsync(string id)
@@ -57,18 +66,18 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
         var res = await _http.GetAsync($"api/data/qsos/{Uri.EscapeDataString(id)}");
         if (res.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
         res.EnsureSuccessStatusCode();
-        return await res.Content.ReadFromJsonAsync<Qso>();
+        return await res.Content.ReadFromJsonAsync<Qso>(_json);
     }
 
     public async Task<IEnumerable<Qso>> GetRecentAsync(int limit = 100) =>
-        (await _http.GetFromJsonAsync<List<Qso>>($"api/data/qsos/recent?limit={limit}")) ?? new();
+        (await _http.GetFromJsonAsync<List<Qso>>($"api/data/qsos/recent?limit={limit}", _json)) ?? new();
 
     public async Task<IEnumerable<Qso>> GetAllAsync() =>
-        (await _http.GetFromJsonAsync<List<Qso>>("api/data/qsos/all")) ?? new();
+        (await _http.GetFromJsonAsync<List<Qso>>("api/data/qsos/all", _json)) ?? new();
 
     public async Task<bool> UpdateAsync(string id, Qso qso)
     {
-        var res = await _http.PutAsJsonAsync($"api/data/qsos/{Uri.EscapeDataString(id)}", qso);
+        var res = await _http.PutAsJsonAsync($"api/data/qsos/{Uri.EscapeDataString(id)}", qso, _json);
         res.EnsureSuccessStatusCode();
         return await res.Content.ReadFromJsonAsync<bool>();
     }
@@ -89,9 +98,9 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
 
     public async Task<(IEnumerable<Qso> Items, int TotalCount)> SearchAsync(QsoSearchRequest criteria)
     {
-        var res = await _http.PostAsJsonAsync("api/data/qsos/search", criteria);
+        var res = await _http.PostAsJsonAsync("api/data/qsos/search", criteria, _json);
         res.EnsureSuccessStatusCode();
-        var page = await res.Content.ReadFromJsonAsync<QsoPage>() ?? new(new(), 0);
+        var page = await res.Content.ReadFromJsonAsync<QsoPage>(_json) ?? new(new(), 0);
         return (page.Items, page.TotalCount);
     }
 
@@ -113,11 +122,11 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
     {
         var res = await _http.PostAsJsonAsync("api/data/qsos/by-ids", ids.ToList());
         res.EnsureSuccessStatusCode();
-        return (await res.Content.ReadFromJsonAsync<List<Qso>>()) ?? new();
+        return (await res.Content.ReadFromJsonAsync<List<Qso>>(_json)) ?? new();
     }
 
     public async Task<List<Qso>> GetByContestSessionAsync(string sessionId) =>
-        (await _http.GetFromJsonAsync<List<Qso>>($"api/data/qsos/contest-session/{Uri.EscapeDataString(sessionId)}")) ?? new();
+        (await _http.GetFromJsonAsync<List<Qso>>($"api/data/qsos/contest-session/{Uri.EscapeDataString(sessionId)}", _json)) ?? new();
 
     public async Task<List<string>> GetDistinctCallsignsAsync() =>
         (await _http.GetFromJsonAsync<List<string>>("api/data/qsos/distinct-callsigns")) ?? new();
@@ -127,7 +136,7 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
         var res = await _http.GetAsync($"api/data/qsos/recent-by-callsign?callsign={Uri.EscapeDataString(callsign)}");
         if (res.StatusCode == System.Net.HttpStatusCode.NoContent) return null;
         res.EnsureSuccessStatusCode();
-        return await res.Content.ReadFromJsonAsync<Qso>();
+        return await res.Content.ReadFromJsonAsync<Qso>(_json);
     }
 
     public async Task<Qso?> FindRecentDuplicateAsync(string callsign, string band, string mode, DateTime createdSinceUtc)
@@ -138,7 +147,7 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
         var res = await _http.GetAsync(url);
         if (res.StatusCode == System.Net.HttpStatusCode.NoContent) return null;
         res.EnsureSuccessStatusCode();
-        return await res.Content.ReadFromJsonAsync<Qso>();
+        return await res.Content.ReadFromJsonAsync<Qso>(_json);
     }
 
     // -- host-only sync surface: a client never uploads the shared log -------------------------------

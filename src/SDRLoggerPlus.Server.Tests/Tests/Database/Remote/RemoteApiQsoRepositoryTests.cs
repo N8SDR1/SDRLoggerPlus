@@ -37,7 +37,9 @@ public class RemoteApiQsoRepositoryTests : IDisposable
             {
                 services.AddControllers(o =>
                         o.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true)
-                    .AddApplicationPart(typeof(SDRLoggerPlus.Server.Controllers.DataSyncController).Assembly);
+                    .AddApplicationPart(typeof(SDRLoggerPlus.Server.Controllers.DataSyncController).Assembly)
+                    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(
+                        new SDRLoggerPlus.Server.Core.Serialization.BsonDocumentJsonConverter()));
                 services.AddScoped<IQsoRepository>(_ => hostRepo); // the host's local shared log
                 services.AddSignalR(); // DataSyncController broadcasts new QSOs to the hub
             })
@@ -105,6 +107,22 @@ public class RemoteApiQsoRepositoryTests : IDisposable
     public async Task GetById_missing_returnsNull_notThrow()
     {
         (await _client.GetByIdAsync("5f9a1b2c3d4e5f6a7b8c9d0e")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Create_preservesAdifExtra_throughTheWire()
+    {
+        // Data-fidelity check: a QSO carrying custom ADIF fields must survive the remote round-trip,
+        // or the shared log silently loses them. AdifExtra is a LiteDB BsonDocument.
+        var qso = Qso();
+        qso.AdifExtra = new MongoDB.Bson.BsonDocument { { "my_custom_field", "hello" }, { "iota", "EU-005" } };
+
+        var created = await _client.CreateAsync(qso);
+        var loaded = await _client.GetByIdAsync(created.Id);
+
+        loaded!.AdifExtra.Should().NotBeNull();
+        loaded!.AdifExtra!["my_custom_field"].AsString.Should().Be("hello");
+        loaded.AdifExtra["iota"].AsString.Should().Be("EU-005");
     }
 
     [Fact]
