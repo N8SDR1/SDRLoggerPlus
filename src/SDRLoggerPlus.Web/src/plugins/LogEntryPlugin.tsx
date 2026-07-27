@@ -48,7 +48,7 @@ const formatTimeForInput = (date: Date): string => {
   return date.toISOString().slice(11, 16);
 };
 
-const BANDS = ['160m', '80m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '70cm'];
+const BANDS = ['160m', '80m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '1.25m', '70cm', '33cm', '23cm', '13cm', '9cm', '6cm', '3cm'];
 
 // Mode list matches v1.x SDRLogger+ — USB/LSB are separate (so the rig
 // actually gets USB or LSB, not a collapsed "SSB"), and DIGU/DIGL are the
