@@ -24,6 +24,7 @@ namespace SDRLoggerPlus.Server.Tests.Tests.Database.Remote;
 public class RemoteApiQsoRepositoryTests : IDisposable
 {
     private readonly LiteDbTestFixture _hostDb;
+    private readonly LiteDbTestFixture _clientCache; // the client's local offline cache (separate DB)
     private readonly TestServer _host;
     private readonly RemoteWriteOutbox _outbox;
     private readonly RemoteApiQsoRepository _client; // the field station's repo
@@ -55,14 +56,16 @@ public class RemoteApiQsoRepositoryTests : IDisposable
             });
 
         _host = new TestServer(builder);
+        _clientCache = new LiteDbTestFixture();
         _outbox = new RemoteWriteOutbox(Path.Combine(Path.GetTempPath(), $"sdrl-outbox-{Guid.NewGuid():N}.json"));
-        _client = new RemoteApiQsoRepository(_host.CreateClient(), _outbox, NullLogger<RemoteApiQsoRepository>.Instance);
+        _client = new RemoteApiQsoRepository(_host.CreateClient(), _outbox, _clientCache.Context, NullLogger<RemoteApiQsoRepository>.Instance);
     }
 
     public void Dispose()
     {
         _host.Dispose();
         _hostDb.Dispose();
+        _clientCache.Dispose();
     }
 
     private static Qso Qso(string call = "DL1ABC") => new()
@@ -154,12 +157,32 @@ public class RemoteApiQsoRepositoryTests : IDisposable
             BaseAddress = new Uri("http://127.0.0.1:59999/"),
             Timeout = TimeSpan.FromSeconds(1),
         };
-        var repo = new RemoteApiQsoRepository(deadClient, outbox, NullLogger<RemoteApiQsoRepository>.Instance);
+        var repo = new RemoteApiQsoRepository(deadClient, outbox, _clientCache.Context, NullLogger<RemoteApiQsoRepository>.Instance);
 
         var result = await repo.CreateAsync(Qso()); // must not throw
 
         result.Id.Should().NotBeNullOrEmpty();
         outbox.Count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DupeCheck_worksOffline_fromTheLocalCache()
+    {
+        var outbox = new RemoteWriteOutbox(Path.Combine(Path.GetTempPath(), $"sdrl-outbox-{Guid.NewGuid():N}.json"));
+        using var deadClient = new HttpClient
+        {
+            BaseAddress = new Uri("http://127.0.0.1:59999/"),
+            Timeout = TimeSpan.FromSeconds(1),
+        };
+        var repo = new RemoteApiQsoRepository(deadClient, outbox, _clientCache.Context, NullLogger<RemoteApiQsoRepository>.Instance);
+
+        // Log a QSO while the host is unreachable — queued AND written through to the local cache.
+        await repo.CreateAsync(Qso("VK3AMP"));
+
+        // Dupe-check still works offline, served from the cache.
+        var dupe = await repo.FindRecentDuplicateAsync("VK3AMP", "20m", "SSB", DateTime.UtcNow.AddMinutes(-5));
+        dupe.Should().NotBeNull();
+        dupe!.Callsign.Should().Be("VK3AMP");
     }
 
     [Fact]
