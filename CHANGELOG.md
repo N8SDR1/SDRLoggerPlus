@@ -3,6 +3,46 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-27 — v2.10.0 "Capella"
+
+Contesting from either side of the pileup, Super Check Partial call history, and a
+club-callsign fix so contest logs never pollute your personal logbook — plus a round
+of scoring corrections for the North-America parties.
+
+### New
+- **Super Check Partial (call history).** As you type a callsign in Log Entry, a
+  **suggestions dropdown** offers matching calls from a bundled Super Check Partial master
+  list, with **stations you've worked before ranked first** and a *last-worked* hint. Pick
+  one and it **prefills** from your last QSO with them (name, QTH, county, grid — all still
+  editable, so a rover/portable can override). One-click **Update master list** pulls the
+  latest from supercheckpartial.com.
+- **Contesting works from either side of the contest.** For contests with a home-area split
+  (ARRL DX, CQ 160, ARRL 10 m / 160 m / RTTY Roundup), a **DX operator** is now asked for —
+  and sends — the DX-side exchange (power, CQ zone, or a serial) instead of a state, and
+  captures the right field from the W/VE stations they work. The side is chosen automatically
+  from your station country/callsign, with an **Operating as** toggle to override it.
+- **Per-session operating callsign for contests.** Start a contest under a **club, portable,
+  or special-event call** and those QSOs are logged/exported under *that* call — they no
+  longer land in your personal logbook or upload under your personal LoTW/QRZ identity.
+- **FlexRadio is now a supported radio** (out of experimental) in the in-app rig setup —
+  6000-series auto-discovered on the LAN, alongside SmartSDR.
+- **Log History gains a Grid column.**
+
+### Fixed
+- **Contest scoring — North-America parties.** **NAQP** and **NA Sprint** multipliers were
+  over-counted: US/Canada were double-counted (state *and* country) and non-North-American
+  DX contacts wrongly earned a multiplier. They now count US states + VE provinces + NA
+  countries only; a European/Asian contact scores points, not a multiplier.
+- **Contest scoring — CQ WW 160.** USA and Canada were counted both as a state/province *and*
+  as a DX country, inflating the multiplier total. Fixed.
+- **Contest exchange wiring.** Every required sent-exchange field is now wired end-to-end and
+  guarded by a test — this closes the class of bug behind the missing Field Day **Class**
+  (1E / 2F), which is again captured and exported to Cabrillo.
+- **ADIF import.** Band and mode are validated on import, fabricated default values are
+  flagged, and an **import-issue report** is shown in the results dialog; edits to an
+  imported QSO no longer vanish.
+- **Backend test hang** (CI) from a spot-status cache deadlock.
+
 ## 2026-07-25 — v2.9.3 "Altair"
 
 A GridTracker-style map view, a fix for the digital double-click-to-call, and a

@@ -3,6 +3,297 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-27 — v2.10.0 "Capella"
+
+Contesting from either side of the pileup, Super Check Partial call history, and a
+club-callsign fix so contest logs never pollute your personal logbook — plus a round
+of scoring corrections for the North-America parties.
+
+### New
+- **Super Check Partial (call history).** As you type a callsign in Log Entry, a
+  **suggestions dropdown** offers matching calls from a bundled Super Check Partial master
+  list, with **stations you've worked before ranked first** and a *last-worked* hint. Pick
+  one and it **prefills** from your last QSO with them (name, QTH, county, grid — all still
+  editable, so a rover/portable can override). One-click **Update master list** pulls the
+  latest from supercheckpartial.com.
+- **Contesting works from either side of the contest.** For contests with a home-area split
+  (ARRL DX, CQ 160, ARRL 10 m / 160 m / RTTY Roundup), a **DX operator** is now asked for —
+  and sends — the DX-side exchange (power, CQ zone, or a serial) instead of a state, and
+  captures the right field from the W/VE stations they work. The side is chosen automatically
+  from your station country/callsign, with an **Operating as** toggle to override it.
+- **Per-session operating callsign for contests.** Start a contest under a **club, portable,
+  or special-event call** and those QSOs are logged/exported under *that* call — they no
+  longer land in your personal logbook or upload under your personal LoTW/QRZ identity.
+- **FlexRadio is now a supported radio** (out of experimental) in the in-app rig setup —
+  6000-series auto-discovered on the LAN, alongside SmartSDR.
+- **Log History gains a Grid column.**
+
+### Fixed
+- **Contest scoring — North-America parties.** **NAQP** and **NA Sprint** multipliers were
+  over-counted: US/Canada were double-counted (state *and* country) and non-North-American
+  DX contacts wrongly earned a multiplier. They now count US states + VE provinces + NA
+  countries only; a European/Asian contact scores points, not a multiplier.
+- **Contest scoring — CQ WW 160.** USA and Canada were counted both as a state/province *and*
+  as a DX country, inflating the multiplier total. Fixed.
+- **Contest exchange wiring.** Every required sent-exchange field is now wired end-to-end and
+  guarded by a test — this closes the class of bug behind the missing Field Day **Class**
+  (1E / 2F), which is again captured and exported to Cabrillo.
+- **ADIF import.** Band and mode are validated on import, fabricated default values are
+  flagged, and an **import-issue report** is shown in the results dialog; edits to an
+  imported QSO no longer vanish.
+- **Backend test hang** (CI) from a spot-status cache deadlock.
+
+## 2026-07-25 — v2.9.3 "Altair"
+
+A GridTracker-style map view, a fix for the digital double-click-to-call, and a
+one-click cure for the imported-log QRZ upload storm.
+
+### New
+- **Grid Tracker gets a real map view.** A new **Map / Chart** toggle in the Grid Tracker
+  panel. **Chart** is unchanged and stays the default; **Map** paints the same
+  worked/confirmed grids on a real slippy basemap (Dark, OpenStreetMap, Satellite,
+  Terrain) with pan/zoom — the GridTracker-app look. Grid designators label the squares
+  as you zoom in, live decodes carry over (cyan active, red-pulse "chase now") and their
+  **callsigns show in the tooltip**, plus **Fit-to-worked** and a **Chase** overlay that
+  outlines the unworked grids in view. Your view + basemap choice are remembered.
+- **Worked-grid layer on the 2D map.** The main Map plugin can now paint your worked grids
+  as a toggleable overlay with its own band filter.
+- **"Mark all as already synced to QRZ."** New maintenance action in **Settings → QRZ**
+  (above Test & Save) that flips every pending QSO to already-synced **without uploading
+  anything** — the clean fix if an imported QRZ export left thousands of QSOs re-uploading
+  as duplicates. The import "already in QRZ" checkbox now spells out exactly when to use it.
+
+### Fixed
+- **Double-click to call a station stopped working with WSJT-X / JTDX.** A v2.9.2 change
+  that resolved the decode's mode code for the "worked-before" colouring also changed the
+  mode sent in the reply, so WSJT-X and JTDX no longer recognised it and silently ignored
+  the call. The reply now echoes the decoder's original fields verbatim; double-click
+  answers a CQ again. *(Reminder: the decoder needs "Accept UDP requests" enabled.)*
+- **Imported QSOs no longer trigger a duplicate-upload storm** on every sync — see the new
+  QRZ maintenance action above.
+
+## 2026-07-24 — v2.9.2 "Altair"
+
+A new award, more flexible layouts, and a FlexRadio reconnect fix.
+
+### New
+- **FFMA award (Fred Fish Memorial Award).** Track all **488** six-metre grid squares
+  of the contiguous 48 states, confirmed by LoTW or paper QSL, in **Statistics → FFMA**.
+  Shown as a checklist grouped by grid field — confirmed, worked-but-unconfirmed, and
+  still-needed — with a **Needed** filter so you can see exactly what's left to chase.
+- **A layout for each log mode.** In **Settings → Appearance → Layout for each log mode**
+  you can bind a layout (a starter or one of your own) to **General / POTA / SAT /
+  Contest**. Switch to that mode and SDRLogger+ *offers* to load it — always a prompt,
+  never a silent swap, and it lets you save or discard unsaved arrangement changes first.
+- **Up to 10 saved layouts** (was 3) — enough to keep a personalised version of each
+  starter plus a few of your own.
+- **Release the radio to a hardware sat controller.** New opt-in in **Settings → S.A.T.**
+  stops SDRLogger+'s own direct CAT polling while the controller has the radio, so it
+  makes no traffic on a shared CI-V bus (older rigs like the IC-9100). Direct Hamlib only.
+
+### Fixed
+- **FlexRadio didn't reconnect on startup.** A Flex connected manually but never came
+  back after a restart, even with "Reconnect last radio on startup" on — the Flex backend
+  had no startup reconnect, and the saved rig type wasn't recorded. Both fixed; it now
+  reconnects once the radio's discovery beacon arrives. *(Reported by Bill, WK2X.)*
+
+## 2026-07-24 — v2.9.1 "Altair"
+
+A same-day follow-up to v2.9.0: one real connection bug, a serial-port warning,
+and honest corrections after a long session on the bench with an IC-705.
+
+### Fixed
+- **A failed Hamlib connect made every later attempt silently do nothing.** After
+  one failed connect, clicking Connect again produced no error, no log line and no
+  change for the rest of the session — it read as "Hamlib is broken" when the radio
+  and port were fine. The service marked itself as owning a radio it had never
+  opened; it now clears that on failure and actually retries.
+
+### New
+- **Serial-port collision warning.** Windows can hand a paired radio a COM number
+  that virtual-port software (VSPE/ELTIMA, com0com) already holds, because such
+  software often doesn't register with the Windows COM name arbiter — and the port
+  then opens the wrong device. The port picker now flags any number claimed by more
+  than one device and tells you how to fix it.
+
+### Verified
+- **IC-705 over USB confirmed** and marked as such (the first bench-verified
+  Popular Radios entry). Its setup hint now reflects what the radio actually does:
+  two USB ports with only the lower one answering CI-V, baud rate that can stay on
+  Auto, and echo-back that can be left on.
+
+### Corrected
+- **Bluetooth CAT is documented as unconfirmed, not working.** v2.9.0 said it worked;
+  a controlled test told a different story. An IC-705 pairs, Windows builds the
+  outgoing port, and the port then won't open — at every baud rate, with the radio
+  registered as a data device, USB unplugged, and no duplicate COM registrations,
+  and the same from a bare serial open with SDRLoggerPlus not running. So the radio
+  isn't accepting the serial connection; we don't know why, and the docs now say only
+  that. USB is the confirmed path.
+
+## 2026-07-24 — v2.9.0 "Altair" 🛰️
+
+Satellite operating gets hands-free, radio setup gets a lot friendlier, and the
+FlexRadio detection problem testers hit is fixed.
+
+### New
+- **S.A.T. Web panel** — dock your CSN S.A.T. controller's *own* web interface right
+  inside SDRLogger+: next passes, pick a satellite to track, TLE and frequency-database
+  updates, rotator and pass log. Add the panel, put your controller's address in
+  **Settings → S.A.T.**, and you're looking at your real controller with your real data.
+- **Follow the controller (auto-activate)** — optional, off by default. SDRLogger+ watches
+  your controller and switches itself on when AOS comes inside your lead time (90 s by
+  default), then off after LOS — taking the Log Entry into **SAT** mode and back to
+  **General** with it, and handing rig control to the controller for the pass. Clicking
+  **Activate** yourself always wins: switch it off mid-pass and it stays off. Verified on a
+  live AO-07 pass.
+- **Popular Radios** — pick your radio by the name on its front panel (IC-7300, IC-705,
+  FT-710, TS-590SG, K4 …) and the speed, bits and PTT settings are filled in, leaving only
+  the port to choose. It also tells you the one setting **on the radio** that has to
+  agree — Icom's CI-V baud, Yaesu's CAT RATE — which is what most "it won't connect" cases
+  turn out to be. The full searchable Hamlib list is one click away.
+- **Serial ports now say what they are** — "COM3 — Silicon Labs CP210x USB to UART Bridge"
+  instead of a bare "COM3", with real USB hardware sorted above virtual ports. Bluetooth
+  radios (IC-705 and similar) are labelled as such: pair in Windows and pick the port,
+  nothing else needed.
+
+### Fixed
+- **FlexRadio wasn't detected after the first run.** A Flex announces itself about a second
+  after the backend starts — usually before the app's window has finished connecting — so
+  that announcement went nowhere, and the radio was never mentioned again for the rest of
+  the session. The app also had no way to ask what the backend had already found. Both
+  fixed: it no longer matters whether the radio speaks up before or after the window opens.
+  *(Thanks to Andrew O'Brien for the report and the "worked once, then never again" detail
+  that pinned it down.)*
+- **Digital decodes never showed stations as already worked.** A decode carries a
+  one-character mode code (`~` for FT8, `+` for FT4) rather than a mode name, and it went
+  straight into the worked-before lookup — which could never match a logged "FT8". Every
+  station you'd already worked on that band and mode showed as un-worked.
+- **Settings were saved over and over when a configured radio was switched off.** With the
+  Settings window open and the rig powered down, the app rewrote its settings several times
+  a second — visible as the Save button flickering.
+- **The S.A.T. Activate button was unreliable until a restart**, and the Log Entry didn't
+  always follow it. Satellite state now stays in step with the controller across restarts
+  and reconnects.
+
+### Changed
+- **PTT is presented honestly.** SDRLogger+ only ever *reads* PTT, to show whether you're
+  transmitting — it never keys your radio. That setting now lives under **Advanced** with
+  two choices (read over CAT, or don't). DTR and RTS are gone: they gain nothing when
+  nothing transmits, and they're the lines many interfaces key from.
+- **The Settings → S.A.T. "Controller Tools" section is gone** — the embedded S.A.T. Web
+  panel shows the same information live from the controller, so a second copy that could
+  drift was worse than none.
+- **Help guide updated throughout** — including a new section on running alongside
+  **WSJT-X / JTDX / MSHV / VarAC** without a COM-port splitter, and a plain statement that
+  radio control needs **no separate Hamlib install** (with the two exceptions: rotators,
+  and Linux).
+
+### Still experimental
+- **FlexRadio 6000** remains 🧪 experimental. The detection fault above explains the mixed
+  tester reports, but no one has yet confirmed a Flex surviving a close-and-reopen cycle —
+  that's the case to prove. Inert unless you own a Flex.
+- **Popular Radios** starting values come from each radio's documentation, not a bench.
+  They're marked 🧪 in the app until an operator confirms them on the actual rig — if one
+  works, or needs a change, please tell us.
+
+## 2026-07-23 — v2.8.1 "Rigel" 📡
+
+The stable **2.8** release. Promotes the rebuilt rig engine + satellite / flrig
+refinements from the v2.8.0 pre-release to stable, and fixes three
+digital-logging bugs reported by testers. **Native FlexRadio 6000 support ships as
+experimental** (still being verified on hardware) — it's inactive unless you own a
+Flex 6000, so it doesn't affect other rigs.
+
+### Fixed
+- **JTDX logged QSOs weren't saved.** JTDX (an older WSJT-X fork) sends a shorter
+  "QSO logged" UDP packet than current WSJT-X / MSHV; the parser read past the end and
+  dropped the whole message, so QSOs logged in JTDX never reached the logbook. (The
+  ADIF monitor and MSHV were unaffected.) JTDX now logs correctly.
+- **Imported QSOs wouldn't upload to QRZ.** ADIF-monitor and ADIF-imported contacts
+  were marked "already synced to QRZ," so the uploader skipped them ("all already
+  synced"). Imports are now marked **not-synced** so they upload; the "mark as already
+  synced" option remains for importing your existing QRZ export.
+- **Imported QSOs didn't appear until Reload.** Background ADIF-monitor imports now
+  refresh the logbook, summary and grid map live, like a directly-entered QSO.
+
+### Included from the v2.8.0 pre-release (now stable)
+Unified rig engine; **experimental** native FlexRadio 6000 (SmartSDR) support;
+S.A.T. controller takes the radio during a pass (rig control paused + auto-switch to
+SAT mode); flrig active-rig hand-off and frequency-follow fixes.
+
+## 2026-07-23 — v2.8.0 "Rigel" 📡 (pre-release · Flex test)
+
+A rebuilt rig-control engine, **native FlexRadio 6000 support**, and satellite +
+flrig refinements. FlexRadio is new and **not yet bench-verified against hardware** —
+this build is a pre-release for Flex owners to test.
+
+### New
+- **Native FlexRadio 6000 (SmartSDR) support** — Flex radios are **auto-discovered**
+  on your LAN (no host/port to enter) and appear in **Settings → Station → Radio
+  Type → FlexRadio**. SDRLogger+ connects to the radio's control API **alongside
+  SmartSDR** (the API is multi-client, so nothing has to close), follows the active
+  slice, and tunes frequency/mode. ⚠ **Unverified on hardware** — please report issues.
+- **Unified rig engine** — TCI, Hamlib, flrig and FlexRadio now run through one
+  internal backend abstraction. No behaviour change to existing rigs; it makes each
+  new radio a clean plug-in (this is how FlexRadio was added).
+- **S.A.T. takes the radio during a pass** — while the CSN S.A.T. controller is
+  actively tracking, it fully owns the connected radio: SDRLogger+ **pauses its own
+  rig control** (spot-click, band/mode dropdowns), shows a **🛰 "S.A.T. controlling
+  radio — rig control paused"** badge with the dropdowns greyed, and only **reads**
+  freq/mode from the S.A.T. output. Control resumes automatically when the pass ends.
+- **S.A.T. auto-switch** — activating the controller drops the Log Entry into **SAT**
+  mode; deactivating returns it to **General**.
+
+### Fixed
+- **flrig: active rig now surfaced.** When your selected rig disconnects, SDRLogger+
+  hands off to another live rig (e.g. flrig / an IC-9100) app-wide, so the status bar
+  and the Log Entry follow-gate track it instead of a dead rig — Band/Mode from the
+  Log Entry now drive flrig.
+- **flrig: frequency follows band changes.** After the app tuned flrig (e.g. a band
+  change), the displayed frequency could lag; flrig now broadcasts its new state
+  immediately so Follow-Radio stays in sync.
+- **"Supported TCI radio"** wording on the Meters/Panadapter no-data hints (was
+  Thetis-specific; TCI works with Lyra / Thetis / ExpertSDR3 too).
+
+## 2026-07-23 — v2.7.0 "Vega" 🛰️
+
+Contest scoring is now exact across the entire catalog, a big Satellite-panel
+overhaul, and a batch of logbook-integrity features.
+
+### New
+- **Winter Field Day scoring** — QSO points by mode, a power multiplier
+  (QRP ×4 / Low ×2 / High ×1), one multiplier per mode (Phone/CW/Digital) per
+  band, and a self-declared **objective-bonus** box that adds to the final score.
+- **ARRL/RAC section roster** — the Multipliers panel now shows **worked / total**
+  sections and lists the ones you still need; the section field flags an unknown
+  section as you type.
+- **Satellite panel overhaul** — following a connected CSN S.A.T. controller, the
+  Log Entry auto-fills satellite, **band**, and up/downlink frequency & mode, and
+  the S.A.T. panel shows the live pass in **both miles and km**: azimuth/elevation,
+  range, **altitude, footprint**, Doppler-shifted up/downlink, sub-satellite point,
+  and signal. It follows the live (Doppler-corrected) frequency on screen but
+  **logs the nominal** transponder frequency (what LoTW expects).
+- **US Counties Award (USA-CA)** — county tracking and award progress, with county
+  capture from ADIF import. *(Brent, N9BC)*
+- **Duplicate-QSO warning** on log entry, and a **QSL sync ledger** with credential
+  redaction in logs. *(Brent, N9BC)*
+- **Credential encryption at rest** + a settings migration framework and a
+  frequency-repair pass for older logs. *(Brent, N9BC)*
+
+### Changed
+- Contest **Power class** now covers every ruleset that uses a power multiplier
+  (Field Day, Winter Field Day, Stew Perry, …), shown in the setup picker.
+- Help guide updated for the contest, section, and satellite changes.
+
+### Fixed
+- **Contest scoring is now exact across the whole catalog** (issue #23). Newly
+  correct: CQ WPX low-band ×2 + North-America exception, CQ WW DX NA↔NA = 2,
+  CQ WW / ARRL VHF per-band points, ARRL 160 m any-DX = 5, 10-10 member points,
+  distance scoring for Stew Perry & ARRL International Digital, and ARRL 10 m
+  multipliers counted once per mode. Exchanges, dupes and multipliers were already
+  correct; this closes the remaining scoring gaps.
+
 ## 2026-07-19 — v2.6.0 "Vega+" 🌟
 
 Contest release: a rule-aware contest logger for the ARRL & CQ majors, plus a
@@ -152,6 +443,85 @@ tracking, built right into SDRLoggerPlus. No JTAlert or GridTracker needed.
   background auto-sync.
 - **Voice** — a shared announcement voice (accent + male / female) for band
   openings, Hot List, RBN alerts, and the DX Coach, with a volume control.
+
+## 2026-07-10 — v2.1.0 "Vega" 🌟
+
+Feature release on the 2.0 "Vega" line.
+
+### New
+- **Units — Imperial / Metric master toggle** (Settings → Appearance). One
+  switch drives distance, satellite range/altitude, wind, temperature, and
+  lightning proximity. The Weather wind switch can still override it (defaults
+  to follow the master).
+- **WSJT-X / JTDX** now has its own Settings section, with a **second
+  independent UDP source** — auto-log from two decoders at once (e.g. WSJT-X
+  and JTDX on separate ports).
+- **AI talk points — bring your own provider.** Chat AI works with any
+  OpenAI-compatible endpoint via a Base-URL field: OpenAI, Anthropic, **Groq**,
+  **OpenRouter**, and **Ollama** (local, no key), plus Custom. Provider errors
+  now show the real reason. The Help Guide includes an Ollama setup walkthrough.
+- **POTA Activators filters** — the DX-cluster toolbar on the POTA panel:
+  Follow-rig (Band/Mode), Band, Mode, a Region filter (park location), and
+  search. Follow-rig persists across restarts.
+- **TCI rig setup — connection check + edit.** Adding a TCI rig probes the
+  host:port first, so a wrong port tells you immediately instead of leaving a
+  rig that never connects. Saved rigs now have an Edit button (name/host/port).
+- **Panadapter** — spectrum height (SPC) and spectrum line-colour controls; the
+  palette and line colour live behind a colour gear.
+- **ADIF Monitor** — Browse buttons to pick the watched `.adi` files.
+
+### Improvements
+- Larger, more legible band-activity tiles in the header bar.
+- About page shows the real version number.
+- New landscape splash screen.
+
+### Fixes
+- **Lightning proximity alert** now reads the freshest strikes (last ~0–10 min)
+  instead of data up to an hour old — storm warnings reflect current conditions.
+
+## 2026-07-08 — v2.0.1
+
+### Fixes
+- **App icon + splash screen** — replaced the leftover QSOThief-lineage
+  artwork with the SDRLogger+ icon. (A dedicated wide splash graphic is
+  still to come in a later release.)
+
+## 2026-07-08 — v2.0.0 "Vega" 🌟
+
+First production release of SDRLoggerPlus v2 (.NET 10 backend + React /
+Electron). Codename **Vega** — the alpha star of the Lyra constellation,
+for the Lyra ↔ SDRLogger+ integration at the heart of this release.
+
+### Lyra Combo Link (headline)
+- Two-way link over the existing TCI socket — no bridge app. Grab a call
+  in Lyra's CW decoder and it populates SDRLogger+ (call + lookup);
+  SDRLogger+ sends the callbook first name back so Lyra's `{NAME}` token
+  fills; a `{LOG}`-tagged CW macro logs the QSO in SDRLogger+ as it sends
+  the signoff.
+- **Auto received-S** — the "S" of RST-Rcvd is computed live from the
+  shared S-meter (SNR-gated), with an Auto/Manual toggle; works on CW,
+  SSB and digital.
+- Survives Lyra restarts (auto-reconnect); a `● Lyra Combo` badge shows
+  when linked. Requires Lyra v0.14.0.
+
+### Maps
+- **2D Map panel restored** and reworked — a responsive globe + map
+  cockpit that stays usable docked small, the focused call/spot offset
+  clear of the globe, and a **radio-tower DX marker** on the 2D-map globe.
+- **3D globe day/night terminator** with a Settings → Map shade slider.
+
+### DX cluster
+- **Follow rig** with independent **Band** and **Mode** toggles — e.g.
+  "CW across all bands" or "CW on the current band only" (CWU/CWL fix).
+
+### Elsewhere
+- **In-app User Guide** (About → Open the User Guide) covering every
+  feature, plus GitHub + Discord links.
+- **"Lyra" theme** (Settings → Appearance) styled after the Lyra SDR.
+- **Analog meter** shows mode + frequency on one line (white RX / red TX),
+  TCI-aware.
+- **Updater** matches Lyra: pre-releases visible, once-per-version, shows
+  the changelog in the prompt.
 
 ## 2026-07-06 — Panadapter deep-clean session
 
