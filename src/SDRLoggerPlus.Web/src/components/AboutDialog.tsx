@@ -357,6 +357,7 @@ function HelpTab() {
             <li><B>Power class &amp; bonuses.</B> Set your <B>power class</B> and the final-score power multiplier is applied where the rules use one (Field Day QRP ×5, Winter Field Day QRP ×4 / Low ×2, Stew Perry, …). For contests with self-declared objective bonuses (Winter Field Day), a <B>bonus-points</B> box adds them to your score.</li>
           </ul>
           <p className="text-xs text-dark-300">Built-in definitions are read-only — <B>clone</B> one to tweak a ruleset, or author your own. Exchanges, dupes, multipliers <em>and scoring</em> are correct across the catalog — including the band-weighted (CQ WPX low bands, VHF per-band), distance-based (Stew Perry, ARRL Digital), North-America-exception (CQ WW / WPX), per-mode-multiplier (ARRL 10 m), the North-America-party multipliers (NAQP and NA Sprint count US states + provinces + NA countries only — a European contact scores points, not a multiplier) and Winter Field Day rules.</p>
+          <p className="text-xs text-amber-300/90"><B>* Single-station today.</B> Contest &amp; Field Day logging runs on <B>one computer with its own local log</B> — there is no live shared or networked log across multiple operators yet (it's on the roadmap). For a <B>multi-op Field Day</B> now, each operator logs on their own machine and you <B>merge the ADIF exports afterward</B>. Live networked multi-op — and support for larger groups — is planned.</p>
         </Section>
 
         <Section id="spots" title="DX Spots & the Map">
