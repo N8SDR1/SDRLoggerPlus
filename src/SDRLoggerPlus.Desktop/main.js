@@ -239,6 +239,34 @@ function getBackendPath() {
 }
 
 /**
+ * Decide whether the backend binds to the LAN (multi-op host) or localhost.
+ * We only expose on the network when the operator opted in (config.json "ShareOnNetwork")
+ * AND at least one access token exists — binding 0.0.0.0 with no token makes the backend's
+ * default-deny auth guard refuse to start, which would brick the launch. Any doubt → localhost.
+ * (Electron's userData dir == the backend's config dir, since app.setName('SDRLoggerPlus').)
+ */
+function resolveBindHost() {
+  try {
+    const cfgPath = path.join(userDataPath, 'config.json');
+    if (!fs.existsSync(cfgPath)) return 'localhost';
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    if (!cfg || cfg.ShareOnNetwork !== true) return 'localhost';
+
+    const tokPath = path.join(userDataPath, 'auth-tokens.json');
+    const tokens = fs.existsSync(tokPath) ? JSON.parse(fs.readFileSync(tokPath, 'utf8')) : [];
+    if (!Array.isArray(tokens) || tokens.length === 0) {
+      log.warn('ShareOnNetwork is on but no access tokens exist — staying on localhost to avoid a refused start.');
+      return 'localhost';
+    }
+    log.info('Multi-op: hosting the shared log on the network (binding 0.0.0.0).');
+    return '0.0.0.0';
+  } catch (err) {
+    log.warn(`Could not resolve bind host, defaulting to localhost: ${err.message}`);
+    return 'localhost';
+  }
+}
+
+/**
  * Start the .NET backend process
  */
 async function startBackend() {
@@ -292,7 +320,9 @@ async function startBackend() {
     cwd: backendDir,
     env: {
       ...process.env,
-      ASPNETCORE_URLS: `http://localhost:${backendPort}`,
+      // localhost by default; 0.0.0.0 only when the operator opted into hosting for other stations
+      // (and a token exists — see resolveBindHost). The app UI stays on localhost regardless.
+      ASPNETCORE_URLS: `http://${resolveBindHost()}:${backendPort}`,
       ASPNETCORE_ENVIRONMENT: app.isPackaged ? 'Production' : 'Development',
       SDRLOGGERPLUS_SHUTDOWN_TOKEN: shutdownToken
     },

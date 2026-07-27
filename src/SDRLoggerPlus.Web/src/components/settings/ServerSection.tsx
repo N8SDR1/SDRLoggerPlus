@@ -16,6 +16,8 @@ export function ServerSection() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [shareOnNetwork, setShareOnNetwork] = useState(false);
   const [devices, setDevices] = useState<AuthDevice[]>([]);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [issuedToken, setIssuedToken] = useState<{ name: string; token: string } | null>(null);
@@ -25,6 +27,7 @@ export function ServerSection() {
     setCfg(c);
     setMode(c.mode);
     setHostUrl(c.hostUrl ?? '');
+    setShareOnNetwork(c.shareOnNetwork);
     if (c.mode === 'host') setDevices(await api.listServerDevices());
   }, []);
 
@@ -37,8 +40,23 @@ export function ServerSection() {
   };
 
   const save = async () => {
-    await api.saveServerConfig({ mode, hostUrl: hostUrl || undefined, token: token || undefined });
-    setSaved(true);
+    setSaveError(null); setSaved(false);
+    // Hosting on the network without a token would make the backend refuse to start — block it here
+    // with a clear message rather than letting the launch break.
+    if (mode === 'host' && shareOnNetwork && devices.length === 0) {
+      setSaveError('Add at least one device token below before turning on network hosting.');
+      return;
+    }
+    try {
+      await api.saveServerConfig({
+        mode, hostUrl: hostUrl || undefined, token: token || undefined,
+        shareOnNetwork: mode === 'host' ? shareOnNetwork : undefined,
+      });
+      setSaved(true);
+    } catch (e) {
+      // The backend refuses hosting-without-a-token (would brick the launch); surface its message.
+      setSaveError(e instanceof Error ? e.message : 'Save failed.');
+    }
   };
 
   const addDevice = async () => {
@@ -86,11 +104,23 @@ export function ServerSection() {
       {/* HOST mode */}
       {mode === 'host' && cfg && (
         <div className="space-y-4">
-          <div className="p-3 rounded-lg bg-glass-50 border border-glass-100">
+          {/* Share-on-network toggle */}
+          <label className="flex items-center gap-3 p-3 rounded-lg bg-glass-50 border border-glass-100 cursor-pointer">
+            <input type="checkbox" checked={shareOnNetwork}
+              onChange={(e) => { setShareOnNetwork(e.target.checked); setSaved(false); setSaveError(null); }}
+              className="w-4 h-4 accent-accent-secondary" />
+            <div>
+              <div className="text-sm font-medium text-gray-200">Share this log on my network</div>
+              <div className="text-xs text-dark-400">Let other stations connect. Requires at least one device token below.</div>
+            </div>
+          </label>
+
+          {/* Reachability status */}
+          <div className="p-3 rounded-lg bg-glass-50 border border-glass-100 text-sm">
             {cfg.remotelyBound ? (
-              <div className="text-sm text-gray-200">
+              <div className="text-gray-200">
                 <div className="flex items-center gap-2 text-green-400 font-medium">
-                  <Wifi className="w-4 h-4" /> Reachable on your network
+                  <Wifi className="w-4 h-4" /> Live — reachable on your network
                 </div>
                 <div className="mt-2 text-dark-300">Other stations connect to:</div>
                 {cfg.lanAddresses.length ? cfg.lanAddresses.map((ip) => (
@@ -101,11 +131,16 @@ export function ServerSection() {
                   </div>
                 )) : <div className="text-dark-400 text-xs mt-1">No LAN address detected.</div>}
               </div>
-            ) : (
-              <div className="text-sm text-amber-200 flex items-start gap-2">
+            ) : shareOnNetwork ? (
+              <div className="text-amber-200 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>Running on this computer only (localhost). Hosting for other stations needs the
-                  backend to listen on your network — that launch option is coming with the multi-op release.</span>
+                <span>Sharing is on but not active yet — <strong>Save and restart</strong> SDRLogger+ to start
+                  hosting{cfg.lanAddresses.length ? <> at <code className="text-accent-primary">http://{cfg.lanAddresses[0]}:{cfg.port}</code></> : ''}.</span>
+              </div>
+            ) : (
+              <div className="text-dark-300">
+                Running on this computer only. Turn on <strong className="text-gray-200">Share this log on
+                my network</strong> above (and add a device token) to host for other stations.
               </div>
             )}
           </div>
@@ -199,6 +234,11 @@ export function ServerSection() {
         {saved && (
           <p className="text-xs text-amber-300 mt-2 flex items-center gap-1">
             <AlertTriangle className="w-3.5 h-3.5" /> Saved — restart SDRLogger+ for the change to take effect.
+          </p>
+        )}
+        {saveError && (
+          <p className="text-xs text-red-400 mt-2 flex items-center gap-1">
+            <XCircle className="w-3.5 h-3.5" /> {saveError}
           </p>
         )}
       </div>

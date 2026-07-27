@@ -1178,11 +1178,12 @@ export interface ServerConfig {
   mode: 'host' | 'client';
   hostUrl?: string;
   remotelyBound: boolean;
+  shareOnNetwork: boolean;
   lanAddresses: string[];
   port: number;
   deviceCount: number;
 }
-export interface SaveServerConfigRequest { mode: 'host' | 'client'; hostUrl?: string; token?: string; }
+export interface SaveServerConfigRequest { mode: 'host' | 'client'; hostUrl?: string; token?: string; shareOnNetwork?: boolean; }
 export interface ServerTestResult { ok: boolean; detail: string; }
 export interface AuthDevice { id: string; name: string; createdUtc: string; lastSeenUtc?: string; }
 

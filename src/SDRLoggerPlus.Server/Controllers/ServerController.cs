@@ -38,10 +38,10 @@ public class ServerController : ControllerBase
     }
 
     public record ServerConfigDto(
-        string Mode, string? HostUrl, bool RemotelyBound,
+        string Mode, string? HostUrl, bool RemotelyBound, bool ShareOnNetwork,
         IReadOnlyList<string> LanAddresses, int Port, int DeviceCount);
 
-    public record SaveConfigRequest(string Mode, string? HostUrl, string? Token);
+    public record SaveConfigRequest(string Mode, string? HostUrl, string? Token, bool? ShareOnNetwork);
     public record TestRequest(string HostUrl, string? Token);
     public record TestResult(bool Ok, string Detail);
     public record AddDeviceRequest(string Name);
@@ -55,6 +55,7 @@ public class ServerController : ControllerBase
             Mode: cfg.Provider == DatabaseProvider.RemoteHost ? "client" : "host",
             HostUrl: cfg.HostUrl,
             RemotelyBound: RemoteAccessGuard.IsRemotelyBound(addrs),
+            ShareOnNetwork: cfg.ShareOnNetwork,
             LanAddresses: LanIPv4(),
             Port: PortOf(addrs),
             DeviceCount: _tokens.List().Count));
@@ -76,6 +77,12 @@ public class ServerController : ControllerBase
         {
             // Back to hosting our own log; keep the stored host URL/token for easy re-connect later.
             cfg.Provider = DatabaseProvider.Local;
+            var share = req.ShareOnNetwork ?? cfg.ShareOnNetwork;
+            // Safety interlock: exposing the backend to the network without a token would make the
+            // default-deny bind guard refuse to start (a bricked launch). Require a device first.
+            if (share && _tokens.List().Count == 0)
+                return BadRequest(new { error = "Add at least one device token before hosting on the network — otherwise the app would refuse to start for security." });
+            cfg.ShareOnNetwork = share;
         }
         await _config.SaveConfigAsync(cfg);
         return Ok(new { restartRequired = true });

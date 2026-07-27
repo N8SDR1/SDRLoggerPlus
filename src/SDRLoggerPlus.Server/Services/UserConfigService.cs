@@ -23,6 +23,11 @@ public class UserConfig
     // (e.g. http://192.168.1.50:5050) and this device's access token. Ignored for a Local/host install.
     public string? HostUrl { get; set; }
     public string? HostToken { get; set; }
+
+    // HOST this log for other stations on the network. When true (and at least one device token
+    // exists), the launcher binds the backend to the LAN (0.0.0.0) instead of localhost. Default
+    // false = a normal single-machine install stays localhost-only, exposing nothing.
+    public bool ShareOnNetwork { get; set; }
 }
 
 /// <summary>
