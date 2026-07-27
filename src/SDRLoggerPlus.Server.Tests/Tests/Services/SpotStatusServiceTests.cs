@@ -25,11 +25,28 @@ public class SpotStatusServiceTests
         _service = new SpotStatusService(serviceProvider, logger);
     }
 
-    private static IServiceProvider BuildServiceProvider(IQsoRepository qsoRepository)
+    /// <summary>
+    /// Deliberately minimal: only what SpotStatusService strictly needs. An optional
+    /// ISettingsService is registered when a test cares about operating-callsign filtering,
+    /// and left out otherwise — leaving it out is what proves the cache still builds without
+    /// it (see BuildCache_WithNoSettingsServiceRegistered_StillCompletes).
+    /// </summary>
+    private static IServiceProvider BuildServiceProvider(
+        IQsoRepository qsoRepository,
+        ISettingsService? settingsService = null)
     {
         var services = new ServiceCollection();
         services.AddSingleton(qsoRepository);
+        if (settingsService is not null) services.AddSingleton(settingsService);
         return services.BuildServiceProvider();
+    }
+
+    private static ISettingsService SettingsWithCallsign(string? callsign)
+    {
+        var settings = new UserSettings { Station = new StationSettings { Callsign = callsign } };
+        var mock = new Mock<ISettingsService>();
+        mock.Setup(s => s.GetSettingsAsync(It.IsAny<string>())).ReturnsAsync(settings);
+        return mock.Object;
     }
 
     #region GetSpotStatus — cache-not-ready guard
@@ -552,6 +569,76 @@ public class SpotStatusServiceTests
 
         _service.GetSpotStatus("W1ABC", country, freqKhz, "CW")
             .Should().Be("worked");
+    }
+
+    #endregion
+
+    #region Cache build resilience
+
+    // How long a cache build may take before we call it hung. The real build is
+    // sub-second against a mocked repository; anything approaching this is a deadlock.
+    private static readonly TimeSpan CacheBuildLimit = TimeSpan.FromSeconds(10);
+
+    [Fact]
+    public async Task BuildCache_WithNoSettingsServiceRegistered_StillCompletes()
+    {
+        // Regression: BuildCacheAsync used to resolve ISettingsService with GetRequiredService.
+        // With no such registration it threw, the blanket catch turned that into "build failed",
+        // StartAsync fell into an unbounded retry loop, and _cacheReady was never set — so every
+        // test awaiting CacheReady hung and the test host never exited. Resolving it optionally
+        // keeps a missing settings service from taking the whole cache down.
+        //
+        // WaitAsync rather than a bare await: if this regresses, the test must FAIL in ten
+        // seconds, not hang CI for six hours.
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("W1ABC", country: "United States", band: "20m", mode: "SSB"),
+        });
+
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady.WaitAsync(CacheBuildLimit);
+
+        // Cache is live, and with no callsign known every QSO counts as personal.
+        _service.GetSpotStatus("W1ABC", "United States", 14000.0, "SSB").Should().Be("worked");
+    }
+
+    [Fact]
+    public async Task BuildCache_WithSettingsService_ExcludesQsosLoggedUnderAnotherCall()
+    {
+        // The behaviour the operating-callsign lookup exists for: a contest run under a club
+        // call must not mark the operator's own countries as worked.
+        var repo = new Mock<IQsoRepository>();
+        var clubQso = MakeQso("DL1ABC", country: "Germany", band: "20m", mode: "SSB");
+        clubQso.Contest = new ContestInfo { StationCallsign = "W1AW" };
+        repo.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso> { clubQso });
+
+        var service = new SpotStatusService(
+            BuildServiceProvider(repo.Object, SettingsWithCallsign("N9BC")),
+            NullLogger<SpotStatusService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        await service.CacheReady.WaitAsync(CacheBuildLimit);
+
+        // Logged as W1AW, operator is N9BC → not personal → Germany still shows as needed.
+        service.GetSpotStatus("DL1ABC", "Germany", 14000.0, "SSB").Should().Be("newDxcc");
+    }
+
+    [Fact]
+    public async Task BuildCache_WithSettingsService_CountsQsosLoggedUnderTheOwnCall()
+    {
+        var repo = new Mock<IQsoRepository>();
+        var ownQso = MakeQso("DL1ABC", country: "Germany", band: "20m", mode: "SSB");
+        ownQso.Contest = new ContestInfo { StationCallsign = "N9BC" };
+        repo.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso> { ownQso });
+
+        var service = new SpotStatusService(
+            BuildServiceProvider(repo.Object, SettingsWithCallsign("N9BC")),
+            NullLogger<SpotStatusService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        await service.CacheReady.WaitAsync(CacheBuildLimit);
+
+        service.GetSpotStatus("DL1ABC", "Germany", 14000.0, "SSB").Should().Be("worked");
     }
 
     #endregion
