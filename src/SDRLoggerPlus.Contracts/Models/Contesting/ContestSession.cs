@@ -82,6 +82,15 @@ public class MyExchange
     public string? Class { get; set; }
 
     /// <summary>
+    /// Generic sent-exchange values keyed by the definition's field key — the SENT-side mirror
+    /// of <see cref="ContestInfo.RcvdFields"/>. Holds any sent field the typed properties above
+    /// don't cover (Sweepstakes precedence/check, WFD section, 10-10 number, Kids-Day age/qth,
+    /// and any future exotic exchange). CabrilloExporter falls back to this by key, so a new
+    /// sent field is wired the moment it's declared — no per-field property plumbing.
+    /// </summary>
+    public Dictionary<string, string>? SentFields { get; set; }
+
+    /// <summary>
     /// Operator-declared role, overriding the location-based guess: InArea/OutArea
     /// for a StateCounty-kind contest, InArea/Dx for a WVE-kind one. When set,
     /// <c>ContestScoringEngine.DetermineRole</c> uses it instead of inferring from

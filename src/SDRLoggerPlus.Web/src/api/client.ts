@@ -1376,6 +1376,9 @@ export interface ContestMyExchange {
   name?: string;
   // Sent CLASS for Field Day / Winter Field Day ("1E", "2F", …).
   class?: string;
+  // Generic sent-exchange values by field key (prec, check, section, nr, age, qth, …) — the
+  // sent-side mirror of the received exchange dict; covers any field the typed props don't.
+  sentFields?: Record<string, string>;
   // Operator-declared bonus/objective points, added to the final score (WFD).
   bonusPoints?: number;
   // Operator-declared role, overriding the location-based guess: "InArea"/"OutArea"

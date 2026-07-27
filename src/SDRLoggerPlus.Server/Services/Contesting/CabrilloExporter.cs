@@ -73,7 +73,7 @@ public static class CabrilloExporter
         return string.Join(" ", tokens).TrimEnd();
     }
 
-    private static string SentValue(ContestField f, MyExchange me, Qso qso)
+    internal static string SentValue(ContestField f, MyExchange me, Qso qso)
     {
         // County is a plain Text field (no dedicated field type); emit it by key so
         // an in-area QSO-party operator sends its county rather than a blank token.
@@ -93,7 +93,10 @@ public static class CabrilloExporter
             ContestFieldType.Name => me.Name ?? "",
             ContestFieldType.Grid => me.Grid ?? "",
             ContestFieldType.Power => PowerExchangeToken(me.Power),
-            _ => "",
+            // Anything else (Text keys like prec/check/section/nr/age/qth, or the Precedence/
+            // Check enum types) resolves from the generic sent store by key — the exact mirror
+            // of RcvdValue's RcvdFields fallback, so no sent field can silently export blank.
+            _ => me.SentFields != null && me.SentFields.TryGetValue(f.Key, out var v) ? v : "",
         };
     }
 

@@ -113,11 +113,18 @@ public static class SeedContests
         // send a CQ zone (or country/prefix, varying by rule year) that is INFORMATIONAL
         // ONLY — it never counts as a multiplier, so the S/P/C field label is a harmless
         // simplification (the DX multiplier is derived from DXCC, not the typed value).
+        // W/VE send RST + State/Province; DX send RST + CQ Zone. Received exchange is
+        // role-split so a DX contact captures its zone rather than being asked for a state.
         foreach (var (m, cab) in New("CQ-160", "CW", "SSB"))
-            yield return D($"cq-160-{m.L}", $"CQ 160 {m.N}", cab, new() { "160M" }, m.Modes,
-                new[] { Rst(), StateF("S/P/C") }, new[] { Rst(), StateF("S/P/C") },
+        {
+            var cq160 = D($"cq-160-{m.L}", $"CQ 160 {m.N}", cab, new() { "160M" }, m.Modes,
+                new[] { Rst(), StateF("S/P/C") },
+                new[] { Rst(), When(StateF("S/P/C"), ContestRole.InArea), When(Zone(), ContestRole.Dx) },
                 Pts(5, sameCountry: 2, otherCont: 10),
                 new[] { M(MultSource.State), M(MultSource.Dxcc) });
+            cq160.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
+            yield return cq160;
+        }
 
         // Per-band points: 6 m = 1, 2 m = 2.
         yield return D("cq-vhf", "CQ VHF", "CQ-VHF", new() { "6M", "2M" }, new[] { "CW", "SSB", "FM", "FT8" },
@@ -125,10 +132,14 @@ public static class SeedContests
             new[] { M(MultSource.Grid, true) });
 
         // Five bands (no 160m). Same country 1 / same continent 2 / diff continent 3.
-        yield return D("cq-ww-rtty", "CQ WW RTTY", "CQ-WW-RTTY", HfNo160, new[] { "RTTY" },
-            new[] { Rst(), Zone(), StateF() }, new[] { Rst(), Zone(), StateF() },
+        // Only stateside/Canadian stations send state/province (Rule III); a DX station sends
+        // RST+Zone only — so the received state is InArea-conditional, not required for DX.
+        var cqRtty = D("cq-ww-rtty", "CQ WW RTTY", "CQ-WW-RTTY", HfNo160, new[] { "RTTY" },
+            new[] { Rst(), Zone(), StateF() }, new[] { Rst(), Zone(), When(StateF(), ContestRole.InArea) },
             Pts(1, sameCountry: 1, sameCont: 2, otherCont: 3),
             new[] { M(MultSource.Dxcc, true), M(MultSource.CqZone, true), M(MultSource.State, true) });
+        cqRtty.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
+        yield return cqRtty;
     }
 
     // ---- ARRL -------------------------------------------------------------

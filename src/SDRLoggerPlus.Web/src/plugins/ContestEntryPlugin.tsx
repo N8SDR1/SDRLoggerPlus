@@ -436,6 +436,14 @@ function SetupView({
               ))}
             </select>
           )}
+          {/* Power as a SENT exchange field with no multiplier tiers (ARRL DX: DX stations send
+              their actual power, e.g. "1KW" / "100") — a free-text input so it isn't stuck at
+              the default. */}
+          {!selected.powerMultipliers && selected.sentExchange.some((f) => isType(f.type, 'power')) && (
+            <input type="text" placeholder="My power (e.g. 100, 1KW)" className="glass-input w-full text-sm px-2 py-1.5 uppercase"
+              value={myEx.power ?? ''}
+              onChange={(e) => setMyEx((p) => ({ ...p, power: e.target.value.toUpperCase() || undefined }))} />
+          )}
           {/* Self-declared objective/bonus points (Winter Field Day), added to the
               final score. WFD's objective table changes yearly, so it's entered as a
               total rather than auto-derived from the log. */}
@@ -476,6 +484,21 @@ function SetupView({
               <input type="text" placeholder="My grid" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, grid: e.target.value.toUpperCase() || undefined }))} />
             )}
+            {/* Generic input for every sent Text field the typed inputs above don't cover
+                (Sweepstakes prec/check, WFD section, 10-10 nr, Kids-Day age/qth, …). Writes to
+                the generic sentFields store, which CabrilloExporter emits by key — so any sent
+                field is enterable + exported the moment it's declared, no per-field plumbing. */}
+            {selected.sentExchange
+              .filter((f) => isType(f.type, 'text') && !['class', 'county'].includes(f.key.toLowerCase()))
+              .map((f) => (
+                <input key={f.key} type="text" placeholder={`My ${f.label}`}
+                  className="glass-input text-sm px-2 py-1.5 uppercase"
+                  value={myEx.sentFields?.[f.key] ?? ''}
+                  onChange={(e) => setMyEx((p) => ({
+                    ...p,
+                    sentFields: { ...(p.sentFields ?? {}), [f.key]: e.target.value.toUpperCase() },
+                  }))} />
+              ))}
             <input type="text" placeholder="My continent (NA/EU/…)" className="glass-input text-sm px-2 py-1.5"
               onChange={(e) => setMyEx((p) => ({ ...p, continent: e.target.value.toUpperCase() || undefined }))} />
           </div>
