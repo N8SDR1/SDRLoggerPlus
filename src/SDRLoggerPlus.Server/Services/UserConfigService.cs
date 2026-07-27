@@ -18,6 +18,11 @@ public class UserConfig
     public DatabaseProvider Provider { get; set; } = DatabaseProvider.Local;
     public string? LocalDbPath { get; set; }
     public DateTime? ConfiguredAt { get; set; }
+
+    // Multi-op field-CLIENT connection (Provider = RemoteHost): the shared-log host's base URL
+    // (e.g. http://192.168.1.50:5050) and this device's access token. Ignored for a Local/host install.
+    public string? HostUrl { get; set; }
+    public string? HostToken { get; set; }
 }
 
 /// <summary>

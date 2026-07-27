@@ -1,4 +1,5 @@
 using SDRLoggerPlus.Server.Core.Database.LiteDb;
+using SDRLoggerPlus.Server.Core.Database.Remote;
 using SDRLoggerPlus.Server.Core.Security;
 using SDRLoggerPlus.Server.Services;
 
@@ -6,7 +7,14 @@ namespace SDRLoggerPlus.Server.Core.Database;
 
 public enum DatabaseProvider
 {
-    Local
+    /// <summary>This machine owns the log in a local LiteDB file (the default; also the log HOST).</summary>
+    Local,
+
+    /// <summary>
+    /// This machine is a field CLIENT: its QSO log lives on a remote host, reached over HTTP+token
+    /// (multi-op shared logging). Everything else (settings, layout) stays local. Requires HostUrl.
+    /// </summary>
+    RemoteHost
 }
 
 public static class DbServiceRegistration
@@ -34,7 +42,27 @@ public static class DbServiceRegistration
         // the shared award snapshot has to outlive a request to be worth
         // anything. Invalidated by every QSO write (LiteQsoRepository.Commit).
         services.AddSingleton<QsoSnapshotCache>();
-        services.AddScoped<IQsoRepository, LiteQsoRepository>();
+
+        // The QSO log is the one thing that goes remote in client mode; everything else (settings,
+        // layout, radio config, contest sessions) stays local per machine. On the host — and on any
+        // normal single-machine install — it's the local LiteDB.
+        if (config.Provider == DatabaseProvider.RemoteHost && !string.IsNullOrWhiteSpace(config.HostUrl))
+        {
+            var baseUrl = config.HostUrl!.TrimEnd('/') + "/";
+            services.AddHttpClient<IQsoRepository, RemoteApiQsoRepository>(client =>
+            {
+                client.BaseAddress = new Uri(baseUrl);
+                if (!string.IsNullOrWhiteSpace(config.HostToken))
+                    client.DefaultRequestHeaders.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", config.HostToken);
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
+        }
+        else
+        {
+            services.AddScoped<IQsoRepository, LiteQsoRepository>();
+        }
+
         services.AddScoped<ISettingsRepository, LiteSettingsRepository>();
         services.AddScoped<ICallsignImageRepository, LiteCallsignImageRepository>();
         services.AddScoped<IRadioConfigRepository, LiteRadioConfigRepository>();

@@ -80,14 +80,18 @@ builder.Services.AddCors(options =>
     });
 });
 
-// SDRLoggerPlus is LiteDB-only. Load the existing config (for ConfiguredAt / paths)
-// if present; otherwise use defaults. The provider is always Local.
+// Load the saved config (provider / host connection / paths) if present, else defaults. Provider is
+// Local (own LiteDB — the default and the log HOST) unless this machine is configured as a field
+// CLIENT (RemoteHost + a host URL); a RemoteHost with no URL falls back to Local so the app still starts.
 var userConfigService = new UserConfigService(
     LoggerFactory.Create(b => b.AddConsole()).CreateLogger<UserConfigService>());
 var userConfig = File.Exists(userConfigService.GetConfigPath())
     ? await userConfigService.GetConfigAsync()
     : new UserConfig();
-userConfig.Provider = DatabaseProvider.Local;
+if (userConfig.Provider == DatabaseProvider.RemoteHost && string.IsNullOrWhiteSpace(userConfig.HostUrl))
+    userConfig.Provider = DatabaseProvider.Local;
+if (userConfig.Provider == DatabaseProvider.RemoteHost)
+    Log.Information("Data provider: RemoteHost — shared log on {HostUrl}", userConfig.HostUrl);
 
 // ── Remote-access auth (v1.0 — networked/shared backend) ───────────────────
 // Per-device bearer tokens, ENFORCED only when the backend is bound off-localhost
