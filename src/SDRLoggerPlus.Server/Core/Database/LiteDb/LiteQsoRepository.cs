@@ -218,9 +218,12 @@ public class LiteQsoRepository : IQsoRepository
             if (_context.Qsos.Delete(new BsonValue(id))) deleted++;
         }
 
-        // One checkpoint for the whole batch. Checkpointing per row would turn
-        // a 50-QSO delete into 50 flushes of the write-ahead log.
-        if (deleted > 0) _context.Database.Checkpoint();
+        // One Commit for the whole batch — checkpointing per row would turn a
+        // 50-QSO delete into 50 flushes of the write-ahead log. Routed through
+        // Commit (not a bare Checkpoint) so the award snapshot is invalidated:
+        // a bare Checkpoint here left the awards serving the deleted QSOs until
+        // the next unrelated write.
+        if (deleted > 0) Commit();
         return Task.FromResult(deleted);
     }
 
