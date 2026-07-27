@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.SignalR;
 using SDRLoggerPlus.Server.Core.Database;
 using SDRLoggerPlus.Server.Core.Database.LiteDb;
 using SDRLoggerPlus.Server.Core.Events;
+using SDRLoggerPlus.Server.Core.Security;
 using SDRLoggerPlus.Server.Services;
 using SDRLoggerPlus.Server.Services.Backup;
 using SDRLoggerPlus.Server.Services.Wsjtx;
@@ -58,15 +59,24 @@ builder.Services.AddSignalR()
         options.PayloadSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 
-// Add CORS
+// Add CORS. The packaged app serves its own SPA same-origin (no CORS needed); this
+// policy is only for cross-origin callers — the Vite dev server, or a browser pointed
+// at a remote backend. An explicit allow-list replaces the old reflect-any policy.
+// Bearer tokens travel in the Authorization header (not cookies), so AllowCredentials
+// is deliberately NOT enabled — reflect-any + credentials was the footgun removed here.
+// Add a separately-hosted frontend's origin via SDRLOGGERPLUS_ALLOWED_ORIGINS (CSV).
+var allowedOrigins = new[] { "http://localhost:5173", "http://127.0.0.1:5173" }
+    .Concat((builder.Configuration["SDRLOGGERPLUS_ALLOWED_ORIGINS"] ?? "")
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    .Distinct()
+    .ToArray();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.SetIsOriginAllowed(_ => true)
+        policy.WithOrigins(allowedOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
+            .AllowAnyMethod();
     });
 });
 
@@ -78,6 +88,39 @@ var userConfig = File.Exists(userConfigService.GetConfigPath())
     ? await userConfigService.GetConfigAsync()
     : new UserConfig();
 userConfig.Provider = DatabaseProvider.Local;
+
+// ── Remote-access auth (v1.0 — networked/shared backend) ───────────────────
+// Per-device bearer tokens, ENFORCED only when the backend is bound off-localhost
+// (the loopback desktop stays zero-auth and unchanged). Token hashes live in a JSON
+// file beside the config, like QslBlockStateStore.
+// See docs/design/networked-shared-database-execution-plan.md.
+var authStore = new AuthTokenStore(
+    Path.Combine(Path.GetDirectoryName(userConfigService.GetConfigPath())!, "auth-tokens.json"));
+
+// Headless token management (mint/list/revoke) runs instead of the web host.
+if (AuthCli.TryHandle(args, authStore))
+    return;
+
+var bindUrls = (builder.Configuration["ASPNETCORE_URLS"] ?? "")
+    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+var forceAuth = string.Equals(builder.Configuration["SDRLOGGERPLUS_REQUIRE_AUTH"], "true",
+    StringComparison.OrdinalIgnoreCase);
+
+// Default-deny: never expose the API + radio control to the network without auth.
+var unsafeBind = RemoteAccessGuard.UnsafeBindReason(bindUrls, forceAuth, authStore.AnyDevices);
+if (unsafeBind is not null)
+{
+    Log.Fatal("{Reason}", unsafeBind);
+    Log.CloseAndFlush();
+    Environment.Exit(1);
+}
+var enforceAuth = RemoteAccessGuard.ShouldEnforce(bindUrls, forceAuth);
+if (enforceAuth)
+    Log.Information("Remote access: token auth ENFORCED ({Count} device(s) registered).",
+        authStore.List().Count);
+
+builder.Services.AddSingleton(authStore);
+builder.Services.AddSingleton(new AuthOptions(enforceAuth));
 
 // Register the same instance used at startup so DI callers see the resolved config
 builder.Services.AddSingleton<IUserConfigService>(userConfigService);
@@ -324,6 +367,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+
+// Gate /api and /hubs behind a device token when reachable remotely. A no-op on a
+// loopback-only desktop (enforce=false). Sits after CORS, before static files/endpoints;
+// static assets + /api/health are exempt so the app shell can load and supply a token.
+app.UseMiddleware<TokenAuthMiddleware>();
 
 // Serve static files (React build)
 app.UseDefaultFiles();
