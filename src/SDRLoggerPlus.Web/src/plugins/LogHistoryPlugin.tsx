@@ -8,6 +8,7 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { api, QsoResponse, UpdateQsoRequest, AdifImportResponse, ConfirmationSource, ConfirmationMergeResponse } from '../api/client';
 import { qslSyncBadges, qslSyncSortKey, type QslBadgeState } from '../utils/qslSyncBadges';
+import { ImportIssuesPanel } from '../components/ImportIssuesPanel';
 import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
 import { useAppStore } from '../store/appStore';
@@ -1682,7 +1683,7 @@ export function LogHistoryPlugin() {
       {/* Import Results */}
       {importResult && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-dark-800 rounded-lg p-6 max-w-md w-full mx-4 border border-glass-200">
+          <div className="bg-dark-800 rounded-lg p-6 max-w-lg w-full mx-4 border border-glass-200 max-h-[85vh] overflow-y-auto">
             <h3 className="text-lg font-ui font-semibold text-white flex items-center gap-2 mb-4">
               {importResult.errorCount === 0 && importResult.importedCount > 0 ? (
                 <CheckCircle className="w-5 h-5 text-accent-success" />
@@ -1723,6 +1724,8 @@ export function LogHistoryPlugin() {
                 ))}
               </div>
             )}
+
+            <ImportIssuesPanel issues={importResult.issues} />
 
             <button
               onClick={() => setImportResult(null)}

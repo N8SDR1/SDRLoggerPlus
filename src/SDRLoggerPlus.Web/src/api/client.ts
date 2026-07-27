@@ -1229,6 +1229,19 @@ export interface AdifImportResponse {
   skippedDuplicates: number;
   errorCount: number;
   errors: string[];
+  /** Band/mode values the importer corrected or could not recognise. Absent on older servers. */
+  issues?: AdifImportIssue[];
+}
+
+/** One distinct import problem, with how many records carried it. */
+export interface AdifImportIssue {
+  field: string;
+  originalValue: string;
+  storedValue: string;
+  /** 'Corrected' — rewritten with no meaning lost. 'Flagged' — kept exactly as it arrived. */
+  action: 'Corrected' | 'Flagged' | string;
+  count: number;
+  note: string;
 }
 
 export type ConfirmationSource = 'lotw' | 'eqsl' | 'qrz' | 'card';
