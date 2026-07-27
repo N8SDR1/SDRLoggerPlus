@@ -157,6 +157,7 @@ function SetupView({
   // club / /P / special-event call. When it differs, those QSOs are kept OUT of personal
   // uploads/awards (Cabrillo only). See docs/design/contest-log-separation.md.
   const stationCall = useSettingsStore((s) => s.settings.station.callsign);
+  const stationCountry = useSettingsStore((s) => s.settings.station.country);
   const [operatingCall, setOperatingCall] = useState('');
   useEffect(() => { if (!operatingCall && stationCall) setOperatingCall(stationCall); }, [stationCall]);
   const opCallDiffers = operatingCall.trim().length > 0
@@ -243,6 +244,15 @@ function SetupView({
       setStarting(false);
     }
   };
+
+  // The operator's own role decides which sent fields to collect. A role-split contest
+  // declares both branches in one exchange (e.g. ARRL DX: State@InArea + Power@Dx); show a
+  // field only when it applies to this operator's side, so a DX op is asked for power, not state.
+  const opRole = selected
+    ? (myEx.roleOverride ?? derivedRole(selected, myEx.state, stationCountry, operatingCall || stationCall))
+    : 'InArea';
+  const sentHas = (type: string) =>
+    !!selected && selected.sentExchange.some((f) => isType(f.type, type) && fieldApplies(f, opRole));
 
   return (
     <div className="flex flex-col h-full p-4 gap-3 overflow-y-auto">
@@ -408,7 +418,7 @@ function SetupView({
             <div className="space-y-1">
               <div className="text-[10px] uppercase tracking-wider text-gray-500">Operating as</div>
               <RoleSelector def={selected}
-                value={myEx.roleOverride ?? derivedRole(selected, myEx.state)}
+                value={opRole}
                 onChange={(r) => setMyEx((p) => ({ ...p, roleOverride: r }))} />
             </div>
           )}
@@ -437,11 +447,10 @@ function SetupView({
             </select>
           )}
           {/* Power as a SENT exchange field with no multiplier tiers — a free-text input (e.g.
-              "1KW" / "100") so it isn't stuck at the default. NOTE: this checks the TOP-LEVEL
-              sent exchange only; a role-split contest whose power lives in a role (ARRL DX DX
-              side) won't render it — the frontend definition doesn't carry per-role exchanges
-              yet. Fixing ARRL-DX DX-side power needs the role exchanges exposed to the client. */}
-          {!selected.powerMultipliers && selected.sentExchange.some((f) => isType(f.type, 'power')) && (
+              "1KW" / "100") so it isn't stuck at the default. Role-aware: ARRL DX declares
+              Power@Dx in its exchange, so this renders for a DX operator (who sends power) but
+              not for a W/VE operator (who sends state) — sentHas() filters by the operator role. */}
+          {!selected.powerMultipliers && sentHas('power') && (
             <input type="text" placeholder="My power (e.g. 100, 1KW)" className="glass-input w-full text-sm px-2 py-1.5 uppercase"
               value={myEx.power ?? ''}
               onChange={(e) => setMyEx((p) => ({ ...p, power: e.target.value.toUpperCase() || undefined }))} />
@@ -461,28 +470,28 @@ function SetupView({
           )}
           {/* My-exchange fields relevant to the sent exchange */}
           <div className="grid grid-cols-2 gap-2">
-            {selected.sentExchange.some((f) => isType(f.type, 'zone')) && (
+            {sentHas('zone') && (
               <input type="text" placeholder="My CQ zone" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, cqZone: parseInt(e.target.value) || undefined }))} />
             )}
-            {selected.sentExchange.some((f) => isType(f.type, 'state')) && selected.homeArea?.kind !== 'StateCounty' && (
+            {sentHas('state') && selected.homeArea?.kind !== 'StateCounty' && (
               <input type="text" placeholder="My state" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, state: e.target.value.toUpperCase() || undefined }))} />
             )}
-            {selected.sentExchange.some((f) => isType(f.type, 'section')) && (
+            {sentHas('section') && (
               <input type="text" placeholder="My section" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, section: e.target.value.toUpperCase() || undefined }))} />
             )}
-            {selected.sentExchange.some((f) => f.key.toLowerCase() === 'class') && (
+            {selected.sentExchange.some((f) => f.key.toLowerCase() === 'class' && fieldApplies(f, opRole)) && (
               <input type="text" placeholder="My class (e.g. 1E)" className="glass-input text-sm px-2 py-1.5"
                 value={myEx.class ?? ''}
                 onChange={(e) => setMyEx((p) => ({ ...p, class: e.target.value.toUpperCase() || undefined }))} />
             )}
-            {selected.sentExchange.some((f) => isType(f.type, 'name')) && (
+            {sentHas('name') && (
               <input type="text" placeholder="My name" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, name: e.target.value || undefined }))} />
             )}
-            {selected.sentExchange.some((f) => isType(f.type, 'grid')) && (
+            {sentHas('grid') && (
               <input type="text" placeholder="My grid" className="glass-input text-sm px-2 py-1.5"
                 onChange={(e) => setMyEx((p) => ({ ...p, grid: e.target.value.toUpperCase() || undefined }))} />
             )}
@@ -491,7 +500,8 @@ function SetupView({
                 the generic sentFields store, which CabrilloExporter emits by key — so any sent
                 field is enterable + exported the moment it's declared, no per-field plumbing. */}
             {selected.sentExchange
-              .filter((f) => isType(f.type, 'text') && !['class', 'county'].includes(f.key.toLowerCase()))
+              .filter((f) => isType(f.type, 'text') && !['class', 'county'].includes(f.key.toLowerCase())
+                && fieldApplies(f, opRole))
               .map((f) => (
                 <input key={f.key} type="text" placeholder={`My ${f.label}`}
                   className="glass-input text-sm px-2 py-1.5 uppercase"
@@ -1001,13 +1011,32 @@ function roleLabels(
     : { inArea: 'W/VE', other: 'DX', otherRole: 'Dx' };
 }
 
-// Frontend guess of the role from the typed state, matching the backend's
-// location-based derivation for StateCounty parties (WVE defaults to in-area).
-function derivedRole(def: ContestDefinition, state: string | undefined): string {
+// Best-effort "is the operator a US/Canada station?", from their station profile.
+// Country is authoritative when set; otherwise fall back to the callsign prefix
+// (US: A–N/K/W blocks; Canada: VA–VG/VO/VY/CF–CK/XJ–XO). Unknown ⇒ true, preserving
+// the historical W/VE default so we never regress a US operator's setup.
+function operatorInUsCanada(country: string | undefined, callsign: string | undefined): boolean {
+  const c = (country ?? '').trim().toLowerCase();
+  if (c) return /(united states|u\.?s\.?a|america|canada|canadian)/.test(c);
+  const call = (callsign ?? '').trim().toUpperCase();
+  if (!call) return true;
+  return /^(A[A-L]|[KNW]|V[A-G]|VO|VY|C[F-K]|X[J-O])/.test(call);
+}
+
+// Frontend guess of the operator's role, matching the backend's location-based
+// derivation. StateCounty parties key off the typed state; WVE-kind contests
+// (ARRL DX, CQ 160, …) key off whether the operator's own station is US/Canada —
+// so a DX operator defaults to the DX side and is shown power/zone, not state.
+function derivedRole(
+  def: ContestDefinition, state: string | undefined,
+  country?: string, callsign?: string,
+): string {
   if (def.homeArea?.kind === 'StateCounty') {
     const st = (state ?? '').trim().toUpperCase();
     return st && def.homeArea.states?.some((s) => s.toUpperCase() === st) ? 'InArea' : 'OutArea';
   }
+  if (def.homeArea?.kind === 'WVE')
+    return operatorInUsCanada(country, callsign) ? 'InArea' : 'Dx';
   return 'InArea';
 }
 

@@ -305,6 +305,15 @@ public enum MultSource
     DxccExceptHome,
 
     /// <summary>
+    /// A North American country, EXCLUDING the operator's home area (USA + Canada). For the
+    /// NA-focused parties (NAQP, NA Sprint) whose multiplier is "US states + VE provinces + NA
+    /// countries": US/VE are counted by <see cref="State"/>, so this adds only the *other* NA
+    /// entities (Mexico, the Caribbean, Central America). A non-NA (DX) QSO — e.g. Europe/Asia —
+    /// yields NO mult here, since those count for QSO points only, never as a multiplier.
+    /// </summary>
+    NaCountryExceptHome,
+
+    /// <summary>
     /// One multiplier for each mode operated on each band (the Winter Field Day
     /// rule). The multiplier value is the mode CLASS — Phone / CW / Digital — so
     /// USB and LSB both count as one Phone mult per band, and RTTY folds into

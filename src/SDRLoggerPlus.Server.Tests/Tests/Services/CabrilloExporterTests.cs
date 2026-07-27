@@ -204,4 +204,38 @@ public class CabrilloExporterTests
         // Category header still carries the class label.
         cbr.Split('\n').Select(l => l.TrimEnd('\r')).Should().Contain("CATEGORY-POWER: LOW");
     }
+
+    // CQ 160 is role-split without a Roles dict: the sent exchange declares State@InArea +
+    // Zone@Dx in one flat list. A DX operator must send RST + CQ Zone — before the AppliesTo
+    // sent-filter, a DX op's exchange had no Zone branch at all and sent only a blank state.
+    [Fact]
+    public void Generate_Cq160DxSide_SendsCqZone_NotBlankState()
+    {
+        var def = SeedContests.All.First(d => d.Id == "cq-160-cw");
+        var session = new ContestSession
+        {
+            DefinitionId = "cq-160-cw", Role = ContestRole.Dx, // DX op sends CQ zone
+            MyExchange = new MyExchange { Continent = "EU", Country = "Germany", CqZone = 14 },
+        };
+        var qso = new Qso
+        {
+            Callsign = "W1AW", Band = "160m", Mode = "CW", Frequency = 1830.0,
+            QsoDate = new DateTime(2026, 1, 30, 0, 0, 0, DateTimeKind.Utc), TimeOn = "010203",
+            RstSent = "599", RstRcvd = "599",
+            Country = "United States", Continent = "NA",
+            Station = new StationInfo { Country = "United States", Continent = "NA", State = "CT" },
+            Contest = new ContestInfo { RcvdState = "CT" },
+        };
+
+        var cbr = CabrilloExporter.Generate(def, session, new[] { qso }, "DL1ABC", null);
+        var t = cbr.Split('\n').Select(l => l.TrimEnd('\r')).First(l => l.StartsWith("QSO:"))
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        // Sent side: QSO:(0) freq(1) mode(2) date(3) time(4) MYCALL(5) rst(6) zone(7)
+        t[6].Should().Be("599");
+        t[7].Should().Be("14");      // CQ zone, not an empty state token
+        // The worked (in-area) station's call follows, then its received State/Prov — "CT".
+        t.Should().Contain("W1AW");
+        t.Should().Contain("CT");
+    }
 }

@@ -118,7 +118,9 @@ public static class SeedContests
         foreach (var (m, cab) in New("CQ-160", "CW", "SSB"))
         {
             var cq160 = D($"cq-160-{m.L}", $"CQ 160 {m.N}", cab, new() { "160M" }, m.Modes,
-                new[] { Rst(), StateF("S/P/C") },
+                // Sent is role-split too: a W/VE op sends State/Prov, a DX op sends CQ Zone.
+                // Without the DX branch a DX operator's sent exchange was a blank state.
+                new[] { Rst(), When(StateF("S/P/C"), ContestRole.InArea), When(Zone(), ContestRole.Dx) },
                 new[] { Rst(), When(StateF("S/P/C"), ContestRole.InArea), When(Zone(), ContestRole.Dx) },
                 Pts(5, sameCountry: 2, otherCont: 10),
                 // Mults are US states + VE provinces (State) + DX countries — USA/Canada must NOT
@@ -152,8 +154,13 @@ public static class SeedContests
         // provinces per band). 3 points per QSO either way.
         foreach (var (m, cab) in New("ARRL-DX", "CW", "SSB"))
         {
+            // Top-level exchange carries both role branches via AppliesTo so the entry/setup
+            // UI can render the operator's side (W/VE sends State, DX sends Power) and capture
+            // the worked station's side. Scoring/Cabrillo still resolve through the Roles dict
+            // below — the AppliesTo union here is the display/entry view of the same split.
             var def = D($"arrl-dx-{m.L}", $"ARRL DX {m.N}", cab, HfBands, m.Modes,
-                new[] { Rst(), StateF() }, new[] { Rst(), Power() },
+                new[] { Rst(), When(StateF(), ContestRole.InArea), When(Power(), ContestRole.Dx) },
+                new[] { Rst(), When(Power(), ContestRole.Dx), When(StateF(), ContestRole.InArea) },
                 Pts(3), new[] { M(MultSource.Dxcc, true) });
             def.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
             def.Roles = new Dictionary<ContestRole, RoleRules>
@@ -183,7 +190,8 @@ public static class SeedContests
         // approximated as states, and the ITU-region mults (maritime/aeronautical
         // mobile only) are not counted — both rare edge cases.
         var tenM = D("arrl-10m", "ARRL 10 Meter", "ARRL-10", new() { "10M" }, new[] { "CW", "SSB" },
-            new[] { Rst(), StateF("S/P/C") },
+            // Sent is role-split like the received side: W/VE/XE send state/prov, DX send a serial.
+            new[] { Rst(), When(StateF("S/P/C"), ContestRole.InArea), When(Serial(), ContestRole.Dx) },
             new[] { Rst(), When(StateF("S/P/C"), ContestRole.InArea), When(Serial(), ContestRole.Dx) },
             Pm(2, 4), new[] { M(MultSource.State, perMode: true), M(MultSource.Dxcc, perMode: true) },
             serial: SerialMode.AllBand);
@@ -193,7 +201,10 @@ public static class SeedContests
         // W/VE-to-W/VE = 2, QSO with DX = 5. W/VE also count DXCC as a mult. W/VE
         // stations send an ARRL/RAC section; DX stations send a signal report only.
         var oneSixty = D("arrl-160m", "ARRL 160 Meter", "ARRL-160", new() { "160M" }, new[] { "CW" },
-            new[] { Rst(), Section() }, new[] { Rst(), When(Section(), ContestRole.InArea) },
+            // W/VE send an ARRL/RAC section; DX send RST only (no section) — so the section is
+            // InArea-conditional on both sides. A DX operator sends just the report.
+            new[] { Rst(), When(Section(), ContestRole.InArea) },
+            new[] { Rst(), When(Section(), ContestRole.InArea) },
             Pts(2, dxPoints: 5), new[] { M(MultSource.Section), M(MultSource.Dxcc) },
             dupe: DupeRule.PerContest);
         oneSixty.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
@@ -203,9 +214,11 @@ public static class SeedContests
         // contest (not per band). US/VE stations send a state/province; DX stations
         // send a serial (per-QSO branching).
         var rttyRu = D("arrl-rtty-roundup", "ARRL RTTY Roundup", "ARRL-RTTY", HfNo160, new[] { "RTTY" },
-            new[] { Rst(), StateF("S/P/#") },
+            // Sent role-split: US/VE send a state/prov, DX send a serial (one sequence, all bands).
+            new[] { Rst(), When(StateF("S/P/#"), ContestRole.InArea), When(Serial(), ContestRole.Dx) },
             new[] { Rst(), When(StateF("St"), ContestRole.InArea), When(Serial(), ContestRole.Dx) },
-            Pts(1), new[] { M(MultSource.State), M(MultSource.Dxcc) }, dupe: DupeRule.PerBand);
+            Pts(1), new[] { M(MultSource.State), M(MultSource.Dxcc) },
+            dupe: DupeRule.PerBand, serial: SerialMode.AllBand);
         rttyRu.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
         yield return rttyRu;
 
@@ -281,15 +294,20 @@ public static class SeedContests
     {
         // RTTY leg drops 160m; CW/SSB use all six HF bands.
         foreach (var (m, cab) in New("NAQP", "CW", "SSB", "RTTY"))
+            // Mults = US states + VE provinces (State) + other NA countries, counted per band.
+            // Non-NA (DX) contacts score QSO points only, never a mult — NaCountryExceptHome, not Dxcc.
             yield return D($"naqp-{m.L}", $"NAQP {m.N}", cab, m.N == "RTTY" ? HfNo160 : HfBands, m.Modes,
                 new[] { Name(), StateF() }, new[] { Name(), StateF() },
-                Pts(1), new[] { M(MultSource.State, true), M(MultSource.Dxcc, true) }, dupe: DupeRule.PerBand);
+                Pts(1), new[] { M(MultSource.State, true), M(MultSource.NaCountryExceptHome, true) },
+                dupe: DupeRule.PerBand);
 
         // Sprints run on 80/40/20 only; multipliers counted once (all-band).
         foreach (var (m, cab) in New("NA-SPRINT", "CW", "SSB", "RTTY"))
+            // Mults (US states + VE provinces + other NA countries) counted ONCE, all-band; a
+            // non-NA DX contact is QSO points only — same NaCountryExceptHome fix as NAQP.
             yield return D($"na-sprint-{m.L}", $"NA Sprint {m.N}", cab, new() { "80M", "40M", "20M" }, m.Modes,
                 new[] { Serial(), Name(), StateF() }, new[] { Serial(), Name(), StateF() },
-                Pts(1), new[] { M(MultSource.State), M(MultSource.Dxcc) },
+                Pts(1), new[] { M(MultSource.State), M(MultSource.NaCountryExceptHome) },
                 dupe: DupeRule.PerBand, serial: SerialMode.AllBand);
 
         // 10m only, worked once per event; no location multiplier (score = QSO points).

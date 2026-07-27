@@ -25,8 +25,12 @@ public static class CabrilloExporter
         // op sends its county, an out-of-state op sends its state, etc. Falls back to
         // the top-level fields for contests without a role split.
         var role = def.Roles?.GetValueOrDefault(session.Role);
-        var sentFields = role?.SentExchange ?? def.SentExchange;
-        var rcvdFields = role?.RcvdExchange ?? def.RcvdExchange;
+        // The operator's sent side is fixed by their own role; drop any AppliesTo branch that
+        // isn't theirs (e.g. CQ 160 declares State@InArea + Zone@Dx in one flat exchange — a DX
+        // op emits only the Zone). Roles-dict contests carry no AppliesTo here, so this is a no-op.
+        var sentFields = (role?.SentExchange ?? def.SentExchange)
+            .Where(f => AppliesToRole(f, session.Role)).ToList();
+        var rcvdBase = role?.RcvdExchange ?? def.RcvdExchange;
 
         var sb = new StringBuilder();
         sb.AppendLine("START-OF-LOG: 3.0");
@@ -43,7 +47,13 @@ public static class CabrilloExporter
         sb.AppendLine("CREATED-BY: SDRLoggerPlus");
 
         foreach (var qso in qsos)
+        {
+            // The received side depends on the *worked* station's role (in a flat AppliesTo
+            // exchange, a DX contact reports its Zone, an in-area contact its State/Prov).
+            var rcvdFields = rcvdBase
+                .Where(f => AppliesToRole(f, ContestScoringEngine.ClassifyWorked(def, qso))).ToList();
             sb.AppendLine(QsoLine(sentFields, rcvdFields, me, qso, stationCallsign));
+        }
 
         sb.AppendLine("END-OF-LOG:");
         return sb.ToString();
@@ -145,6 +155,10 @@ public static class CabrilloExporter
             _ => "MIXED",
         };
     }
+
+    // A field with no AppliesTo (or All) is emitted for every role; otherwise only for its role.
+    private static bool AppliesToRole(ContestField f, ContestRole role) =>
+        f.AppliesTo is null or ContestRole.All || f.AppliesTo == role;
 
     private static bool IsCw(string? mode) => (mode ?? "").ToUpperInvariant().StartsWith("CW");
 

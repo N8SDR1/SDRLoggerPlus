@@ -276,6 +276,9 @@ public static class ContestScoringEngine
         return false;
     }
 
+    private static bool IsNorthAmerica(string? continent) =>
+        string.Equals(continent, "NA", StringComparison.OrdinalIgnoreCase);
+
     // -- dupe ---------------------------------------------------------------
 
     private static string DupeKey(ContestDefinition def, Qso qso)
@@ -432,6 +435,14 @@ public static class ContestScoringEngine
         MultSource.DxccExceptHome => IsUsOrCanada(qso.Country ?? qso.Station?.Country, qso.Continent)
             ? null
             : (qso.Dxcc?.ToString() ?? qso.Country),
+        // NA country, excluding USA/Canada (counted via State) and every non-NA entity (DX =
+        // QSO points only). Fixes the NAQP / NA Sprint over-count where plain Dxcc scored a mult
+        // for US/VE (double) and for European/Asian DX (which earn no NAQP multiplier at all).
+        MultSource.NaCountryExceptHome =>
+            IsNorthAmerica(qso.Continent ?? qso.Station?.Continent)
+            && !IsUsOrCanada(qso.Country ?? qso.Station?.Country, qso.Continent)
+                ? (qso.Dxcc?.ToString() ?? qso.Country)
+                : null,
         MultSource.CqZone => qso.Station?.CqZone?.ToString(),
         MultSource.ItuZone => qso.Station?.ItuZone?.ToString(),
         MultSource.State => qso.Contest?.RcvdState ?? qso.Station?.State,
