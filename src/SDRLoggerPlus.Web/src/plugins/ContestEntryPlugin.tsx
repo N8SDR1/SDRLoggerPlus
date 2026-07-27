@@ -436,9 +436,11 @@ function SetupView({
               ))}
             </select>
           )}
-          {/* Power as a SENT exchange field with no multiplier tiers (ARRL DX: DX stations send
-              their actual power, e.g. "1KW" / "100") — a free-text input so it isn't stuck at
-              the default. */}
+          {/* Power as a SENT exchange field with no multiplier tiers — a free-text input (e.g.
+              "1KW" / "100") so it isn't stuck at the default. NOTE: this checks the TOP-LEVEL
+              sent exchange only; a role-split contest whose power lives in a role (ARRL DX DX
+              side) won't render it — the frontend definition doesn't carry per-role exchanges
+              yet. Fixing ARRL-DX DX-side power needs the role exchanges exposed to the client. */}
           {!selected.powerMultipliers && selected.sentExchange.some((f) => isType(f.type, 'power')) && (
             <input type="text" placeholder="My power (e.g. 100, 1KW)" className="glass-input w-full text-sm px-2 py-1.5 uppercase"
               value={myEx.power ?? ''}
