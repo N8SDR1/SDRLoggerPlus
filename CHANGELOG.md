@@ -3,6 +3,34 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-27 — v2.10.1 "Capella"
+
+Award-accuracy and confirmation fixes (your next LoTW download may pick up
+confirmations that were being dropped for years), plus QRZ auto-upload and the
+microwave bands.
+
+### New
+- **Auto-upload to QRZ after logging (opt-in).** Club Log, HRDLog and eQSL already
+  uploaded each QSO the moment you logged it — now QRZ can too. Turn it on in
+  **Settings → QRZ** ("Auto-upload after logging"); it's **off by default**, so if you
+  sync QRZ manually nothing changes.
+- **Microwave bands.** The log-entry band selector now includes **13cm, 9cm, 6cm and
+  3cm** (plus 1.25m / 33cm / 23cm) — so **QO-100** (Es'hail-2: 2.4 GHz up / 10 GHz down)
+  and other microwave contacts can be logged. The frequency→band map matches.
+
+### Fixed
+- **FFMA now counts your live-logged QSOs.** Grids confirmed on a QSO you logged in the
+  app (rather than imported) were invisible to the FFMA award — a grid whose first
+  LoTW confirmation arrived on a live-logged QSO stayed "worked" forever. It now reads
+  the grid the same way the rest of the app does. *(thanks @n9bc)*
+- **LoTW confirmations for submode QSOs were silently dropped for years.** LoTW reports
+  a submode contact (MSK144, FT4, JS8, …) under its ADIF parent (`MFSK`), so the merge
+  never matched and the confirmation vanished. Now matched most-specific-first, with a
+  guard so it can't confirm a *different* mode's QSO. Your next download will likely pick
+  up confirmations you'd been missing. *(thanks @n9bc)*
+- **Bulk delete no longer leaves awards counting deleted QSOs.** A Log History bulk
+  delete now invalidates the award snapshot like every other write. *(thanks @n9bc)*
+
 ## 2026-07-27 — v2.10.0 "Capella"
 
 Contesting from either side of the pileup, Super Check Partial call history, and a
