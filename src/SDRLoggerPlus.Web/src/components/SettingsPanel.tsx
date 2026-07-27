@@ -464,7 +464,7 @@ function StationSettingsSection() {
 
 // QRZ Settings Section
 function QrzSettingsSection() {
-  const { settings, updateQrzSettings } = useSettingsStore();
+  const { settings, updateQrzSettings, saveSettings } = useSettingsStore();
   const [showPassword, setShowPassword] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
@@ -564,6 +564,28 @@ function QrzSettingsSection() {
           <span
             className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
               qrz.enabled ? 'translate-x-5' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Auto-upload after logging (opt-in) */}
+      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+        <div>
+          <p className="font-medium font-ui text-dark-200">Auto-upload to QRZ after logging</p>
+          <p className="text-sm text-dark-300">
+            Send each QSO to your QRZ logbook the moment it's logged (needs your API key). Off = sync manually.
+          </p>
+        </div>
+        <button
+          onClick={() => { updateQrzSettings({ autoUploadOnLog: !qrz.autoUploadOnLog }); saveSettings(); }}
+          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+            qrz.autoUploadOnLog ? 'bg-accent-success' : 'bg-dark-600 border border-dark-400'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+              qrz.autoUploadOnLog ? 'translate-x-5' : 'translate-x-0'
             }`}
           />
         </button>

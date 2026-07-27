@@ -68,6 +68,39 @@ public class QsoService : IQsoService
     }
 
     /// <summary>
+    /// Auto-upload a freshly logged QSO to the QRZ logbook — OPT-IN via QrzSettings.AutoUploadOnLog.
+    /// Kept separate from <see cref="RecordUpload"/> because QRZ tracks its own sync status (the returned
+    /// QrzLogId is stamped on the QSO), not the QSL ledger the confirmation services use. Runs in a fresh
+    /// scope so it outlives the request, and self-gates on the opt-in setting so a normal manual-sync
+    /// user is unaffected.
+    /// </summary>
+    private void RecordQrzUpload(Qso qso)
+    {
+        if (_scopeFactory == null) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var settings = scope.ServiceProvider.GetRequiredService<ISettingsService>();
+                if (!(await settings.GetSettingsAsync()).Qrz.AutoUploadOnLog) return; // opt-in only
+
+                var qrz = scope.ServiceProvider.GetRequiredService<IQrzService>();
+                var result = await qrz.UploadQsoAsync(qso);
+                if (result.Success && !string.IsNullOrEmpty(result.LogId))
+                {
+                    var repo = scope.ServiceProvider.GetRequiredService<IQsoRepository>();
+                    await repo.UpdateQrzSyncStatusAsync(qso.Id, result.LogId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "QRZ auto-upload on log failed");
+            }
+        });
+    }
+
+    /// <summary>
     /// How far back an identical (callsign, band, mode) entry counts as a
     /// probable duplicate. 30 minutes catches double-clicks, UDP re-logs and
     /// "did I already log him?" without flagging legit repeat contacts later
@@ -224,6 +257,9 @@ public class QsoService : IQsoService
 
             if (_eqsl != null)
                 RecordUpload(created.Id, QslSyncLedger.EqslKey, () => _eqsl.UploadQsoAsync(created));
+
+            // QRZ logbook — opt-in auto-upload (self-gates on QrzSettings.AutoUploadOnLog).
+            RecordQrzUpload(created);
         }
 
         // Update spot status cache incrementally — including the grid, so a grid

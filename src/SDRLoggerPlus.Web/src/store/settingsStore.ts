@@ -20,6 +20,7 @@ export interface QrzSettings {
   password: string;
   apiKey: string; // For QRZ logbook uploads
   enabled: boolean;
+  autoUploadOnLog: boolean; // Opt-in: upload each QSO to the QRZ logbook the moment it's logged
 }
 
 // HamQTH.com free callbook. Used as a fallback lookup source when QRZ has
@@ -598,6 +599,7 @@ const defaultSettings: Settings = {
     password: '',
     apiKey: '',
     enabled: false,
+    autoUploadOnLog: false,
   },
   hamQth: {
     username: '',

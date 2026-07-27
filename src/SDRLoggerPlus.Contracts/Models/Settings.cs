@@ -216,6 +216,12 @@ public class QrzSettings
     [BsonElement("apiKey")]
     public string? ApiKey { get; set; } = string.Empty; // QRZ API key for logbook uploads
 
+    // Opt-in: upload each QSO to the QRZ logbook automatically the moment it's logged (like Club Log /
+    // HRDLog / eQSL already do). Default OFF because many operators treat QRZ as their master log and
+    // import it wholesale — auto-upload is only safe now that sync-status tracking + dedup are in place.
+    [BsonElement("autoUploadOnLog")]
+    public bool AutoUploadOnLog { get; set; }
+
     [BsonElement("hasXmlSubscription")]
     public bool? HasXmlSubscription { get; set; } // Cached subscription status
 
