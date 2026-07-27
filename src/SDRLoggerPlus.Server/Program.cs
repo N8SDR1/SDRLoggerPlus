@@ -136,13 +136,18 @@ builder.Services.AddSingleton<IUserConfigService>(userConfigService);
 // Register database provider and repositories
 builder.Services.AddDatabase(userConfig);
 
-// Field-CLIENT only: bridge the host's live QSO events onto our own hub so the local UI sees
-// contacts other stations just logged, and drain the offline outbox when the host returns.
-// A host/normal install never starts these.
+// Multi-op time authority (S4): the offset holder is registered always (the TimeController reads it
+// on the host too, where it just reports "I am the authority").
+builder.Services.AddSingleton<SDRLoggerPlus.Server.Core.Time.HostTimeOffset>();
+
+// Field-CLIENT only: bridge the host's live QSO events onto our own hub so the local UI sees contacts
+// other stations just logged, drain the offline outbox when the host returns, and keep this clock
+// synced to the host. A host/normal install never starts these.
 if (userConfig.Provider == DatabaseProvider.RemoteHost)
 {
     builder.Services.AddHostedService<HostBridgeService>();
     builder.Services.AddHostedService<OutboxFlushService>();
+    builder.Services.AddHostedService<HostTimeSyncService>();
 }
 
 // Register services
