@@ -1,9 +1,30 @@
-import { User, ContactRound, MapPin, Navigation, Globe, ExternalLink } from 'lucide-react';
+import { User, ContactRound, MapPin, Navigation, Globe, ExternalLink, Check, X } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
 import { formatDistance } from '../utils/units';
+
+// `accepts` is a genuine three-state (true/false/undefined-for-unknown). Renders
+// nothing for undefined rather than a third "unknown" pill — QRZ leaves the field
+// blank far more often than it reports a real "no", and a whole row of grey
+// question marks would bury the two channels that do have an answer.
+export function QslBadge({ label, accepts }: { label: string; accepts?: boolean }) {
+  if (accepts === undefined) return null;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
+        accepts
+          ? 'bg-accent-success/15 border-accent-success/30 text-accent-success'
+          : 'bg-dark-700/60 border-glass-100 text-dark-400'
+      }`}
+      title={`${label}: ${accepts ? 'accepts this confirmation channel' : 'does not accept this confirmation channel'}`}
+    >
+      {accepts ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+      {label}
+    </span>
+  );
+}
 
 export function QrzProfilePlugin() {
   const { focusedCallsignInfo, isLookingUpCallsign } = useAppStore();
@@ -142,6 +163,18 @@ export function QrzProfilePlugin() {
                       </span>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* QSL confirmation channels — QRZ callbook only, so absent
+                  entirely on a HamQTH-sourced lookup. */}
+              {(focusedCallsignInfo.lotw !== undefined ||
+                focusedCallsignInfo.eqsl !== undefined ||
+                focusedCallsignInfo.mqsl !== undefined) && (
+                <div className="flex items-center gap-2 text-sm font-ui">
+                  <QslBadge label="LOTW" accepts={focusedCallsignInfo.lotw} />
+                  <QslBadge label="eQSL" accepts={focusedCallsignInfo.eqsl} />
+                  <QslBadge label="QSL" accepts={focusedCallsignInfo.mqsl} />
                 </div>
               )}
 

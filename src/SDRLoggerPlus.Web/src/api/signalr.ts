@@ -43,6 +43,12 @@ export interface CallsignLookedUpEvent {
   // Both absent for a plain base call.
   baseCallsign?: string;
   compoundNote?: string;
+  // QRZ-only "will accept" flags from the callbook profile. Three-state:
+  // true/false/undefined-for-unknown — undefined is NOT "no". Always undefined
+  // when the lookup fell back to HamQTH, which has no equivalent fields.
+  lotw?: boolean;
+  eqsl?: boolean;
+  mqsl?: boolean;
 }
 
 export interface QsoLoggedEvent {
