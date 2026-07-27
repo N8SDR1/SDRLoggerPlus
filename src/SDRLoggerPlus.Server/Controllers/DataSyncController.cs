@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using SDRLoggerPlus.Contracts.Api;
+using SDRLoggerPlus.Contracts.Events;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Core.Database;
+using SDRLoggerPlus.Server.Hubs;
 
 namespace SDRLoggerPlus.Server.Controllers;
 
@@ -23,18 +26,38 @@ namespace SDRLoggerPlus.Server.Controllers;
 public class DataSyncController : ControllerBase
 {
     private readonly IQsoRepository _repo;
-    public DataSyncController(IQsoRepository repo) => _repo = repo;
+    private readonly IHubContext<LogHub, ILogHubClient> _hub;
+    public DataSyncController(IQsoRepository repo, IHubContext<LogHub, ILogHubClient> hub)
+    {
+        _repo = repo;
+        _hub = hub;
+    }
+
+    // A field client's write goes straight to the repo (bypassing QsoService), so broadcast here too —
+    // every station connected to this host's hub then refetches the shared log and sees the new QSO live.
+    private Task Broadcast(Qso q) => _hub.BroadcastQso(new QsoLoggedEvent(
+        q.Id, q.Callsign, q.QsoDate, q.TimeOn, q.Band, q.Mode, q.Frequency,
+        q.RstSent, q.RstRcvd, q.Station?.Grid));
 
     /// <summary>Page wrapper for search — mirrors the repository's (Items, TotalCount) tuple over JSON.</summary>
     public record QsoPage(List<Qso> Items, int TotalCount);
     public record ExistsRequest(string Callsign, DateTime QsoDate, string TimeOn, string Band, string Mode);
 
     [HttpPost]
-    public async Task<ActionResult<Qso>> Create([FromBody] Qso qso) => Ok(await _repo.CreateAsync(qso));
+    public async Task<ActionResult<Qso>> Create([FromBody] Qso qso)
+    {
+        var created = await _repo.CreateAsync(qso);
+        await Broadcast(created);
+        return Ok(created);
+    }
 
     [HttpPost("bulk")]
-    public async Task<ActionResult<List<Qso>>> CreateBulk([FromBody] List<Qso> qsos) =>
-        Ok((await _repo.CreateBulkAsync(qsos)).ToList());
+    public async Task<ActionResult<List<Qso>>> CreateBulk([FromBody] List<Qso> qsos)
+    {
+        var created = (await _repo.CreateBulkAsync(qsos)).ToList();
+        if (created.Count > 0) await Broadcast(created[^1]); // one nudge → clients refetch the whole shared log
+        return Ok(created);
+    }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<Qso>> GetById(string id) =>

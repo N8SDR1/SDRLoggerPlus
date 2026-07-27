@@ -39,11 +39,16 @@ public class RemoteApiQsoRepositoryTests : IDisposable
                         o.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true)
                     .AddApplicationPart(typeof(SDRLoggerPlus.Server.Controllers.DataSyncController).Assembly);
                 services.AddScoped<IQsoRepository>(_ => hostRepo); // the host's local shared log
+                services.AddSignalR(); // DataSyncController broadcasts new QSOs to the hub
             })
             .Configure(app =>
             {
                 app.UseRouting();
-                app.UseEndpoints(e => e.MapControllers());
+                app.UseEndpoints(e =>
+                {
+                    e.MapControllers();
+                    e.MapHub<SDRLoggerPlus.Server.Hubs.LogHub>("/hubs/log");
+                });
             });
 
         _host = new TestServer(builder);

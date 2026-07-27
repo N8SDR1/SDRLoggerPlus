@@ -132,6 +132,11 @@ builder.Services.AddSingleton<IUserConfigService>(userConfigService);
 // Register database provider and repositories
 builder.Services.AddDatabase(userConfig);
 
+// Field-CLIENT only: bridge the host's live QSO events onto our own hub so the local UI sees
+// contacts other stations just logged. A host/normal install never starts this.
+if (userConfig.Provider == DatabaseProvider.RemoteHost)
+    builder.Services.AddHostedService<HostBridgeService>();
+
 // Register services
 builder.Services.AddScoped<IQsoService, QsoService>();
 builder.Services.AddScoped<IAwardsService, AwardsService>();
