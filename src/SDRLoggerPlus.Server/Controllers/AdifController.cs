@@ -74,7 +74,9 @@ public class AdifController : ControllerBase
                 result.ImportedCount,
                 result.SkippedDuplicates,
                 result.ErrorCount,
-                result.Errors
+                result.Errors,
+                result.Issues?.Select(i => new AdifImportIssueDto(
+                    i.Field, i.OriginalValue, i.StoredValue, i.Action, i.Count, i.Note))
             ));
         }
         catch (OperationCanceledException)
