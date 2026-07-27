@@ -1,198 +1,196 @@
-# Networked / shared-database — v1.0 execution plan
+# Multi-operator networked logging — design & build plan
 
-**Companion to** [`networked-shared-database.md`](networked-shared-database.md) (the design). That doc
-covers *what and why*; this covers *the exact ordered build* for the first shippable increment, with
-acceptance criteria. Written 2026-07-27, anchors re-verified against the code **after the v2.10.0 release**.
+**Companion to** [`networked-shared-database.md`](networked-shared-database.md) (background/research).
+This is the authoritative build plan. **Model corrected 2026-07-27** from an earlier "thin browser
+client" framing to the **log-host** model below, after walking the real Field-Day what-ifs with the
+operator. Anchors re-verified against post-v2.10.0 code.
 
-> **Nothing here is built yet.** This is the map to approve before we cut code. The first increment
-> touches **auth, CORS, and remote reachability of a backend that can key the transmitter** — so it ships
-> behind review, not while the operator is away.
+> **The one-line model:** every station runs the **full app driving its own local radio**; only the
+> **log** is shared, by pointing each app's data layer at **one host** over the network. It's the
+> **N3FJP/N1MM model minus its two weak spots** — no file/permission sharing (we use an authenticated
+> HTTP API), and real auth (per-device tokens, already built).
 
 ---
 
-## Where the code actually is today (re-verified 2026-07-27)
+## 1. The model (why it is this shape)
 
-| Anchor | Current state | File |
+Field reality: 3 stations = 3 laptops, **each with its own USB/TCI radio** (e.g. A=IC-7300/USB,
+B=TS-590/USB, C=Hermes-Lite/TCI). Radio control **must** stay on the laptop the rig is plugged into, so
+each laptop runs a full backend. Therefore we do **not** share a backend — we share the **log**:
+
+- **Radio is always local.** Unchanged per-laptop rig control.
+- **The database is the only shared thing.** One machine is the **log host**; the others' apps read/write
+  it over the network. No merging, no per-machine divergence — one log, many writers.
+- **API-mediated, not file-shared.** The host exposes an HTTP API + token; clients never touch its disk.
+  This is what makes mixed-OS trivial and kills the SMB/permission problems N3FJP has.
+
+```mermaid
+flowchart TB
+  subgraph A["Station A (Mac) — IC-7300 USB"]
+    A1[SDRLogger+ full app<br/>local radio control]
+  end
+  subgraph B["Station B (Linux) — TS-590 USB"]
+    B1[SDRLogger+ full app<br/>local radio control]
+  end
+  subgraph C["Station C (Windows) — Hermes-Lite TCI"]
+    C1[SDRLogger+ full app<br/>local radio control]
+  end
+  H["LOG HOST<br/>(a laptop / spare PC / NAS)<br/>owns THE database + serial counter + time source"]
+  A1 -- "HTTP+token (log / dupe / score / serial)" --> H
+  B1 -- "HTTP+token" --> H
+  C1 -- "HTTP+token" --> H
+  H -. "live QSO stream (SignalR)" .-> A1
+  H -. "live QSO stream" .-> B1
+  H -. "live QSO stream" .-> C1
+```
+
+**WAN / Bill's case** is the same picture with the host on the internet (VPS / always-on PC) reached via
+**Tailscale/WireGuard** (preferred — no public port) or a **TLS reverse proxy**:
+
+```mermaid
+flowchart LR
+  L1[Laptop + radio] & L2[Laptop + radio] & L3[Laptop + radio]
+  L1 & L2 & L3 -- "HTTPS + token (Tailscale/WireGuard mesh)" --> V["Internet host<br/>(VPS / NAS / home PC)<br/>THE shared log"]
+```
+
+---
+
+## 2. Two host flavors (pick per scale — LiteDB first, Postgres later)
+
+| | **Option 1 — central backend as data host** | **Option 2 — shared SQL (Postgres)** |
 |---|---|---|
-| Client API base | `const API_BASE = '/api'` (relative) | `client.ts:4` |
-| SignalR hub URL | `.withUrl('/hubs/log')` (relative) | `signalr.ts` |
-| CORS | `SetIsOriginAllowed(_=>true).AllowAnyHeader().AllowAnyMethod().AllowCredentials()` | `Program.cs:66-69` |
-| Auth | **None** — no `AddAuthentication`, no `[Authorize]`, no middleware | — |
-| DB provider | Hard-forced `DatabaseProvider.Local` | `Program.cs:80` |
-| Repo swap point | `AddScoped<IQsoRepository, LiteQsoRepository>()` | `DbServiceRegistration.cs:37` |
-| Only credential pattern in codebase | shutdown-token, constant-time `FixedTimeEquals` | `SystemController.Shutdown` |
+| Where the log lives | One SDRLogger+ backend's **LiteDB** (a laptop / spare PC / NAS) | A **Postgres** server (NAS/VPS) |
+| Clients | Full apps whose **data layer targets the host's API** | Full apps whose backend connects **directly to Postgres** |
+| Concurrency | Host's one process serializes writes → **~8 ops comfortable** | Native multi-writer → **15–20+** |
+| Setup | Zero DB server — just designate a host | Stand up Postgres |
+| Build cost | Reuses LiteDB + the v1.0 auth (small) | New repo + schema + migration (large) |
+| **Verdict** | **First target** — covers your 3-station LAN *and* Bill's WAN | **Scale-up** when a big station outgrows Option 1 |
 
-**Conclusion:** the design is still accurate. The security posture is unchanged since it was written —
-open CORS + no auth + radio control over SignalR — so **v1.0 (auth + CORS) remains the correct, urgent
-first step**, and everything downstream (configurable client, headless, TLS) layers cleanly on the
-existing LiteDB with no database change.
+Both keep radios local. The seam that switches between them already exists: `IQsoRepository` +
+`DatabaseProvider` (`DbServiceRegistration.cs`).
 
 ---
 
-## v1.0 — lock the doors (the only increment that must land before ANY remote story)
+## 3. Cross-cutting design decisions (every what-if we walked)
 
-**Goal:** the backend can be safely reachable off-localhost. No new user-facing capability yet — this is
-pure hardening, because the moment step v1.1 makes the client point anywhere, an unauthenticated backend
-is a stranger keying your rig.
-
-### Tasks (in order)
-
-1. **Server auth token store** — generate a token on first server run; store it *hashed* via
-   `ISecretProtector`; support a small **per-device token set** (name + hash + created/last-seen) so a
-   lost phone can be revoked without locking the desktop. New `AuthTokenService` + a `auth_tokens`
-   collection (or a settings blob). Reuse the `FixedTimeEquals` comparison from `SystemController`.
-2. **Auth middleware** — a minimal `AuthenticationHandler`/middleware wired **between `app.UseCors()`
-   (`Program.cs`) and `MapControllers()`**. Require `Authorization: Bearer <token>` on everything
-   **except** `/api/health` and the first-run setup endpoints. SignalR: validate the token via
-   `accessTokenFactory` (query-string `access_token` on the negotiate/ws — the standard SignalR pattern).
-3. **Default-deny bind guard** — on startup, if `ASPNETCORE_URLS` binds a **non-localhost** address and no
-   auth token is configured, **refuse to start** with a clear log line. Localhost-only (today's Electron
-   case) stays zero-config: auth optional when bound to loopback.
-4. **CORS allow-list** — replace the reflect-any policy with a config-driven origin allow-list; **drop
-   `AllowCredentials`** once we're on bearer tokens (wildcard + credentials is the footgun; tokens don't
-   need cookies).
-5. **Local-path stays invisible** — Electron loopback path must behave exactly as today (no login prompt
-   for the normal desktop user). Auth only engages when reachable remotely / token configured.
-
-### Acceptance criteria
-- Desktop Electron on loopback: **unchanged** — no prompt, everything works.
-- Backend bound to `0.0.0.0` with no token: **refuses to start**, logs why.
-- Backend bound to `0.0.0.0` with a token: every `/api/*` and `/hubs/*` call **401/rejects without the
-  bearer token**; `/api/health` still answers (for reverse-proxy health checks).
-- A revoked device token stops working; other devices keep working.
-- CORS: a random origin can no longer make credentialed calls.
-- **Security test:** an unauthenticated SignalR connect cannot invoke `CommandRotator` / `TuneToFrequency`
-  / `SendCwKey` / `SendDxSpot`.
-
-### Tests to write
-- Middleware unit tests (valid / missing / malformed / revoked token → 200 / 401).
-- Bind-guard test (non-loopback + no token → startup abort).
-- SignalR auth handshake test (reject without `access_token`).
-- CORS policy test (disallowed origin rejected).
-
----
-
-## v1.1 — configurable client backend location
-
-The relative-URL assumption is the only hard client coupling; this is small and mechanical.
-
-- New `src/SDRLoggerPlus.Web/src/api/backend.ts`: `getApiBase()` / `getHubUrl()` resolving
-  `localStorage override → import.meta.env.VITE_BACKEND_URL → '' (relative)`. Packaged same-origin path
-  is unchanged when the override is empty.
-- `client.ts:4` → `API_BASE = ` `${getApiBase()}/api` ``; route the handful of raw `fetch` sites (the
-  204/blob/stream ones that bypass the `fetch<T>()` helper) through it.
-- `signalr.ts` → `.withUrl(getHubUrl(), { accessTokenFactory: () => getToken() })`.
-- **Settings → Server** field: host/URL + **Test** against `/api/health` + a token field. On Electron,
-  when a remote server is configured, **skip `startBackend()`** and `loadURL` the remote origin instead.
-- **Acceptance:** a second machine's browser/app points at the first machine's backend, authenticates, and
-  logs a QSO that appears live (SignalR) on both.
-
-## v1.2 — run the backend headless
-- Add a `--server` / headless launch of the existing self-contained publish
-  (`ASPNETCORE_URLS=https://0.0.0.0:5050`, `ASPNETCORE_ENVIRONMENT=Production`); ship a Windows Service
-  wrapper + a `systemd` unit.
-- **Overridable data dir** (env/CLI) so the DB lands on a chosen volume — **local disk only, never SMB/NFS**
-  (WAL + shared-mutex semantics break over network FS).
-- Re-enter secrets on the host (DPAPI→AES boundary from §2 of the design); setup flow reachable headless.
-
-## v1.3 — TLS + edge (mandatory before any WAN story)
-- Reverse proxy (Caddy auto-LE / nginx / Traefik) terminating TLS → localhost, **WebSocket upgrade enabled
-  on `/hubs`**. HSTS + secure context (the WebGL globe needs it — a useful forcing function).
-- Document **WireGuard/Tailscale as the preferred single-user WAN path** (no public port at all).
+- **Mixed OS is a non-issue.** HTTP, not file shares. A Linux host authenticates Windows/Mac clients;
+  auth tokens are SHA-256 hashes (OS-portable, already built that way).
+- **The only thing to configure is the host.** Host binds to the LAN (`0.0.0.0:port`) + one **firewall
+  allow** on that port (Win prompt / Mac prompt / `ufw allow`). Clients allow nothing (outbound HTTP).
+  Give the host a **static/reserved IP or hostname** so the client "Host" address never changes. **LAN =
+  plain HTTP acceptable; WAN = TLS/Tailscale mandatory** (also required for the WebGL globe's secure context).
+- **Unique QSO ID at creation** (`stationId + localSeq`, or a GUID). One decision that pays off three ways:
+  outbox de-dup, multi-USB merge without double-counting, and never re-uploading a duplicate to QRZ/LoTW.
+  **Retrofitting IDs later is painful — do it first.**
+- **Host-authoritative time.** Do NOT trust three laptop clocks (no internet at Field Day → 30–90 s skew →
+  broken dupes + Cabrillo cross-check busts). Host exposes `GET /api/time`; each client measures an
+  **offset (SNTP-style)** and stamps QSOs as `local + offset` (all UTC). Show a **sync indicator + a
+  warning** if a client clock is wildly off. Anchor the host to NTP/GPS when available for true UTC.
+- **Client local replica + outbox (offline-first).** Each client keeps a cached copy of the log (so it can
+  see + dupe-check when the host blips) and an **outbox** of its own un-acked QSOs (so a Wi-Fi drop or host
+  death never loses a contact). Idempotent, keyed on the unique QSO ID.
+- **Serials are host-allocated.** Single atomic counter(s) on the host per the contest's rule
+  (station-wide / per-band / per-op — already modeled by `SerialMode`). Client **pre-reserves its next
+  number** so it's on-screen *before* the caller answers (instant to speak) — a **hard reservation, not a
+  preview**, so a faster op can't steal it. Effects: a shared sequence shows **per-op gaps** (normal);
+  abandoned QSOs leave a gap (fine). Client holds a **small cushion** so a host blip doesn't leave an op
+  without a number mid-QSO.
+- **Shared event bus (not just a QSO stream).** The host's live SignalR channel carries everything the
+  stations need to coordinate, not only new QSOs: **QSOs**, **serial reservations**, **radio presence**,
+  and **operator messages**. One connection, richer payload — the same rails serve all of it.
+- **Radio presence = band + mode only (no frequency).** Each app broadcasts `{station, operator, band,
+  mode}` **only when band/mode changes** (not on VFO tuning) → minimal traffic. This drives (a) a live
+  "who's on what" board and (b) the **RF-collision / desense warning** — critical for Field Day, where
+  stations are feet apart and a nearby transmitter on the same band can desense or damage another's RX
+  front end. **Two-tier severity, derived from band+mode alone** (mode fixes which band segment you're in,
+  so it stands in for frequency separation):
+  - **Same band + same mode = HARD warn** (most dangerous — same segment, closest in freq, e.g. two 20m
+    USB rigs both in the phone segment). Copy: *"⚠ Watch out — X is also on 20m USB."*
+  - **Same band + different mode = SOFT heads-up** (more forgiving — CW low-end vs phone high-end ≈ 100+
+    kHz apart). Copy: *"Take care — X is on 20m CW."*
+  Frequency is deliberately omitted — band+mode already gives both the one-Tx-per-band-mode rule check and
+  the desense-severity tier, without VFO chatter on the wire.
+- **Operator LAN messaging.** N3FJP-style op-to-op chat over the event bus (band changes, coordination).
+  Small; rides the same channel.
+- **Redundancy & failover (low-tech, split-brain-proof).**
+  - Host: internal DB primary + **continuous per-QSO mirror to a USB drive** + periodic snapshot + rolling
+    **ADIF** (universal recovery format).
+  - Each client: local replica + outbox + **its own USB mirror + rolling ADIF** → every position carries a
+    near-complete copy; worst case any single machine is missing only its last 1–2 un-propagated QSOs.
+  - **Failover = pull the (powered-off, crash-consistent) host USB → plug into standby → it hosts → clients
+    re-point (auto if host has a reserved IP) → outboxes flush.** Human-decided (no auto-promotion) → no
+    split-brain. A **host-epoch** counter, bumped on promotion, makes a returning old host **stand down to a
+    client** instead of forming a second brain. USB *is* the warm standby, on removable media.
+  - **Best mitigation: put the host on a non-operating box** (spare PC / NAS / VPS) so it rarely fails.
 
 ---
 
-## Scaling strategy — cut off the multi-op cliff *before* it happens
+## 4. Build stages (order, dependencies, acceptance)
 
-The failure mode to prevent is a **word-of-mouth trap**: word spreads that SDRLogger+ does contesting +
-Field Day + "multi-op", a 20-person club tries it, it buckles, and the story becomes "it can't handle
-Field Day." First impressions with a club don't get a second try.
+**S0 — ✅ DONE: remote-access auth (v1.0).** Per-device tokens (SHA-256), off-localhost default-deny bind
+guard, `TokenAuthMiddleware` gating `/api`+`/hubs`, CORS allow-list, `--auth-add-device` CLI. 1426 tests
+green. Files under `Core/Security/`. *(Built 2026-07-27, not yet committed.)*
 
-### Honest thresholds (estimates — must be load-tested, not guessed)
-One backend fronting **LiteDB**, many clients over the API:
-- **4–8 casual ops** (a contact every 20–60 s): **comfortable.**
-- **8–15**: **gray zone** — fine at a relaxed rate, strains at a fast FT8/CW run rate.
-- **20+**: **wants the SQL backend** — LiteDB's single-writer lock serializes behind this app's
-  read-heavy ops (dupe-check, live scoring, awards aggregation).
+**S1 — Data-host mode (the core).** Let a full app send its logging/dupe/score to a remote host instead of
+its own file.
+- Add a **remote `IQsoRepository`** (`RemoteApiQsoRepository`) that calls the host's existing QSO API
+  (endpoints already exist), selected by a new `DatabaseProvider.RemoteHost` + a configured host URL+token.
+- **Settings → Server**: host URL + token + **Test** (`/api/health`); "This machine is the host" vs
+  "Connect to a host". Client subscribes to the host's SignalR stream for live QSOs.
+- *Accept:* Laptop B (own radio) logs a QSO that lands in Host A's log and appears live on A and C; B's
+  dupe-check + score reflect all stations.
 
-### The trap: SQL alone does NOT fix 20-op. Three bottlenecks, not one:
-1. **Write concurrency** → SQL fixes (real row locks/transactions).
-2. **Aggregation cost** (scoring/awards scanning the whole log per change; `QsoSnapshotCache` ≈ 0.7 s per
-   award over 24.5 k QSOs) → SQL fixes by pushing it into `GROUP BY`.
-3. **SignalR fan-out** — every logged QSO broadcasts to all clients + triggers a score recompute. At 20
-   clients this bites **even with SQL behind it**. → Needs **diff-based/throttled updates**, independent
-   of the database.
+**S2 — Unique QSO IDs + idempotent writes.** Stamp every QSO with a stable id at creation; host write is
+idempotent on it. *Accept:* re-sending the same QSO (retry/outbox flush) never creates a duplicate; two
+USB copies merge with zero double-counts.
 
-So "handle a 20-op Field Day well" = a deliberate **Multi-op hardening** package =
-**Postgres backend + server-side aggregation + efficient SignalR fan-out** — built as one milestone,
-*before* the capability is promoted. It is NOT just "swap in MySQL."
+**S3 — Client replica + outbox (offline-first).** Local cache for read/dupe when host is unreachable;
+transactional outbox for un-acked writes; auto-flush on reconnect. *Accept:* pull the host's network
+mid-session → B keeps logging + dupe-checking locally → reconnect → everything syncs, nothing lost/dupted.
 
-### Two levers to cut it off
-- **Lever 1 (free, now): control the promise.** Until the hardening ships, docs/wiki/landing page must
-  state the current limit plainly (see next section). One honest sentence prevents the bad first
-  impression at zero engineering cost. Lift the cap only when the hardening is proven.
-- **Lever 2 (the build): Postgres path proactively, as a planned arc.** The `IQsoRepository` seam already
-  exists, so this is scoped, not a rewrite. LiteDB stays the default for the 99% (single op / small
-  groups); the big multi-op deployment is *explicitly a Postgres server* — a documented "serious Field Day
-  station, set it up this way" path. Two coexisting modes; never a forced global swap, never drop LiteDB.
+**S4 — Host-authoritative time.** `GET /api/time`; client offset sync + corrected UTC stamping; sync
+indicator + skew warning. *Accept:* a client clock set 60 s off still logs QSOs within ~1 s of the host's
+time; indicator shows the offset.
 
-### Revised sequencing
-1. **v1.0** auth/CORS (foundation).
-2. **v1.1–1.3** shared backend on LiteDB → single-user-multi-device + small groups.
-3. **Multi-op hardening** (Postgres + server-side aggregation + SignalR fan-out) → the "cut it off"
-   milestone; gate promotion of 20-op capability behind it.
-4. **Offline-first sync** → mobile/POTA/FD robustness.
+**S5 — Host-allocated serials.** Atomic reserve-ahead from the host per `SerialMode`; on-screen next number
+pre-reserved (hard claim); small offline cushion. *Accept:* two clients running simultaneously never
+receive the same serial; each op's next number is on screen before the caller answers; a host blip doesn't
+strand an op mid-QSO.
 
----
+**S6 — Redundancy & failover.** Host + client USB mirror (per-QSO append) + rolling ADIF; documented
+pull-and-promote procedure; host-epoch guard. *Accept:* kill the host, pull its USB, promote the standby,
+re-point clients, flush outboxes → full log intact; old host returning stands down as a client.
 
-## Current-release limits we MUST publish up front (before anyone builds on it)
+**S0.5 — Multi-op contest schema (schema-first, do BEFORE S1).** Add `ContestInfo.Operator` (who's at the
+key) + `ContestInfo.LoggedByStation` (which position — also the multi-Tx tag); move `Qso.Id` minting to
+**creation time on the client** (the idempotency key S2/S3 depend on). Additive/nullable — freezes the
+record shape before the network transports it. *Accept:* a QSO carries operator + station; the id is
+stable from the moment it's created, before it ever leaves the client.
 
-**Operator directive (2026-07-27): users must learn the limits RIGHT AWAY — not after they've set up a
-Field Day around it.** Put a clear, asterisked limitation note wherever multi-op could be *assumed*:
+**S-COORD — Live coordination on the event bus (HIGH — RF safety; after S1/S3).** Radio-presence heartbeat
+(`band+mode` only, on change) → live "who's on what" board + **RF-collision/desense warning** (same
+band+mode = hard warn; same band = soft heads-up). Plus **operator LAN messaging**. Depends only on the
+shared event bus that S1 (host + SignalR) and S3 (replica/stream) establish. The desense warning protects
+hardware, so it's not a "nicety" — it ships with the first usable multi-op build.
 
-- **Landing page** (`website/index.html`, Contest-logging card)
-- **Wiki** — `Home.md`, `Contesting.md`, `Feature-Status.md`
-- **In-app Help** (`AboutDialog.tsx`, Contest section)
+**S7 — (Scale-up, later) Postgres backend.** `PostgresQsoRepository` + sibling repos; `DatabaseProvider`
+extension; migration path. Only when concurrent-write load demands it (see load-test gate).
 
-**The honest current-release limit (v2.10.0):**
-> Contest and Field Day logging is **single-station**. Each computer runs SDRLogger+ with its **own local
-> logbook** — there is **no live shared/networked log across multiple operators yet**. For a multi-op
-> Field Day today, each operator logs on their own machine and you **merge the ADIF exports afterward**.
-> Live networked multi-op — and support for larger concurrent groups — is **on the roadmap** (see this
-> design). When it lands it will start with a comfort range (~8 ops on the built-in database) and a
-> separate SQL-backed server path for larger stations.
-
-Keep the note in lock-step with reality as each stage ships: update the cap number, don't quietly delete
-the caveat.
-
-## Load-test plan (measure the tip-over instead of guessing)
-Before promoting any multi-op number, prove it:
-- **Harness:** a script that opens N SignalR clients + drives M QSO writes/min through the API against a
-  headless backend (reuse the `scripts/` e2e pattern). Parameterize N (5/8/12/20) × rate (slow/contest).
-- **Measure:** write latency (p50/p95), score-recompute latency, SignalR delivery lag to the Nth client,
-  dupe-check latency, backend CPU/RAM. On both **LiteDB** and (once built) **Postgres**.
-- **Publish** the comfortable-ops number that keeps p95 write + score under a target (e.g. < 500 ms) — that
-  becomes the documented cap. Re-run per backend so the wiki number is measured, not a guess.
-
-## Deferred (explicitly NOT in v1)
-- **v2 — swappable SQL repo** (Postgres/MySQL): only when concurrent multi-op writes are a demonstrated
-  bottleneck. Needs 5+ sibling repo impls, `QsoSnapshotCache` rework, SignalR backplane for multi-instance.
-- **Offline-first sync** (device_id + local_seq, tombstones, owner-wins-per-record): the robustness layer
-  for mobile/POTA/FD — big, layer it on #1 once v1 lands.
-
-## Convergence to honor now (so we don't repaint later)
-Both this arc and contest-log-separation reduce to *"point the write at the correct backend/store."* Build
-**one "profile/target" concept** = **{ backend URL + auth token + store selector }** in v1.1, and have any
-future networked `IQsoRepository` accept a **contest-vs-general store selector** — otherwise contest
-isolation (`IsPersonalQso` / `StationCallsign`, contest Stage 1 already shipped in v2.10.0) breaks the
-instant a backend is shared for a club Field Day.
+**S8 — (Later) Cabrillo multi-op category + mult sharing.** `CATEGORY-OPERATOR: MULTI-OP` +
+`CATEGORY-TRANSMITTER` (ONE/TWO/UNLIMITED) + full `OPERATORS:` list as session settings (session-level, no
+record migration — safe to do late). Live needed/mult sharing so an op doesn't chase a dupe the other just
+worked.
 
 ---
 
-## Open decisions needing operator input before we build v1.0
-1. **Auth model** — recommend a **per-device bearer-token set** (name a device, revoke one, no passwords to
-   manage). Alternative: single shared secret (simpler, weaker — one leak = rotate everyone).
-2. **v1 primary target** — recommend **Bill's single-user-multi-device** first (LiteDB unchanged, ~90% of
-   the ask). Club multi-op FD (concurrent writers) pulls in v2 SQL + sync and is a separate, larger arc.
-3. **WAN edge** — recommend **document Tailscale/WireGuard as the default**, reverse-proxy+TLS as the
-   power-user path. Avoids ever telling anyone to open a public port.
+## 5. Gates carried forward
+- **Load-test before promoting any operator count** — N SignalR clients × M writes/min against a headless
+  host; publish the *measured* comfortable-ops number per backend (LiteDB vs Postgres), not a guess.
+- **Cap the promise until hardened** — the current-release "single-station only" notices (landing page,
+  wiki, in-app Help) stay until the multi-op path ships and is load-tested; then lift the cap to the
+  measured number.
+
+## 6. Open items to confirm before S1
+1. **Host discovery/addressing** — reserved static IP vs `hostname.local` (mDNS) vs a manual "Host" field
+   (recommend: manual field now + reserved-IP guidance; mDNS discovery later).
+2. **S1 host store** — start on **LiteDB (Option 1)**; Postgres deferred to S7. (Confirmed direction.)
