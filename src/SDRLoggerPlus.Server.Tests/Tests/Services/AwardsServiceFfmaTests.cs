@@ -98,6 +98,47 @@ public class AwardsServiceFfmaTests
     }
 
     [Fact]
+    public void LiveLoggedQsoWithGridOnStationOnly_StillCountsForTheAward()
+    {
+        // Issue #42. A QSO logged live through the app (manual entry, WSJT-X auto-log)
+        // stores its grid ONLY on Station.Grid — QsoService.CreateAsync never sets the
+        // legacy top-level field; ADIF imports set both. Reading only q.Grid made every
+        // live-logged QSO invisible here, so a grid whose first LoTW confirmation came
+        // from a live QSO sat at "worked" forever while Log History showed it confirmed.
+        var imported = Q("EN82"); // older imported QSO: both fields, unconfirmed
+        var liveLogged = new Qso
+        {
+            Id = Guid.NewGuid().ToString(),
+            Callsign = "AA5HH",
+            Band = "6m",
+            Mode = "FT8",
+            QsoDate = new DateTime(2026, 7, 27, 16, 0, 0, DateTimeKind.Utc),
+            Station = new StationInfo { Grid = "EN82" }, // grid on Station ONLY
+            Qsl = new QslStatus { Lotw = new LotwStatus { Rcvd = "Y" } },
+        };
+
+        var result = AwardsService.ComputeFfma([imported, liveLogged], Required, LotwOrPaper);
+
+        var en82 = result.Grids.Single(g => g.Grid == "EN82");
+        en82.Status.Should().Be("confirmed", "the LoTW-confirmed live-logged QSO must count");
+        en82.QsoCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void StationGridWinsOverALegacyTopLevelGrid()
+    {
+        // Same precedence as VUCC: Station.Grid is the v2 field, the top-level is the
+        // legacy fallback. When they disagree (an old edit updated only one), trust
+        // Station — it is what the edit form and callbook enrichment write.
+        var qso = Q("JN58", lotw: "Y"); // top-level says JN58 (not required)
+        qso.Station = new StationInfo { Grid = "EN74" }; // Station says EN74 (required)
+
+        var result = AwardsService.ComputeFfma([qso], Required, LotwOrPaper);
+
+        result.Grids.Single(g => g.Grid == "EN74").Status.Should().Be("confirmed");
+    }
+
+    [Fact]
     public void ListCompleteOnlyWhenExactly488()
     {
         AwardsService.ComputeFfma([], Required, LotwOrPaper).ListComplete.Should().BeFalse();

@@ -332,6 +332,75 @@ public partial class AdifService : IAdifService
         };
     }
 
+    /// <summary>
+    /// ADIF submode → parent mode, for the family fallback index. WSJT-X (and the
+    /// operator) log the submode name; LoTW reports the parent with the submode in
+    /// SUBMODE. Only families this log's mode set actually spans — widening a match
+    /// is only safe where the parent/submode relationship is defined by the spec.
+    /// </summary>
+    private static readonly Dictionary<string, string> ModeFamilies = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["FT4"] = "MFSK",
+        ["MSK144"] = "MFSK",
+        ["JS8"] = "MFSK",
+        ["FST4"] = "MFSK",
+        ["Q65"] = "MFSK",
+        ["JT65A"] = "JT65",
+        ["JT65B"] = "JT65",
+        ["JT65C"] = "JT65",
+    };
+
+    /// <summary>Like <see cref="MergeKey"/>, but with the mode collapsed to its ADIF family.</summary>
+    private static string FamilyMergeKey(string callsign, string band, string mode)
+    {
+        var m = NormalizeModeForMatch(mode);
+        if (ModeFamilies.TryGetValue(m, out var family)) m = family;
+        return $"{callsign.ToUpperInvariant()}|{band.ToUpperInvariant()}|{m}";
+    }
+
+    /// <summary>SUBMODE from a parsed report record. Unmapped ADIF fields land in AdifExtra.</summary>
+    private static string? GetReportSubmode(Qso rec) =>
+        rec.AdifExtra != null && rec.AdifExtra.TryGetValue("submode", out var v)
+            && v.AsString is { Length: > 0 } s ? s : null;
+
+    private static void AddToIndex(Dictionary<string, List<Qso>> index, string key, Qso qso)
+    {
+        if (!index.TryGetValue(key, out var list)) index[key] = list = new List<Qso>();
+        list.Add(qso);
+    }
+
+    private static Qso? Find(Dictionary<string, List<Qso>> index, string key, DateTime reportDate) =>
+        index.TryGetValue(key, out var candidates) ? PickNearestByDate(candidates, reportDate) : null;
+
+    /// <summary>
+    /// The family-fallback lookup, keyed on the report's MODE. When the report also
+    /// carries a SUBMODE this app knows, that submode is an explicit statement of the
+    /// contact's mode — the only legitimate family targets are then QSOs logged as
+    /// that submode (which the exact level already missed) or as the literal parent
+    /// ("MFSK"). A different sibling — report says MSK144, log row says FT4 — is a
+    /// different contact, and confirming it would invent a QSL. An unknown submode
+    /// gives no such statement, so the whole family stays eligible.
+    /// </summary>
+    private static Qso? FindInFamily(Dictionary<string, List<Qso>> familyIndex, Qso rec, string? submode)
+    {
+        if (!familyIndex.TryGetValue(FamilyMergeKey(rec.Callsign, rec.Band, rec.Mode), out var candidates))
+            return null;
+
+        var sub = NormalizeModeForMatch(submode);
+        if (sub.Length > 0 && ModeFamilies.TryGetValue(sub, out var parent))
+        {
+            candidates = candidates.Where(q =>
+            {
+                var m = NormalizeModeForMatch(q.Mode);
+                return string.Equals(m, sub, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(m, parent, StringComparison.OrdinalIgnoreCase);
+            }).ToList();
+            if (candidates.Count == 0) return null;
+        }
+
+        return PickNearestByDate(candidates, rec.QsoDate);
+    }
+
     public async Task<ConfirmationMergeResponse> MergeConfirmationsAsync(
         Stream stream, ConfirmationSource source, CancellationToken cancellationToken = default)
     {
@@ -343,18 +412,21 @@ public partial class AdifService : IAdifService
 
         // Index the log by call+band+mode; a key can hold many QSOs (worked the
         // same station repeatedly), so we keep a list and pick the nearest date.
+        //
+        // Indexed twice: by exact mode and by mode FAMILY. LoTW reports a submode
+        // QSO under its ADIF parent (an MSK144 or FT4 QSO comes back MODE=MFSK,
+        // with the real mode in SUBMODE), so the log's "MSK144" and the report's
+        // "MFSK" never produce the same exact key — every such confirmation was
+        // silently dropped as unmatched. The family index is the fallback that
+        // catches those; exact matches are always tried first.
         var index = new Dictionary<string, List<Qso>>(StringComparer.OrdinalIgnoreCase);
+        var familyIndex = new Dictionary<string, List<Qso>>(StringComparer.OrdinalIgnoreCase);
         foreach (var q in existing)
         {
             if (string.IsNullOrEmpty(q.Callsign) || string.IsNullOrEmpty(q.Band) || string.IsNullOrEmpty(q.Mode))
                 continue;
-            var key = MergeKey(q.Callsign, q.Band, q.Mode);
-            if (!index.TryGetValue(key, out var list))
-            {
-                list = new List<Qso>();
-                index[key] = list;
-            }
-            list.Add(q);
+            AddToIndex(index, MergeKey(q.Callsign, q.Band, q.Mode), q);
+            AddToIndex(familyIndex, FamilyMergeKey(q.Callsign, q.Band, q.Mode), q);
         }
 
         int matched = 0, updated = 0, alreadyConfirmed = 0, unmatched = 0;
@@ -379,10 +451,17 @@ public partial class AdifService : IAdifService
                 continue;
             }
 
-            var key = MergeKey(rec.Callsign, rec.Band, rec.Mode);
-            var target = index.TryGetValue(key, out var candidates)
-                ? PickNearestByDate(candidates, rec.QsoDate)
-                : null;
+            // Most-specific first. SUBMODE, when the report carries one, is the truest
+            // description of the QSO ("MFSK" + "FT4" means the log likely says FT4),
+            // then the report's own MODE, then the family fallback for the
+            // submode-vs-parent spelling gap. An exact hit always takes precedence
+            // over a family hit, and the family level filters by the report's own
+            // submode claim — see FindInFamily.
+            var submode = GetReportSubmode(rec);
+            var target =
+                (submode is not null ? Find(index, MergeKey(rec.Callsign, rec.Band, submode), rec.QsoDate) : null)
+                ?? Find(index, MergeKey(rec.Callsign, rec.Band, rec.Mode), rec.QsoDate)
+                ?? FindInFamily(familyIndex, rec, submode);
             if (target is null)
             {
                 unmatched++;

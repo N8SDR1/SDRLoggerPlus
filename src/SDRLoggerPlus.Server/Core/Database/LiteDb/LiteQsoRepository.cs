@@ -22,8 +22,11 @@ public class LiteQsoRepository : IQsoRepository
     /// </summary>
     private void Commit()
     {
-        _context.Database.Checkpoint();
+        // Invalidate FIRST: the write is already visible via the WAL, so the snapshot
+        // is stale from this point regardless — and if Checkpoint throws, invalidating
+        // after it would never run, leaving awards serving vanished rows.
         _snapshots?.Invalidate();
+        _context.Database.Checkpoint();
     }
 
     public Task<Qso?> GetByIdAsync(string id)
@@ -183,6 +186,8 @@ public class LiteQsoRepository : IQsoRepository
 
         qso.QslSync = ledger;
         var success = _context.Qsos.Update(qso);
+        // Bare Checkpoint on purpose — the QSL sync ledger feeds no award, so the
+        // snapshot may live on. Every award-visible mutation must use Commit().
         _context.Database.Checkpoint();
         return Task.FromResult(success);
     }
@@ -218,9 +223,12 @@ public class LiteQsoRepository : IQsoRepository
             if (_context.Qsos.Delete(new BsonValue(id))) deleted++;
         }
 
-        // One checkpoint for the whole batch. Checkpointing per row would turn
-        // a 50-QSO delete into 50 flushes of the write-ahead log.
-        if (deleted > 0) _context.Database.Checkpoint();
+        // One Commit for the whole batch — checkpointing per row would turn a
+        // 50-QSO delete into 50 flushes of the write-ahead log. Routed through
+        // Commit (not a bare Checkpoint) so the award snapshot is invalidated:
+        // a bare Checkpoint here left the awards serving the deleted QSOs until
+        // the next unrelated write.
+        if (deleted > 0) Commit();
         return Task.FromResult(deleted);
     }
 
