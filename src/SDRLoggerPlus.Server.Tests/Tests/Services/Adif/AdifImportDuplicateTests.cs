@@ -47,9 +47,10 @@ public class AdifImportDuplicateTests
             new Mock<ILogger<AdifService>>().Object);
     }
 
+    // ADIF FREQ is in MHz per spec (the parser scales it to kHz for storage).
     private static Stream Adif(string band, string mode) => new MemoryStream(Encoding.UTF8.GetBytes(
         $"<CALL:5>G0AMO <QSO_DATE:8>20260303 <TIME_ON:4>2113 <BAND:{band.Length}>{band} " +
-        $"<MODE:{mode.Length}>{mode} <FREQ:5>14084 <EOR>"));
+        $"<MODE:{mode.Length}>{mode} <FREQ:6>14.084 <EOR>"));
 
     [Theory]
     [InlineData("MFSK", "DATA")]   // 422 groups in the live log
@@ -117,6 +118,65 @@ public class AdifImportDuplicateTests
         mode.OriginalValue.Should().Be("FT2");
         mode.StoredValue.Should().Be("FT2", "an unrecognised mode is kept, not guessed at");
         mode.Action.Should().Be("Flagged");
+    }
+
+    [Fact]
+    public async Task AMissingModeIsStoredAsSsbButFlaggedAsFabricated()
+    {
+        // The SSB default predates this work and is kept so behaviour does not change — but
+        // it is a fabrication, and the report must say so instead of passing it off as data.
+        var adif = new MemoryStream(Encoding.UTF8.GetBytes(
+            "<CALL:5>G0AMO <QSO_DATE:8>20260303 <TIME_ON:4>2113 <BAND:3>20m <EOR>"));
+
+        var result = await _service.ImportAdifAsync(adif);
+
+        _stored.Single().Mode.Should().Be("SSB");
+        var issue = result.Issues!.Single(i => i.Field == "mode");
+        issue.OriginalValue.Should().Be("(missing)");
+        issue.Action.Should().Be("Flagged");
+    }
+
+    [Fact]
+    public async Task AMissingBandWithNoFrequencyIsStoredAs20mButFlaggedAsFabricated()
+    {
+        var adif = new MemoryStream(Encoding.UTF8.GetBytes(
+            "<CALL:5>G0AMO <QSO_DATE:8>20260303 <TIME_ON:4>2113 <MODE:3>FT8 <EOR>"));
+
+        var result = await _service.ImportAdifAsync(adif);
+
+        _stored.Single().Band.Should().Be("20m");
+        var issue = result.Issues!.Single(i => i.Field == "band");
+        issue.OriginalValue.Should().Be("(missing)");
+        issue.Action.Should().Be("Flagged");
+    }
+
+    [Fact]
+    public async Task ABandDerivedFromFrequencyIsNotFlagged()
+    {
+        // Frequency is the trustworthy field — deriving the band from it is a correct
+        // inference, not a fabrication, and flagging it would drown the report in noise.
+        var adif = new MemoryStream(Encoding.UTF8.GetBytes(
+            "<CALL:5>G0AMO <QSO_DATE:8>20260303 <TIME_ON:4>2113 <MODE:3>FT8 <FREQ:6>14.074 <EOR>"));
+
+        var result = await _service.ImportAdifAsync(adif);
+
+        _stored.Single().Band.Should().Be("20m");
+        result.Issues.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AFrequencyOutsideEveryBandIsFlaggedWithTheFrequency()
+    {
+        var adif = new MemoryStream(Encoding.UTF8.GetBytes(
+            "<CALL:5>G0AMO <QSO_DATE:8>20260303 <TIME_ON:4>2113 <MODE:3>FT8 <FREQ:5>3.100 <EOR>"));
+
+        var result = await _service.ImportAdifAsync(adif);
+
+        // 3.100 MHz sits between 160m and 80m — no amateur allocation.
+        _stored.Single().Band.Should().Be("Unknown");
+        var issue = result.Issues!.Single(i => i.Field == "band");
+        issue.OriginalValue.Should().Contain("3100");
+        issue.Action.Should().Be("Flagged");
     }
 
     [Fact]

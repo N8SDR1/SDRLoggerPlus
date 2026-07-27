@@ -58,6 +58,11 @@ public static class AdifFieldNormalizer
         "PSK31", "PSK63", "PSK125", "PSK2K", "Q65", "QRA64", "ROS", "RTTY", "RTTYM",
         "SSB", "SSTV", "T10", "THOR", "THRB", "TOR", "V4", "VOI", "WINMOR", "WSPR",
         "VARA HF", "VARA FM", "VARA SATELLITE",
+        // ADIF submodes of SSB, but loggers routinely write them into MODE and they carry
+        // real information (which sideband). This log holds 192 of them; the edit form
+        // offers both; the confirmation-merge key already collapses them to SSB. Flagging
+        // them as unrecognised would tell the operator to go check 192 perfectly good QSOs.
+        "USB", "LSB",
     };
 
     /// <summary>

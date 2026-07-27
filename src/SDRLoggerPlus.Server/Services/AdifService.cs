@@ -611,11 +611,61 @@ public partial class AdifService : IAdifService
         // were stored exactly as written: this log ended up holding "40M" and "40m" as separate
         // spellings across 13,106 records, and 1,130 records with modes the ADIF enumeration
         // does not define. Anything unrecognised is kept verbatim and reported, never guessed at.
-        var (band, bandIssue) = AdifFieldNormalizer.NormalizeBand(
-            GetStringField(fields, "band") ?? DeriveFromFrequency(fields));
-        var (mode, modeIssue) = AdifFieldNormalizer.NormalizeMode(GetStringField(fields, "mode") ?? "SSB");
-        if (bandIssue != null) issues?.Add(bandIssue);
-        if (modeIssue != null) issues?.Add(modeIssue);
+        //
+        // The stored fallbacks below (20m, SSB, Unknown) predate this code and are kept so the
+        // change is report-only — but they are fabrications, so each one is now flagged. A
+        // band derived from FREQ is not flagged: frequency is the trustworthy field.
+        var rawBand = GetStringField(fields, "band");
+        var rawMode = GetStringField(fields, "mode");
+        var freqKhz = GetDoubleField(fields, "freq");
+
+        string bandInput;
+        AdifFieldIssue? bandOriginIssue = null;
+        if (!string.IsNullOrWhiteSpace(rawBand))
+        {
+            bandInput = rawBand;
+        }
+        else if (freqKhz.HasValue)
+        {
+            // FREQ is in kHz; BandHelper wants Hz.
+            bandInput = BandHelper.GetBand((long)(freqKhz.Value * 1000.0));
+            if (bandInput == "Unknown")
+            {
+                bandOriginIssue = new AdifFieldIssue(
+                    "band", $"FREQ {freqKhz.Value}", "Unknown", AdifFieldAction.Flagged,
+                    $"No BAND field, and FREQ {freqKhz.Value} kHz sits outside every amateur band. " +
+                    "Stored as 'Unknown'.");
+            }
+        }
+        else
+        {
+            bandInput = "20m";
+            bandOriginIssue = new AdifFieldIssue(
+                "band", "(missing)", "20m", AdifFieldAction.Flagged,
+                "Record has neither BAND nor FREQ. Stored as '20m', the importer's long-standing " +
+                "default — almost certainly wrong. Check the source log.");
+        }
+
+        string modeInput;
+        AdifFieldIssue? modeOriginIssue = null;
+        if (!string.IsNullOrWhiteSpace(rawMode))
+        {
+            modeInput = rawMode;
+        }
+        else
+        {
+            modeInput = "SSB";
+            modeOriginIssue = new AdifFieldIssue(
+                "mode", "(missing)", "SSB", AdifFieldAction.Flagged,
+                "Record has no MODE. Stored as 'SSB', the importer's long-standing default.");
+        }
+
+        var (band, bandIssue) = AdifFieldNormalizer.NormalizeBand(bandInput);
+        var (mode, modeIssue) = AdifFieldNormalizer.NormalizeMode(modeInput);
+        // An origin issue supersedes the normalizer's: "this value was fabricated" explains
+        // more than "this value is unrecognised" ever could.
+        if ((bandOriginIssue ?? bandIssue) is { } bi) issues?.Add(bi);
+        if ((modeOriginIssue ?? modeIssue) is { } mi) issues?.Add(mi);
 
         var qso = new Qso
         {
@@ -927,12 +977,4 @@ public partial class AdifService : IAdifService
         return digits[..6];
     }
 
-    private static string DeriveFromFrequency(Dictionary<string, object> fields)
-    {
-        var freq = GetDoubleField(fields, "freq");
-        if (!freq.HasValue) return "20m";
-
-        // Frequency is now in kHz - convert to Hz for BandHelper
-        return BandHelper.GetBand((long)(freq.Value * 1000.0));
-    }
 }

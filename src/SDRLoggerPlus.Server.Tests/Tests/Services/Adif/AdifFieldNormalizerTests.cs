@@ -109,6 +109,9 @@ public class AdifFieldNormalizerTests
     [InlineData("PSK")]
     [InlineData("JT65B")]
     [InlineData("VARA HF")]
+    // SSB submodes, but loggers write them into MODE and they carry which-sideband info.
+    [InlineData("USB")]
+    [InlineData("LSB")]
     public void ModesThisLogLegitimatelyContainsPassThroughUntouched(string mode)
     {
         var (value, issue) = AdifFieldNormalizer.NormalizeMode(mode);
