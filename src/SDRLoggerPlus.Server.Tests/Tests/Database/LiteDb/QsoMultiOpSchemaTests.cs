@@ -68,4 +68,39 @@ public class QsoMultiOpSchemaTests : IDisposable
         loaded!.Contest!.Operator.Should().Be("N8SDR");
         loaded.Contest.LoggedByStation.Should().Be("station-A");
     }
+
+    // -- S2: idempotent create on the origin-minted Id -----------------------------------------------
+
+    [Fact]
+    public async Task CreateAsync_withAnExistingId_isIdempotent_noDoubleLog()
+    {
+        var qso = Basic();
+        qso.Id = "5f9a1b2c3d4e5f6a7b8c9d0e";
+        var first = await _repo.CreateAsync(qso);
+
+        // A retry (first write landed, ack lost) or a re-merge sends the same Id again.
+        var retry = Basic();
+        retry.Id = "5f9a1b2c3d4e5f6a7b8c9d0e";
+        var second = await _repo.CreateAsync(retry); // must NOT throw or double-log
+
+        second.Id.Should().Be(first.Id);
+        (await _repo.GetCountAsync()).Should().Be(1); // one row, not two
+    }
+
+    [Fact]
+    public async Task CreateBulkAsync_skipsAlreadyPresentIds()
+    {
+        var a = Basic();
+        a.Id = "5f9a1b2c3d4e5f6a7b8c9d01";
+        await _repo.CreateAsync(a);
+
+        var again = Basic();
+        again.Id = "5f9a1b2c3d4e5f6a7b8c9d01"; // already present → skip
+        var fresh = Basic();
+        fresh.Id = "5f9a1b2c3d4e5f6a7b8c9d02"; // new → insert
+
+        await _repo.CreateBulkAsync(new[] { again, fresh });
+
+        (await _repo.GetCountAsync()).Should().Be(2); // a + fresh, not 3
+    }
 }

@@ -123,6 +123,16 @@ public class LiteQsoRepository : IQsoRepository
         {
             qso.Id = ObjectId.NewObjectId().ToString();
         }
+        else
+        {
+            // Idempotent create (S2, multi-op). A provided, origin-minted Id that is ALREADY here means
+            // this is a retry (the first write landed but the ack was lost) or a re-merge of a copy we
+            // already hold. Return the existing row instead of throwing a duplicate-key error or logging
+            // the contact twice — the invariant the outbox and multi-USB merge depend on.
+            var existing = _context.Qsos.FindById(new BsonValue(qso.Id));
+            if (existing != null)
+                return Task.FromResult(existing);
+        }
 
         _context.Qsos.Insert(qso);
         Commit();
@@ -134,23 +144,32 @@ public class LiteQsoRepository : IQsoRepository
         var qsoList = qsos.ToList();
         var now = DateTime.UtcNow;
 
+        // Idempotent bulk create (S2, multi-op): insert only rows whose Id isn't already present, so a
+        // merge of USB copies / a re-import of an already-synced batch adds each contact at most once.
+        // (Empty Ids get a fresh ObjectId and are always new; provided Ids are checked against the log.)
+        var toInsert = new List<Qso>();
         foreach (var qso in qsoList)
         {
             qso.CreatedAt = now;
             qso.UpdatedAt = now;
 
-            // Generate an ID if not set
             if (string.IsNullOrEmpty(qso.Id))
             {
                 qso.Id = ObjectId.NewObjectId().ToString();
+                toInsert.Add(qso);
             }
+            else if (_context.Qsos.FindById(new BsonValue(qso.Id)) == null)
+            {
+                toInsert.Add(qso);
+            }
+            // else: already in the log → idempotent skip (don't double-log).
         }
 
-        // Bulk insert all QSOs
-        _context.Qsos.InsertBulk(qsoList);
-
-        // Single checkpoint after all inserts - this is the key optimization
-        Commit();
+        if (toInsert.Count > 0)
+        {
+            _context.Qsos.InsertBulk(toInsert);
+            Commit();
+        }
 
         return Task.FromResult<IEnumerable<Qso>>(qsoList);
     }
