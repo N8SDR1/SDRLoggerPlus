@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DecodeAlertsSection } from './settings/DecodeAlertsSection';
+import { ServerSection } from './settings/ServerSection';
 import {
   loadAnnouncementVoices,
   applyAnnouncementVoice,
@@ -169,6 +170,12 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     name: 'Voice',
     icon: <Volume2 className="w-5 h-5" />,
     description: 'Voice for spoken announcements (accent, male/female)',
+  },
+  {
+    id: 'server',
+    name: 'Server / Multi-op',
+    icon: <Server className="w-5 h-5" />,
+    description: 'Share your log across stations (host or connect)',
   },
   {
     id: 'about',
@@ -5328,6 +5335,8 @@ export function SettingsPanel() {
         return <SatSettingsSection />;
       case 'dxcoach':
         return <DxCoachSettingsSection />;
+      case 'server':
+        return <ServerSection />;
       case 'voice':
         return <VoiceSettingsSection />;
       case 'about':

@@ -1149,7 +1149,42 @@ class ApiClient {
   async getCallsignMapImages(limit: number = 100): Promise<CallsignMapImage[]> {
     return this.fetch<CallsignMapImage[]>(`/callsign-images?limit=${limit}`);
   }
+
+  // ── Multi-op Server (Settings → Server) ──────────────────────────────
+  async getServerConfig(): Promise<ServerConfig> {
+    return this.fetch<ServerConfig>('/server/config');
+  }
+  async saveServerConfig(req: SaveServerConfigRequest): Promise<{ restartRequired: boolean }> {
+    return this.fetch('/server/config', { method: 'POST', body: JSON.stringify(req) });
+  }
+  async testServerHost(hostUrl: string, token?: string): Promise<ServerTestResult> {
+    return this.fetch<ServerTestResult>('/server/test', {
+      method: 'POST', body: JSON.stringify({ hostUrl, token }),
+    });
+  }
+  async listServerDevices(): Promise<AuthDevice[]> {
+    return this.fetch<AuthDevice[]>('/server/devices');
+  }
+  async addServerDevice(name: string): Promise<{ token: string; device: AuthDevice }> {
+    return this.fetch('/server/devices', { method: 'POST', body: JSON.stringify({ name }) });
+  }
+  async revokeServerDevice(id: string): Promise<{ removed: boolean }> {
+    return this.fetch(`/server/devices/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
 }
+
+// ── Multi-op Server types ──────────────────────────────────────────────
+export interface ServerConfig {
+  mode: 'host' | 'client';
+  hostUrl?: string;
+  remotelyBound: boolean;
+  lanAddresses: string[];
+  port: number;
+  deviceCount: number;
+}
+export interface SaveServerConfigRequest { mode: 'host' | 'client'; hostUrl?: string; token?: string; }
+export interface ServerTestResult { ok: boolean; detail: string; }
+export interface AuthDevice { id: string; name: string; createdUtc: string; lastSeenUtc?: string; }
 
 // QRZ Types
 export interface QrzSubscriptionResponse {
