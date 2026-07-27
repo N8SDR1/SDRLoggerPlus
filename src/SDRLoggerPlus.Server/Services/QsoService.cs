@@ -268,9 +268,15 @@ public class QsoService : IQsoService
         if (request.Comment != null) existing.Comment = request.Comment;
 
         existing.Station ??= new StationInfo();
-        if (request.Name != null) existing.Station.Name = request.Name;
-        if (request.Grid != null) existing.Station.Grid = request.Grid;
-        if (request.Country != null) existing.Station.Country = request.Country;
+        // Name, Grid and Country exist BOTH at the top level and on Station, and
+        // MapToResponse reads the top-level one first (`qso.Grid ?? Station.Grid`).
+        // ADIF import populates both, so writing only Station left the top-level
+        // value stale and every read handed back the old one — the edit was saved
+        // and then invisibly overwritten on display (issue #34). Write both.
+        // State and County were never affected: they live only on Station.
+        if (request.Name != null) { existing.Name = request.Name; existing.Station.Name = request.Name; }
+        if (request.Grid != null) { existing.Grid = request.Grid; existing.Station.Grid = request.Grid; }
+        if (request.Country != null) { existing.Country = request.Country; existing.Station.Country = request.Country; }
         if (request.State != null) existing.Station.State = request.State;
         // Stripped the same way as on create: a caller may send the ADIF
         // "ST,County" form, but the field is stored as the bare name.

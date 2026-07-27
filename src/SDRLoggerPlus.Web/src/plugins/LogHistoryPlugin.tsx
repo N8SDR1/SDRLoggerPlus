@@ -15,6 +15,8 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useAgGridState } from '../hooks/useAgGridState';
 import { utcDatePart, toUtcInstant } from '../utils/qsoDateTime';
 import { formMhzToStoredKhz, storedKhzToFormMhz } from '../utils/frequency';
+import { selectOptionsFor, LOG_MODES } from '../utils/qsoFieldOptions';
+import { ALL_BANDS } from '../utils/spotBands';
 
 // Common RST values for phone modes (SSB, AM, FM)
 const RST_PHONE = ['59', '58', '57', '56', '55', '54', '53', '52', '51'];
@@ -140,17 +142,25 @@ const ActionCellRenderer = (props: ICellRendererParams<QsoResponse> & {
   onDelete: (qso: QsoResponse) => void;
 }) => {
   if (!props.data) return null;
+  // Read the row's data at click time, not the copy captured when this cell
+  // rendered. getRowId puts the grid in immutable-data mode, where a refetch
+  // updates each row node in place and only re-renders cells whose value
+  // changed — and this column's field is `id`, which never changes. So after
+  // editing a QSO this renderer kept the pre-edit object, and reopening the
+  // pencil refilled the form from it: the row showed the new value while the
+  // edit dialog showed the old one. The node always holds the current row.
+  const current = () => props.node?.data ?? props.data!;
   return (
     <div className="flex items-center gap-1">
       <button
-        onClick={() => props.onEdit(props.data!)}
+        onClick={() => props.onEdit(current())}
         className="p-1 text-dark-300 hover:text-accent-primary transition-colors"
         title="Edit QSO"
       >
         <Pencil className="w-3.5 h-3.5" />
       </button>
       <button
-        onClick={() => props.onDelete(props.data!)}
+        onClick={() => props.onDelete(current())}
         className="p-1 text-dark-300 hover:text-accent-danger transition-colors"
         title="Delete QSO"
       >
@@ -448,7 +458,12 @@ export function LogHistoryPlugin() {
     setIsSaving(true);
     try {
       await api.updateQso(editingQso.id, updates);
-      queryClient.invalidateQueries({ queryKey: ['qsos'] });
+      // Awaited: invalidateQueries only *marks* the list stale and refetches in
+      // the background, so closing straight away left a window where reopening
+      // the edit pencil rebuilt the form from the pre-edit row — the save looked
+      // like it had been discarded. Hold the modal (the button still reads
+      // "Saving…") until the refreshed rows are actually in.
+      await queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
       setEditingQso(null);
     } catch (error) {
@@ -1770,6 +1785,15 @@ function EditQsoModal({
     comment: qso.comment || '',
   });
 
+  // Band and mode come out of the log in whatever spelling was imported —
+  // "40M" alongside "20m", and 27 distinct modes against a list of two dozen.
+  // A controlled <select> renders blank for anything its options don't match,
+  // and a blank *required* select then silently refuses to submit, so the edit
+  // appeared to do nothing. selectOptionsFor keeps the value visible either
+  // way. See utils/qsoFieldOptions.
+  const bandField = selectOptionsFor(ALL_BANDS, formData.band);
+  const modeField = selectOptionsFor(LOG_MODES, formData.mode);
+
   // Get RST options based on mode
   const getRstOptions = (mode: string): string[] => {
     return mode === 'CW' ? RST_CW_DIGITAL : RST_PHONE;
@@ -1783,8 +1807,11 @@ function EditQsoModal({
       // and would throw away the time of day.
       qsoDate: toUtcInstant(formData.qsoDate, formData.timeOn),
       timeOn: formData.timeOn,
-      band: formData.band,
-      mode: formData.mode,
+      // The resolved values, so what the form shows is what gets saved — an
+      // untouched "40M" is tidied to "40m", and an unrecognised mode is sent
+      // back exactly as it came.
+      band: bandField.value,
+      mode: modeField.value,
       // Edited in MHz; Qso.Frequency is stored in kHz.
       frequency: formData.frequency ? formMhzToStoredKhz(parseFloat(formData.frequency)) : undefined,
       rstSent: formData.rstSent || undefined,
@@ -1843,42 +1870,25 @@ function EditQsoModal({
             <div>
               <label className="block text-sm text-dark-300 mb-1 font-ui">Band</label>
               <select
-                value={formData.band}
+                value={bandField.value}
                 onChange={(e) => setFormData({ ...formData, band: e.target.value })}
                 className="glass-input w-full font-mono"
                 required
               >
                 <option value="">Select</option>
-                <option value="160m">160m</option>
-                <option value="80m">80m</option>
-                <option value="40m">40m</option>
-                <option value="30m">30m</option>
-                <option value="20m">20m</option>
-                <option value="17m">17m</option>
-                <option value="15m">15m</option>
-                <option value="12m">12m</option>
-                <option value="10m">10m</option>
-                <option value="6m">6m</option>
-                <option value="2m">2m</option>
+                {bandField.options.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm text-dark-300 mb-1 font-ui">Mode</label>
               <select
-                value={formData.mode}
+                value={modeField.value}
                 onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
                 className="glass-input w-full font-mono"
                 required
               >
                 <option value="">Select</option>
-                <option value="SSB">SSB</option>
-                <option value="CW">CW</option>
-                <option value="FT8">FT8</option>
-                <option value="FT4">FT4</option>
-                <option value="RTTY">RTTY</option>
-                <option value="PSK31">PSK31</option>
-                <option value="AM">AM</option>
-                <option value="FM">FM</option>
+                {modeField.options.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div>
