@@ -269,7 +269,15 @@ public class SpotStatusService : ISpotStatusService, IHostedService
             var allQsos = await qsoRepo.GetAllAsync();
             // Worked-before needed-status is a PERSONAL judgement — a club/special contest run must
             // not mark your countries/zones/grids as worked. Exclude non-personal-call QSOs.
-            var myCall = (await scope.ServiceProvider.GetRequiredService<ISettingsService>().GetSettingsAsync())?.Station?.Callsign;
+            //
+            // Resolved optionally on purpose. The operating callsign only refines which QSOs count;
+            // without it every QSO counts, which is the pre-contest-session behaviour and perfectly
+            // usable. GetRequiredService would throw instead, and the catch below turns any throw
+            // into a permanent retry loop that never completes _cacheReady — so a missing or broken
+            // settings service would take the whole spot-status cache down with it.
+            var myCall = scope.ServiceProvider.GetService<ISettingsService>() is { } settingsService
+                ? (await settingsService.GetSettingsAsync())?.Station?.Callsign
+                : null;
 
             var newCountries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var newCountryBands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
