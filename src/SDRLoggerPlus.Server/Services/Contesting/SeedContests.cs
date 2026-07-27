@@ -121,7 +121,9 @@ public static class SeedContests
                 new[] { Rst(), StateF("S/P/C") },
                 new[] { Rst(), When(StateF("S/P/C"), ContestRole.InArea), When(Zone(), ContestRole.Dx) },
                 Pts(5, sameCountry: 2, otherCont: 10),
-                new[] { M(MultSource.State), M(MultSource.Dxcc) });
+                // Mults are US states + VE provinces (State) + DX countries — USA/Canada must NOT
+                // also count as DX countries (they're the states/provinces), so DxccExceptHome.
+                new[] { M(MultSource.State), M(MultSource.DxccExceptHome) });
             cq160.HomeArea = new HomeArea { Kind = HomeAreaKind.WVE };
             yield return cq160;
         }

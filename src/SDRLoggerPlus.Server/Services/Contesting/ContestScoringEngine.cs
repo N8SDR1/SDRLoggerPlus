@@ -427,6 +427,11 @@ public static class ContestScoringEngine
     private static string? MultValue(MultSource source, Qso qso) => source switch
     {
         MultSource.Dxcc => qso.Dxcc?.ToString() ?? qso.Country,
+        // DXCC country, but not the home area (USA/Canada) — those are counted via State, so
+        // returning null here (no mult) is what stops the CQ WW 160 double-count.
+        MultSource.DxccExceptHome => IsUsOrCanada(qso.Country ?? qso.Station?.Country, qso.Continent)
+            ? null
+            : (qso.Dxcc?.ToString() ?? qso.Country),
         MultSource.CqZone => qso.Station?.CqZone?.ToString(),
         MultSource.ItuZone => qso.Station?.ItuZone?.ToString(),
         MultSource.State => qso.Contest?.RcvdState ?? qso.Station?.State,

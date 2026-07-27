@@ -297,6 +297,14 @@ public enum MultSource
     Continent,
 
     /// <summary>
+    /// DXCC entity, EXCLUDING the operator's home area (USA + Canada). For contests whose
+    /// multiplier is "US states + VE provinces + DX countries" (CQ WW 160), the states/provinces
+    /// are already counted by <see cref="State"/>, so counting USA/Canada again as a DXCC country
+    /// double-counts them. This source yields no mult for a US/Canadian QSO.
+    /// </summary>
+    DxccExceptHome,
+
+    /// <summary>
     /// One multiplier for each mode operated on each band (the Winter Field Day
     /// rule). The multiplier value is the mode CLASS — Phone / CW / Digital — so
     /// USB and LSB both count as one Phone mult per band, and RTTY folds into
