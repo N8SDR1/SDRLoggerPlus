@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Server, Wifi, Copy, Trash2, Plus, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
-import { api, type ServerConfig, type AuthDevice } from '../../api/client';
+import { Server, Wifi, Copy, Trash2, Plus, CheckCircle2, XCircle, AlertTriangle, Clock } from 'lucide-react';
+import { api, type ServerConfig, type AuthDevice, type TimeSyncState } from '../../api/client';
 
 /**
  * Settings → Server — the multi-op "easy connect" front door.
@@ -21,6 +21,7 @@ export function ServerSection() {
   const [devices, setDevices] = useState<AuthDevice[]>([]);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [issuedToken, setIssuedToken] = useState<{ name: string; token: string } | null>(null);
+  const [timeSync, setTimeSync] = useState<TimeSyncState | null>(null);
 
   const load = useCallback(async () => {
     const c = await api.getServerConfig();
@@ -29,6 +30,7 @@ export function ServerSection() {
     setHostUrl(c.hostUrl ?? '');
     setShareOnNetwork(c.shareOnNetwork);
     if (c.mode === 'host') setDevices(await api.listServerDevices());
+    try { setTimeSync(await api.getTimeSync()); } catch { /* older backend */ }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -222,6 +224,26 @@ export function ServerSection() {
               </span>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Time sync status */}
+      {timeSync && (
+        <div className="p-3 rounded-lg bg-glass-50 border border-glass-100 text-sm flex items-start gap-2">
+          <Clock className="w-4 h-4 text-accent-secondary mt-0.5 shrink-0" />
+          {timeSync.isHost ? (
+            <span className="text-gray-200">This machine is the <strong>time authority</strong> — other stations sync their clocks to it.</span>
+          ) : Math.abs(timeSync.offsetMs) > 5000 ? (
+            <span className="text-amber-300">
+              Your clock is <strong>{(timeSync.offsetMs / 1000).toFixed(1)} s</strong> off the host —
+              QSO times may not line up across stations. Consider correcting this computer's clock.
+            </span>
+          ) : (
+            <span className="text-gray-300">
+              Clock synced to host (offset {(timeSync.offsetMs / 1000).toFixed(1)} s
+              {timeSync.lastSyncUtc ? `, ${new Date(timeSync.lastSyncUtc).toLocaleTimeString()}` : ''}).
+            </span>
+          )}
         </div>
       )}
 

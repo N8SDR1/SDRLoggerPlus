@@ -1171,6 +1171,10 @@ class ApiClient {
   async revokeServerDevice(id: string): Promise<{ removed: boolean }> {
     return this.fetch(`/server/devices/${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
+
+  async getTimeSync(): Promise<TimeSyncState> {
+    return this.fetch<TimeSyncState>('/time/offset');
+  }
 }
 
 // ── Multi-op Server types ──────────────────────────────────────────────
@@ -1184,6 +1188,7 @@ export interface ServerConfig {
   deviceCount: number;
 }
 export interface SaveServerConfigRequest { mode: 'host' | 'client'; hostUrl?: string; token?: string; shareOnNetwork?: boolean; }
+export interface TimeSyncState { isHost: boolean; offsetMs: number; lastSyncUtc?: string; }
 export interface ServerTestResult { ok: boolean; detail: string; }
 export interface AuthDevice { id: string; name: string; createdUtc: string; lastSeenUtc?: string; }
 
