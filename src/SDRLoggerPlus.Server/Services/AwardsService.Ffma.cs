@@ -48,7 +48,10 @@ public partial class AwardsService
 
         foreach (var q in sixMeterQsos)
         {
-            var grid = NormalizeGrid(q.Grid);
+            // Station.Grid first, legacy top-level as fallback — same precedence as VUCC.
+            // Live-logged QSOs (manual entry, WSJT-X auto-log) carry their grid ONLY on
+            // Station; reading just q.Grid made them invisible to the award (issue #42).
+            var grid = NormalizeGrid(q.Station?.Grid ?? q.Grid);
             if (grid is null || !requiredGrids.Contains(grid)) continue;
 
             byGrid.TryGetValue(grid, out var acc);
