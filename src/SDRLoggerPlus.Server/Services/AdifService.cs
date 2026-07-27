@@ -345,6 +345,7 @@ public partial class AdifService : IAdifService
         ["JS8"] = "MFSK",
         ["FST4"] = "MFSK",
         ["Q65"] = "MFSK",
+        ["JT65A"] = "JT65",
         ["JT65B"] = "JT65",
         ["JT65C"] = "JT65",
     };
@@ -370,6 +371,35 @@ public partial class AdifService : IAdifService
 
     private static Qso? Find(Dictionary<string, List<Qso>> index, string key, DateTime reportDate) =>
         index.TryGetValue(key, out var candidates) ? PickNearestByDate(candidates, reportDate) : null;
+
+    /// <summary>
+    /// The family-fallback lookup, keyed on the report's MODE. When the report also
+    /// carries a SUBMODE this app knows, that submode is an explicit statement of the
+    /// contact's mode — the only legitimate family targets are then QSOs logged as
+    /// that submode (which the exact level already missed) or as the literal parent
+    /// ("MFSK"). A different sibling — report says MSK144, log row says FT4 — is a
+    /// different contact, and confirming it would invent a QSL. An unknown submode
+    /// gives no such statement, so the whole family stays eligible.
+    /// </summary>
+    private static Qso? FindInFamily(Dictionary<string, List<Qso>> familyIndex, Qso rec, string? submode)
+    {
+        if (!familyIndex.TryGetValue(FamilyMergeKey(rec.Callsign, rec.Band, rec.Mode), out var candidates))
+            return null;
+
+        var sub = NormalizeModeForMatch(submode);
+        if (sub.Length > 0 && ModeFamilies.TryGetValue(sub, out var parent))
+        {
+            candidates = candidates.Where(q =>
+            {
+                var m = NormalizeModeForMatch(q.Mode);
+                return string.Equals(m, sub, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(m, parent, StringComparison.OrdinalIgnoreCase);
+            }).ToList();
+            if (candidates.Count == 0) return null;
+        }
+
+        return PickNearestByDate(candidates, rec.QsoDate);
+    }
 
     public async Task<ConfirmationMergeResponse> MergeConfirmationsAsync(
         Stream stream, ConfirmationSource source, CancellationToken cancellationToken = default)
@@ -424,16 +454,14 @@ public partial class AdifService : IAdifService
             // Most-specific first. SUBMODE, when the report carries one, is the truest
             // description of the QSO ("MFSK" + "FT4" means the log likely says FT4),
             // then the report's own MODE, then the family fallback for the
-            // submode-vs-parent spelling gap. Falling through only widens the net —
-            // an exact hit always takes precedence over a family hit.
+            // submode-vs-parent spelling gap. An exact hit always takes precedence
+            // over a family hit, and the family level filters by the report's own
+            // submode claim — see FindInFamily.
             var submode = GetReportSubmode(rec);
             var target =
                 (submode is not null ? Find(index, MergeKey(rec.Callsign, rec.Band, submode), rec.QsoDate) : null)
                 ?? Find(index, MergeKey(rec.Callsign, rec.Band, rec.Mode), rec.QsoDate)
-                ?? (submode is not null ? Find(familyIndex, FamilyMergeKey(rec.Callsign, rec.Band, submode), rec.QsoDate) : null)
-                // The report's own MODE gets its own family try: a submode this app
-                // doesn't know must not block the parent-mode lookup that would work.
-                ?? Find(familyIndex, FamilyMergeKey(rec.Callsign, rec.Band, rec.Mode), rec.QsoDate);
+                ?? FindInFamily(familyIndex, rec, submode);
             if (target is null)
             {
                 unmatched++;

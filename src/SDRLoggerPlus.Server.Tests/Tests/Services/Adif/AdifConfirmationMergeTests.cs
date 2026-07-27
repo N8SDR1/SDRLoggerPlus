@@ -108,8 +108,11 @@ public class AdifConfirmationMergeTests
     {
         // Worked the same station on 6 m FT4 AND MSK144 the same day — plausible during
         // a contest. The report's SUBMODE says which one this confirmation belongs to.
-        var ft4 = Logged("FT4");
+        // The decoy is logged FIRST: a nearest-date tie keeps the first-inserted
+        // candidate, so this fails — rather than passing vacuously — if the submode
+        // level ever stops running.
         var msk = Logged("MSK144");
+        var ft4 = Logged("FT4");
 
         await _service.MergeConfirmationsAsync(Report("MFSK", submode: "FT4"), ConfirmationSource.Lotw);
 
@@ -121,13 +124,44 @@ public class AdifConfirmationMergeTests
     public async Task AnExactModeMatchAlwaysBeatsAFamilyMatch()
     {
         // A log can legitimately hold a literal "MFSK" QSO next to an MSK144 one.
-        var literal = Logged("MFSK");
+        // Decoy first — see TheSubmodePicksTheRightSibling for why order matters.
         var msk = Logged("MSK144");
+        var literal = Logged("MFSK");
 
         await _service.MergeConfirmationsAsync(Report("MFSK"), ConfirmationSource.Lotw);
 
         LotwConfirmed(literal).Should().BeTrue("exact key hit — the family fallback must not run");
         LotwConfirmed(msk).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AReportNamingASiblingSubmodeConfirmsNothing()
+    {
+        // The log holds only an FT4 QSO; the report says MODE=MFSK SUBMODE=MSK144 —
+        // an explicit statement that the confirmed contact was MSK144. That QSO is
+        // simply not in this log (uploaded from elsewhere, or deleted), and the
+        // family fallback must not hand its confirmation to the FT4 sibling.
+        var ft4 = Logged("FT4");
+
+        var result = await _service.MergeConfirmationsAsync(
+            Report("MFSK", submode: "MSK144"), ConfirmationSource.Lotw);
+
+        LotwConfirmed(ft4).Should().BeFalse("the report names a different contact");
+        result.Unmatched.Should().Be(1, "a missing QSO must be reported missing, not absorbed");
+        result.Updated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AKnownSubmodeStillMatchesALiteralParentModeRow()
+    {
+        // The sibling guard must not overshoot: a log row stored as the literal
+        // parent ("MFSK") is a legitimate target for any submode of that family.
+        var literal = Logged("MFSK");
+
+        await _service.MergeConfirmationsAsync(
+            Report("MFSK", submode: "MSK144"), ConfirmationSource.Lotw);
+
+        LotwConfirmed(literal).Should().BeTrue();
     }
 
     [Fact]
