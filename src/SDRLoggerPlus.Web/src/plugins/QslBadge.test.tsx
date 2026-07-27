@@ -11,6 +11,14 @@ describe('QslBadge', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('renders nothing for JSON null — the shape SignalR actually sends', () => {
+    // The server serializes a C# null as `lotw: null`, not an omitted key. A
+    // strict undefined check here once rendered every HamQTH-fallback lookup
+    // as three "does not accept" badges.
+    const { container } = render(<QslBadge label="LOTW" accepts={null} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('shows the label when the operator accepts the channel', () => {
     render(<QslBadge label="LOTW" accepts={true} />);
     expect(screen.getByText('LOTW')).toBeInTheDocument();

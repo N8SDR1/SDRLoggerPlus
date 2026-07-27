@@ -389,7 +389,10 @@ public class QrzController : ControllerBase
                 info.Email,
                 info.QslManager,
                 info.ImageUrl,
-                info.LicenseExpiration
+                info.LicenseExpiration,
+                info.Lotw,
+                info.Eqsl,
+                info.Mqsl
             ));
         }
         catch (QrzSubscriptionRequiredException)

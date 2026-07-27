@@ -44,11 +44,13 @@ export interface CallsignLookedUpEvent {
   baseCallsign?: string;
   compoundNote?: string;
   // QRZ-only "will accept" flags from the callbook profile. Three-state:
-  // true/false/undefined-for-unknown — undefined is NOT "no". Always undefined
-  // when the lookup fell back to HamQTH, which has no equivalent fields.
-  lotw?: boolean;
-  eqsl?: boolean;
-  mqsl?: boolean;
+  // true / false / nullish-for-unknown — and unknown is NOT "no". The server
+  // serializes C# null as JSON null (not an omitted key), so consumers must
+  // null-check loosely. Always nullish when the lookup fell back to HamQTH,
+  // which has no equivalent fields.
+  lotw?: boolean | null;
+  eqsl?: boolean | null;
+  mqsl?: boolean | null;
 }
 
 export interface QsoLoggedEvent {

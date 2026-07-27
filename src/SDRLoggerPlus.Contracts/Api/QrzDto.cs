@@ -50,5 +50,10 @@ public record QrzCallsignResponse(
     string? Email,
     string? QslManager,
     string? ImageUrl,
-    DateTime? LicenseExpiration
+    DateTime? LicenseExpiration,
+    // "Will accept" flags from the QRZ callbook profile. Three-state:
+    // true / false / null-for-unknown — null is NOT a refusal.
+    bool? Lotw = null,
+    bool? Eqsl = null,
+    bool? Mqsl = null
 );

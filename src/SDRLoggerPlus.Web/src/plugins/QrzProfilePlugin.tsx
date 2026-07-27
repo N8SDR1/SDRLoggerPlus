@@ -5,12 +5,15 @@ import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
 import { formatDistance } from '../utils/units';
 
-// `accepts` is a genuine three-state (true/false/undefined-for-unknown). Renders
-// nothing for undefined rather than a third "unknown" pill — QRZ leaves the field
-// blank far more often than it reports a real "no", and a whole row of grey
-// question marks would bury the two channels that do have an answer.
-export function QslBadge({ label, accepts }: { label: string; accepts?: boolean }) {
-  if (accepts === undefined) return null;
+// `accepts` is a genuine three-state: true / false / unknown. Unknown arrives in
+// BOTH nullish flavours — SignalR serializes a C# null as JSON null, while a
+// locally-built event may simply omit the key — so the check must be loose. A
+// strict `=== undefined` here once rendered every HamQTH-fallback lookup as three
+// "does not accept" badges. Unknown renders nothing rather than a third pill:
+// QRZ leaves the field blank far more often than it reports a real "no", and a
+// row of grey question marks would bury the channels that do have an answer.
+export function QslBadge({ label, accepts }: { label: string; accepts?: boolean | null }) {
+  if (accepts == null) return null;
   return (
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
@@ -167,10 +170,11 @@ export function QrzProfilePlugin() {
               )}
 
               {/* QSL confirmation channels — QRZ callbook only, so absent
-                  entirely on a HamQTH-sourced lookup. */}
-              {(focusedCallsignInfo.lotw !== undefined ||
-                focusedCallsignInfo.eqsl !== undefined ||
-                focusedCallsignInfo.mqsl !== undefined) && (
+                  entirely on a HamQTH-sourced lookup. Loose nullish checks:
+                  the wire carries null, a local event omits the key. */}
+              {(focusedCallsignInfo.lotw != null ||
+                focusedCallsignInfo.eqsl != null ||
+                focusedCallsignInfo.mqsl != null) && (
                 <div className="flex items-center gap-2 text-sm font-ui">
                   <QslBadge label="LOTW" accepts={focusedCallsignInfo.lotw} />
                   <QslBadge label="eQSL" accepts={focusedCallsignInfo.eqsl} />
