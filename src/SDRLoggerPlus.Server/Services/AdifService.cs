@@ -8,6 +8,7 @@ using SDRLoggerPlus.Contracts.Events;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Core.Database;
 using SDRLoggerPlus.Server.Hubs;
+using SDRLoggerPlus.Server.Services.Adif;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -52,7 +53,13 @@ public partial class AdifService : IAdifService
         _spotStatusService = spotStatusService;
     }
 
-    public IEnumerable<Qso> ParseAdif(string adifContent)
+    public IEnumerable<Qso> ParseAdif(string adifContent) => ParseAdif(adifContent, null);
+
+    /// <summary>
+    /// Parse ADIF, optionally collecting what had to be corrected or could not be understood.
+    /// Pass a collection to get the detail; pass null when only the QSOs matter.
+    /// </summary>
+    public IEnumerable<Qso> ParseAdif(string adifContent, ICollection<AdifFieldIssue>? issues)
     {
         // Skip header if present
         var eohMatch = EndOfHeaderPattern().Match(adifContent);
@@ -66,7 +73,7 @@ public partial class AdifService : IAdifService
             var trimmedRecord = record.Trim();
             if (string.IsNullOrEmpty(trimmedRecord)) continue;
 
-            var qso = ParseRecord(trimmedRecord);
+            var qso = ParseRecord(trimmedRecord, issues);
             if (qso != null)
             {
                 yield return qso;
@@ -107,7 +114,9 @@ public partial class AdifService : IAdifService
 
     public async Task<AdifImportResult> ImportAdifAsync(Stream stream, bool skipDuplicates = true, bool markAsSyncedToQrz = true, bool clearExistingLogs = false, CancellationToken cancellationToken = default)
     {
-        var qsos = ParseAdif(stream).ToList();
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var fieldIssues = new List<AdifFieldIssue>();
+        var qsos = ParseAdif(reader.ReadToEnd(), fieldIssues).ToList();
         var importedCount = 0;
         var skippedDuplicates = 0;
         var errorCount = 0;
@@ -260,12 +269,42 @@ public partial class AdifService : IAdifService
             errorCount > 0 ? $"Import complete with {errorCount} error(s)" : "Import complete"
         ));
 
-        return new AdifImportResult(qsos.Count, importedCount, skippedDuplicates, errorCount, errors);
+        // Roll the per-record findings up into one line per distinct problem.
+        var issueSummary = fieldIssues
+            .GroupBy(i => (i.Field, i.Original, i.Result, i.Action, i.Note))
+            .Select(g => new AdifImportIssueSummary(
+                g.Key.Field, g.Key.Original, g.Key.Result, g.Key.Action.ToString(), g.Count(), g.Key.Note))
+            .OrderByDescending(s => s.Count)
+            .ToList();
+
+        if (issueSummary.Count > 0)
+        {
+            _logger.LogInformation("ADIF import found {Distinct} distinct field issues across {Records} records",
+                issueSummary.Count, issueSummary.Sum(s => s.Count));
+        }
+
+        return new AdifImportResult(
+            qsos.Count, importedCount, skippedDuplicates, errorCount, errors, issueSummary);
     }
 
+    /// <summary>
+    /// Identity of a contact for duplicate detection: who, when, and on what band.
+    ///
+    /// Mode used to be part of this key, and that is what let 1,046 duplicate records into a
+    /// 24,544-record log. The same contact exported by two programs arrives with two mode
+    /// spellings — "DATA" and "MFSK", "PH" and "SSB", a truncated "FT2" and the "29" it was
+    /// truncated from — and a key containing the mode reads those as two different QSOs, so
+    /// the second one imports. Mode is the least reliable field in a real ADIF file and the
+    /// worst possible thing to hang identity on.
+    ///
+    /// Band stays, through the normalizer so "40M" and "40m" collapse to one key. It is
+    /// genuinely part of identity — the same station worked on two bands in the same minute is
+    /// two contacts — and unlike mode it is verifiable against the frequency.
+    /// </summary>
     private static string GetQsoKey(string callsign, DateTime qsoDate, string timeOn, string band, string mode)
     {
-        return $"{callsign.ToUpperInvariant()}|{qsoDate.Date:yyyyMMdd}|{timeOn}|{band}|{mode}";
+        _ = mode; // deliberately not part of identity — see above
+        return $"{callsign.ToUpperInvariant()}|{qsoDate.Date:yyyyMMdd}|{timeOn}|{AdifFieldNormalizer.CanonicalBandKey(band)}";
     }
 
     /// <summary>
@@ -464,7 +503,7 @@ public partial class AdifService : IAdifService
         return ExportToAdif(qsoList, settings.Station.Callsign);
     }
 
-    private Qso? ParseRecord(string record)
+    private Qso? ParseRecord(string record, ICollection<AdifFieldIssue>? issues = null)
     {
         var fields = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         var extraFields = new BsonDocument();
@@ -568,14 +607,74 @@ public partial class AdifService : IAdifService
             }
         }
 
+        // Canonicalise band and mode before they reach the database. Until this existed, both
+        // were stored exactly as written: this log ended up holding "40M" and "40m" as separate
+        // spellings across 13,106 records, and 1,130 records with modes the ADIF enumeration
+        // does not define. Anything unrecognised is kept verbatim and reported, never guessed at.
+        //
+        // The stored fallbacks below (20m, SSB, Unknown) predate this code and are kept so the
+        // change is report-only — but they are fabrications, so each one is now flagged. A
+        // band derived from FREQ is not flagged: frequency is the trustworthy field.
+        var rawBand = GetStringField(fields, "band");
+        var rawMode = GetStringField(fields, "mode");
+        var freqKhz = GetDoubleField(fields, "freq");
+
+        string bandInput;
+        AdifFieldIssue? bandOriginIssue = null;
+        if (!string.IsNullOrWhiteSpace(rawBand))
+        {
+            bandInput = rawBand;
+        }
+        else if (freqKhz.HasValue)
+        {
+            // FREQ is in kHz; BandHelper wants Hz.
+            bandInput = BandHelper.GetBand((long)(freqKhz.Value * 1000.0));
+            if (bandInput == "Unknown")
+            {
+                bandOriginIssue = new AdifFieldIssue(
+                    "band", $"FREQ {freqKhz.Value}", "Unknown", AdifFieldAction.Flagged,
+                    $"No BAND field, and FREQ {freqKhz.Value} kHz sits outside every amateur band. " +
+                    "Stored as 'Unknown'.");
+            }
+        }
+        else
+        {
+            bandInput = "20m";
+            bandOriginIssue = new AdifFieldIssue(
+                "band", "(missing)", "20m", AdifFieldAction.Flagged,
+                "Record has neither BAND nor FREQ. Stored as '20m', the importer's long-standing " +
+                "default — almost certainly wrong. Check the source log.");
+        }
+
+        string modeInput;
+        AdifFieldIssue? modeOriginIssue = null;
+        if (!string.IsNullOrWhiteSpace(rawMode))
+        {
+            modeInput = rawMode;
+        }
+        else
+        {
+            modeInput = "SSB";
+            modeOriginIssue = new AdifFieldIssue(
+                "mode", "(missing)", "SSB", AdifFieldAction.Flagged,
+                "Record has no MODE. Stored as 'SSB', the importer's long-standing default.");
+        }
+
+        var (band, bandIssue) = AdifFieldNormalizer.NormalizeBand(bandInput);
+        var (mode, modeIssue) = AdifFieldNormalizer.NormalizeMode(modeInput);
+        // An origin issue supersedes the normalizer's: "this value was fabricated" explains
+        // more than "this value is unrecognised" ever could.
+        if ((bandOriginIssue ?? bandIssue) is { } bi) issues?.Add(bi);
+        if ((modeOriginIssue ?? modeIssue) is { } mi) issues?.Add(mi);
+
         var qso = new Qso
         {
             Callsign = call.ToUpperInvariant(),
             QsoDate = DateTime.SpecifyKind(qsoDateTime, DateTimeKind.Utc),
             TimeOn = GetStringField(fields, "time_on") ?? qsoDateTime.ToString("HHmm"),
             TimeOff = GetStringField(fields, "time_off"),
-            Band = GetStringField(fields, "band") ?? DeriveFromFrequency(fields),
-            Mode = GetStringField(fields, "mode") ?? "SSB",
+            Band = band,
+            Mode = mode,
             Frequency = GetDoubleField(fields, "freq"),
             RstSent = GetStringField(fields, "rst_sent"),
             RstRcvd = GetStringField(fields, "rst_rcvd"),
@@ -878,12 +977,4 @@ public partial class AdifService : IAdifService
         return digits[..6];
     }
 
-    private static string DeriveFromFrequency(Dictionary<string, object> fields)
-    {
-        var freq = GetDoubleField(fields, "freq");
-        if (!freq.HasValue) return "20m";
-
-        // Frequency is now in kHz - convert to Hz for BandHelper
-        return BandHelper.GetBand((long)(freq.Value * 1000.0));
-    }
 }

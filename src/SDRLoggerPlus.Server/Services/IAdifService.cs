@@ -44,10 +44,30 @@ public interface IAdifService
     Task<ConfirmationMergeResponse> MergeConfirmationsAsync(Stream stream, ConfirmationSource source, CancellationToken cancellationToken = default);
 }
 
+// AdifImportIssueSummary is declared below; the per-record AdifFieldIssue it summarises
+// lives in Services/Adif/AdifFieldNormalizer.cs.
 public record AdifImportResult(
     int TotalRecords,
     int ImportedCount,
     int SkippedDuplicates,
     int ErrorCount,
-    IEnumerable<string> Errors
+    IEnumerable<string> Errors,
+    // What had to be corrected, and what could not be understood. Previously the import
+    // reported these four integers and nothing else, so a file full of malformed modes
+    // looked exactly like a clean one — which is how 1,130 bad records accumulated unnoticed.
+    IReadOnlyList<AdifImportIssueSummary>? Issues = null
+);
+
+/// <summary>
+/// One distinct problem found during import, with how many records it affected. Grouped
+/// rather than per-record: "'FT2' is not a mode — 114 records" is actionable, 114 identical
+/// lines are not.
+/// </summary>
+public record AdifImportIssueSummary(
+    string Field,
+    string OriginalValue,
+    string StoredValue,
+    string Action,
+    int Count,
+    string Note
 );
