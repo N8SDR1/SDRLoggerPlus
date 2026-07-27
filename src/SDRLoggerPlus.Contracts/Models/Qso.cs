@@ -232,6 +232,18 @@ public class ContestInfo
     [BsonElement("stationCall")]
     public string? StationCallsign { get; set; }
 
+    // MULTI-OP: the individual operator at the key for this QSO (personal call or initials).
+    // Distinct from StationCallsign (the entry's operating call) — feeds Cabrillo OPERATORS: and
+    // "who worked what". NULL = single-op / not tracked.
+    [BsonElement("operator")]
+    public string? Operator { get; set; }
+
+    // MULTI-OP: which logging position/station recorded this QSO (a station label, or the auth
+    // device id). Identifies the transmitter/position for multi-transmitter categories and drives
+    // the band/mode occupancy view. NULL = single-op / not tracked.
+    [BsonElement("loggedByStation")]
+    public string? LoggedByStation { get; set; }
+
     [BsonElement("serialSent")]
     public string? SerialSent { get; set; }
 
