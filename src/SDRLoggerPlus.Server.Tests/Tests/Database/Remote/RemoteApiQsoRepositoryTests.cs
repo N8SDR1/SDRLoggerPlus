@@ -108,6 +108,22 @@ public class RemoteApiQsoRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task Create_sameOriginId_twice_landsOnceOnTheHost()
+    {
+        // The outbox will re-send a QSO whose ack was lost. With the origin-minted Id + the host's
+        // idempotent create, that retry must NOT double-log — the whole client→host→DB chain.
+        var qso = Qso();
+        qso.Id = "5f9a1b2c3d4e5f6a7b8c9d0e";
+        await _client.CreateAsync(qso);
+
+        var retry = Qso();
+        retry.Id = "5f9a1b2c3d4e5f6a7b8c9d0e";
+        await _client.CreateAsync(retry);
+
+        (await _client.GetCountAsync()).Should().Be(1);
+    }
+
+    [Fact]
     public async Task HostOnlySyncMethods_areNoOpsOnAClient()
     {
         // A client must never independently upload the shared log — these delegate to the host.
