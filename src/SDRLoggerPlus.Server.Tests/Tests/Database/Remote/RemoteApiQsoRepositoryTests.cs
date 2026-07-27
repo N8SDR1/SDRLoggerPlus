@@ -25,6 +25,7 @@ public class RemoteApiQsoRepositoryTests : IDisposable
 {
     private readonly LiteDbTestFixture _hostDb;
     private readonly TestServer _host;
+    private readonly RemoteWriteOutbox _outbox;
     private readonly RemoteApiQsoRepository _client; // the field station's repo
 
     public RemoteApiQsoRepositoryTests()
@@ -54,7 +55,8 @@ public class RemoteApiQsoRepositoryTests : IDisposable
             });
 
         _host = new TestServer(builder);
-        _client = new RemoteApiQsoRepository(_host.CreateClient(), NullLogger<RemoteApiQsoRepository>.Instance);
+        _outbox = new RemoteWriteOutbox(Path.Combine(Path.GetTempPath(), $"sdrl-outbox-{Guid.NewGuid():N}.json"));
+        _client = new RemoteApiQsoRepository(_host.CreateClient(), _outbox, NullLogger<RemoteApiQsoRepository>.Instance);
     }
 
     public void Dispose()
@@ -139,6 +141,25 @@ public class RemoteApiQsoRepositoryTests : IDisposable
         await _client.CreateAsync(retry);
 
         (await _client.GetCountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Create_whenHostUnreachable_queuesToOutbox_andReturnsOptimistically()
+    {
+        // A client whose host can't be reached (dead address) must NOT lose the QSO or throw at the
+        // operator — it queues to the outbox and returns as logged; the flush service re-sends later.
+        var outbox = new RemoteWriteOutbox(Path.Combine(Path.GetTempPath(), $"sdrl-outbox-{Guid.NewGuid():N}.json"));
+        using var deadClient = new HttpClient
+        {
+            BaseAddress = new Uri("http://127.0.0.1:59999/"),
+            Timeout = TimeSpan.FromSeconds(1),
+        };
+        var repo = new RemoteApiQsoRepository(deadClient, outbox, NullLogger<RemoteApiQsoRepository>.Instance);
+
+        var result = await repo.CreateAsync(Qso()); // must not throw
+
+        result.Id.Should().NotBeNullOrEmpty();
+        outbox.Count.Should().Be(1);
     }
 
     [Fact]

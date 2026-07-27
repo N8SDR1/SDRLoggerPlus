@@ -22,18 +22,17 @@ namespace SDRLoggerPlus.Server.Core.Database.Remote;
 public sealed class RemoteApiQsoRepository : IQsoRepository
 {
     private readonly HttpClient _http; // pre-configured: BaseAddress = host, Authorization: Bearer <token>
+    private readonly RemoteWriteOutbox _outbox;
     private readonly ILogger<RemoteApiQsoRepository> _log;
 
     // Web defaults (camelCase, matching the API) PLUS the BsonDocument converter so Qso.AdifExtra
     // (custom ADIF fields) round-trips faithfully instead of being mangled by System.Text.Json.
-    private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new BsonDocumentJsonConverter() }
-    };
+    private static readonly JsonSerializerOptions _json = RemoteJson.Options;
 
-    public RemoteApiQsoRepository(HttpClient http, ILogger<RemoteApiQsoRepository> log)
+    public RemoteApiQsoRepository(HttpClient http, RemoteWriteOutbox outbox, ILogger<RemoteApiQsoRepository> log)
     {
         _http = http;
+        _outbox = outbox;
         _log = log;
     }
 
@@ -46,7 +45,23 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
         // Mint the origin id here if the caller didn't — this is the idempotency/dedup key the outbox
         // (S3) and multi-USB merge depend on, and the host's repo respects a provided id (S0.5).
         if (string.IsNullOrEmpty(qso.Id)) qso.Id = ObjectId.NewObjectId().ToString();
-        var res = await _http.PostAsJsonAsync("api/data/qsos", qso, _json);
+
+        HttpResponseMessage res;
+        try
+        {
+            res = await _http.PostAsJsonAsync("api/data/qsos", qso, _json);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            // Couldn't REACH the host (down / Wi-Fi blip) — queue it and return as logged so the operator
+            // keeps working. The flush service re-sends when the host returns; idempotent on the Id (S2)
+            // so a retry never double-logs. (A reached-but-errored response below still throws — a bad
+            // token or bad data is a real error, not something to queue-loop on.)
+            _log.LogWarning("Host unreachable — QSO {Id} queued to the outbox for retry.", qso.Id);
+            _outbox.Enqueue(qso);
+            return qso;
+        }
+
         res.EnsureSuccessStatusCode();
         return (await res.Content.ReadFromJsonAsync<Qso>(_json))!;
     }

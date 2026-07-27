@@ -48,6 +48,13 @@ public static class DbServiceRegistration
         // normal single-machine install — it's the local LiteDB.
         if (config.Provider == DatabaseProvider.RemoteHost && !string.IsNullOrWhiteSpace(config.HostUrl))
         {
+            // Offline outbox (S3): QSOs logged while the host is unreachable are queued here and
+            // re-sent by OutboxFlushService. Persisted beside the config so a blip across a restart
+            // still doesn't lose a contact.
+            services.AddSingleton(sp => new RemoteWriteOutbox(
+                Path.Combine(Path.GetDirectoryName(sp.GetRequiredService<IUserConfigService>().GetConfigPath())!,
+                    "outbox.json")));
+
             var baseUrl = config.HostUrl!.TrimEnd('/') + "/";
             services.AddHttpClient<IQsoRepository, RemoteApiQsoRepository>(client =>
             {
