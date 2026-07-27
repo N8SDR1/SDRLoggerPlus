@@ -430,7 +430,10 @@ public partial class AdifService : IAdifService
             var target =
                 (submode is not null ? Find(index, MergeKey(rec.Callsign, rec.Band, submode), rec.QsoDate) : null)
                 ?? Find(index, MergeKey(rec.Callsign, rec.Band, rec.Mode), rec.QsoDate)
-                ?? Find(familyIndex, FamilyMergeKey(rec.Callsign, rec.Band, submode ?? rec.Mode), rec.QsoDate);
+                ?? (submode is not null ? Find(familyIndex, FamilyMergeKey(rec.Callsign, rec.Band, submode), rec.QsoDate) : null)
+                // The report's own MODE gets its own family try: a submode this app
+                // doesn't know must not block the parent-mode lookup that would work.
+                ?? Find(familyIndex, FamilyMergeKey(rec.Callsign, rec.Band, rec.Mode), rec.QsoDate);
             if (target is null)
             {
                 unmatched++;

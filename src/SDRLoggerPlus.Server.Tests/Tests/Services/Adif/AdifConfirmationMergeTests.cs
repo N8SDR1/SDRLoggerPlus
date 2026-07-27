@@ -131,6 +131,19 @@ public class AdifConfirmationMergeTests
     }
 
     [Fact]
+    public async Task AnUnknownSubmodeDoesNotBlockTheParentModeFallback()
+    {
+        // LoTW ships submodes this app hasn't heard of yet. The unknown submode's
+        // miss must not eat the MODE=MFSK family lookup that still identifies the QSO.
+        var qso = Logged("MSK144");
+
+        await _service.MergeConfirmationsAsync(
+            Report("MFSK", submode: "FUTUREMODE"), ConfirmationSource.Lotw);
+
+        LotwConfirmed(qso).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task AnMfskReportDoesNotConfirmAnFt8Qso()
     {
         // FT8 is its own ADIF mode, not an MFSK submode. Widening must stop at the
