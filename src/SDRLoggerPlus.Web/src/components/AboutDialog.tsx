@@ -394,6 +394,7 @@ function HelpTab() {
           </ul>
           <p>RST defaults sensibly per mode (599 CW / 59 phone). With the Combo link on, the received <B>S</B> can auto-fill from the meter (see above).</p>
           <p>Your full logbook lives in <B>Log History</B> — search, sort and filter every QSO. Columns include date, time, call, band, mode, RST, a <B>Grid</B> column (the worked station's Maidenhead grid), name and country. <B>Drag any column</B> to reorder it — a newly added column starts at the far right until you move it, and your layout is remembered.</p>
+          <p>As you type a call in Log Entry, Log History <B>auto-filters</B> to that station so you can see your history with them. Don't want that? The <B>History On/Off</B> toggle next to the Callsign field turns the auto-filter off (it's remembered) — the callbook lookup and name/grid prefill still work exactly the same.</p>
         </Section>
 
         <Section id="sat" title="Satellites">
@@ -517,7 +518,7 @@ function HelpTab() {
         </Section>
 
         <Section id="callbook" title="Callbook, Uploads & Import">
-          <p><B>Callbook lookups</B>: QRZ then HamQTH (<P>Settings → Web Logbooks</P>), falling back to the bundled AD1C <B>cty.dat</B> for country + approximate coords. Keep cty.dat current with the update button under <P>Settings → Web Logbooks → Country Files</P>.</p>
+          <p><B>Callbook lookups</B>: QRZ then HamQTH (<P>Settings → Web Logbooks</P>), falling back to the bundled AD1C <B>cty.dat</B> for country + approximate coords. Keep cty.dat current with the update button under <P>Settings → Web Logbooks → Country Files</P>. The <B>QRZ Profile</B> panel also shows that station's <B>QSL acceptance badges</B> — whether they confirm via LoTW, eQSL, and paper QSL — so you know how you'll get the contact confirmed.</p>
           <p><B>Upload logbooks</B> (per-QSO or on demand), each in <P>Settings → Web Logbooks</P>: <B>LoTW</B> (signs via TQSL), <B>eQSL</B>, <B>Club Log</B>, <B>HRDLog</B>, and <B>QRZ Logbook</B>. To push just a handful, <B>tick the rows in Log History</B> and use the <B>QRZ</B> / <B>LoTW</B> buttons on the selection bar — it uploads exactly those (LoTW re-signs even ones already sent, so it's also how you re-send a corrected QSO).</p>
           <p><B>Import</B> — <P>Settings → ADIF Monitor</P> watches external <span className="font-mono text-[11px] text-dark-100">.adi</span> files (VarAC, MSHV, … — <B>Browse</B> to each file or paste its path) and listens for ADIF-over-UDP from N1MM / Logger32 / DXKeeper; <B>WSJT-X / JTDX / MSHV</B> auto-log has its own section — <P>Settings → Decoder Link (UDP)</P> — with two independent UDP sources so you can run two decoders (say WSJT-X and JTDX) on separate ports at once.</p>
           <p><B>Backup &amp; Restore</B> (<P>Settings → Backup &amp; Restore</P>) — turn on <B>Scheduled Backups</B> to save your logbook automatically (daily, weekly, or on exit) to a folder you choose, keeping the last N copies. You can also <B>Export / Import all app settings</B> to a single file — ideal for moving your whole setup to another PC or keeping a safe copy off-machine.</p>
@@ -567,7 +568,7 @@ function HelpTab() {
 
         <Section id="awards" title="Awards & Statistics">
           <ul className="ml-4 list-disc space-y-1.5">
-            <li><B>Statistics</B> panel — DXCC, WAS, WAZ, WPX, WAC, 5-band awards, VUCC, <B>FFMA</B>, POTA, IOTA; worked vs. confirmed, filterable by band / continent.</li>
+            <li><B>Statistics</B> panel — DXCC, WAS, WAZ, WPX, WAC, 5-band awards, VUCC, <B>FFMA</B>, POTA, IOTA; worked vs. confirmed, filterable by band / continent. The DXCC tab shows each entity's <B>ARRL primary prefix</B> (K, VE, DL…) beside the name and can <B>sort by prefix</B>.</li>
             <li><B>FFMA</B> (Fred Fish Memorial Award) — all 488 six-metre grids of the lower 48, confirmed by LoTW or paper QSL. Shown as a checklist grouped by grid field: confirmed (green), worked-but-unconfirmed (amber), and still-needed — filter to <em>Needed</em> to see exactly what's left to chase.</li>
             <li><B>Propagation</B> panel — HF band conditions (from N0NBH) as a 24-hour heatmap by band and UTC hour.</li>
             <li><B>Rotator</B> panel — azimuth / elevation readout + preset headings; configure the hamlib rotctld / serial connection in <P>Settings → Rotator</P>.</li>
