@@ -196,6 +196,30 @@ The research is unambiguous:
 
 ---
 
+## 5a. Phase 3 — historical repair for USERS' logs (decision: opt-in tool)
+
+Phase 1/2 fix live behavior for everyone the moment they update — no *new* corruption. The tail is
+*historical* rows in each user's own local DB (we can't reach them remotely), mostly from the pre-#21
+edit-modal bug. **Decision (operator, 2026-07-28): an opt-in in-app tool, never a silent mass-migration
+of other people's data.**
+
+**Settings → Logbook → "Verify QSO times"** (read-only scan → review → optional repair):
+- **Scan (read-only)** buckets every row by comparing `QsoDate`'s time-of-day against the `TimeOn`
+  string (the reliable UTC field):
+  - *Consistent* — `QsoDate` time ≈ `TimeOn` → leave alone (the vast majority).
+  - *Fixable (lost time)* — `QsoDate` time = `00:00` but `TimeOn` is a real non-midnight time → the
+    flatten bug; reconstruct `QsoDate` = its date + `TimeOn`. **Only this bucket is repaired.**
+  - *Ambiguous* — disagree in some other way, or a wrong **date** (evening QSO bumped a day — no signal
+    to recover, memory flags it as data loss) → **report only, never auto-change.**
+- **Repair** only the *Fixable* bucket, only on explicit user confirm: **snapshot first** (backup
+  engine), then a **flag-preserving direct write** (`_context.Qsos.Update`, sync flags untouched, no
+  `UpdatedAt` bump, never via `UpdateAsync`) so it can't re-queue a QRZ/LoTW upload. Idempotent.
+- **Honest limits shown in the UI:** fixes the *local* log only (already-uploaded wrong dates on
+  QRZ/LoTW are left — re-uploading is the catastrophe we refuse); wrong *dates* are reported, not fixed.
+
+Sits naturally alongside the duplicate-remover (`duplicate-management.md`) as a "Logbook health"
+maintenance area — both are scan → review → snapshot → repair, upload-safe.
+
 ## 6. The one data tail: historical double-shifted manual entries
 
 If a manual QSO was ever created from a client that sent a **naive** datetime (`Kind=Unspecified`),
