@@ -71,7 +71,7 @@ const MODE_GROUPS: { label: string; modes: string[] }[] = [
   { label: 'CW',             modes: ['CWU', 'CWL'] },
   { label: 'AM / FM',        modes: ['AM', 'SAM', 'FM', 'NFM'] },
   { label: 'Digital (TCI)',  modes: ['DIGU', 'DIGL'] },
-  { label: 'Digital (Log)',  modes: ['FT8', 'FT4', 'JS8', 'RTTY', 'PSK31', 'WSPR', 'JT65', 'JT9', 'DIGI'] },
+  { label: 'Digital (Log)',  modes: ['FT8', 'FT4', 'JS8', 'Q65', 'MSK144', 'RTTY', 'PSK31', 'WSPR', 'JT65', 'JT9', 'DIGI'] },
 ];
 
 // Treat CWU/CWL as "CW" for RST/RSTr defaulting and dB-enhancement checks
