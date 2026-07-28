@@ -196,6 +196,7 @@ const HELP_SECTIONS = [
   { id: 'logging',  title: 'Logging QSOs' },
   { id: 'sat',      title: 'Satellites' },
   { id: 'contest',  title: 'Contest Logging' },
+  { id: 'multiop',  title: 'Multi-op (Beta)' },
   { id: 'spots',    title: 'DX Spots & the Map' },
   { id: 'decodes',  title: 'Digital Decodes & Grid' },
   { id: 'weather',  title: 'Weather & Alerts' },
@@ -357,7 +358,42 @@ function HelpTab() {
             <li><B>Power class &amp; bonuses.</B> Set your <B>power class</B> and the final-score power multiplier is applied where the rules use one (Field Day QRP ×5, Winter Field Day QRP ×4 / Low ×2, Stew Perry, …). For contests with self-declared objective bonuses (Winter Field Day), a <B>bonus-points</B> box adds them to your score.</li>
           </ul>
           <p className="text-xs text-dark-300">Built-in definitions are read-only — <B>clone</B> one to tweak a ruleset, or author your own. Exchanges, dupes, multipliers <em>and scoring</em> are correct across the catalog — including the band-weighted (CQ WPX low bands, VHF per-band), distance-based (Stew Perry, ARRL Digital), North-America-exception (CQ WW / WPX), per-mode-multiplier (ARRL 10 m), the North-America-party multipliers (NAQP and NA Sprint count US states + provinces + NA countries only — a European contact scores points, not a multiplier) and Winter Field Day rules.</p>
-          <p className="text-xs text-amber-300/90"><B>* Single-station today.</B> Contest &amp; Field Day logging runs on <B>one computer with its own local log</B> — there is no live shared or networked log across multiple operators yet (it's on the roadmap). For a <B>multi-op Field Day</B> now, each operator logs on their own machine and you <B>merge the ADIF exports afterward</B>. Live networked multi-op — and support for larger groups — is planned.</p>
+          <p className="text-xs text-amber-300/90">🧪 <B>New — multi-operator networked logging (early testing).</B> Several stations can now share <B>one live log</B> — see <button onClick={() => go('multiop')} className="font-bold text-accent-primary hover:underline">Multi-op (Beta)</button> below. It's a pre-test feature: give it a practice run before a critical contest.</p>
+        </Section>
+
+        <Section id="multiop" title="Multi-op — shared networked logging (Beta)">
+          <p className="text-xs text-amber-300/90 border border-amber-400/30 rounded p-2 bg-amber-400/5">🧪 <B>Early testing / pre-test.</B> This works and is covered by tests, but it hasn't yet been proven at scale on real multi-station hardware. <B>Don't rely on it for a critical contest</B> — try it on a practice run first, and report anything that breaks on <button onClick={() => openLink(GITHUB_URL + '/issues')} className="font-bold text-accent-primary hover:underline">GitHub Issues</button> or <button onClick={() => openLink(DISCORD_URL)} className="font-bold text-accent-primary hover:underline">Discord</button>. Single-station logging is unaffected — leave <P>Settings → Server</P> on <B>Local</B> and nothing changes.</p>
+
+          <p><B>What it is.</B> Share <B>one live log across several stations</B> — for Field Day or any multi-op. Each computer runs its own copy of SDRLogger+ and its own radio; only the <em>log</em> is shared. Every station logs into, and dupe-checks and scores against, the <B>same shared log</B> in real time. It's the N1MM+ / N3FJP networking idea, with two things they lack: there are <B>no shared files or drive permissions</B> to wrangle (it's a proper authenticated network API), and <B>every station signs in with its own token</B>.</p>
+
+          <p><B>How the connection works.</B> One machine is the <B>host</B> — it owns the shared log and everyone else dials into it. It can be one of the operating laptops, a spare PC, or a small always-on box on the LAN. The other stations are <B>clients</B> that connect to the host over your network. All you exchange is the host's <B>address</B> (e.g. <span className="font-mono text-[11px] text-accent-primary">http://192.168.1.50:5050</span>) and a per-station <B>token</B>.</p>
+
+          <p className="font-semibold text-white mt-1">Set up the host</p>
+          <ol className="ml-4 list-decimal space-y-1.5">
+            <li>On the host machine, open <P>Settings → Server</P> and pick <B>Host this log</B>.</li>
+            <li>Under <B>Device tokens</B>, add one per station (type a name like <em>Station B</em> → <B>Add device</B>). Copy each generated token and hand it to that station — it's shown once.</li>
+            <li>Turn on <B>Share this log on my network</B>. (The app won't host without at least one token — that's the guard against an open, unauthenticated log.) It then lists the <B>address</B> other stations dial; copy it.</li>
+            <li><B>Save</B>. The host is now serving the shared log to your LAN.</li>
+          </ol>
+
+          <p className="font-semibold text-white mt-1">Connect each other station</p>
+          <ol className="ml-4 list-decimal space-y-1.5">
+            <li>On that station, open <P>Settings → Server</P> and pick <B>Connect to a host</B>.</li>
+            <li>Paste the host's <B>Host address</B> and the <B>Access token</B> that station was given.</li>
+            <li>Click <B>Test connection</B> to confirm it reaches the host and the token is accepted, then <B>Save</B> and restart the app.</li>
+          </ol>
+          <p className="text-xs text-dark-300">Everyone is now on one shared log — every QSO, dupe check and score reflects the whole team live. Each operator still runs their own radio, panadapter, spots and layout exactly as before; only the logbook is shared.</p>
+
+          <p className="font-semibold text-white mt-1">Built to survive a Field Day</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>Outage-tough.</B> If the host or the Wi-Fi drops, a client <B>never loses a QSO</B> — logged contacts queue locally and re-send automatically when the link returns, and dupe-checking keeps working offline from a local cache. Contacts carry a stable ID so a re-send is never double-counted.</li>
+            <li><B>Host-allocated serials.</B> When a contest uses serial numbers (CQ WPX, ARRL Sweepstakes), the host hands out one atomic sequence so two stations never issue the same number. Field Day uses no serial, so nothing to configure there.</li>
+            <li><B>One clock.</B> The host is the <B>time authority</B> — every station's QSO times agree even with no internet, which keeps cross-station dupe-checking honest.</li>
+            <li><B>Coordination panel.</B> Add the <B>Multi-op</B> panel (it's in the panel picker, tagged <em>field day</em>) for a live <B>who's-on-what board</B>: each station's band/mode, <B>RF-collision warnings</B> (“⚠ Watch out — N9BC is also on 20 m USB”), and <B>operator chat</B> to pass messages across the site.</li>
+            <li><B>USB failover copy.</B> Point <P>Settings → Backup</P> at a live <B>ADIF mirror</B> path (e.g. a USB stick) and the log is continuously written out — a pull-and-go copy if you ever need to evacuate a laptop and keep operating.</li>
+          </ul>
+
+          <p className="text-xs text-dark-300"><B>How big?</B> Comfortable for a <B>small/medium group on the built-in database (roughly up to ~8 operators)</B> — enough for most Field Day sites. A SQL-backed server path for larger stations (15–20+) is the next step; until we publish a load-tested number, treat bigger groups as unproven. If you're unsure for a big event, the old fallback still works: each op logs locally and you merge the ADIF exports afterward.</p>
         </Section>
 
         <Section id="spots" title="DX Spots & the Map">
