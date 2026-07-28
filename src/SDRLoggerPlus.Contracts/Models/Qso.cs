@@ -26,12 +26,21 @@ public class Qso
     [BsonElement("call")]
     public string Callsign { get; set; } = null!;
 
+    /// <summary>
+    /// The UTC instant of the contact (date AND time). This is the canonical time frame for the
+    /// whole app — QSOs are stored, compared, filtered, exported and uploaded in UTC, and local time
+    /// exists only at the display edge. See docs/design/timezone-architecture.md. Do NOT store a local
+    /// wall-clock value here, and derive <see cref="TimeOn"/>/<see cref="TimeOff"/> and every exported
+    /// QSO_DATE/TIME_ON from this single instant so they can never drift.
+    /// </summary>
     [BsonElement("qso_datetime")]
     public DateTime QsoDate { get; set; }
 
+    /// <summary>ADIF UTC time-on, "HHmm"/"HHmmss" — the time-of-day of <see cref="QsoDate"/>.</summary>
     [BsonElement("time_on")]
     public string TimeOn { get; set; } = null!;
 
+    /// <summary>ADIF UTC time-off, "HHmm"/"HHmmss", or null.</summary>
     [BsonElement("time_off")]
     public string? TimeOff { get; set; }
 

@@ -53,16 +53,30 @@ on:
 
 jobs:
   backend-tests:
-    name: Backend Tests (.NET)
+    name: Backend Tests (.NET) — ${{ matrix.label }}
     runs-on: ubuntu-latest
     # A hung test run used to inherit GitHub's 6-hour default and sit on a runner that
     # whole time, while `build-check` (which needs this job) never started. A healthy
     # run finishes in 2-3 minutes.
     timeout-minutes: 15
 
+    # Run the whole suite across UTC + a negative-offset and a positive-offset zone.
+    # QSO date/time is stored/compared in UTC and this class of bug is INVISIBLE on a
+    # UTC-only runner (see docs/design/timezone-architecture.md — the day-boundary
+    # miss only shows when the server's local day differs from UTC). This matrix is the
+    # standing guard against a timezone regression sneaking back in.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { tz: 'UTC',              label: 'utc' }
+          - { tz: 'America/New_York', label: 'us-eastern' }   # negative offset
+          - { tz: 'Pacific/Auckland', label: 'nz' }           # positive offset
+
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
       DOTNET_NOLOGO: 1
+      TZ: ${{ matrix.tz }}
       AI_LIVE_TESTS: ${{ secrets.AI_LIVE_TESTS }}
       QRZ_LIVE_TESTS: ${{ secrets.QRZ_LIVE_TESTS }}
 
@@ -117,7 +131,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: backend-test-results
+          name: backend-test-results-${{ matrix.label }}
           path: ./test-results/*.trx
           if-no-files-found: ignore
 
