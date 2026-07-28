@@ -198,6 +198,12 @@ builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Contesting.ContestBr
 builder.Services.AddScoped<SDRLoggerPlus.Server.Services.Contesting.ContestSessionService>();
 builder.Services.AddScoped<SDRLoggerPlus.Server.Services.Contesting.ContestService>();
 
+// Multi-op shared serial allocator (S5): host-side atomic serials so all stations draw from one
+// sequence. Persisted beside the config so a host restart continues (not restarts) the sequence.
+builder.Services.AddSingleton(sp => new SDRLoggerPlus.Server.Services.Contesting.SharedSerialAllocator(
+    Path.Combine(Path.GetDirectoryName(sp.GetRequiredService<IUserConfigService>().GetConfigPath())!,
+        "shared-serials.json")));
+
 // Register DX News service
 builder.Services.AddScoped<IDXNewsService, DXNewsService>();
 
