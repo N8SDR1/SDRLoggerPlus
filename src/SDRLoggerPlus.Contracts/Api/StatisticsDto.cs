@@ -30,13 +30,30 @@ public record BandSummary(
     int EntitiesConfirmed
 );
 
+/// <summary>
+/// Which confirmation channels count as "confirmed". ARRL awards (VUCC, FFMA)
+/// credit only LoTW and paper cards, so a grid confirmed on eQSL or QRZ Logbook
+/// alone reads as confirmed under <see cref="Any"/> but not under
+/// <see cref="AwardRules"/> — the mismatch reported in issue #46, where the grid
+/// map painted grids green that the FFMA screen correctly called unconfirmed.
+/// </summary>
+public enum ConfirmationRule
+{
+    /// <summary>LoTW, paper QSL, eQSL, or QRZ Logbook.</summary>
+    Any,
+
+    /// <summary>LoTW or paper QSL only — what ARRL accepts.</summary>
+    AwardRules
+}
+
 public record StatisticsFilters(
     string? Band = null,
     string? Mode = null,
     string? Continent = null,
     string? Status = null,
     DateTime? FromDate = null,
-    DateTime? ToDate = null
+    DateTime? ToDate = null,
+    ConfirmationRule Confirmations = ConfirmationRule.Any
 );
 
 public record VuccStatistics(

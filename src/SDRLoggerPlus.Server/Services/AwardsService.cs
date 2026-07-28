@@ -214,22 +214,30 @@ public partial class AwardsService : IAwardsService
         }
         var filteredList = filtered.ToList();
 
-        var qsos = filteredList
-            .Where(q => !string.IsNullOrEmpty(q.Grid) && q.Grid.Length >= 4)
-            .Where(q => VuccBands.Contains(q.Band, StringComparer.OrdinalIgnoreCase))
+        // VUCC is an ARRL award, so the caller can ask for award-rules counting
+        // (LoTW + paper card only) instead of any-channel confirmation (#46).
+        var isConfirmed = ConfirmationPolicy.For(filters?.Confirmations ?? ConfirmationRule.Any);
+
+        // Station.Grid first, legacy top-level as fallback — the precedence FFMA and
+        // the grid map use. Live-logged QSOs carry their grid ONLY on Station
+        // (issue #42's class of bug); reading just q.Grid hid them from VUCC too.
+        var gridRows = filteredList
+            .Select(q => (Qso: q, Grid: NormalizeGrid(q.Station?.Grid ?? q.Grid)))
+            .Where(x => x.Grid != null)
+            .Where(x => VuccBands.Contains(x.Qso.Band, StringComparer.OrdinalIgnoreCase))
             .ToList();
 
         // Group by 4-char grid prefix + band
-        var gridGroups = qsos
-            .GroupBy(q => new { Grid = q.Grid![..4].ToUpperInvariant(), Band = q.Band.ToLowerInvariant() })
+        var gridGroups = gridRows
+            .GroupBy(x => new { Grid = x.Grid!, Band = x.Qso.Band.ToLowerInvariant() })
             .ToList();
 
         var gridDetails = new List<GridDetail>();
 
         foreach (var group in gridGroups)
         {
-            var groupQsos = group.ToList();
-            var confirmed = groupQsos.Any(IsConfirmed);
+            var groupQsos = group.Select(x => x.Qso).ToList();
+            var confirmed = groupQsos.Any(isConfirmed);
 
             // Filter by status
             if (filters != null && !string.IsNullOrEmpty(filters.Status))
@@ -257,8 +265,9 @@ public partial class AwardsService : IAwardsService
         // Satellite is a VUCC award in its own right (100 grids), not a band.
         // Its rows are built from the same filtered set without the VuccBands
         // restriction, because a satellite QSO credits the satellite award
-        // whatever band the uplink happened to be on.
-        gridDetails.AddRange(BuildSatelliteGridRows(filteredList, filters?.Status));
+        // whatever band the uplink happened to be on. Same confirmation rule —
+        // VUCC Satellite is ARRL too.
+        gridDetails.AddRange(BuildSatelliteGridRows(filteredList, filters?.Status, isConfirmed));
 
         gridDetails = gridDetails.OrderBy(g => g.Grid).ThenBy(g => GetBandOrder(g.Band)).ToList();
 
@@ -310,11 +319,15 @@ public partial class AwardsService : IAwardsService
                 rows = rows.Where(x => x.Qso.QsoDate <= filters.ToDate.Value.AddDays(1)).ToList();
         }
 
+        // The caller picks the rule: the grid views default to ARRL counting so a
+        // green square means the same thing here, on the map, and on FFMA (#46).
+        var isConfirmed = ConfirmationPolicy.For(filters?.Confirmations ?? ConfirmationRule.Any);
+
         var grids = rows
             .GroupBy(x => x.Grid!)
             .Select(g => new WorkedGrid(
                 Grid: g.Key,
-                Confirmed: g.Any(x => IsConfirmed(x.Qso)),
+                Confirmed: g.Any(x => isConfirmed(x.Qso)),
                 QsoCount: g.Count()))
             .OrderBy(g => g.Grid)
             .ToList();
@@ -514,26 +527,11 @@ public partial class AwardsService : IAwardsService
         return $"country:{qso.Country?.ToUpperInvariant() ?? "UNKNOWN"}";
     }
 
-    private static bool IsConfirmed(Qso qso)
-    {
-        // Check LoTW confirmation
-        if (string.Equals(qso.Qsl?.Lotw?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        // Check eQSL confirmation
-        if (string.Equals(qso.Qsl?.Eqsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        // Check QRZ Logbook confirmation
-        if (string.Equals(qso.Qsl?.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        // Check paper QSL
-        if (string.Equals(qso.Qsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        return false;
-    }
+    /// <summary>
+    /// Confirmed by any channel. Kept as a named method because most awards here
+    /// still use it unconditionally; the grid views choose their rule per request.
+    /// </summary>
+    private static bool IsConfirmed(Qso qso) => ConfirmationPolicy.Any(qso);
 
     private static int GetBandOrder(string band) => band.ToLowerInvariant() switch
     {
