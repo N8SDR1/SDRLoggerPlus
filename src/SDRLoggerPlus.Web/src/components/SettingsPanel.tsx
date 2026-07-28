@@ -75,8 +75,10 @@ import { distanceUnitFor, resolveSpeedUnit } from '../utils/units';
 import { clampPercent, percentToZoomLevel, zoomLevelToPercent, MIN_PERCENT, MAX_PERCENT, STEP_PERCENT } from '../utils/zoomScale';
 import { APP_VERSION } from '../version';
 
-// Settings navigation items
+// Settings navigation items — grouped by workflow: logging → digital/decoders →
+// spots & alerts → hardware → network → appearance → AI → about.
 const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactNode; description: string }[] = [
+  // ── Station & logbook ──
   {
     id: 'station',
     name: 'Station',
@@ -90,10 +92,16 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     description: 'QRZ, LOTW, Club Log, HRDLog, eQSL',
   },
   {
-    id: 'alerts',
-    name: 'Alerts',
-    icon: <Bell className="w-5 h-5" />,
-    description: 'Weather and Hot List alerts',
+    id: 'logbookhealth',
+    name: 'Logbook Health',
+    icon: <Stethoscope className="w-5 h-5" />,
+    description: 'Verify QSO times + find duplicates',
+  },
+  {
+    id: 'backup',
+    name: 'Backup & Restore',
+    icon: <Archive className="w-5 h-5" />,
+    description: 'Logbook backups + settings export / import',
   },
   {
     id: 'adifmonitor',
@@ -101,6 +109,7 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     icon: <FileCode className="w-5 h-5" />,
     description: 'Auto-import QSOs from external .adi files',
   },
+  // ── Digital & decoders ──
   {
     id: 'wsjtx',
     name: 'Decoder Link (UDP)',
@@ -113,6 +122,13 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     icon: <Bell className="w-5 h-5" />,
     description: 'Geo-scoped needed-status alerts on the digital decode stream',
   },
+  // ── Spots & alerts ──
+  {
+    id: 'alerts',
+    name: 'Alerts',
+    icon: <Bell className="w-5 h-5" />,
+    description: 'Weather and Hot List alerts',
+  },
   {
     id: 'rbnalerts',
     name: 'Band Openings',
@@ -120,22 +136,17 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     description: 'RBN VHF/UHF band-opening alerts with voice',
   },
   {
+    id: 'dxcoach',
+    name: 'DX Coach',
+    icon: <Target className="w-5 h-5" />,
+    description: 'Award-opportunity coach + propagation gate',
+  },
+  // ── Hardware ──
+  {
     id: 'rotator',
     name: 'Rotator',
     icon: <Compass className="w-5 h-5" />,
     description: 'Hamlib rotctld connection',
-  },
-  {
-    id: 'backup',
-    name: 'Backup & Restore',
-    icon: <Archive className="w-5 h-5" />,
-    description: 'Logbook backups + settings export / import',
-  },
-  {
-    id: 'logbookhealth',
-    name: 'Logbook Health',
-    icon: <Stethoscope className="w-5 h-5" />,
-    description: 'Verify QSO times + find duplicates',
   },
   {
     id: 'sat',
@@ -143,6 +154,14 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     icon: <Satellite className="w-5 h-5" />,
     description: 'CSN satellite controller link',
   },
+  // ── Network ──
+  {
+    id: 'server',
+    name: 'Server / Multi-op',
+    icon: <Server className="w-5 h-5" />,
+    description: 'Share your log across stations (host or connect)',
+  },
+  // ── Appearance & display ──
   {
     id: 'appearance',
     name: 'Appearance',
@@ -162,29 +181,19 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     description: 'Customize header display settings',
   },
   {
-    id: 'ai',
-    name: 'Chat AI',
-    icon: <Bot className="w-5 h-5" />,
-    description: 'LLM API settings for talk points',
-  },
-  {
-    id: 'dxcoach',
-    name: 'DX Coach',
-    icon: <Target className="w-5 h-5" />,
-    description: 'Award-opportunity coach + propagation gate',
-  },
-  {
     id: 'voice',
     name: 'Voice',
     icon: <Volume2 className="w-5 h-5" />,
     description: 'Voice for spoken announcements (accent, male/female)',
   },
+  // ── AI ──
   {
-    id: 'server',
-    name: 'Server / Multi-op',
-    icon: <Server className="w-5 h-5" />,
-    description: 'Share your log across stations (host or connect)',
+    id: 'ai',
+    name: 'Chat AI',
+    icon: <Bot className="w-5 h-5" />,
+    description: 'LLM API settings for talk points',
   },
+  // ── About ──
   {
     id: 'about',
     name: 'About',
@@ -453,8 +462,6 @@ function StationSettingsSection() {
           </div>
         </div>
       </div>
-
-      <ScpMaintenance />
 
       {/* Radio setup — moved here from the standalone Rig panel so all station
           configuration lives in one place. */}
@@ -5376,7 +5383,14 @@ export function SettingsPanel() {
       case 'backup':
         return <BackupSettingsSection />;
       case 'logbookhealth':
-        return <LogbookHealthSection />;
+        return (
+          <div className="space-y-6">
+            <LogbookHealthSection />
+            <div className="max-w-2xl border-t border-glass-100 pt-5">
+              <ScpMaintenance />
+            </div>
+          </div>
+        );
       case 'alerts':
         return <AlertsSection />;
       case 'sat':

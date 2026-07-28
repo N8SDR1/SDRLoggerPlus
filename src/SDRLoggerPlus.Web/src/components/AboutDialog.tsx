@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Coffee, BookOpen, Info, ScrollText, Github, MessageCircle } from 'lucide-react';
+import { X, Coffee, BookOpen, Info, ScrollText, Github, MessageCircle, Search } from 'lucide-react';
 import { APP_VERSION } from '../version';
 
 interface AboutDialogProps {
@@ -204,6 +204,7 @@ const HELP_SECTIONS = [
   { id: 'callbook', title: 'Callbook, Uploads & Import' },
   { id: 'ai',       title: 'AI Talk Points' },
   { id: 'awards',   title: 'Awards & Statistics' },
+  { id: 'clock',    title: 'Clock & Time Sync' },
   { id: 'settings', title: 'Settings & Shortcuts' },
   { id: 'updates',  title: 'Updates & Support' },
 ] as const;
@@ -226,6 +227,25 @@ function HelpTab() {
   };
   const secRefs = useRef<Record<string, HTMLElement | null>>({});
   const [active, setActive] = useState<string>('start');
+  const [query, setQuery] = useState('');
+
+  // Build a search index from the rendered section text (title + body) once on mount.
+  // Every section is always mounted, so this reads the real content — no keyword upkeep.
+  const [index, setIndex] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const idx: Record<string, string> = {};
+    for (const s of HELP_SECTIONS) {
+      const el = secRefs.current[s.id];
+      idx[s.id] = `${s.title} ${el?.textContent ?? ''}`.toLowerCase();
+    }
+    setIndex(idx);
+  }, []);
+
+  const q = query.trim().toLowerCase();
+  // Before the index is built (empty), show everything; once built, match title+body.
+  const matches = (id: string) => !q || (index[id] !== undefined ? index[id].includes(q) : true);
+  const shownSections = HELP_SECTIONS.filter((s) => matches(s.id));
+
   const go = (id: string) => {
     secRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setActive(id);
@@ -234,6 +254,7 @@ function HelpTab() {
   const Section = ({ id, title, children }: { id: string; title: string; children: React.ReactNode }) => (
     <section
       ref={(el) => { secRefs.current[id] = el; }}
+      hidden={!matches(id)}
       className="scroll-mt-1"
     >
       <h2 className="text-base font-semibold font-ui text-white mb-1.5">{title}</h2>
@@ -243,11 +264,32 @@ function HelpTab() {
 
   return (
     <div className="flex gap-5">
-      {/* Sticky table of contents */}
-      <nav className="sticky top-0 self-start shrink-0 w-40 hidden sm:block">
-        <p className="text-[10px] uppercase tracking-wide text-dark-400 mb-2 px-2">Contents</p>
+      {/* Sticky table of contents + search */}
+      <nav className="sticky top-0 self-start shrink-0 w-44 hidden sm:block">
+        <div className="relative mb-3 px-1">
+          <Search className="w-3.5 h-3.5 text-dark-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search help…"
+            className="w-full pl-8 pr-6 py-1.5 rounded-md bg-dark-700/50 border border-dark-600 text-xs text-white placeholder:text-dark-400 focus:outline-none focus:border-accent-primary"
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              title="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        <p className="text-[10px] uppercase tracking-wide text-dark-400 mb-2 px-2">
+          {q ? `${shownSections.length} match${shownSections.length === 1 ? '' : 'es'}` : 'Contents'}
+        </p>
         <ul className="space-y-0.5">
-          {HELP_SECTIONS.map((s) => (
+          {shownSections.map((s) => (
             <li key={s.id}>
               <button
                 onClick={() => go(s.id)}
@@ -261,11 +303,19 @@ function HelpTab() {
               </button>
             </li>
           ))}
+          {q && shownSections.length === 0 && (
+            <li className="px-2 py-1 text-xs text-dark-400">No matches</li>
+          )}
         </ul>
       </nav>
 
       {/* Content */}
       <div className="flex-1 min-w-0 space-y-7 text-sm text-dark-200 leading-relaxed">
+        {q && shownSections.length === 0 && (
+          <p className="text-sm text-dark-300">
+            No help topics match “{query}”. Try a different word, or clear the search to see everything.
+          </p>
+        )}
         <Section id="start" title="Getting Started">
           <p>Five minutes to your first logged QSO:</p>
           <ol className="ml-4 list-decimal space-y-1.5">
@@ -394,6 +444,19 @@ function HelpTab() {
           </ul>
 
           <p className="text-xs text-dark-300"><B>How big?</B> Comfortable for a <B>small/medium group on the built-in database (roughly up to ~8 operators)</B> — enough for most Field Day sites. A SQL-backed server path for larger stations (15–20+) is the next step; until we publish a load-tested number, treat bigger groups as unproven. If you're unsure for a big event, the old fallback still works: each op logs locally and you merge the ADIF exports afterward.</p>
+
+          <p className="font-semibold text-white mt-1">Operating over the internet (WAN)</p>
+          <p className="text-xs text-dark-300">
+            On one LAN it just works. To share a log <B>between sites over the internet</B>, don't
+            port-forward the host to the open internet — the connection is plain HTTP and the token would
+            be the only thing guarding it. Instead put every station on a <B>private mesh VPN</B>: install{' '}
+            <button onClick={() => openLink('https://tailscale.com/')} className="font-bold text-accent-primary hover:underline">Tailscale</button>{' '}
+            (or <button onClick={() => openLink('https://www.zerotier.com/')} className="font-bold text-accent-primary hover:underline">ZeroTier</button>)
+            on each machine, then use the host's VPN address in <P>Settings → Server → Connect to a host</P>
+            exactly as you would on a LAN. It needs <B>no port-forwarding</B> and the traffic is
+            <B>encrypted</B> end-to-end. If you must expose a public port instead, put it behind an HTTPS
+            tunnel — never bare.
+          </p>
         </Section>
 
         <Section id="spots" title="DX Spots & the Map">
@@ -471,6 +534,17 @@ function HelpTab() {
             <li><B>Propagation</B> panel — HF band conditions (from N0NBH) as a 24-hour heatmap by band and UTC hour.</li>
             <li><B>Rotator</B> panel — azimuth / elevation readout + preset headings; configure the hamlib rotctld / serial connection in <P>Settings → Rotator</P>.</li>
           </ul>
+        </Section>
+
+        <Section id="clock" title="Clock & Time Sync">
+          <p>The header shows a live <B>UTC</B> clock and your <B>local</B> clock side by side — QSOs are
+          always logged in UTC (the ham convention), so the UTC clock is the one to watch.</p>
+          <p><B>Sync your PC clock from NTP.</B> Accurate time matters for digital modes and contest logs.
+          <B>Right-click either clock</B> in the header to open a small panel that checks how far your PC is
+          off an internet time server (NTP) and shows the difference. Click <P>Sync now</P> to correct it —
+          on <B>Windows</B> this asks for administrator approval (a Windows UAC prompt) and then sets the
+          clock; on macOS/Linux it shows the offset so you can fix it in your OS date/time settings. It only
+          adjusts your computer's clock, nothing in your log.</p>
         </Section>
 
         <Section id="settings" title="Settings & Shortcuts">
