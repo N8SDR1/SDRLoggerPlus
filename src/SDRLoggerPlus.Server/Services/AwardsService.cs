@@ -134,6 +134,10 @@ public partial class AwardsService : IAwardsService
                 if (skip) continue;
             }
 
+            // Primary DXCC prefix (K, G, DL, JA…) for the "sort by prefix" option, from cty.dat
+            // via a representative callsign in the entity.
+            var primaryPrefix = CtyService.GetPrimaryPrefixFromCallsign(representative.Callsign ?? "");
+
             entityStatuses.Add(new DxccEntityStatus(
                 DxccCode: dxccCode,
                 EntityName: entityName,
@@ -141,7 +145,8 @@ public partial class AwardsService : IAwardsService
                 BandStatus: bandStatus,
                 FirstWorked: groupQsos.Min(q => q.QsoDate),
                 LastWorked: groupQsos.Max(q => q.QsoDate),
-                TotalQsos: groupQsos.Count
+                TotalQsos: groupQsos.Count,
+                PrimaryPrefix: primaryPrefix
             ));
         }
 

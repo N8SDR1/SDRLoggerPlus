@@ -154,6 +154,7 @@ export interface DxccEntityStatus {
   firstWorked?: string;
   lastWorked?: string;
   totalQsos: number;
+  primaryPrefix?: string;
 }
 
 export interface BandSummary {

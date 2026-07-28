@@ -4,7 +4,7 @@ namespace SDRLoggerPlus.Server.Services;
 
 // Lat/Lon are in STANDARD convention (east-positive, north-positive) — the
 // parser negates cty.dat's longitude column which is stored east-negative.
-internal record CtyEntity(string Country, string Continent, int CqZone, int ItuZone, double Lat, double Lon);
+internal record CtyEntity(string Country, string Continent, int CqZone, int ItuZone, double Lat, double Lon, string Prefix = "");
 
 /// <summary>
 /// Snapshot of the currently-loaded cty.dat: how many prefixes it holds, when
@@ -63,6 +63,14 @@ internal static partial class CtyService
 
         var entity = FindEntity(callsign);
         return entity is null ? (null, null, null) : (entity.Country, entity.Continent, entity.CqZone);
+    }
+
+    /// <summary>The DXCC entity's primary prefix for a callsign (e.g. K, G, DL, JA), or null.</summary>
+    public static string? GetPrimaryPrefixFromCallsign(string callsign)
+    {
+        if (string.IsNullOrEmpty(callsign)) return null;
+        var prefix = FindEntity(callsign)?.Prefix;
+        return string.IsNullOrEmpty(prefix) ? null : prefix;
     }
 
     /// <summary>
@@ -252,6 +260,7 @@ internal static partial class CtyService
         int ituZone = 0;
         double lat = 0;
         double lon = 0;
+        string primaryPrefix = ""; // the entity's primary DXCC prefix (cty.dat field 8), reused for its alias lines
 
         var i = 0;
         while (i < lines.Length)
@@ -290,10 +299,10 @@ internal static partial class CtyService
                         out lon);
                     lon = -lon; // AD1C convention → standard east-positive
                     // fields[6] = UTC offset (unused), fields[7] = primary prefix
-                    var primaryPrefix = fields[7].Trim().TrimStart('*');
+                    primaryPrefix = fields[7].Trim().TrimStart('*');
                     if (!string.IsNullOrEmpty(primaryPrefix))
                     {
-                        var entity = new CtyEntity(country, continent, cqZone, ituZone, lat, lon);
+                        var entity = new CtyEntity(country, continent, cqZone, ituZone, lat, lon, primaryPrefix);
                         map.TryAdd(primaryPrefix, entity);
                     }
                 }
@@ -304,7 +313,7 @@ internal static partial class CtyService
             // Prefix line: leading whitespace, comma-separated prefixes, semicolon terminates entity
             if (country != null && continent != null)
             {
-                var entity = new CtyEntity(country, continent, cqZone, ituZone, lat, lon);
+                var entity = new CtyEntity(country, continent, cqZone, ituZone, lat, lon, primaryPrefix);
                 var trimmed = line.Trim().TrimEnd(';');
                 var prefixes = trimmed.Split(',', StringSplitOptions.RemoveEmptyEntries);
 

@@ -59,7 +59,7 @@ function SummaryBar({ label, value, max }: { label: string; value: number; max: 
 export function StatisticsPlugin() {
   const [activeTab, setActiveTab] = useState<StatsTab>('dxcc');
   const [filters, setFilters] = useState<DxccFilters>({});
-  const [sortBy, setSortBy] = useState<'name' | 'continent' | 'qsos'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'prefix' | 'continent' | 'qsos'>('name');
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['dxcc-statistics', filters],
@@ -76,6 +76,13 @@ export function StatisticsPlugin() {
   const sortedEntities = useMemo(() => {
     if (!data) return [];
     return [...data.entities].sort((a, b) => {
+      if (sortBy === 'prefix') {
+        // Entities with no known prefix sort last; ties break by name.
+        const pa = a.primaryPrefix || '￿';
+        const pb = b.primaryPrefix || '￿';
+        const cmp = pa.localeCompare(pb, undefined, { numeric: true, sensitivity: 'base' });
+        return cmp !== 0 ? cmp : a.entityName.localeCompare(b.entityName);
+      }
       if (sortBy === 'continent') {
         const cmp = (a.continent ?? 'ZZ').localeCompare(b.continent ?? 'ZZ');
         return cmp !== 0 ? cmp : a.entityName.localeCompare(b.entityName);
@@ -168,10 +175,11 @@ export function StatisticsPlugin() {
 
           <select
             value={sortBy}
-            onChange={e => setSortBy(e.target.value as 'name' | 'continent' | 'qsos')}
+            onChange={e => setSortBy(e.target.value as 'name' | 'prefix' | 'continent' | 'qsos')}
             className="glass-input text-xs px-2 py-1"
           >
             <option value="name">Sort: Name</option>
+            <option value="prefix">Sort: DXCC Prefix</option>
             <option value="continent">Sort: Continent</option>
             <option value="qsos">Sort: QSOs</option>
           </select>
@@ -248,6 +256,9 @@ export function StatisticsPlugin() {
                     className={`border-b border-glass-100/30 hover:bg-dark-700/50 transition-colors ${idx % 2 === 0 ? '' : 'bg-dark-800/30'}`}
                   >
                     <td className="px-3 py-1.5 text-gray-200 font-medium">
+                      {entity.primaryPrefix && (
+                        <span className="font-mono text-accent-primary mr-1.5" title="DXCC primary prefix">{entity.primaryPrefix}</span>
+                      )}
                       {entity.entityName}
                     </td>
                     <td className="text-center px-1 py-1.5 text-dark-300">

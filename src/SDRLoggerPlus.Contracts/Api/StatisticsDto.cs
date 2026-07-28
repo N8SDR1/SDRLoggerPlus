@@ -15,7 +15,8 @@ public record DxccEntityStatus(
     Dictionary<string, BandStatus> BandStatus,
     DateTime? FirstWorked,
     DateTime? LastWorked,
-    int TotalQsos
+    int TotalQsos,
+    string? PrimaryPrefix = null
 );
 
 public record BandStatus(

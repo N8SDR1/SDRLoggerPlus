@@ -138,6 +138,27 @@ public class CtyServiceTests
 
     #endregion
 
+    #region GetPrimaryPrefixFromCallsign — DXCC primary prefix (for "sort by prefix")
+
+    [Theory]
+    [InlineData("W1AW", "K")]      // United States
+    [InlineData("VE3ABC", "VE")]   // Canada
+    [InlineData("G0ABC", "G")]     // England
+    [InlineData("DL1ABC", "DL")]   // Germany
+    [InlineData("JA1YXP", "JA")]   // Japan
+    public void GetPrimaryPrefixFromCallsign_KnownCallsigns_ReturnsEntityPrimaryPrefix(string callsign, string expectedPrefix)
+    {
+        CtyService.GetPrimaryPrefixFromCallsign(callsign).Should().Be(expectedPrefix);
+    }
+
+    [Fact]
+    public void GetPrimaryPrefixFromCallsign_Empty_ReturnsNull()
+    {
+        CtyService.GetPrimaryPrefixFromCallsign("").Should().BeNull();
+    }
+
+    #endregion
+
     #region GetCountryFromCallsign — longest-prefix matching
 
     [Fact]
