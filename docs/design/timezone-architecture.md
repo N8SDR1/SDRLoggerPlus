@@ -229,6 +229,23 @@ Run the suite off-UTC (set the test host to a non-UTC zone) — the CI runner is
 
 ---
 
+## 7a. Progress (2026-07-28)
+
+- ✅ **Phase 0** — LiteDB round-trip probe (`LiteDbDateTimeRoundTripProbe`).
+- ✅ **Phase 1** — canonical-UTC read projection in `LiteDbContext` mapper + guards
+  (`AdifReimportUtcRegressionTests`, `UtcProjectionUploadSafetyTests`). Fixes the dedupe bug at the
+  source. Full suite green in UTC **and** America/New_York.
+- ✅ **Phase 2a** — manual write path pinned via `QsoService.CanonicalUtc` (`QsoServiceUtcWriteTests`).
+- ⏸ **Cabrillo single-source time** — intentionally NOT changed. Post-Phase-1 `CabrilloExporter` is
+  UTC-correct (date already `ToUniversalTime()`, `TimeOn` is stored UTC). Making time *derive from
+  QsoDate* (to match ADIF export and remove the two-source drift) would zero the existing test fixtures,
+  which set `QsoDate=midnight` + real `TimeOn` — do it deliberately with modernized fixtures, not as a
+  drive-by.
+- ⏸ **Date-range filter** (`LiteQsoRepository.cs:83`) and **frontend render spots**
+  (`LogHistoryPlugin.tsx:1349,1404`, plus emitting API `QsoDate` as `Z`) — these hinge on a product
+  decision: does range-filtering / those views bucket by **UTC day** (like the grid) or **local day**
+  (like the Today tile)? Decide that first, then fix behind a boundary test.
+
 ## 8. Sequenced work
 
 1. **Phase 0** — LiteDB round-trip probe test. *(confirms the whole approach)*
