@@ -202,6 +202,7 @@ const HELP_SECTIONS = [
   { id: 'weather',  title: 'Weather & Alerts' },
   { id: 'meters',   title: 'Meters & Panadapter' },
   { id: 'callbook', title: 'Callbook, Uploads & Import' },
+  { id: 'health',   title: 'Logbook Health' },
   { id: 'ai',       title: 'AI Talk Points' },
   { id: 'awards',   title: 'Awards & Statistics' },
   { id: 'clock',    title: 'Clock & Time Sync' },
@@ -484,6 +485,7 @@ function HelpTab() {
           <p><B>Filters</B> (Cluster panel + <P>Settings</P>): max age (1–60 min), capacity (50–300), band/mode multi-select, <B>Track Rig</B> (show only the rig's current band+mode), and status colors — new DXCC (orange), new band (green), worked (gray, dimmable). The <B>Filters</B> button opens more: <B>spotter continent</B> (who's hearing it, and from where) and <B>DX continent</B>, <B>source</B> (Cluster / RBN / POTA …), and <B>CQ zone</B> — all live, and the count on the button shows how many are active.</p>
           <p><B>POTA Activators</B> panel — live park activations, now with the same filter toolbar as the Cluster: <B>Follow rig</B> (Band/Mode), Band, Mode, a <B>Region</B> filter (by park location), and search.</p>
           <p><B>Click a spot</B> to tune the radio and prefill the Log Entry. Spots can also be <B>pushed to a TCI radio's panadapter</B> (Lyra / Thetis) as click-to-tune markers.</p>
+          <p><B>Spot your own QSO.</B> The <B>Spot</B> button in Log Entry posts the current callsign + frequency to a DX cluster. This needs a <B>telnet DX cluster</B> — <B>SpotHole is receive-only</B> and can't send. If you run more than one cluster, pick which one sends your spots with the <B>Spots</B> toggle next to it in the <B>Cluster</B> panel (or <P>Settings → Cluster → Outbound Spots</P>). The network peers clusters together, so you only ever spot from one.</p>
           <p><B>DXpeditions & Hot List (auto hot spots).</B> The <B>DXpeditions</B> panel lists current and upcoming operations (NG3K feed). Click any callsign to drop it on your <B>Hot List</B> — a watchlist that makes matching DX spots light up as <B>hot spots</B> the instant they appear, and, with the announce mode on, calls them out by <B>voice</B>. Cycle the pill Off → Visual → Visual + Voice; the counter shows how many you're watching, and Clear All empties the list. Manage watched calls + text-to-speech under <P>Settings → Alerts → Hot List</P>.</p>
           <p><B>The 3D globe</B> shows spots + spotter→DX arcs, lightning strikes, POTA parks, your station, satellite tracks + footprints, the day/night terminator, gray line, aurora, PSK-Reporter coverage, and cached QRZ profile photos. Click a point to focus that call. Overlays are all in <P>Settings → Map</P>.</p>
           <p><B>"Heard Me" — who's hearing you.</B> Switch on the <B>PSK</B> and <B>RBN</B> layers (on the 3D globe and the 2D map) to draw arcs from your station out to every receiver that recently spotted <em>you</em> — <B>PSK Reporter</B> for digital, <B>RBN skimmers</B> for CW/RTTY. The band follows your connected rig (or pick a band, or <B>All bands</B>), each layer with its own look-back window; click a receiver dot to see its report — frequency, mode, SNR, and how long ago.</p>
@@ -519,6 +521,27 @@ function HelpTab() {
           <p><B>Upload logbooks</B> (per-QSO or on demand), each in <P>Settings → Web Logbooks</P>: <B>LoTW</B> (signs via TQSL), <B>eQSL</B>, <B>Club Log</B>, <B>HRDLog</B>, and <B>QRZ Logbook</B>. To push just a handful, <B>tick the rows in Log History</B> and use the <B>QRZ</B> / <B>LoTW</B> buttons on the selection bar — it uploads exactly those (LoTW re-signs even ones already sent, so it's also how you re-send a corrected QSO).</p>
           <p><B>Import</B> — <P>Settings → ADIF Monitor</P> watches external <span className="font-mono text-[11px] text-dark-100">.adi</span> files (VarAC, MSHV, … — <B>Browse</B> to each file or paste its path) and listens for ADIF-over-UDP from N1MM / Logger32 / DXKeeper; <B>WSJT-X / JTDX / MSHV</B> auto-log has its own section — <P>Settings → Decoder Link (UDP)</P> — with two independent UDP sources so you can run two decoders (say WSJT-X and JTDX) on separate ports at once.</p>
           <p><B>Backup &amp; Restore</B> (<P>Settings → Backup &amp; Restore</P>) — turn on <B>Scheduled Backups</B> to save your logbook automatically (daily, weekly, or on exit) to a folder you choose, keeping the last N copies. You can also <B>Export / Import all app settings</B> to a single file — ideal for moving your whole setup to another PC or keeping a safe copy off-machine.</p>
+        </Section>
+
+        <Section id="health" title="Logbook Health">
+          <p>Opt-in maintenance for your own log, under <P>Settings → Logbook Health</P>. Nothing is ever
+          changed without your confirmation, and a <B>full backup is taken automatically</B> before any
+          repair. Both tools fix your <B>local</B> log only — they never re-upload to or delete from
+          QRZ / LoTW / eQSL.</p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><B>Verify QSO times.</B> Scans for QSOs whose stored date lost its time-of-day to an old
+              bug (the time still survives in the ADIF <span className="font-mono">TIME_ON</span> field) and
+              reconstructs just those. Anything it can't be sure of is <B>reported, never guessed</B>. Your
+              log's counts show as Consistent / Fixable / Ambiguous.</li>
+            <li><B>Find duplicates.</B> Finds the same station worked on the same band at the same minute.
+              It keeps one copy of each same-mode set — preferring one already synced to QRZ/LoTW, then the
+              most complete — and pre-checks the rest. When the copies have <B>different modes</B> (e.g. CW
+              vs FT8, a likely wrong-mode entry) it flags the set and leaves it to you: tick exactly the rows
+              to remove. At least one QSO in every set is always kept.</li>
+            <li><B>Callsign Suggestions (Super Check Partial).</B> Manage the master call list used for
+              Log-Entry suggestions here — a seed ships built-in; update it on demand from
+              supercheckpartial.com.</li>
+          </ul>
         </Section>
 
         <Section id="ai" title="AI Talk Points">
