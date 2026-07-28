@@ -242,19 +242,20 @@ function HelpTab() {
   }, []);
 
   const q = query.trim().toLowerCase();
-  // Before the index is built (empty), show everything; once built, match title+body.
-  const matches = (id: string) => !q || (index[id] !== undefined ? index[id].includes(q) : true);
-  const shownSections = HELP_SECTIONS.filter((s) => matches(s.id));
+  // Search is a jump-to tool: every section whose title OR body contains the query.
+  const results = q
+    ? HELP_SECTIONS.filter((s) => (index[s.id] ?? s.title.toLowerCase()).includes(q))
+    : [];
 
   const go = (id: string) => {
     secRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setActive(id);
   };
+  const jumpTo = (id: string) => { go(id); setQuery(''); };
 
   const Section = ({ id, title, children }: { id: string; title: string; children: React.ReactNode }) => (
     <section
       ref={(el) => { secRefs.current[id] = el; }}
-      hidden={!matches(id)}
       className="scroll-mt-1"
     >
       <h2 className="text-base font-semibold font-ui text-white mb-1.5">{title}</h2>
@@ -284,12 +285,34 @@ function HelpTab() {
               <X className="w-3.5 h-3.5" />
             </button>
           )}
+
+          {/* Results dropdown — every section whose title or text matches, click to jump. */}
+          {q && (
+            <div className="absolute left-1 right-1 top-full mt-1 z-20 rounded-md border border-dark-600 bg-dark-800 shadow-xl overflow-hidden">
+              <p className="text-[10px] uppercase tracking-wide text-dark-400 px-2.5 py-1.5 border-b border-dark-700">
+                {results.length} match{results.length === 1 ? '' : 'es'}
+              </p>
+              <ul className="max-h-64 overflow-y-auto py-1">
+                {results.map((s) => (
+                  <li key={s.id}>
+                    <button
+                      onClick={() => jumpTo(s.id)}
+                      className="w-full text-left px-2.5 py-1.5 text-xs text-dark-200 hover:bg-accent-primary/10 hover:text-accent-primary"
+                    >
+                      {s.title}
+                    </button>
+                  </li>
+                ))}
+                {results.length === 0 && (
+                  <li className="px-2.5 py-1.5 text-xs text-dark-400">No matching topics</li>
+                )}
+              </ul>
+            </div>
+          )}
         </div>
-        <p className="text-[10px] uppercase tracking-wide text-dark-400 mb-2 px-2">
-          {q ? `${shownSections.length} match${shownSections.length === 1 ? '' : 'es'}` : 'Contents'}
-        </p>
+        <p className="text-[10px] uppercase tracking-wide text-dark-400 mb-2 px-2">Contents</p>
         <ul className="space-y-0.5">
-          {shownSections.map((s) => (
+          {HELP_SECTIONS.map((s) => (
             <li key={s.id}>
               <button
                 onClick={() => go(s.id)}
@@ -303,19 +326,11 @@ function HelpTab() {
               </button>
             </li>
           ))}
-          {q && shownSections.length === 0 && (
-            <li className="px-2 py-1 text-xs text-dark-400">No matches</li>
-          )}
         </ul>
       </nav>
 
       {/* Content */}
       <div className="flex-1 min-w-0 space-y-7 text-sm text-dark-200 leading-relaxed">
-        {q && shownSections.length === 0 && (
-          <p className="text-sm text-dark-300">
-            No help topics match “{query}”. Try a different word, or clear the search to see everything.
-          </p>
-        )}
         <Section id="start" title="Getting Started">
           <p>Five minutes to your first logged QSO:</p>
           <ol className="ml-4 list-decimal space-y-1.5">

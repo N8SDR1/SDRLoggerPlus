@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { RadioTower, Map, Settings, Plus, Trash2, X, Search, Crosshair, Eraser, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { RadioTower, Map, Settings, Plus, Trash2, X, Search, Crosshair, Eraser, SlidersHorizontal, ChevronDown, Send } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, ICellRendererParams, RowClickedEvent, CellMouseOverEvent, CellMouseOutEvent, RowStyle } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -286,6 +286,12 @@ function ClusterSettingsPanel({
 }) {
   const canAddMore = connections.length < 4;
 
+  // Which cluster sends outbound spots (the "Send self-spots to" pick), shown/settable per cluster.
+  const primarySpotClusterId = useSettingsStore((s) => s.settings.cluster.primarySpotClusterId);
+  const updateClusterSettings = useSettingsStore((s) => s.updateClusterSettings);
+  const setSpotCluster = (id: string) =>
+    updateClusterSettings({ primarySpotClusterId: primarySpotClusterId === id ? '' : id });
+
   const getStatusColor = (status?: ClusterStatusType) => {
     switch (status) {
       case 'connected': return 'bg-accent-success';
@@ -327,13 +333,29 @@ function ClusterSettingsPanel({
                   ({getStatusText(status)})
                 </span>
               </div>
-              <button
-                onClick={() => onRemoveConnection(conn.id)}
-                className="p-1 text-dark-300 hover:text-accent-danger transition-colors"
-                title="Remove cluster"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                {/* Outbound-spot cluster toggle. Only ONE cluster sends spots (the network peers
+                    them anyway); click to make this the one, click again to unset. */}
+                <button
+                  onClick={() => setSpotCluster(conn.id)}
+                  title={primarySpotClusterId === conn.id
+                    ? 'This cluster sends your spots — click to unset'
+                    : 'Send your spots from this cluster'}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide transition-colors ${
+                    primarySpotClusterId === conn.id
+                      ? 'bg-accent-secondary/20 text-accent-secondary'
+                      : 'text-dark-400 hover:text-dark-200'}`}
+                >
+                  <Send className="w-3 h-3" /> {primarySpotClusterId === conn.id ? 'Spots ✓' : 'Spots'}
+                </button>
+                <button
+                  onClick={() => onRemoveConnection(conn.id)}
+                  className="p-1 text-dark-300 hover:text-accent-danger transition-colors"
+                  title="Remove cluster"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Configuration Grid */}
