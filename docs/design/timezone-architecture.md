@@ -236,15 +236,21 @@ Run the suite off-UTC (set the test host to a non-UTC zone) — the CI runner is
   (`AdifReimportUtcRegressionTests`, `UtcProjectionUploadSafetyTests`). Fixes the dedupe bug at the
   source. Full suite green in UTC **and** America/New_York.
 - ✅ **Phase 2a** — manual write path pinned via `QsoService.CanonicalUtc` (`QsoServiceUtcWriteTests`).
-- ⏸ **Cabrillo single-source time** — intentionally NOT changed. Post-Phase-1 `CabrilloExporter` is
-  UTC-correct (date already `ToUniversalTime()`, `TimeOn` is stored UTC). Making time *derive from
-  QsoDate* (to match ADIF export and remove the two-source drift) would zero the existing test fixtures,
-  which set `QsoDate=midnight` + real `TimeOn` — do it deliberately with modernized fixtures, not as a
-  drive-by.
-- ⏸ **Date-range filter** (`LiteQsoRepository.cs:83`) and **frontend render spots**
-  (`LogHistoryPlugin.tsx:1349,1404`, plus emitting API `QsoDate` as `Z`) — these hinge on a product
-  decision: does range-filtering / those views bucket by **UTC day** (like the grid) or **local day**
-  (like the Today tile)? Decide that first, then fix behind a boundary test.
+- ✅ **Phase 2b** — **UTC end-to-end, single-source** (the "act like every other logger" pass):
+  - QRZ / eQSL / Club Log / HRDLog ADIF builders derive `QSO_DATE`+`TIME_ON` from one
+    `QsoDate.ToUniversalTime()` (HHmmss), matching ADIF export — no more unconverted-date + raw-TimeOn.
+  - Cabrillo derives time from the same UTC instant as the date (dead `Hhmm` helper removed).
+  - "Today" tile and date-range filter bucket by **UTC day** (consistent with the UTC grid and every
+    other logger); range bounds pinned `Kind=Utc`.
+  - Log History recent-strip + delete-dialog dates render in UTC.
+  - `UploaderUtcConsistencyTests` proves all uploaders emit identical UTC date+time for an evening QSO;
+    Cabrillo/ClubLog fixtures modernized to store the real time in `QsoDate`. Full suite green in UTC
+    **and** America/New_York; frontend tsc + tests green.
+
+  **Decision recorded:** there was no product choice to make — the established loggers (N1MM, N3FJP,
+  Log4OM, Logger32, HRD) all use **UTC as the one canonical frame**; local time is display-only. So the
+  Today tile is now UTC too (reversing the earlier deliberate-local choice), because a UTC grid + a local
+  count is exactly the mixing that caused the recurring bugs. One frame, UTC, everywhere.
 
 ## 8. Sequenced work
 
