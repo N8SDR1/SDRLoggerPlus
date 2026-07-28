@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ScrollText, Search, Calendar, Radio, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, CloudUpload, Loader2, Pencil, Trash2, Upload, Download, FileText, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { ScrollText, Search, Calendar, Radio, Filter, X, CloudUpload, Loader2, Pencil, Trash2, Upload, Download, FileDown, FileText, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -18,11 +18,18 @@ import { utcDatePart, toUtcInstant } from '../utils/qsoDateTime';
 import { formMhzToStoredKhz, storedKhzToFormMhz } from '../utils/frequency';
 import { selectOptionsFor, LOG_MODES } from '../utils/qsoFieldOptions';
 import { ALL_BANDS } from '../utils/spotBands';
+import { filterQsos, hasQuickFilter, deriveBandOptions, deriveModeOptions } from '../utils/logHistoryFilter';
 
 // Common RST values for phone modes (SSB, AM, FM)
 const RST_PHONE = ['59', '58', '57', '56', '55', '54', '53', '52', '51'];
 // Common RST values for CW and digital modes
 const RST_CW_DIGITAL = ['599', '589', '579', '569', '559', '549', '539', '529', '519'];
+
+// Ceiling on the single load that backs the whole panel. Well clear of any
+// realistic personal log (a 23k log fetches in well under a second); a log that
+// somehow exceeded it would show a truncated view, which the banner under the
+// grid calls out rather than leaving it to look like QSOs went missing.
+const MAX_ROWS = 250000;
 
 // Custom cell renderer for mode badges
 // QSL column — a green badge per confirmed channel (LoTW / eQSL / card).
@@ -179,15 +186,19 @@ export function LogHistoryPlugin() {
   const [selectedMode, setSelectedMode] = useState<string>('');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
+  // How many rows survive the quick filters AND the grid's own column filters.
+  // Driven by the grid rather than the server now that the whole log is local.
+  const [visibleCount, setVisibleCount] = useState(0);
+  const [columnFilterActive, setColumnFilterActive] = useState(false);
+  const [isExportingFiltered, setIsExportingFiltered] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [editingQso, setEditingQso] = useState<QsoResponse | null>(null);
   const [deletingQso, setDeletingQso] = useState<QsoResponse | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  // Multi-select delete. Selection is scoped to the page on screen — paging or
-  // refiltering swaps the grid's rows out, so it clears rather than silently
-  // holding rows you can no longer see.
+  // Multi-select delete. Selection spans the filtered set rather than one page,
+  // so it survives paging; refiltering clears it rather than silently holding
+  // rows you can no longer see.
   const [selectedQsos, setSelectedQsos] = useState<QsoResponse[]>([]);
   const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
@@ -283,7 +294,6 @@ export function LogHistoryPlugin() {
   // Sync callsign filter from LogEntryPlugin
   useEffect(() => {
     setCallsignSearch(logHistoryCallsignFilter || '');
-    setCurrentPage(1);
   }, [logHistoryCallsignFilter]);
 
   // ADIF Import mutation
@@ -474,26 +484,48 @@ export function LogHistoryPlugin() {
     }
   }, [editingQso, isSaving, queryClient]);
 
-  // Paging or refiltering swaps the grid's rows out from under the selection.
-  // Drop it, so "N selected" can never count rows that are no longer on screen
-  // and the delete button can never reach them.
+  // Refiltering swaps the grid's rows out from under the selection. Drop it, so
+  // "N selected" can never count rows that are no longer on screen and the
+  // delete button can never reach them.
   useEffect(() => {
     clearSelection();
-  }, [currentPage, callsignSearch, nameSearch, selectedBand, selectedMode, fromDate, toDate, clearSelection]);
+  }, [callsignSearch, nameSearch, selectedBand, selectedMode, fromDate, toDate, clearSelection]);
 
+  // The whole log in one request, filtered in the browser from here on.
+  //
+  // Server-side paging meant the panel only ever held 50 QSOs, so nothing could
+  // filter beyond the fields the API happened to expose. With every QSO local,
+  // AG Grid's per-column filters combine across any columns (and the two-condition
+  // AND/OR within a column), and "Export Filtered" can hand back exactly the
+  // set on screen. AG Grid virtualises rows, so tens of thousands cost nothing
+  // to scroll.
   const { data: response, isLoading } = useQuery({
-    queryKey: ['qsos', callsignSearch, nameSearch, selectedBand, selectedMode, fromDate, toDate, currentPage],
-    queryFn: () => api.getQsos({
-      callsign: callsignSearch || undefined,
-      name: nameSearch || undefined,
-      band: selectedBand || undefined,
-      mode: selectedMode || undefined,
-      fromDate: fromDate || undefined,
-      toDate: toDate || undefined,
-      page: currentPage,
-      pageSize,
-    }),
+    queryKey: ['qsos', 'all'],
+    queryFn: () => api.getQsos({ page: 1, pageSize: MAX_ROWS }),
   });
+
+  const allQsos = useMemo(() => response?.items ?? [], [response]);
+
+  // Quick filter row — applied here; the grid's column filters narrow further.
+  const quickCriteria = useMemo(
+    () => ({
+      callsign: callsignSearch,
+      name: nameSearch,
+      band: selectedBand,
+      mode: selectedMode,
+      fromDate,
+      toDate,
+    }),
+    [callsignSearch, nameSearch, selectedBand, selectedMode, fromDate, toDate],
+  );
+
+  const qsos = useMemo(() => filterQsos(allQsos, quickCriteria), [allQsos, quickCriteria]);
+
+  // Band and mode choices come from the log itself, so a band or mode can never
+  // be present in the log and missing from its dropdown — which is what kept
+  // MSK144, Q65, 60m and everything above 2m unfilterable before.
+  const bandOptions = useMemo(() => deriveBandOptions(allQsos), [allQsos]);
+  const modeOptions = useMemo(() => deriveModeOptions(allQsos), [allQsos]);
 
   const { data: stats } = useQuery({
     queryKey: ['statistics'],
@@ -512,13 +544,11 @@ export function LogHistoryPlugin() {
     return map;
   }, [contestDefs]);
 
-  const qsos = response?.items || [];
-  const totalCount = response?.totalCount || 0;
-  const totalPages = response?.totalPages || 1;
-
-  const handlePageChange = useCallback((page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  }, [totalPages]);
+  const loadedCount = allQsos.length;
+  const serverTotal = response?.totalCount ?? 0;
+  // Only possible if a log outgrows MAX_ROWS — surfaced rather than left to
+  // look like QSOs have gone missing.
+  const isTruncated = serverTotal > loadedCount;
 
   const clearFilters = useCallback(() => {
     setCallsignSearch('');
@@ -527,10 +557,58 @@ export function LogHistoryPlugin() {
     setSelectedMode('');
     setFromDate('');
     setToDate('');
-    setCurrentPage(1);
+    gridApiRef.current?.setFilterModel(null);
   }, []);
 
-  const hasActiveFilters = callsignSearch || nameSearch || selectedBand || selectedMode || fromDate || toDate;
+  const hasActiveFilters = hasQuickFilter(quickCriteria) || columnFilterActive;
+
+  // Keep the count next to "Summary" and the Export Filtered button in step with
+  // what the grid is actually showing. onModelUpdated covers both the quick
+  // filters (which replace rowData) and the grid's own column filters.
+  const handleModelUpdated = useCallback(() => {
+    const grid = gridApiRef.current;
+    if (!grid) return;
+    setVisibleCount(grid.getDisplayedRowCount());
+    setColumnFilterActive(grid.isAnyFilterPresent());
+  }, []);
+
+  // A column filter changes which rows exist as far as the selection is
+  // concerned, so the same rule as the quick filters applies: drop it.
+  const handleFilterChanged = useCallback(() => {
+    clearSelection();
+  }, [clearSelection]);
+
+  const downloadAdif = useCallback((blob: Blob, suffix: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sdrloggerplus_${suffix}_${new Date().toISOString().slice(0, 10)}.adi`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  // Export exactly what's on screen. This is the point of the client-side
+  // filtering: narrow to (say) 6m + MSK144 + LoTW-confirmed, then write those
+  // QSOs out as ADIF — enough to rebuild a lost WSJTX log for one mode.
+  const handleExportFiltered = useCallback(async () => {
+    const grid = gridApiRef.current;
+    if (!grid || isExportingFiltered) return;
+    const ids: string[] = [];
+    grid.forEachNodeAfterFilterAndSort((node) => {
+      if (node.data) ids.push(node.data.id);
+    });
+    if (ids.length === 0) return;
+    setIsExportingFiltered(true);
+    try {
+      downloadAdif(await api.exportSelectedQsos(ids), 'filtered');
+    } catch (error) {
+      console.error('Failed to export filtered QSOs:', error);
+    } finally {
+      setIsExportingFiltered(false);
+    }
+  }, [isExportingFiltered, downloadAdif]);
 
   const formatTime = (timeStr: string) => {
     if (timeStr && timeStr.length >= 4) {
@@ -546,6 +624,20 @@ export function LogHistoryPlugin() {
       cellRenderer: DateCellRenderer,
       width: 110,
       resizable: true,
+      filter: 'agDateColumnFilter',
+      filterParams: {
+        // Compare in UTC to match what the cell shows. Comparing locally put an
+        // evening QSO in the previous day's bucket, so a single-day filter
+        // missed the very QSOs whose date was on screen.
+        comparator: (filterDate: Date, cellValue: string | null) => {
+          if (!cellValue) return -1;
+          const cell = new Date(cellValue);
+          if (Number.isNaN(cell.getTime())) return -1;
+          const cellUtc = Date.UTC(cell.getUTCFullYear(), cell.getUTCMonth(), cell.getUTCDate());
+          const filterUtc = Date.UTC(filterDate.getFullYear(), filterDate.getMonth(), filterDate.getDate());
+          return cellUtc < filterUtc ? -1 : cellUtc > filterUtc ? 1 : 0;
+        },
+      },
     },
     {
       headerName: 'Time',
@@ -605,20 +697,41 @@ export function LogHistoryPlugin() {
         (params.data?.confirmedEqsl ? 4 : 0) +
         (params.data?.confirmedQrz ? 2 : 0) +
         (params.data?.confirmedCard ? 1 : 0),
+      // Filter on channel names instead of that sort key, so the column filter
+      // reads as "contains LoTW" rather than an opaque bitmask number.
+      filterValueGetter: (params) =>
+        [
+          params.data?.confirmedLotw ? 'LoTW' : '',
+          params.data?.confirmedEqsl ? 'eQSL' : '',
+          params.data?.confirmedQrz ? 'QRZ' : '',
+          params.data?.confirmedCard ? 'Card' : '',
+        ].filter(Boolean).join(' ') || 'Unconfirmed',
+      filter: 'agTextColumnFilter',
       width: 70,
       resizable: true,
-      headerTooltip: 'Confirmations received — L: LoTW, E: eQSL, Q: QRZ Logbook, C: card / paper QSL',
+      headerTooltip:
+        'Confirmations received — L: LoTW, E: eQSL, Q: QRZ Logbook, C: card / paper QSL. ' +
+        'Filter by name, e.g. contains "LoTW", or "Unconfirmed" for none.',
     },
     {
       headerName: 'Sync',
       cellRenderer: QslSyncCellRenderer,
       // Sorts by severity so unresolved upload failures surface first.
       valueGetter: (params) => qslSyncSortKey(params.data?.qslSync),
+      // Service + state as words, so "contains blocked" collects everything
+      // that needs a human and "contains Club Log" narrows to one service.
+      filterValueGetter: (params) => {
+        const badges = qslSyncBadges(params.data?.qslSync);
+        if (badges.length === 0) return 'Untracked';
+        return badges.map((b) => `${b.service} ${b.state}`).join(' ');
+      },
+      filter: 'agTextColumnFilter',
       width: 70,
       resizable: true,
       headerTooltip:
         'Upload status — C: Club Log, H: HRDLog, E: eQSL. Green sent, amber will retry, ' +
-        'red needs attention. A dash means the QSO predates upload tracking.',
+        'red needs attention. A dash means the QSO predates upload tracking. ' +
+        'Filter by words, e.g. "blocked" or "Club Log".',
     },
     {
       headerName: 'Grid',
@@ -641,6 +754,8 @@ export function LogHistoryPlugin() {
       width: 50,
       resizable: false,
       sortable: false,
+      // The Country column beside it is the one worth filtering.
+      filter: false,
     },
     {
       headerName: 'Country',
@@ -688,6 +803,7 @@ export function LogHistoryPlugin() {
       width: 70,
       resizable: false,
       sortable: false,
+      filter: false,
       pinned: 'right',
     },
   ], [contestNameById, myStationCall]);
@@ -696,8 +812,12 @@ export function LogHistoryPlugin() {
     sortable: true,
     resizable: true,
     filter: true,
+    // A search box under each header, so per-column filtering is visible rather
+    // than hidden behind the header menu. Tied to the Filter button because the
+    // row costs vertical space the grid would rather give to QSOs.
+    floatingFilter: showFilters,
     enableRowGroup: false,
-  }), []);
+  }), [showFilters]);
 
   return (
     <GlassPanel
@@ -728,6 +848,24 @@ export function LogHistoryPlugin() {
               )}
               <span className="text-xs">Export</span>
             </button>
+            {/* Appears only once the view is narrowed, where it means something
+                the plain Export doesn't: write out just these QSOs — enough to
+                rebuild a single-mode WSJTX log from the filtered set. */}
+            {visibleCount > 0 && visibleCount !== loadedCount && (
+              <button
+                onClick={handleExportFiltered}
+                disabled={isExportingFiltered}
+                className="glass-button p-1.5 flex items-center gap-1.5 text-accent-secondary hover:text-accent-primary disabled:opacity-50"
+                title={`Export the ${visibleCount.toLocaleString()} QSOs matching the current filters to ADIF`}
+              >
+                {isExportingFiltered ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FileDown className="w-4 h-4" />
+                )}
+                <span className="text-xs">Export {visibleCount.toLocaleString()}</span>
+              </button>
+            )}
             <span className="text-glass-100 mx-1">|</span>
             <button
               onClick={handleSyncToQrz}
@@ -1023,8 +1161,13 @@ export function LogHistoryPlugin() {
             <span className="font-medium text-dark-200 text-sm">Summary</span>
             <span className="flex items-baseline gap-2">
               <span className="font-display font-bold text-accent-primary text-xl leading-none">{stats.totalQsos.toLocaleString()}</span>
-              {hasActiveFilters && totalCount !== stats.totalQsos && (
-                <span className="font-display font-bold text-accent-info text-xl leading-none">({totalCount.toLocaleString()})</span>
+              {visibleCount !== loadedCount && (
+                <span
+                  title="QSOs matching the current filters"
+                  className="font-display font-bold text-accent-info text-xl leading-none"
+                >
+                  ({visibleCount.toLocaleString()})
+                </span>
               )}
               <span className="text-[13px] text-dark-300">QSOs</span>
             </span>
@@ -1051,10 +1194,7 @@ export function LogHistoryPlugin() {
             <input
               type="text"
               value={callsignSearch}
-              onChange={(e) => {
-                setCallsignSearch(e.target.value.toUpperCase());
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setCallsignSearch(e.target.value.toUpperCase())}
               placeholder="Search callsign..."
               className="glass-input w-full pl-10 font-mono"
             />
@@ -1066,63 +1206,41 @@ export function LogHistoryPlugin() {
             <input
               type="text"
               value={nameSearch}
-              onChange={(e) => {
-                setNameSearch(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setNameSearch(e.target.value)}
               placeholder="Search name..."
               className="glass-input w-full pl-10"
             />
           </div>
 
-          {/* Band Select */}
+          {/* Band and Mode options come from the log, so they always cover
+              exactly what's in it — no more, and crucially no less. */}
           <select
             value={selectedBand}
-            onChange={(e) => {
-              setSelectedBand(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={(e) => setSelectedBand(e.target.value)}
             className="glass-input w-24 font-mono"
           >
             <option value="">Band</option>
-            <option value="160m">160m</option>
-            <option value="80m">80m</option>
-            <option value="40m">40m</option>
-            <option value="30m">30m</option>
-            <option value="20m">20m</option>
-            <option value="17m">17m</option>
-            <option value="15m">15m</option>
-            <option value="12m">12m</option>
-            <option value="10m">10m</option>
-            <option value="6m">6m</option>
-            <option value="2m">2m</option>
+            {bandOptions.map((band) => (
+              <option key={band} value={band}>{band}</option>
+            ))}
           </select>
 
-          {/* Mode Select */}
           <select
             value={selectedMode}
-            onChange={(e) => {
-              setSelectedMode(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={(e) => setSelectedMode(e.target.value)}
             className="glass-input w-24 font-mono"
           >
             <option value="">Mode</option>
-            <option value="SSB">SSB</option>
-            <option value="CW">CW</option>
-            <option value="FT8">FT8</option>
-            <option value="FT4">FT4</option>
-            <option value="RTTY">RTTY</option>
-            <option value="PSK31">PSK31</option>
-            <option value="AM">AM</option>
-            <option value="FM">FM</option>
+            {modeOptions.map((mode) => (
+              <option key={mode} value={mode}>{mode}</option>
+            ))}
           </select>
 
-          {/* Filter Toggle */}
+          {/* Filter Toggle — date range plus the per-column filter row */}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`glass-button p-2 ${showFilters ? 'bg-accent-primary/20' : ''}`}
-            title="Date filters"
+            title="Show date range and per-column filters"
           >
             <Filter className="w-4 h-4" />
           </button>
@@ -1148,10 +1266,7 @@ export function LogHistoryPlugin() {
               <input
                 type="date"
                 value={fromDate}
-                onChange={(e) => {
-                  setFromDate(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => setFromDate(e.target.value)}
                 className="glass-input px-2 py-1 text-sm font-mono"
               />
             </div>
@@ -1160,10 +1275,7 @@ export function LogHistoryPlugin() {
               <input
                 type="date"
                 value={toDate}
-                onChange={(e) => {
-                  setToDate(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => setToDate(e.target.value)}
                 className="glass-input px-2 py-1 text-sm font-mono"
               />
             </div>
@@ -1176,7 +1288,7 @@ export function LogHistoryPlugin() {
           <div className="shrink-0 flex items-center justify-between gap-3 mb-2 px-3 py-2 rounded-lg bg-accent-primary/10 border border-accent-primary/30">
             <span className="text-sm text-dark-200 font-ui">
               <span className="font-mono font-semibold text-white">{selectedQsos.length}</span>
-              {selectedQsos.length === 1 ? ' QSO selected' : ' QSOs selected'} on this page
+              {selectedQsos.length === 1 ? ' QSO selected' : ' QSOs selected'}
               {selectedUploadResult && (
                 <span className={`ml-3 text-xs ${selectedUploadResult.ok ? 'text-accent-success' : 'text-accent-danger'}`}>
                   {selectedUploadResult.ok ? '✓ ' : '⚠ '}{selectedUploadResult.text}
@@ -1244,6 +1356,10 @@ export function LogHistoryPlugin() {
                 checkboxes: true,
                 headerCheckbox: true,
                 enableClickSelection: false,
+                // The header checkbox takes the filtered set, not the whole log —
+                // "select everything I can see" is the useful meaning, and it
+                // keeps a stray click from arming a delete over every QSO.
+                selectAll: 'filtered',
               }}
               selectionColumnDef={{
                 pinned: 'left',
@@ -1254,6 +1370,14 @@ export function LogHistoryPlugin() {
               onSelectionChanged={handleSelectionChanged}
               getRowId={(params) => params.data.id}
               suppressMenuHide={true}
+              // Paging is the grid's job now that it holds the whole log — no
+              // round-trip per page, and filters apply across every QSO rather
+              // than the 50 that happened to be on screen.
+              pagination={true}
+              paginationPageSize={pageSize}
+              paginationPageSizeSelector={[25, 50, 100, 250]}
+              onFilterChanged={handleFilterChanged}
+              onModelUpdated={handleModelUpdated}
               onGridReady={handleGridReady}
               onColumnMoved={onColumnChanged}
               onColumnResized={onColumnChanged}
@@ -1264,60 +1388,13 @@ export function LogHistoryPlugin() {
           )}
         </div>
 
-        {/* Pagination — shrink-0 so it's never squeezed out by the grid above */}
-        {totalPages > 1 && (
-          <div className="shrink-0 flex items-center justify-between pt-2 border-t border-glass-100">
-            <div className="text-sm text-dark-300 font-mono">
-              Showing {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalCount)} of {totalCount.toLocaleString()}
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => handlePageChange(1)}
-                disabled={currentPage === 1}
-                className="glass-button p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
-                title="First page"
-              >
-                <ChevronsLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="glass-button p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
-                title="Previous page"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <div className="flex items-center gap-1 px-2">
-                <input
-                  type="number"
-                  value={currentPage}
-                  onChange={(e) => {
-                    const page = parseInt(e.target.value) || 1;
-                    handlePageChange(page);
-                  }}
-                  min={1}
-                  max={totalPages}
-                  className="glass-input w-16 text-center text-sm py-1 font-mono"
-                />
-                <span className="text-dark-300 text-sm font-mono">/ {totalPages}</span>
-              </div>
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="glass-button p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
-                title="Next page"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handlePageChange(totalPages)}
-                disabled={currentPage === totalPages}
-                className="glass-button p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
-                title="Last page"
-              >
-                <ChevronsRight className="w-4 h-4" />
-              </button>
-            </div>
+        {/* Only reachable if a log outgrows MAX_ROWS. Say so plainly rather than
+            let the grid quietly present a partial log as the whole thing. */}
+        {isTruncated && (
+          <div className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-warning/10 border border-accent-warning/30 text-xs text-accent-warning font-ui">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            Showing the first {loadedCount.toLocaleString()} of {serverTotal.toLocaleString()} QSOs.
+            Filters and export cover only the loaded rows.
           </div>
         )}
 
