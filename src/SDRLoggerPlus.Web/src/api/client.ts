@@ -1176,6 +1176,16 @@ class ApiClient {
     return this.fetch<TimeSyncState>('/time/offset');
   }
 
+  // ── NTP clock sync (banner clock right-click) ──
+  async getNtpOffset(server?: string): Promise<NtpOffset> {
+    const qs = server ? `?server=${encodeURIComponent(server)}` : '';
+    return this.fetch<NtpOffset>(`/time/ntp${qs}`);
+  }
+  async ntpResync(server?: string): Promise<NtpResync> {
+    const qs = server ? `?server=${encodeURIComponent(server)}` : '';
+    return this.fetch<NtpResync>(`/time/ntp/resync${qs}`, { method: 'POST' });
+  }
+
   // ── Logbook health — Verify QSO times (docs/design/timezone-architecture.md §5a) ──
   async scanQsoTimes(): Promise<QsoTimeAuditResult> {
     return this.fetch<QsoTimeAuditResult>('/logbookhealth/qso-times');
@@ -1220,6 +1230,8 @@ export interface ServerConfig {
 }
 export interface SaveServerConfigRequest { mode: 'host' | 'client'; hostUrl?: string; token?: string; shareOnNetwork?: boolean; }
 export interface TimeSyncState { isHost: boolean; offsetMs: number; lastSyncUtc?: string; }
+export interface NtpOffset { reachable: boolean; serverUtc: string; offsetMs: number; server: string; error: string | null; }
+export interface NtpResync { ok: boolean; detail: string; offsetMs: number; server: string; }
 export interface ServerTestResult { ok: boolean; detail: string; }
 
 // Logbook health — Verify QSO times
@@ -1251,7 +1263,7 @@ export interface QsoDuplicateMember {
   keep: boolean;
   keepReason: string | null;
 }
-export interface QsoDuplicateGroup { key: string; members: QsoDuplicateMember[]; }
+export interface QsoDuplicateGroup { key: string; members: QsoDuplicateMember[]; modeMismatch: boolean; }
 export interface QsoDuplicateScanResult {
   total: number;
   groupCount: number;

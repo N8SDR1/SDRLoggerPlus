@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAppStore } from '../store/appStore';
-import { api, SpaceWeatherData } from '../api/client';
+import { api, SpaceWeatherData, type NtpOffset } from '../api/client';
 import { APP_VERSION } from '../version';
 
 // ── Band activity heat map (SDRLogger+ port) ────────────────────────────────
@@ -150,6 +150,7 @@ export function HeaderPlugin() {
 
   const pad = (n: number) => n.toString().padStart(2, '0');
 
+  const [ntpPos, setNtpPos] = useState<{ x: number; y: number } | null>(null);
   const utcHours = currentTime.getUTCHours();
   const utcMinutes = currentTime.getUTCMinutes();
   const utcSeconds = currentTime.getUTCSeconds();
@@ -197,8 +198,12 @@ export function HeaderPlugin() {
       {/* Separator */}
       <div className="header-plugin__sep border-glass-100" />
 
-      {/* UTC Time */}
-      <div className="header-plugin__group">
+      {/* UTC Time — right-click to sync the PC clock from NTP */}
+      <div
+        className="header-plugin__group cursor-context-menu"
+        title="Right-click to sync your PC clock from NTP"
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setNtpPos({ x: e.clientX, y: e.clientY }); }}
+      >
         <span className="header-plugin__label font-ui text-accent-success">UTC</span>
         <span className="header-plugin__time font-display text-white">
           {pad(utcHours)}:{pad(utcMinutes)}:{pad(utcSeconds)}
@@ -209,14 +214,22 @@ export function HeaderPlugin() {
       {/* Separator */}
       <div className="header-plugin__sep border-glass-100" />
 
-      {/* Local Time */}
-      <div className="header-plugin__group">
+      {/* Local Time — right-click to sync the PC clock from NTP */}
+      <div
+        className="header-plugin__group cursor-context-menu"
+        title="Right-click to sync your PC clock from NTP"
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setNtpPos({ x: e.clientX, y: e.clientY }); }}
+      >
         <span className="header-plugin__label font-ui text-accent-success">LOCAL</span>
         <span className="header-plugin__time font-display text-accent-primary">
           {localTimeStr}
         </span>
         <span className="header-plugin__date font-mono text-dark-300">{localDateStr}</span>
       </div>
+
+      {/* NTP sync popover — fixed to the viewport at the click point so the header panel's
+          overflow can never clip it. */}
+      {ntpPos && <NtpSyncPopover pos={ntpPos} onClose={() => setNtpPos(null)} />}
 
       {/* Separator */}
       <div className="header-plugin__sep border-glass-100" />
@@ -280,5 +293,99 @@ export function HeaderPlugin() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Right-click-the-clock NTP sync. Queries public NTP for this PC's offset and, on Windows, offers a
+ * one-click "Sync now" that sets the system clock via an elevated helper (a UAC prompt). Read-only
+ * elsewhere. See NtpService / TimeController.
+ */
+function NtpSyncPopover({ pos, onClose }: { pos: { x: number; y: number }; onClose: () => void }) {
+  const [offset, setOffset] = useState<NtpOffset | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true); setMessage(null);
+    try { setOffset(await api.getNtpOffset()); }
+    catch { setOffset({ reachable: false, serverUtc: '', offsetMs: 0, server: 'NTP', error: 'Request failed' }); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const sync = async () => {
+    setSyncing(true); setMessage(null);
+    try {
+      const r = await api.ntpResync();
+      setMessage(r.detail);
+      if (r.ok) await load();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'Sync failed.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const describe = (ms: number) => {
+    const s = ms / 1000;
+    const abs = Math.abs(s);
+    const word = s > 0 ? 'behind' : 'ahead of';
+    if (abs < 0.5) return 'PC clock is in sync with NTP.';
+    return `PC clock is ${abs.toFixed(1)} s ${word} NTP.`;
+  };
+
+  // Clamp to the viewport so a click near the right/bottom edge stays fully visible.
+  const width = 256;
+  const left = Math.min(pos.x, window.innerWidth - width - 8);
+  const top = Math.min(pos.y + 8, window.innerHeight - 180);
+
+  return (
+    <>
+      {/* click-away backdrop */}
+      <div className="fixed inset-0 z-[999]" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
+      <div
+        className="fixed z-[1000] w-64 rounded-lg border border-glass-200 bg-dark-800 shadow-xl p-3 text-xs"
+        style={{ left: Math.max(8, left), top: Math.max(8, top) }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-ui font-semibold text-white">Clock sync (NTP)</span>
+          <button onClick={onClose} className="text-dark-400 hover:text-white" title="Close">✕</button>
+        </div>
+
+        {loading ? (
+          <div className="text-dark-300">Checking NTP…</div>
+        ) : offset && !offset.reachable ? (
+          <div className="text-amber-300">Couldn’t reach NTP{offset.error ? `: ${offset.error}` : '.'}</div>
+        ) : offset ? (
+          <>
+            <div className="text-dark-200">{describe(offset.offsetMs)}</div>
+            <div className="text-[10px] text-dark-400 mt-0.5 font-mono">{offset.server}</div>
+          </>
+        ) : null}
+
+        {message && <div className="mt-2 text-accent-primary">{message}</div>}
+
+        <div className="flex items-center gap-2 mt-3">
+          <button
+            onClick={sync}
+            disabled={syncing || loading}
+            className="px-2.5 py-1.5 rounded-md bg-accent-secondary text-black font-medium hover:bg-accent-secondary/90 disabled:opacity-50"
+            title="Windows: prompts for administrator approval to set the clock"
+          >
+            {syncing ? 'Syncing…' : 'Sync now'}
+          </button>
+          <button onClick={load} disabled={loading || syncing}
+            className="px-2.5 py-1.5 rounded-md border border-glass-200 text-gray-200 hover:bg-glass-100 disabled:opacity-50">
+            Re-check
+          </button>
+        </div>
+        <p className="text-[10px] text-dark-400 mt-2 leading-snug">
+          “Sync now” sets your PC clock from NTP. On Windows it asks for administrator approval.
+        </p>
+      </div>
+    </>
   );
 }

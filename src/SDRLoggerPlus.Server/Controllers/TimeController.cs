@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using SDRLoggerPlus.Server.Core.Time;
+using SDRLoggerPlus.Server.Services;
 
 namespace SDRLoggerPlus.Server.Controllers;
 
@@ -14,7 +15,12 @@ namespace SDRLoggerPlus.Server.Controllers;
 public class TimeController : ControllerBase
 {
     private readonly HostTimeOffset _offset;
-    public TimeController(HostTimeOffset offset) => _offset = offset;
+    private readonly NtpService _ntp;
+    public TimeController(HostTimeOffset offset, NtpService ntp)
+    {
+        _offset = offset;
+        _ntp = ntp;
+    }
 
     [HttpGet]
     public ActionResult Now() => Ok(new { utc = DateTime.UtcNow });
@@ -26,4 +32,24 @@ public class TimeController : ControllerBase
         offsetMs = _offset.Offset.TotalMilliseconds,
         lastSyncUtc = _offset.LastSyncUtc,
     });
+
+    /// <summary>Query public NTP and report how far THIS PC's clock is off (read-only).</summary>
+    [HttpGet("ntp")]
+    public async Task<ActionResult> Ntp([FromQuery] string? server, CancellationToken ct)
+        => Ok(await _ntp.QueryAsync(server, ct));
+
+    /// <summary>
+    /// Sync the PC clock to NTP. Queries NTP, then (Windows) sets the system clock via an elevated
+    /// helper — a UAC prompt the operator must approve. Returns the pre-sync offset for the UI.
+    /// </summary>
+    [HttpPost("ntp/resync")]
+    public async Task<ActionResult> NtpResync([FromQuery] string? server, CancellationToken ct)
+    {
+        var q = await _ntp.QueryAsync(server, ct);
+        if (!q.Reachable)
+            return Ok(new { ok = false, detail = $"Couldn't reach NTP: {q.Error}", offsetMs = 0.0, server = q.Server });
+
+        var r = _ntp.SetSystemClock(q.ServerUtc);
+        return Ok(new { ok = r.Ok, detail = r.Detail, offsetMs = q.OffsetMs, server = q.Server });
+    }
 }
