@@ -3,6 +3,52 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-28 — v2.12.0 "Arcturus"
+
+**Correct time, everywhere — plus new Logbook Health tools, an NTP clock sync, and a cleaner Help & Settings.**
+
+### Changed — QSO times are now UTC end-to-end
+The recurring "off by a day" gremlins are fixed at the root. Every QSO is stored, compared,
+filtered, exported and uploaded in **UTC** — the convention every logger (N1MM, N3FJP, Log4OM…)
+already uses — with date and time derived from a single instant so they can't drift.
+
+- **Re-importing an ADIF no longer duplicates evening QSOs.** The importer's duplicate check was
+  missing contacts near UTC-midnight; it now matches correctly, so a re-import of the same file
+  skips 100%.
+- **Exports/uploads agree.** ADIF, Cabrillo, QRZ, LoTW, eQSL, Club Log and HRDLog all emit the same
+  UTC date **and** time.
+- This is a read/logic fix — **no re-upload to QRZ/LoTW/eQSL is triggered**, and your data isn't
+  rewritten.
+
+### New — Logbook Health (Settings → Logbook Health)
+Opt-in, backup-first maintenance for your **local** log — nothing changes without your confirmation,
+and it never re-uploads to or deletes from QRZ / LoTW / eQSL.
+
+- **Verify QSO times** — finds QSOs whose date lost its time-of-day to the old bug (the time still
+  lives in the ADIF `TIME_ON` field) and reconstructs just those; anything uncertain is reported,
+  never guessed.
+- **Find duplicates** — finds the same station on the same band at the same minute, keeps one copy
+  (preferring one already synced, then the most complete), and pre-checks the rest. When copies have
+  **different modes** (e.g. CW vs FT8) it flags the set and lets **you** tick which to remove — one
+  is always kept.
+- **Super Check Partial** (callsign-suggestion master list) now lives here too.
+
+### New — Sync your PC clock from NTP
+**Right-click the header clock** to see how far your PC is off internet time (NTP) and, on Windows,
+**Sync now** to correct it (asks for administrator approval).
+
+### Fixed — Spotting your own QSO
+When no spot-capable cluster is connected, the app now says so clearly — **SpotHole is receive-only**;
+add a telnet DX cluster to send spots. If you run more than one cluster, a new **Spots** toggle on each
+cluster (Settings → Cluster) picks which one sends your spots.
+
+### Improved — Help & Settings
+- **Help guide search** — type a term and a dropdown lists every matching section; new **Logbook
+  Health** and **Clock & Time Sync** topics, plus **WAN sharing** guidance (Tailscale / ZeroTier) for
+  multi-op over the internet.
+- **Settings reorganized** into a logical flow (logbook → digital → spots → hardware → network →
+  appearance), with **Logbook Health** right after Web Logbooks.
+
 ## 2026-07-27 — v2.11.0 "Deneb"
 
 **Multi-operator networked logging arrives — as an early-testing (beta) feature.**
