@@ -980,3 +980,16 @@ public record LightningStrike(double Lat, double Lon, DateTime TimestampUtc, boo
 
 /// <summary>A batch of newly-observed lightning strikes pushed to clients.</summary>
 public record LightningStrikesEvent(IReadOnlyList<LightningStrike> Strikes);
+
+/// <summary>
+/// Multi-op radio presence (S-COORD): a station announces which band+mode it's on so the group sees a
+/// "who's on what" board and gets an RF-collision/desense warning. Band+mode only — no frequency (that
+/// would be constant VFO chatter, and band is the right granularity for both the one-Tx-per-band-mode
+/// rule and same-band desense).
+/// </summary>
+public record StationPresenceEvent(
+    string StationId, string? Operator, string? Band, string? Mode, DateTime UpdatedUtc);
+
+/// <summary>Multi-op operator-to-operator chat over the shared event bus (S-COORD).</summary>
+public record OperatorMessageEvent(
+    string StationId, string? Operator, string Text, DateTime SentUtc);

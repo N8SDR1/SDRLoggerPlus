@@ -29,6 +29,8 @@ public interface ILogHubClient
     Task OnBandOpening(BandOpeningEvent evt);
     Task OnRigStatus(RigStatusEvent evt);
     Task OnTciMeters(TciMetersEvent evt);
+    Task OnStationPresence(StationPresenceEvent evt);
+    Task OnOperatorMessage(OperatorMessageEvent evt);
     Task OnStationLocation(StationLocationEvent evt);
     Task OnContestState(SDRLoggerPlus.Contracts.Api.ContestStateDto state);
 
@@ -1312,6 +1314,12 @@ public static class LogHubExtensions
     {
         await hub.Clients.All.OnQsoLogged(evt);
     }
+
+    public static Task BroadcastPresence(this IHubContext<LogHub, ILogHubClient> hub, StationPresenceEvent evt)
+        => hub.Clients.All.OnStationPresence(evt);
+
+    public static Task BroadcastOperatorMessage(this IHubContext<LogHub, ILogHubClient> hub, OperatorMessageEvent evt)
+        => hub.Clients.All.OnOperatorMessage(evt);
 
     public static async Task BroadcastContestState(this IHubContext<LogHub, ILogHubClient> hub, SDRLoggerPlus.Contracts.Api.ContestStateDto state)
     {

@@ -204,6 +204,10 @@ builder.Services.AddSingleton(sp => new SDRLoggerPlus.Server.Services.Contesting
     Path.Combine(Path.GetDirectoryName(sp.GetRequiredService<IUserConfigService>().GetConfigPath())!,
         "shared-serials.json")));
 
+// Multi-op coordination (S-COORD): host-side "who's on what band+mode" board for the RF-collision
+// warning; presence + operator chat ride the shared event bus.
+builder.Services.AddSingleton<StationPresenceTracker>();
+
 // Register DX News service
 builder.Services.AddScoped<IDXNewsService, DXNewsService>();
 

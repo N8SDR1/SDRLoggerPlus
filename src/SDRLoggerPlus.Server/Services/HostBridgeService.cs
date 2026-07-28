@@ -46,11 +46,22 @@ public sealed class HostBridgeService : BackgroundService
             .WithAutomaticReconnect()
             .Build();
 
-        // Relay the host's new-QSO events to our own frontend, which then refetches the shared log.
+        // Relay the host's shared-bus events to our own frontend (which is wired only to its own hub):
+        // new QSOs (→ refetch the log), station presence (→ who's-on-what + RF warning), and op chat.
         _conn.On<QsoLoggedEvent>("OnQsoLogged", async evt =>
         {
             try { await _localHub.BroadcastQso(evt); }
             catch (Exception ex) { _log.LogDebug("Relay of host QSO event failed: {Msg}", ex.Message); }
+        });
+        _conn.On<StationPresenceEvent>("OnStationPresence", async evt =>
+        {
+            try { await _localHub.BroadcastPresence(evt); }
+            catch (Exception ex) { _log.LogDebug("Relay of presence failed: {Msg}", ex.Message); }
+        });
+        _conn.On<OperatorMessageEvent>("OnOperatorMessage", async evt =>
+        {
+            try { await _localHub.BroadcastOperatorMessage(evt); }
+            catch (Exception ex) { _log.LogDebug("Relay of op message failed: {Msg}", ex.Message); }
         });
 
         _conn.Reconnected += _ => { _log.LogInformation("Reconnected to host hub {Url}", hubUrl); return Task.CompletedTask; };
