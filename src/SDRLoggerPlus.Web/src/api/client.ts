@@ -1,4 +1,4 @@
-import type { SatState, ContestStateEvent, WsjtxDecodeEvent } from './signalr';
+import type { SatState, ContestStateEvent, WsjtxDecodeEvent, StationPresenceEvent } from './signalr';
 export type { SatState } from './signalr';
 
 const API_BASE = '/api';
@@ -1174,6 +1174,19 @@ class ApiClient {
 
   async getTimeSync(): Promise<TimeSyncState> {
     return this.fetch<TimeSyncState>('/time/offset');
+  }
+
+  // ── Multi-op coordination (S-COORD) ──────────────────────────────────
+  async reportPresence(stationId: string, operator: string | undefined, band: string | undefined, mode: string | undefined): Promise<StationPresenceEvent[]> {
+    return this.fetch<StationPresenceEvent[]>('/data/coord/presence', {
+      method: 'POST', body: JSON.stringify({ stationId, operator, band, mode }),
+    });
+  }
+  async getPresenceBoard(): Promise<StationPresenceEvent[]> {
+    return this.fetch<StationPresenceEvent[]>('/data/coord/presence');
+  }
+  async sendCoordMessage(stationId: string, operator: string | undefined, text: string): Promise<void> {
+    await this.fetch('/data/coord/message', { method: 'POST', body: JSON.stringify({ stationId, operator, text }) });
   }
 }
 

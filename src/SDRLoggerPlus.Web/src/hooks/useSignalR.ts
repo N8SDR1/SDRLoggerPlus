@@ -4,6 +4,7 @@ import { signalRService, type HamlibRigConfigDto, type SignalRConnectionState } 
 import { useAppStore, type ConnectionState } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLayoutStore } from '../store/layoutStore';
+import { useMultiOpStore } from '../store/multiOpStore';
 import { useToastStore } from '../store/toastStore';
 import { useWsjtxDecodeStore } from '../store/wsjtxDecodeStore';
 import { runDecodeAlerts } from '../utils/decodeAlertEngine';
@@ -164,6 +165,8 @@ export function useSignalRConnection() {
             // turns green immediately instead of on the next timed refetch.
             queryClient.invalidateQueries({ queryKey: ['gridmap'] });
           },
+          onStationPresence: (evt) => useMultiOpStore.getState().upsertPresence(evt),
+          onOperatorMessage: (evt) => useMultiOpStore.getState().addMessage(evt),
           onConfirmationSyncCompleted: (evt) => {
             if (evt.error) {
               useToastStore.getState().push(`${evt.source} auto-sync failed: ${evt.error}`, 'error');

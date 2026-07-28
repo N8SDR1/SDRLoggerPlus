@@ -800,10 +800,27 @@ export interface ConfirmationSyncCompletedEvent {
   error?: string;
 }
 
+// Multi-op coordination (S-COORD) — mirror the backend event records.
+export interface StationPresenceEvent {
+  stationId: string;
+  operator?: string;
+  band?: string;
+  mode?: string;
+  updatedUtc: string;
+}
+export interface OperatorMessageEvent {
+  stationId: string;
+  operator?: string;
+  text: string;
+  sentUtc: string;
+}
+
 type EventHandlers = {
   onCallsignFocused?: (evt: CallsignFocusedEvent) => void;
   onCallsignLookedUp?: (evt: CallsignLookedUpEvent) => void;
   onQsoLogged?: (evt: QsoLoggedEvent) => void;
+  onStationPresence?: (evt: StationPresenceEvent) => void;
+  onOperatorMessage?: (evt: OperatorMessageEvent) => void;
   onConfirmationSyncCompleted?: (evt: ConfirmationSyncCompletedEvent) => void;
   onSpotReceived?: (evt: SpotReceivedEvent) => void;
   onWsjtxDecode?: (evt: WsjtxDecodeEvent) => void;
@@ -1054,6 +1071,14 @@ class SignalRService {
 
     this.connection.on('OnQsoLogged', (evt: QsoLoggedEvent) => {
       this.handlers.onQsoLogged?.(evt);
+    });
+
+    this.connection.on('OnStationPresence', (evt: StationPresenceEvent) => {
+      this.handlers.onStationPresence?.(evt);
+    });
+
+    this.connection.on('OnOperatorMessage', (evt: OperatorMessageEvent) => {
+      this.handlers.onOperatorMessage?.(evt);
     });
 
     this.connection.on('OnContestState', (evt: ContestStateEvent) => {
