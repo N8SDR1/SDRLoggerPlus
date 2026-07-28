@@ -214,6 +214,25 @@ public class LiteQsoRepository : IQsoRepository
         return Task.FromResult(success);
     }
 
+    /// <summary>
+    /// Repairs ONLY the QsoDate instant, leaving every sync flag and UpdatedAt untouched.
+    ///
+    /// Like UpdateQslSyncAsync, this deliberately does NOT go through UpdateAsync: that flips a
+    /// Synced QSO to Modified and bumps UpdatedAt, which would re-queue a QRZ upload. A maintenance
+    /// time-repair fixes local data only and must never tell QRZ/LoTW the QSO changed. QsoDate feeds
+    /// date-based awards, so this uses Commit() (award-visible), unlike the QSL-ledger writer.
+    /// </summary>
+    public Task<bool> RepairQsoDateAsync(string id, DateTime qsoDateUtc)
+    {
+        var qso = _context.Qsos.FindById(new BsonValue(id));
+        if (qso == null) return Task.FromResult(false);
+
+        qso.QsoDate = DateTime.SpecifyKind(qsoDateUtc.ToUniversalTime(), DateTimeKind.Utc);
+        var success = _context.Qsos.Update(qso);
+        Commit();
+        return Task.FromResult(success);
+    }
+
     public Task<IEnumerable<Qso>> GetQslFailuresAsync(string service)
     {
         // Filtered in memory: the ledger is a nested document and LiteDB's

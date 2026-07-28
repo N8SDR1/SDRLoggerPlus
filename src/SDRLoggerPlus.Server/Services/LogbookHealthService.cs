@@ -55,6 +55,43 @@ public class LogbookHealthService
     }
 
     /// <summary>
+    /// Repair the chosen fixable-lost-time rows: reconstruct QsoDate from TimeOn. Each id is
+    /// RE-VALIDATED as still FixableLostTime before any write (so a stale request can't corrupt a
+    /// row that changed meanwhile), and written via the repository's flag-preserving path — no sync
+    /// flag touched, no UpdatedAt bump, never through UpdateAsync, so nothing is re-uploaded.
+    ///
+    /// <paramref name="snapshotBefore"/> is awaited ONCE before the first write; if it throws, the
+    /// repair aborts having changed nothing (no snapshot ⇒ no repair). The caller wires it to a real
+    /// backup. When there is nothing to repair, no snapshot is taken.
+    /// </summary>
+    public async Task<QsoTimeRepairResult> RepairFixableTimesAsync(
+        IReadOnlyCollection<string> ids, Func<Task>? snapshotBefore = null)
+    {
+        int repaired = 0, skipped = 0;
+        var snapshotted = false;
+
+        foreach (var id in ids.Distinct())
+        {
+            var qso = await _repository.GetByIdAsync(id);
+            if (qso is null) { skipped++; continue; }
+
+            var (bucket, proposed) = Classify(qso);
+            if (bucket != QsoTimeBucket.FixableLostTime || proposed is null) { skipped++; continue; }
+
+            if (!snapshotted)
+            {
+                if (snapshotBefore is not null) await snapshotBefore();
+                snapshotted = true;
+            }
+
+            if (await _repository.RepairQsoDateAsync(id, proposed.Value)) repaired++;
+            else skipped++;
+        }
+
+        return new QsoTimeRepairResult(ids.Count, repaired, skipped);
+    }
+
+    /// <summary>
     /// Classify one QSO. Compares the UTC time-of-day of QsoDate against the TimeOn string at
     /// minute granularity. Returns the bucket and, for FixableLostTime, the corrected UTC instant.
     /// </summary>

@@ -237,4 +237,9 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
     // Destructive whole-log wipe is intentionally NOT proxied — it must be done on the host directly.
     public Task<long> DeleteAllAsync() =>
         throw new NotSupportedException("Deleting the entire shared log must be done on the host, not a connected client.");
+
+    // A maintenance time-repair operates on local historical data; on a connected client the log
+    // lives on the host, so it must be run there, not proxied.
+    public Task<bool> RepairQsoDateAsync(string id, DateTime qsoDateUtc) =>
+        throw new NotSupportedException("Repairing QSO times must be done on the host, not a connected client.");
 }

@@ -26,6 +26,12 @@ public record QsoTimeIssue(
     /// <summary>For FixableLostTime: the corrected UTC instant we would write (date + TimeOn).</summary>
     DateTime? ProposedQsoDate);
 
+/// <summary>Outcome of repairing the fixable-lost-time rows.</summary>
+public record QsoTimeRepairResult(int Requested, int Repaired, int Skipped);
+
+/// <summary>Request body: which fixable QSO ids to repair (from the scan's FixableSamples).</summary>
+public record QsoTimeRepairRequest(IReadOnlyList<string> Ids);
+
 /// <summary>Read-only result of a "Verify QSO times" scan over the whole logbook.</summary>
 public record QsoTimeAuditResult(
     int Total,

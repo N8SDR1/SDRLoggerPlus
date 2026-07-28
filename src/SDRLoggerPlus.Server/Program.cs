@@ -152,6 +152,7 @@ if (userConfig.Provider == DatabaseProvider.RemoteHost)
 
 // Register services
 builder.Services.AddScoped<IQsoService, QsoService>();
+builder.Services.AddScoped<LogbookHealthService>();
 builder.Services.AddScoped<IAwardsService, AwardsService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddScoped<IQrzService, QrzService>();

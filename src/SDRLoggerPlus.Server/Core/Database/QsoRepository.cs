@@ -63,4 +63,12 @@ public interface IQsoRepository
     /// <summary>QSOs whose ledger records a retryable failure for the given service.</summary>
     Task<IEnumerable<Qso>> GetQslFailuresAsync(string service);
     Task<long> DeleteAllAsync();
+
+    /// <summary>
+    /// Repair ONLY the QsoDate instant, preserving every sync flag and NOT bumping UpdatedAt.
+    /// Deliberately bypasses UpdateAsync (which would flip QrzSyncStatus Synced→Modified and
+    /// re-queue a QRZ upload) — a maintenance time-repair must never re-upload. Used by the
+    /// "Verify QSO times" tool (docs/design/timezone-architecture.md §5a).
+    /// </summary>
+    Task<bool> RepairQsoDateAsync(string id, DateTime qsoDateUtc);
 }
