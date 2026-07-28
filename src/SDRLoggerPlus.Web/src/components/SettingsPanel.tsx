@@ -4079,6 +4079,22 @@ function BackupSettingsSection() {
         <p className="text-xs text-dark-400 mt-1">Leave blank to use the default backups folder next to your database</p>
       </div>
 
+      {/* Live mirror drive (S6) */}
+      <div>
+        <label className="block text-sm font-medium text-dark-200 mb-1">Live mirror drive (USB)</label>
+        <input
+          type="text"
+          value={backup.liveMirrorPath ?? ''}
+          onChange={(e) => updateBackupSettings({ liveMirrorPath: e.target.value })}
+          className="glass-input w-full"
+          placeholder="e.g. E:\  (leave blank to disable)"
+        />
+        <p className="text-xs text-dark-400 mt-1">
+          Keeps a continuously-current ADIF copy of your log on this drive (rewritten within ~30 s of a
+          new QSO). Your pull-and-go evacuation copy — for multi-op failover, or just storm insurance.
+        </p>
+      </div>
+
       {/* Status + Run now */}
       <div className="p-3 bg-dark-700 rounded-lg border border-glass-100 space-y-2">
         <div className="flex items-center justify-between">

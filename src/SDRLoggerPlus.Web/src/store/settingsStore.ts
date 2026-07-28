@@ -450,6 +450,7 @@ export interface BackupSettings {
   interval: 'daily' | 'weekly' | 'on_exit';
   retention: number;
   destinationPath?: string | null;
+  liveMirrorPath?: string | null; // S6: continuously-current ADIF copy on a (USB) drive
 }
 
 export type AiProvider = 'anthropic' | 'openai' | 'groq' | 'openrouter' | 'ollama' | 'custom';
@@ -815,6 +816,7 @@ const defaultSettings: Settings = {
     interval: 'daily',
     retention: 10,
     destinationPath: '',
+    liveMirrorPath: '',
   },
   hotList: {
     enabled: false,

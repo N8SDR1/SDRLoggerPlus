@@ -372,6 +372,10 @@ builder.Services.AddSingleton<BackupService>(sp =>
 });
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BackupService>());
 
+// Live ADIF mirror to a configured drive (S6 evacuation copy / storm insurance). Off unless a path
+// is set in Settings → Backup; any install can use it, not just multi-op.
+builder.Services.AddHostedService<LiveMirrorService>();
+
 // RBN band-opening alerts (own telnet session, VHF/UHF only, voice on frontend)
 builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.BandOpening.BandOpeningService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SDRLoggerPlus.Server.Services.BandOpening.BandOpeningService>());

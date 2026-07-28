@@ -995,6 +995,16 @@ public class BackupSettings
     [BsonElement("retention")]
     public int Retention { get; set; } = 10;
 
+    /// <summary>
+    /// Storm/failover insurance (S6): a folder — typically a USB drive — to keep a continuously-current
+    /// ADIF copy of the log in. Rewritten within ~30 s of a new QSO, atomically (a yanked drive never
+    /// leaves a truncated file). It's the pull-and-go evacuation copy for multi-op failover — pull the
+    /// drive from a dead host, import the ADIF into the standby. Empty = off. Universal ADIF so it
+    /// imports into anything.
+    /// </summary>
+    [BsonElement("liveMirrorPath")]
+    public string? LiveMirrorPath { get; set; }
+
     /// <summary>Empty/null → default: &lt;config dir&gt;/backups</summary>
     [BsonElement("destinationPath")]
     public string? DestinationPath { get; set; }
