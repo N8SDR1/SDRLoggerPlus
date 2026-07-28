@@ -206,14 +206,25 @@ with report-to-GitHub/Discord. Single-station is unaffected (Settings → Server
 
 **Remaining before we lift the beta tag — tomorrow's pick-up list:**
 
-1. **S5b — serial-number client integration** *(main deferred piece)*
-   - In `RemoteHost` mode, route `ContestSessionService.AllocateSerialAsync` (~line 142) to the host
-     `POST /api/data/serial/next` instead of local `ContestSerials.Allocate`. Backend
-     `SharedSerialAllocator` + `SerialController` are already done (S5a).
-   - Add the on-screen **pre-reservation** display (show the next serial *before* the caller answers;
-     a hard reservation, not a preview, so a faster op can't steal it).
-   - Scope: only **CQ WPX** + **ARRL Sweepstakes** actually need shared serials for multi-op. **Field Day
-     uses no serial**, so the marquee case needs nothing here.
+1. **S5b — serial-number client integration** *(✅ Piece 1 + 2a DONE 2026-07-28; 2b optional)*
+   > **Research verdict (2026-07-28, GitHub #52):** N1MM's own manual states *"Missing or duplicated serial
+   > numbers in the log do not matter; what matters is that what is logged matches what was actually
+   > sent."* Neither N1MM (replication + manual "set to highest+1" reset) nor N3FJP (shared file)
+   > **hard-locks** serials — the shown number is a live preview that can bump. So **Piece 1 + 2a = "done"**
+   > and match/exceed the reference tools; **2b (hard lock) is OPTIONAL**, beyond what any of them do.
+   - **(1) ✅ Client→host routing.** `IHostSerialClient` (Local / Remote) swapped by provider in
+     `DbServiceRegistration` (mirrors `IQsoRepository→RemoteApiQsoRepository`). `ContestSessionService`
+     `AllocateSerialAsync`/`PeekSerialAsync` call the host `POST /api/data/serial/next|peek` in RemoteHost
+     mode, with local fallback on a host blip. Backend `SharedSerialAllocator` + `SerialController` = S5a.
+   - **(2a) ✅ Preview display.** `ContestService.BuildDisplayStateAsync` overlays the host's `/peek` onto
+     the contest state's `NextSerial` in multi-op (inert on a local install). Live preview, N1MM-style.
+   - **(2b) Hard reservation — OPTIONAL (was thought required).** Reserve-on-show / commit-on-log /
+     release-on-clear so a shown number can't bump. Needs a reserve/commit/release lifecycle on
+     `SharedSerialAllocator` (today only `Next`/`Peek`). Build ONLY if a real WPX multi-op crew asks —
+     it would exceed N1MM/N3FJP. Tracked on #52.
+   - Scope: only **CQ WPX** + **ARRL Sweepstakes** need shared serials. **Field Day uses no serial.** No
+     sync/upload risk (contest-session data). Our host-atomic `Next` prevents dupes on the *logged*
+     number — stricter than N1MM.
 
 2. **Manual host-IP entry in "Host this log"** *(operator ask, 2026-07-28)*
    - Today `ServerController` auto-discovers LAN addresses and the UI only *displays*

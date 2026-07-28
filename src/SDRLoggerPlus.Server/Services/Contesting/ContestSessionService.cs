@@ -16,17 +16,20 @@ public class ContestSessionService
     private readonly ContestDefinitionService _definitions;
     private readonly ISettingsService _settings;
     private readonly ILogger<ContestSessionService> _logger;
+    private readonly IHostSerialClient _hostSerial;
 
     public ContestSessionService(
         IContestSessionRepository repo,
         ContestDefinitionService definitions,
         ISettingsService settings,
-        ILogger<ContestSessionService> logger)
+        ILogger<ContestSessionService> logger,
+        IHostSerialClient hostSerial)
     {
         _repo = repo;
         _definitions = definitions;
         _settings = settings;
         _logger = logger;
+        _hostSerial = hostSerial;
     }
 
     public Task<List<ContestSession>> GetAllAsync() => _repo.GetAllAsync();
@@ -146,6 +149,19 @@ public class ContestSessionService
         var def = _definitions.Get(session.DefinitionId);
         if (def == null || def.Serial == SerialMode.None) return 0;
 
+        // Multi-op: draw from the HOST's atomic sequence so ops never collide (S5b).
+        // TODO(#52): this is the soft "next number" — the HARD-LOCKED reservation
+        // (reserve-on-show / commit-on-log / release-on-clear) is still outstanding.
+        if (_hostSerial.IsRemote)
+        {
+            try { return await _hostSerial.NextAsync(session.DefinitionId, band); }
+            catch (Exception ex)
+            {
+                // Never block logging on a host blip — fall back to the local counter, warn loudly.
+                _logger.LogWarning(ex, "Host serial allocation failed; falling back to LOCAL serial (may collide across ops)");
+            }
+        }
+
         var serial = ContestSerials.Allocate(session, def.Serial, band);
         await _repo.UpsertAsync(session);
         return serial;
@@ -158,6 +174,19 @@ public class ContestSessionService
         if (session == null) return 0;
         var def = _definitions.Get(session.DefinitionId);
         if (def == null) return 0;
+
+        // Multi-op preview: the host owns the sequence, so peek there (S5b piece 2a).
+        // TODO(#52): a peek is only a preview — two ops can see the same number. The hard
+        // reservation that prevents number-stealing is still outstanding.
+        if (_hostSerial.IsRemote && def.Serial != SerialMode.None)
+        {
+            try { return await _hostSerial.PeekAsync(session.DefinitionId, band); }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Host serial peek failed; showing local peek");
+            }
+        }
+
         return ContestSerials.Peek(session, def.Serial, band);
     }
 }

@@ -56,18 +56,22 @@ public static class DbServiceRegistration
                     "outbox.json")));
 
             var baseUrl = config.HostUrl!.TrimEnd('/') + "/";
-            services.AddHttpClient<IQsoRepository, RemoteApiQsoRepository>(client =>
+            System.Action<System.Net.Http.HttpClient> configureHostClient = client =>
             {
                 client.BaseAddress = new Uri(baseUrl);
                 if (!string.IsNullOrWhiteSpace(config.HostToken))
                     client.DefaultRequestHeaders.Authorization =
                         new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", config.HostToken);
                 client.Timeout = TimeSpan.FromSeconds(30);
-            });
+            };
+            services.AddHttpClient<IQsoRepository, RemoteApiQsoRepository>(configureHostClient);
+            // Contest serials come from the host's atomic allocator in multi-op (S5b piece 1).
+            services.AddHttpClient<Services.Contesting.IHostSerialClient, Services.Contesting.RemoteHostSerialClient>(configureHostClient);
         }
         else
         {
             services.AddScoped<IQsoRepository, LiteQsoRepository>();
+            services.AddSingleton<Services.Contesting.IHostSerialClient, Services.Contesting.LocalHostSerialClient>();
         }
 
         services.AddScoped<ISettingsRepository, LiteSettingsRepository>();

@@ -26,6 +26,7 @@ public class ContestService
     private readonly ContestBroadcastService _broadcast;
     private readonly IHubContext<LogHub, ILogHubClient> _hub;
     private readonly ILogger<ContestService> _logger;
+    private readonly IHostSerialClient _hostSerial;
 
     public ContestService(
         IQsoRepository qsos,
@@ -36,7 +37,8 @@ public class ContestService
         CallHistoryService callHistory,
         ContestBroadcastService broadcast,
         IHubContext<LogHub, ILogHubClient> hub,
-        ILogger<ContestService> logger)
+        ILogger<ContestService> logger,
+        IHostSerialClient hostSerial)
     {
         _qsos = qsos;
         _sessions = sessions;
@@ -47,6 +49,7 @@ public class ContestService
         _broadcast = broadcast;
         _hub = hub;
         _logger = logger;
+        _hostSerial = hostSerial;
     }
 
     /// <summary>
@@ -71,7 +74,31 @@ public class ContestService
         var def = _definitions.Get(session.DefinitionId);
         if (def == null) return null;
         var log = await _qsos.GetByContestSessionAsync(session.Id);
-        return BuildState(session, def, log);
+        return await BuildDisplayStateAsync(session, def, log);
+    }
+
+    /// <summary>
+    /// BuildState plus the live "next serial" overlay. In multi-op RemoteHost mode the displayed next
+    /// number must come from the HOST's shared sequence (S5b 2a) — a live preview, exactly like N1MM
+    /// (a duplicate/gap is harmless per contest rules; #52 tracks the optional hard-lock). On a normal
+    /// local install PeekSerialAsync returns the same local peek BuildState would, so this is inert there.
+    /// </summary>
+    private async Task<ContestStateDto> BuildDisplayStateAsync(ContestSession session, ContestDefinition def, List<Qso> log)
+    {
+        var state = BuildState(session, def, log);
+        // Local install/host: BuildState's local peek is correct. Multi-op client: overlay the HOST's
+        // shared-sequence peek so the displayed next number matches what allocation will hand out.
+        if (!state.SerialInUse || !_hostSerial.IsRemote) return state;
+        try
+        {
+            var hostSerial = await _hostSerial.PeekAsync(session.DefinitionId, session.BandFilter ?? "");
+            return state with { NextSerial = hostSerial };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Host serial peek for display failed; showing local peek");
+            return state;
+        }
     }
 
     /// <summary>Live dupe/mult check for a call at the given band/mode (typing feedback).</summary>
@@ -191,7 +218,7 @@ public class ContestService
         _logger.LogInformation("Contest QSO {Call} on {Band} ({Points} pts, dupe={Dupe})",
             created.Callsign, created.Band, eval.Points, eval.IsDupe);
 
-        var state = BuildState(session, def, log);
+        var state = await BuildDisplayStateAsync(session, def, log);
 
         // Broadcast like the normal log path so Log History etc. stay live,
         // plus the contest-specific state for score/mult panels.
@@ -336,7 +363,7 @@ public class ContestService
             await _qsos.UpdateAsync(log[i].Id, log[i]);
         }
 
-        var state = BuildState(session, def, log);
+        var state = await BuildDisplayStateAsync(session, def, log);
         await _hub.BroadcastContestState(state);
         return state;
     }
