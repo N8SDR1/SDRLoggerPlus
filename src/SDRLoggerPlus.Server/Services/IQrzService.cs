@@ -92,7 +92,16 @@ public record QrzCallsignInfo(
     string? Email,
     string? QslManager,
     string? ImageUrl,
-    DateTime? LicenseExpiration
+    DateTime? LicenseExpiration,
+    // QRZ-only: whether the operator's callbook profile says they accept each
+    // confirmation channel. null means QRZ left the field blank (unknown), not "no" —
+    // the XML API models it as a genuine three-state (0/1/blank), and collapsing
+    // blank to false would tell the operator "won't confirm" about someone who
+    // simply never filled the field in. HamQTH has no equivalent, so a lookup that
+    // falls back to HamQTH surfaces none of these three.
+    bool? Lotw = null,
+    bool? Eqsl = null,
+    bool? Mqsl = null
 );
 
 public record QrzUploadProgress(

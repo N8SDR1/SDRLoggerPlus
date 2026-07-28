@@ -44,7 +44,13 @@ public record CallsignLookedUpEvent(
     // BaseCallsign carries it ("HB9GUX"); CompoundNote is a short human note
     // ("HB9GUX operating from France"). Both null for a plain base call.
     string? BaseCallsign = null,
-    string? CompoundNote = null
+    string? CompoundNote = null,
+    // QRZ-only "will accept" flags from the callbook profile — a genuine three-state
+    // (true/false/null-for-unknown). Null whenever the lookup fell back to HamQTH,
+    // which carries no equivalent fields.
+    bool? Lotw = null,
+    bool? Eqsl = null,
+    bool? Mqsl = null
 );
 
 /// <summary>

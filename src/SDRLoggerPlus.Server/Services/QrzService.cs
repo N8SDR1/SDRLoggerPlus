@@ -378,7 +378,10 @@ public class QrzService : IQrzService
                 Email: GetElementValueNs(callsignElement, "email"),
                 QslManager: GetElementValueNs(callsignElement, "qslmgr"),
                 ImageUrl: GetElementValueNs(callsignElement, "image"),
-                LicenseExpiration: ParseDate(GetElementValueNs(callsignElement, "expdate"))
+                LicenseExpiration: ParseDate(GetElementValueNs(callsignElement, "expdate")),
+                Lotw: ParseTriState(GetElementValueNs(callsignElement, "lotw")),
+                Eqsl: ParseTriState(GetElementValueNs(callsignElement, "eqsl")),
+                Mqsl: ParseTriState(GetElementValueNs(callsignElement, "mqsl"))
             );
         }
         catch (QrzSubscriptionRequiredException)
@@ -682,6 +685,18 @@ public class QrzService : IQrzService
         if (string.IsNullOrEmpty(value)) return null;
         return DateTime.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var result) ? result : null;
     }
+
+    /// <summary>
+    /// QRZ's lotw/eqsl/mqsl fields are a genuine three-state: "1" (will accept),
+    /// "0" (won't), or blank/missing (the operator never said). Collapsing the
+    /// blank case to false would misreport an unknown operator as a refusal.
+    /// </summary>
+    internal static bool? ParseTriState(string? value) => value switch
+    {
+        "1" => true,
+        "0" => false,
+        _ => null
+    };
 
     /// <summary>
     /// Normalize coordinates that may be in microdegree format (degrees * 1,000,000).

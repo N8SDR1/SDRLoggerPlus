@@ -344,7 +344,10 @@ public class LogHub : Hub<ILogHubClient>
             Distance: distance,
             LatLonIsApproximate: isApproximate,
             BaseCallsign: isCompound ? baseCall : null,
-            CompoundNote: compoundNote
+            CompoundNote: compoundNote,
+            Lotw: info?.Lotw,
+            Eqsl: info?.Eqsl,
+            Mqsl: info?.Mqsl
         );
 
         _logger.LogDebug(
