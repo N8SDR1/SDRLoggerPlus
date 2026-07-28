@@ -3,6 +3,39 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-27 — v2.11.0 "Deneb"
+
+**Multi-operator networked logging arrives — as an early-testing (beta) feature.**
+
+> ⚠️ **Please read: multi-op is brand new and in an EARLY TESTING phase.** It works and is
+> covered by tests, but it has **not yet been proven at scale on real multi-station
+> hardware**. **Don't rely on it for a critical contest yet.** Try it, and please report
+> anything that breaks on **[GitHub Issues](https://github.com/N8SDR1/SDRLoggerPlus/issues)**
+> or the **Discord**. Single-station logging is unchanged and unaffected.
+
+### New — Multi-op networked logging *(early testing / beta)*
+Share **one live log across several stations** for Field Day / multi-op. Each computer keeps
+running its own app and its own radio — only the **log** is shared.
+
+- **Host a shared log** (Settings → Server → "Host this log", "Share this log on my network")
+  or **connect to one** (host address + a per-device access token). Everything token-secured.
+- **Live across stations** — a contact logged on any station appears on all of them, with
+  **shared dupe-checking** and running score.
+- **Survives outages** — a host or Wi-Fi blip **never loses a QSO** (it's queued and re-sent),
+  and dupe-checking keeps working from a local cache while you're disconnected.
+- **Host-allocated serial numbers** — one atomic sequence, so a fast op and a slow op never
+  hand out the same number (CQ WPX / Sweepstakes).
+- **Time sync** — the host is the time authority, so all stations agree even with no internet;
+  a warning shows if a clock drifts.
+- **Multi-op coordination panel** — a "who's on what" board with **RF-collision warnings**
+  ("⚠ Watch out — N9BC is also on 20m USB"), plus **operator-to-operator chat**.
+- **Live ADIF evacuation mirror** — keep a continuously-current copy of the log on a USB drive
+  (Settings → Backup) — pull-and-go failover, or just storm insurance.
+
+### Fixed
+- **Custom ADIF fields preserved across the shared log.** IOTA / SOTA / contest extras
+  (`AdifExtra`) now round-trip faithfully over the networked-log path.
+
 ## 2026-07-27 — v2.10.1 "Capella"
 
 Award-accuracy and confirmation fixes (your next LoTW download may pick up
