@@ -194,3 +194,44 @@ worked.
 1. **Host discovery/addressing** — reserved static IP vs `hostname.local` (mDNS) vs a manual "Host" field
    (recommend: manual field now + reserved-IP guidance; mDNS discovery later).
 2. **S1 host store** — start on **LiteDB (Option 1)**; Postgres deferred to S7. (Confirmed direction.)
+
+---
+
+## 7. Status & next-session pick-up (updated 2026-07-28)
+
+**Shipped:** the whole S1–S6 stack (backend + frontend) is built and **released as a pre-test / beta
+feature in v2.11.0 "Deneb"** (2026-07-28). Multi-op is documented as early-testing everywhere (in-app
+Help "Multi-op (Beta)", wiki `Contesting.md` + `Feature-Status.md` + `Home.md`, and the landing page card)
+with report-to-GitHub/Discord. Single-station is unaffected (Settings → Server stays **Local**).
+
+**Remaining before we lift the beta tag — tomorrow's pick-up list:**
+
+1. **S5b — serial-number client integration** *(main deferred piece)*
+   - In `RemoteHost` mode, route `ContestSessionService.AllocateSerialAsync` (~line 142) to the host
+     `POST /api/data/serial/next` instead of local `ContestSerials.Allocate`. Backend
+     `SharedSerialAllocator` + `SerialController` are already done (S5a).
+   - Add the on-screen **pre-reservation** display (show the next serial *before* the caller answers;
+     a hard reservation, not a preview, so a faster op can't steal it).
+   - Scope: only **CQ WPX** + **ARRL Sweepstakes** actually need shared serials for multi-op. **Field Day
+     uses no serial**, so the marquee case needs nothing here.
+
+2. **Manual host-IP entry in "Host this log"** *(operator ask, 2026-07-28)*
+   - Today `ServerController` auto-discovers LAN addresses and the UI only *displays*
+     `http://<lan-ip>:<port>`. Make the advertised address **user-settable / overridable** — for a public
+     IP, a Tailscale/VPN IP, or when auto-detect picks the wrong NIC. Frontend `ServerSection.tsx` host
+     pane + persist on `UserConfig`. (It's the address clients dial, so it must not be display-only.)
+
+3. **WAN reachability guidance** *(pairs with #2)*
+   - Verified in code: the host binds Kestrel `0.0.0.0:5050` and clients make a **direct HTTP + SignalR**
+     connection — there is **no** UPnP/auto-port-forward, **no** relay/rendezvous, **no** hole-punch, **no**
+     tunnel, and the link is **plain HTTP (no TLS)**. So WAN does **not** "just work."
+   - Add an **"Operating over the internet (WAN)"** subsection to wiki `Contesting.md` + in-app Help:
+     **VPN / overlay (Tailscale / ZeroTier / WireGuard) = recommended** (no port-forward, encrypted, use the
+     host's VPN IP just like LAN); port-forward + public IP (dyn-DNS) works but is **least safe — the device
+     token is the only guard and the data is unencrypted**; or an HTTPS tunnel (Cloudflare / ngrok).
+
+4. **Already done, riding the next release** — time-sync label fix (`395d3d2`: the note now follows the
+   *selected* mode, not the live backend) and the landing-page Discord link (`3b58792`).
+
+5. **Go-live gate** — real-hardware + load test (measure the comfortable op-count on LiteDB), then lift the
+   "beta / early-testing" wording everywhere to the *measured* number (per §5).
