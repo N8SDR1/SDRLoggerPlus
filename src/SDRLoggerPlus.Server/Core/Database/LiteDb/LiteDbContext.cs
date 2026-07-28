@@ -26,6 +26,26 @@ public class LiteDbContext : IDbContext, IDisposable
         // concurrent first-access races during startup deserialization
         _mapper = new BsonMapper();
 
+        // Canonical time frame = UTC, everywhere (see docs/design/timezone-architecture.md).
+        //
+        // LiteDB 5.0.21 stores every DateTime as the correct UTC instant on disk, but on read
+        // it converts to the server's LOCAL time and returns Kind=Local — and the connection-string
+        // `UtcDate=true` flag is inert in this version (proven in LiteDbDateTimeRoundTripProbe and
+        // commit 1daa146). That local re-projection is the root of years of off-by-a-day bugs:
+        // an evening QSO reads back on the previous calendar day, so the import dedupe key misses
+        // it and it re-imports. Fix it once, at the boundary, by projecting every DateTime back to
+        // Kind=Utc on read. .ToUniversalTime() recovers the exact stored instant regardless of the
+        // Kind LiteDB hands us (no-op if already Utc, correct conversion if Local) — the on-disk
+        // bytes are unchanged, so this is a read-projection, NOT a data migration, and it cannot
+        // re-stamp or re-queue any QSO for upload (upload selection keys on sync flags, never on
+        // QsoDate — see the timezone doc §5).
+        _mapper.RegisterType<DateTime>(
+            serialize: dt => dt.ToUniversalTime(),
+            deserialize: bson => bson.AsDateTime.ToUniversalTime());
+        _mapper.RegisterType<DateTime?>(
+            serialize: dt => dt.HasValue ? dt.Value.ToUniversalTime() : BsonValue.Null,
+            deserialize: bson => bson.IsNull ? (DateTime?)null : bson.AsDateTime.ToUniversalTime());
+
         // Register custom serializer for MongoDB.Bson.BsonDocument so that the
         // Qso.AdifExtra property (which stores unmapped ADIF fields) can be
         // persisted in LiteDB without type-cast errors between MongoDB BSON types.
