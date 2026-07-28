@@ -227,12 +227,16 @@ export function ServerSection() {
         </div>
       )}
 
-      {/* Time sync status */}
+      {/* Time sync status — reflects the mode being configured, not just the live backend.
+          Host: this machine is the authority. Client: it takes its clock FROM the host —
+          show the live offset once actually connected, otherwise a forward-looking note. */}
       {timeSync && (
         <div className="p-3 rounded-lg bg-glass-50 border border-glass-100 text-sm flex items-start gap-2">
           <Clock className="w-4 h-4 text-accent-secondary mt-0.5 shrink-0" />
-          {timeSync.isHost ? (
+          {mode === 'host' ? (
             <span className="text-gray-200">This machine is the <strong>time authority</strong> — other stations sync their clocks to it.</span>
+          ) : timeSync.isHost ? (
+            <span className="text-gray-300">This machine will <strong>sync its clock from the host</strong> once you save and reconnect, so QSO times line up across stations.</span>
           ) : Math.abs(timeSync.offsetMs) > 5000 ? (
             <span className="text-amber-300">
               Your clock is <strong>{(timeSync.offsetMs / 1000).toFixed(1)} s</strong> off the host —
@@ -240,7 +244,7 @@ export function ServerSection() {
             </span>
           ) : (
             <span className="text-gray-300">
-              Clock synced to host (offset {(timeSync.offsetMs / 1000).toFixed(1)} s
+              Clock synced <strong>from the host</strong> (offset {(timeSync.offsetMs / 1000).toFixed(1)} s
               {timeSync.lastSyncUtc ? `, ${new Date(timeSync.lastSyncUtc).toLocaleTimeString()}` : ''}).
             </span>
           )}
