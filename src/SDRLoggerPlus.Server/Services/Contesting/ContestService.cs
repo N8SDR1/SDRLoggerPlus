@@ -505,10 +505,11 @@ public class ContestService
     {
         var summary = ContestScoringEngine.Recompute(def, session.MyExchange, log);
 
-        // Rates from wall-clock timestamps. CreatedAt/StartedAt come back from LiteDB
-        // as *local* time (Kind=Local), so compare in the same frame — using UtcNow
-        // here made every QSO read ~(UTC offset) hours old, so the last-hour count
-        // (and the rate) was permanently 0.
+        // Rates from wall-clock timestamps. CreatedAt/StartedAt are UTC (LiteDB now returns
+        // Kind=Utc — see docs/design/timezone-architecture.md); these are a display/rate
+        // calculation, so ToLocalTime() them and compare against DateTime.Now in the operator's
+        // local frame. (Comparing a UTC stored value against local Now WITHOUT the conversion
+        // would read every QSO ~offset hours off — the bug this .ToLocalTime() guards.)
         var now = DateTime.Now;
         var lastHour = log.Count(q => q.CreatedAt.ToLocalTime() >= now.AddHours(-1));
 
