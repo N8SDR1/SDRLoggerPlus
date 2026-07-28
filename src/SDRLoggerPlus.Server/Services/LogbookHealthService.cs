@@ -122,16 +122,23 @@ public class LogbookHealthService
                 .ThenBy(q => q.CreatedAt)
                 .ToList();
 
+            // Different modes at the same call/band/minute usually means one row has a WRONG mode, not
+            // a plain double-entry. Don't guess — default the whole group to KEEP and let the operator
+            // decide which (if any) to remove. Only same-mode groups get an auto keep/remove default.
+            var modeMismatch = ordered.Select(q => NormalizeMode(q.Mode)).Distinct().Count() > 1;
             var keeper = ordered[0];
-            redundant += ordered.Count - 1;
+
+            // "Redundant" (the default-remove count) only counts unambiguous same-mode extras.
+            if (!modeMismatch) redundant += ordered.Count - 1;
 
             if (outGroups.Count < GroupCap)
             {
                 var members = ordered.Select(q => new QsoDuplicateMember(
                     q.Id, q.Callsign, q.QsoDate, q.Band, q.Mode, IsSynced(q),
-                    Keep: ReferenceEquals(q, keeper),
-                    KeepReason: ReferenceEquals(q, keeper) ? KeeperReason(q, ordered) : null)).ToList();
-                outGroups.Add(new QsoDuplicateGroup(g.Key, members));
+                    // Mode-mismatch groups: everyone Keep by default (nothing pre-selected for removal).
+                    Keep: modeMismatch || ReferenceEquals(q, keeper),
+                    KeepReason: !modeMismatch && ReferenceEquals(q, keeper) ? KeeperReason(q, ordered) : null)).ToList();
+                outGroups.Add(new QsoDuplicateGroup(g.Key, members, modeMismatch));
             }
         }
 
@@ -147,16 +154,37 @@ public class LogbookHealthService
     public async Task<QsoDuplicateRemoveResult> RemoveDuplicatesAsync(
         IReadOnlyCollection<string> ids, Func<Task>? snapshotBefore = null)
     {
-        var scan = await FindDuplicatesAsync();
-        var deletable = scan.Groups
-            .SelectMany(g => g.Members)
-            .Where(m => !m.Keep)
-            .Select(m => m.Id)
-            .ToHashSet();
+        var all = (await _repository.GetAllAsync()).ToList();
 
-        var toDelete = ids.Distinct().Where(deletable.Contains).ToList();
-        var skipped = ids.Distinct().Count() - toDelete.Count;
+        // Map each QSO id to its duplicate-group key (only for ids that are actually in a group of 2+).
+        var groupOf = new Dictionary<string, string>();
+        var groupMembers = new Dictionary<string, List<string>>();
+        foreach (var g in all.GroupBy(DuplicateKey).Where(g => g.Count() > 1))
+        {
+            var memberIds = g.Select(q => q.Id).ToList();
+            groupMembers[g.Key] = memberIds;
+            foreach (var id in memberIds) groupOf[id] = g.Key;
+        }
 
+        var requested = ids.Distinct().ToList();
+
+        // Only a member of a duplicate group may be deleted (never a unique QSO — protects against a
+        // stale/bad request), AND we must leave at least ONE survivor in every group. Honour the
+        // operator's per-row choice within that guardrail: if they somehow select every member of a
+        // group, keep the group's default keeper so nothing is fully erased.
+        var deletable = requested.Where(id => groupOf.ContainsKey(id)).ToHashSet();
+        var toDelete = new List<string>();
+        foreach (var byGroup in deletable.GroupBy(id => groupOf[id]))
+        {
+            var members = groupMembers[byGroup.Key];
+            var wanted = byGroup.ToList();
+            // If the whole group is selected, spare one survivor (the last-ordered = the auto-keeper).
+            if (wanted.Count >= members.Count)
+                wanted = wanted.Where(id => id != PickSurvivor(all, members)).ToList();
+            toDelete.AddRange(wanted);
+        }
+
+        var skipped = requested.Count - toDelete.Count;
         if (toDelete.Count == 0)
             return new QsoDuplicateRemoveResult(ids.Count, 0, skipped);
 
@@ -166,12 +194,37 @@ public class LogbookHealthService
         return new QsoDuplicateRemoveResult(ids.Count, deleted, skipped);
     }
 
+    /// <summary>The row to spare if a whole group is selected for deletion — the keep-policy winner.</summary>
+    private static string PickSurvivor(IReadOnlyList<Qso> all, IReadOnlyList<string> memberIds)
+    {
+        var members = all.Where(q => memberIds.Contains(q.Id));
+        return members
+            .OrderByDescending(IsSynced)
+            .ThenByDescending(Completeness)
+            .ThenBy(q => q.CreatedAt)
+            .First().Id;
+    }
+
     /// <summary>Canonical duplicate identity: call + UTC date + minute-of-day + band. Mode excluded
     /// (the least reliable ADIF field), matching the import dedupe rule.</summary>
     private static string DuplicateKey(Qso q)
     {
         var utc = q.QsoDate.ToUniversalTime();
         return $"{q.Callsign.ToUpperInvariant()}|{utc:yyyyMMddHHmm}|{AdifFieldNormalizer.CanonicalBandKey(q.Band)}";
+    }
+
+    /// <summary>Collapse sideband/phone/spelling variants so only genuinely different modes count as a
+    /// mismatch (SSB≡USB≡LSB≡PH, RTTY≡FSK, PSK*≡PSK). CW vs FT8, JT65 vs JT9, FSK vs FT8 stay distinct.</summary>
+    private static string NormalizeMode(string? mode)
+    {
+        var m = (mode ?? "").ToUpperInvariant().Trim();
+        return m switch
+        {
+            "USB" or "LSB" or "SSB" or "PH" or "PHONE" or "VOICE" => "SSB",
+            "FSK" or "RTTY" => "RTTY",
+            "PSK31" or "PSK63" or "PSK125" or "PSK" => "PSK",
+            _ => m,
+        };
     }
 
     private static bool IsSynced(Qso q) =>

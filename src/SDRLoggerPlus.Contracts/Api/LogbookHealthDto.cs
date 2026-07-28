@@ -57,7 +57,12 @@ public record QsoDuplicateMember(
     string? KeepReason);
 
 /// <summary>A set of QSOs sharing one canonical identity (call + UTC date + minute + band).</summary>
-public record QsoDuplicateGroup(string Key, IReadOnlyList<QsoDuplicateMember> Members);
+public record QsoDuplicateGroup(
+    string Key,
+    IReadOnlyList<QsoDuplicateMember> Members,
+    /// <summary>True when the members disagree on MODE — likely one has a wrong mode rather than being a
+    /// plain double-entry, so the tool defaults to keeping all and lets the operator choose.</summary>
+    bool ModeMismatch);
 
 /// <summary>Read-only result of a whole-log duplicate scan.</summary>
 public record QsoDuplicateScanResult(

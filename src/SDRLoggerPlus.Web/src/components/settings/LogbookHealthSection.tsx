@@ -35,20 +35,34 @@ export function LogbookHealthSection() {
   const [dupConfirming, setDupConfirming] = useState(false);
   const [dupResult, setDupResult] = useState<QsoDuplicateRemoveResult | null>(null);
   const [dupError, setDupError] = useState<string | null>(null);
+  // Which QSO ids the operator has marked for removal. Seeded from the scan's defaults
+  // (auto-keeper's twins in same-mode groups; nothing pre-selected in mode-mismatch groups).
+  const [removeIds, setRemoveIds] = useState<Set<string>>(new Set());
 
   const scanDups = async () => {
     setDupScanning(true); setDupError(null); setDupResult(null);
-    try { setDups(await api.scanDuplicates()); }
+    try {
+      const r = await api.scanDuplicates();
+      setDups(r);
+      setRemoveIds(new Set(r.groups.flatMap(g => g.members.filter(m => !m.keep).map(m => m.id))));
+    }
     catch (e) { setDupError(e instanceof Error ? e.message : 'Duplicate scan failed.'); }
     finally { setDupScanning(false); }
   };
 
+  const toggleRemove = (id: string) => {
+    setRemoveIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   const removeDups = async () => {
-    if (!dups) return;
+    if (!dups || removeIds.size === 0) return;
     setDupRemoving(true); setDupError(null);
     try {
-      const ids = dups.groups.flatMap(g => g.members.filter(m => !m.keep).map(m => m.id));
-      const r = await api.removeDuplicates(ids);
+      const r = await api.removeDuplicates([...removeIds]);
       setDupResult(r);
       setDupConfirming(false);
       await scanDups();
@@ -236,9 +250,10 @@ export function LogbookHealthSection() {
         </div>
 
         <p className="text-xs text-dark-300">
-          Finds accidental double-entries — the same station on the same band at the same minute (mode is
-          ignored, matching the importer). It keeps one copy of each — preferring the one already synced to
-          QRZ/LoTW, then the most complete — and proposes removing the rest.
+          Finds the same station worked on the same band at the same minute. It <strong className="text-gray-200">keeps one copy</strong> of each
+          same-mode set (preferring one already synced to QRZ/LoTW, then the most complete) and pre-checks the
+          rest for removal. When the copies have <strong className="text-gray-200">different modes</strong> it leaves them alone and asks you to
+          decide — tick exactly the rows you want gone.
         </p>
 
         {dupError && (
@@ -251,53 +266,61 @@ export function LogbookHealthSection() {
           <>
             <div className="grid grid-cols-2 gap-2 text-center">
               <Stat label="Duplicate sets" value={dups.groupCount} tone={dups.groupCount > 0 ? 'warn' : 'ok'} />
-              <Stat label="Redundant" value={dups.redundantCount} tone={dups.redundantCount > 0 ? 'warn' : 'ok'} />
+              <Stat label="Selected to remove" value={removeIds.size} tone={removeIds.size > 0 ? 'warn' : 'ok'} />
             </div>
             <div className="text-[11px] text-dark-400 text-center">{dups.total.toLocaleString()} QSOs scanned</div>
 
-            {dups.redundantCount === 0 && (
+            {dups.groupCount === 0 && (
               <div className="text-sm text-green-400 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4" /> No duplicates found.
               </div>
             )}
 
-            {dups.redundantCount > 0 && (
+            {dups.groupCount > 0 && (
               <div className="space-y-2">
                 <div className="max-h-72 overflow-y-auto rounded border border-glass-100 divide-y divide-glass-100">
                   {dups.groups.map(g => (
-                    <div key={g.key} className="px-3 py-2">
-                      {g.members.map(m => (
-                        <div key={m.id} className="flex items-center justify-between gap-3 text-xs py-0.5">
-                          <span className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-accent-primary">{m.callsign}</span>
-                            <span className="text-dark-400 font-mono">{utc(m.qsoDate)} · {m.band} · {m.mode}</span>
-                          </span>
-                          {m.keep ? (
-                            <span className="text-[10px] uppercase tracking-wide text-green-400" title={m.keepReason ?? ''}>
-                              keep{m.synced ? ' ✓synced' : ''}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] uppercase tracking-wide text-red-400 flex items-center gap-1">
-                              <Trash2 className="w-3 h-3" /> remove
-                            </span>
-                          )}
+                    <div key={g.key} className={`px-3 py-2 ${g.modeMismatch ? 'bg-amber-400/5' : ''}`}>
+                      {g.modeMismatch && (
+                        <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-amber-300 mb-1">
+                          <AlertTriangle className="w-3 h-3" /> Different modes — you choose
                         </div>
-                      ))}
+                      )}
+                      {g.members.map(m => {
+                        const marked = removeIds.has(m.id);
+                        return (
+                          <label key={m.id} className="flex items-center justify-between gap-3 text-xs py-0.5 cursor-pointer">
+                            <span className="flex items-center gap-2 min-w-0">
+                              <input type="checkbox" checked={marked} onChange={() => toggleRemove(m.id)}
+                                className="accent-red-500 shrink-0" />
+                              <span className="font-mono font-bold text-accent-primary">{m.callsign}</span>
+                              <span className="text-dark-400 font-mono truncate">{utc(m.qsoDate)} · {m.band} · <span className={g.modeMismatch ? 'text-amber-300' : ''}>{m.mode}</span></span>
+                            </span>
+                            <span className="text-[10px] uppercase tracking-wide shrink-0">
+                              {marked ? (
+                                <span className="text-red-400 flex items-center gap-1"><Trash2 className="w-3 h-3" /> remove</span>
+                              ) : (
+                                <span className="text-green-400" title={m.keepReason ?? ''}>keep{m.synced ? ' ✓synced' : ''}</span>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
 
                 {!dupConfirming ? (
-                  <button onClick={() => setDupConfirming(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent-secondary text-black font-medium text-sm hover:bg-accent-secondary/90">
-                    <Trash2 className="w-4 h-4" /> Remove {dups.redundantCount.toLocaleString()} duplicate(s)
+                  <button onClick={() => setDupConfirming(true)} disabled={removeIds.size === 0}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent-secondary text-black font-medium text-sm hover:bg-accent-secondary/90 disabled:opacity-40">
+                    <Trash2 className="w-4 h-4" /> Remove {removeIds.size.toLocaleString()} selected
                   </button>
                 ) : (
                   <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 space-y-2">
                     <p className="text-xs text-amber-200">
-                      This takes a <strong>full backup first</strong>, then deletes the redundant copies from
-                      your <strong>local</strong> log only. It will <strong>not</strong> remove them from QRZ /
-                      LoTW / eQSL.
+                      This takes a <strong>full backup first</strong>, then deletes the <strong>{removeIds.size}</strong> ticked
+                      row(s) from your <strong>local</strong> log only. It will <strong>not</strong> remove them from
+                      QRZ / LoTW / eQSL. At least one QSO in every set is always kept.
                     </p>
                     <div className="flex gap-2">
                       <button onClick={removeDups} disabled={dupRemoving}
