@@ -3,6 +3,7 @@ import { useMap } from 'react-leaflet';
 import { useQuery } from '@tanstack/react-query';
 import L from 'leaflet';
 import { api } from '../api/client';
+import { useConfirmationRuleStore } from '../store/confirmationRuleStore';
 
 interface GridSquareOverlayProps {
   /** Band to filter worked grids to (e.g. '20m'); 'all' or undefined = every band. */
@@ -30,9 +31,13 @@ export function GridSquareOverlay({ band, mode }: GridSquareOverlayProps) {
   const bandFilter = band && band.toLowerCase() !== 'all' ? band : undefined;
   const modeFilter = mode && mode.toLowerCase() !== 'all' ? mode : undefined;
 
+  // Same shared rule as the Grid Tracker panel, so the overlay and the chart
+  // can never disagree about which grids are confirmed (#46).
+  const confirmationRule = useConfirmationRuleStore((s) => s.rule);
+
   const { data } = useQuery({
-    queryKey: ['gridmap', 'map-overlay', bandFilter ?? 'all', modeFilter ?? 'all'],
-    queryFn: () => api.getGridMap(bandFilter, modeFilter),
+    queryKey: ['gridmap', 'map-overlay', bandFilter ?? 'all', modeFilter ?? 'all', confirmationRule],
+    queryFn: () => api.getGridMap(bandFilter, modeFilter, confirmationRule),
     staleTime: 60_000,
   });
 

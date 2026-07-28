@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { api, VuccFilters } from '../api/client';
+import { ConfirmationRuleToggle } from '../components/ConfirmationRuleToggle';
+import { useConfirmationRuleStore } from '../store/confirmationRuleStore';
 
 const VUCC_BANDS = ['6m', '2m', '70cm', '23cm'];
 
@@ -42,12 +44,16 @@ export function VuccStatisticsTab() {
   const [filters, setFilters] = useState<VuccFilters>({});
   const [sortBy, setSortBy] = useState<'grid' | 'band' | 'qsos'>('grid');
 
+  // VUCC is an ARRL award, so it defaults to LoTW+card counting; the shared
+  // toggle widens it to any confirmation channel (#46).
+  const confirmationRule = useConfirmationRuleStore((s) => s.rule);
+
   const { data, isLoading, error, refetch } = useQuery({
     // Nested under 'statistics' so QSO mutations invalidate it. React Query
     // matches by key prefix, so the old standalone 'vucc-statistics' key never
     // saw the ['statistics'] invalidation and the bars sat on cached numbers.
-    queryKey: ['statistics', 'vucc', filters],
-    queryFn: () => api.getVuccStatistics(filters),
+    queryKey: ['statistics', 'vucc', filters, confirmationRule],
+    queryFn: () => api.getVuccStatistics({ ...filters, confirmations: confirmationRule }),
     staleTime: 60_000,
   });
 
@@ -103,6 +109,8 @@ export function VuccStatisticsTab() {
           <option value="band">Sort: Band</option>
           <option value="qsos">Sort: QSOs</option>
         </select>
+
+        <ConfirmationRuleToggle />
 
         {(filters.band || filters.status) && (
           <button
