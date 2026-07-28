@@ -1817,8 +1817,9 @@ export function LogEntryPlugin() {
         {/* Submit / Clear / Spot — v1.x General button row minus QRZ
             (the callsign info card already exposes a QRZ.com link via the
             ExternalLink icon, so a second button here would be redundant).
-            Spot is a placeholder until the "send-a-spot-to-the-cluster"
-            hub method lands (v2 currently only RECEIVES spots). */}
+            Spot sends this QSO to your chosen telnet DX cluster; SpotHole is
+            receive-only, so the backend replies with a clear "add a cluster"
+            message when there's nothing spottable connected. */}
         <div className="flex gap-2">
           <button
             type="submit"
@@ -1858,7 +1859,7 @@ export function LogEntryPlugin() {
             }}
             disabled={!formData.callsign || !formData.frequency}
             className="glass-button flex items-center justify-center gap-1.5 py-2 px-3 disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Send this QSO's callsign+frequency as a spot to every connected DX cluster"
+            title="Send this QSO as a DX spot to your chosen telnet cluster (SpotHole is receive-only — add a cluster in Settings → Cluster to spot)"
           >
             <Send className="w-4 h-4" />
             Spot

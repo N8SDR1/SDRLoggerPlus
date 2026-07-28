@@ -346,19 +346,23 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
             {
                 // Rule 3: refuse rather than guess.
                 _logger.LogWarning("Spot: {N} clusters connected but no primary picked in Settings → Cluster — refusing to guess", connected.Count);
-                return new SendSpotResult(false, 0, "Multiple clusters connected — pick a primary spot cluster in Settings → Cluster");
+                return new SendSpotResult(false, 0, "You have several clusters connected — choose which one sends your spots under Settings → Cluster → Outbound Spots (“Send self-spots to”).");
             }
             else if (!string.IsNullOrWhiteSpace(primaryId))
             {
                 _logger.LogInformation("Spot: primary cluster {PrimaryId} isn't connected", primaryId);
-                return new SendSpotResult(false, 0, "The primary spot cluster isn't currently connected");
+                return new SendSpotResult(false, 0, "Your chosen spot cluster isn’t connected right now. Connect it (or pick another) under Settings → Cluster.");
             }
         }
 
         if (target is null)
         {
-            _logger.LogInformation("Spot: no connected cluster to send to");
-            return new SendSpotResult(false, 0, "No DX cluster is connected");
+            // The common case for a fresh install: SpotHole is the default source and it only
+            // RECEIVES spots (a REST poller, never in _connections). So there is nothing to spot on
+            // until the operator adds a telnet DX cluster. Say that plainly — see YO8RFS report.
+            _logger.LogInformation("Spot: no spottable (telnet) DX cluster connected");
+            return new SendSpotResult(false, 0,
+                "Spotting needs a DX cluster connection. SpotHole (the default source) only receives spots — it can’t send them. Add a telnet DX cluster under Settings → Cluster to spot your own QSOs.");
         }
 
         var ok = await target.SendSpotAsync(callsign, freqKhz, comment, ct);
