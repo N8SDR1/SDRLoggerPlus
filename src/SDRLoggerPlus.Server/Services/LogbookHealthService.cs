@@ -1,6 +1,7 @@
 using SDRLoggerPlus.Contracts.Api;
 using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Core.Database;
+using SDRLoggerPlus.Server.Services.Adif;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -89,6 +90,117 @@ public class LogbookHealthService
         }
 
         return new QsoTimeRepairResult(ids.Count, repaired, skipped);
+    }
+
+    // ── Find duplicates (whole-log) ──────────────────────────────────────────────────────────────
+    private const int GroupCap = 500;
+
+    /// <summary>
+    /// Read-only: group QSOs by canonical identity (call + UTC date + minute + band; mode excluded,
+    /// matching the importer) and, for each group of 2+, decide which single row to KEEP. Keep policy:
+    /// prefer the copy already synced to QRZ/LoTW (keeps local ↔ online consistent), then the most
+    /// complete record, then the earliest CreatedAt. The others are proposed for deletion.
+    /// </summary>
+    public async Task<QsoDuplicateScanResult> FindDuplicatesAsync()
+    {
+        var all = (await _repository.GetAllAsync()).ToList();
+
+        var groups = all
+            .GroupBy(DuplicateKey)
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        int redundant = 0;
+        var outGroups = new List<QsoDuplicateGroup>();
+
+        foreach (var g in groups)
+        {
+            // Keeper first: synced, then completeness, then oldest.
+            var ordered = g
+                .OrderByDescending(IsSynced)
+                .ThenByDescending(Completeness)
+                .ThenBy(q => q.CreatedAt)
+                .ToList();
+
+            var keeper = ordered[0];
+            redundant += ordered.Count - 1;
+
+            if (outGroups.Count < GroupCap)
+            {
+                var members = ordered.Select(q => new QsoDuplicateMember(
+                    q.Id, q.Callsign, q.QsoDate, q.Band, q.Mode, IsSynced(q),
+                    Keep: ReferenceEquals(q, keeper),
+                    KeepReason: ReferenceEquals(q, keeper) ? KeeperReason(q, ordered) : null)).ToList();
+                outGroups.Add(new QsoDuplicateGroup(g.Key, members));
+            }
+        }
+
+        return new QsoDuplicateScanResult(all.Count, groups.Count, redundant, outGroups);
+    }
+
+    /// <summary>
+    /// Delete the chosen redundant rows. Recomputes the keep/delete decision server-side and only
+    /// deletes ids that are genuinely a NON-keeper in a duplicate group — so a stale or malicious
+    /// request can never delete a keeper or a unique QSO. Deletes are local-only (no QRZ/LoTW cascade)
+    /// and a snapshot is taken before the first delete.
+    /// </summary>
+    public async Task<QsoDuplicateRemoveResult> RemoveDuplicatesAsync(
+        IReadOnlyCollection<string> ids, Func<Task>? snapshotBefore = null)
+    {
+        var scan = await FindDuplicatesAsync();
+        var deletable = scan.Groups
+            .SelectMany(g => g.Members)
+            .Where(m => !m.Keep)
+            .Select(m => m.Id)
+            .ToHashSet();
+
+        var toDelete = ids.Distinct().Where(deletable.Contains).ToList();
+        var skipped = ids.Distinct().Count() - toDelete.Count;
+
+        if (toDelete.Count == 0)
+            return new QsoDuplicateRemoveResult(ids.Count, 0, skipped);
+
+        if (snapshotBefore is not null) await snapshotBefore();
+        var deleted = await _repository.DeleteManyAsync(toDelete);
+
+        return new QsoDuplicateRemoveResult(ids.Count, deleted, skipped);
+    }
+
+    /// <summary>Canonical duplicate identity: call + UTC date + minute-of-day + band. Mode excluded
+    /// (the least reliable ADIF field), matching the import dedupe rule.</summary>
+    private static string DuplicateKey(Qso q)
+    {
+        var utc = q.QsoDate.ToUniversalTime();
+        return $"{q.Callsign.ToUpperInvariant()}|{utc:yyyyMMddHHmm}|{AdifFieldNormalizer.CanonicalBandKey(q.Band)}";
+    }
+
+    private static bool IsSynced(Qso q) =>
+        q.QrzSyncStatus == SyncStatus.Synced ||
+        string.Equals(q.Qsl?.Lotw?.Sent, "Y", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>How much a row carries — used to keep the richest copy.</summary>
+    private static int Completeness(Qso q)
+    {
+        int n = 0;
+        if (!string.IsNullOrWhiteSpace(q.Name) || !string.IsNullOrWhiteSpace(q.Station?.Name)) n++;
+        if (!string.IsNullOrWhiteSpace(q.Grid) || !string.IsNullOrWhiteSpace(q.Station?.Grid)) n++;
+        if (!string.IsNullOrWhiteSpace(q.Country) || !string.IsNullOrWhiteSpace(q.Station?.Country)) n++;
+        if (!string.IsNullOrWhiteSpace(q.RstSent)) n++;
+        if (!string.IsNullOrWhiteSpace(q.RstRcvd)) n++;
+        if (!string.IsNullOrWhiteSpace(q.Comment)) n++;
+        if (!string.IsNullOrWhiteSpace(q.Notes)) n++;
+        if (q.Frequency is > 0) n++;
+        if (q.AdifExtra is not null && q.AdifExtra.ElementCount > 0) n++;
+        return n;
+    }
+
+    private static string KeeperReason(Qso keeper, IReadOnlyList<Qso> group)
+    {
+        if (IsSynced(keeper) && group.Count(IsSynced) == 1) return "already synced to QRZ/LoTW";
+        var maxComplete = group.Max(Completeness);
+        if (Completeness(keeper) == maxComplete && group.Count(q => Completeness(q) == maxComplete) == 1)
+            return "most complete record";
+        return "earliest logged";
     }
 
     /// <summary>

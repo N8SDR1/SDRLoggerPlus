@@ -53,4 +53,32 @@ public class LogbookHealthController : ControllerBase
             result.Repaired, result.Skipped, result.Requested);
         return Ok(result);
     }
+
+    /// <summary>Read-only scan: group the log into duplicate sets with a keep/delete decision per row.</summary>
+    [HttpGet("duplicates")]
+    public async Task<ActionResult<QsoDuplicateScanResult>> ScanDuplicates()
+        => Ok(await _health.FindDuplicatesAsync());
+
+    /// <summary>
+    /// Delete the chosen redundant rows. Takes a full backup first; deletes are local-only (they never
+    /// touch QRZ/LoTW), and the server re-validates that every id is a non-keeper before deleting.
+    /// </summary>
+    [HttpPost("duplicates/remove")]
+    public async Task<ActionResult<QsoDuplicateRemoveResult>> RemoveDuplicates([FromBody] QsoDuplicateRemoveRequest request)
+    {
+        if (request.Ids is null || request.Ids.Count == 0)
+            return BadRequest("No QSO ids supplied.");
+
+        var result = await _health.RemoveDuplicatesAsync(
+            request.Ids,
+            snapshotBefore: async () =>
+            {
+                _logger.LogInformation("Find duplicates: taking a backup before removing up to {Count} row(s)", request.Ids.Count);
+                await _backup.RunNowAsync("duplicate-removal");
+            });
+
+        _logger.LogInformation("Find duplicates: deleted {Deleted}, skipped {Skipped} of {Requested}",
+            result.Deleted, result.Skipped, result.Requested);
+        return Ok(result);
+    }
 }

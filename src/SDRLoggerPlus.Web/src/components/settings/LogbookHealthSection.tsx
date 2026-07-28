@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Stethoscope, Clock, CheckCircle2, AlertTriangle, Wrench, RefreshCw, ShieldCheck } from 'lucide-react';
-import { api, type QsoTimeAuditResult, type QsoTimeRepairResult } from '../../api/client';
+import { Stethoscope, Clock, CheckCircle2, AlertTriangle, Wrench, RefreshCw, ShieldCheck, Layers, Trash2 } from 'lucide-react';
+import {
+  api,
+  type QsoTimeAuditResult, type QsoTimeRepairResult,
+  type QsoDuplicateScanResult, type QsoDuplicateRemoveResult,
+} from '../../api/client';
 
 /**
  * Settings → Logbook Health → Verify QSO times.
@@ -23,6 +27,37 @@ export function LogbookHealthSection() {
   }, []);
 
   useEffect(() => { runScan(); }, [runScan]);
+
+  // ── Find duplicates ──
+  const [dups, setDups] = useState<QsoDuplicateScanResult | null>(null);
+  const [dupScanning, setDupScanning] = useState(false);
+  const [dupRemoving, setDupRemoving] = useState(false);
+  const [dupConfirming, setDupConfirming] = useState(false);
+  const [dupResult, setDupResult] = useState<QsoDuplicateRemoveResult | null>(null);
+  const [dupError, setDupError] = useState<string | null>(null);
+
+  const scanDups = async () => {
+    setDupScanning(true); setDupError(null); setDupResult(null);
+    try { setDups(await api.scanDuplicates()); }
+    catch (e) { setDupError(e instanceof Error ? e.message : 'Duplicate scan failed.'); }
+    finally { setDupScanning(false); }
+  };
+
+  const removeDups = async () => {
+    if (!dups) return;
+    setDupRemoving(true); setDupError(null);
+    try {
+      const ids = dups.groups.flatMap(g => g.members.filter(m => !m.keep).map(m => m.id));
+      const r = await api.removeDuplicates(ids);
+      setDupResult(r);
+      setDupConfirming(false);
+      await scanDups();
+    } catch (e) {
+      setDupError(e instanceof Error ? e.message : 'Duplicate removal failed.');
+    } finally {
+      setDupRemoving(false);
+    }
+  };
 
   const doRepair = async () => {
     if (!scan) return;
@@ -184,6 +219,113 @@ export function LogbookHealthSection() {
             Fixes your <strong>local</strong> log only. Anything already uploaded to QRZ / LoTW keeps its
             current date — a re-upload is never triggered.
           </span>
+        </div>
+      </div>
+
+      {/* Find duplicates */}
+      <div className="rounded-lg border border-glass-100 bg-glass-50 p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-gray-200 font-medium">
+            <Layers className="w-4 h-4 text-accent-primary" /> Find duplicates
+          </div>
+          <button onClick={scanDups} disabled={dupScanning}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-glass-200 text-sm text-gray-200 hover:bg-glass-100 disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 ${dupScanning ? 'animate-spin' : ''}`} />
+            {dupScanning ? 'Scanning…' : dups ? 'Re-scan' : 'Scan for duplicates'}
+          </button>
+        </div>
+
+        <p className="text-xs text-dark-300">
+          Finds accidental double-entries — the same station on the same band at the same minute (mode is
+          ignored, matching the importer). It keeps one copy of each — preferring the one already synced to
+          QRZ/LoTW, then the most complete — and proposes removing the rest.
+        </p>
+
+        {dupError && (
+          <div className="text-sm text-red-400 flex items-center gap-1.5">
+            <AlertTriangle className="w-4 h-4" /> {dupError}
+          </div>
+        )}
+
+        {dups && (
+          <>
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <Stat label="Duplicate sets" value={dups.groupCount} tone={dups.groupCount > 0 ? 'warn' : 'ok'} />
+              <Stat label="Redundant" value={dups.redundantCount} tone={dups.redundantCount > 0 ? 'warn' : 'ok'} />
+            </div>
+            <div className="text-[11px] text-dark-400 text-center">{dups.total.toLocaleString()} QSOs scanned</div>
+
+            {dups.redundantCount === 0 && (
+              <div className="text-sm text-green-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" /> No duplicates found.
+              </div>
+            )}
+
+            {dups.redundantCount > 0 && (
+              <div className="space-y-2">
+                <div className="max-h-72 overflow-y-auto rounded border border-glass-100 divide-y divide-glass-100">
+                  {dups.groups.map(g => (
+                    <div key={g.key} className="px-3 py-2">
+                      {g.members.map(m => (
+                        <div key={m.id} className="flex items-center justify-between gap-3 text-xs py-0.5">
+                          <span className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-accent-primary">{m.callsign}</span>
+                            <span className="text-dark-400 font-mono">{utc(m.qsoDate)} · {m.band} · {m.mode}</span>
+                          </span>
+                          {m.keep ? (
+                            <span className="text-[10px] uppercase tracking-wide text-green-400" title={m.keepReason ?? ''}>
+                              keep{m.synced ? ' ✓synced' : ''}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] uppercase tracking-wide text-red-400 flex items-center gap-1">
+                              <Trash2 className="w-3 h-3" /> remove
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                {!dupConfirming ? (
+                  <button onClick={() => setDupConfirming(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent-secondary text-black font-medium text-sm hover:bg-accent-secondary/90">
+                    <Trash2 className="w-4 h-4" /> Remove {dups.redundantCount.toLocaleString()} duplicate(s)
+                  </button>
+                ) : (
+                  <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 space-y-2">
+                    <p className="text-xs text-amber-200">
+                      This takes a <strong>full backup first</strong>, then deletes the redundant copies from
+                      your <strong>local</strong> log only. It will <strong>not</strong> remove them from QRZ /
+                      LoTW / eQSL.
+                    </p>
+                    <div className="flex gap-2">
+                      <button onClick={removeDups} disabled={dupRemoving}
+                        className="px-3 py-1.5 rounded-lg bg-accent-secondary text-black font-medium text-sm hover:bg-accent-secondary/90 disabled:opacity-50">
+                        {dupRemoving ? 'Removing…' : 'Back up & remove'}
+                      </button>
+                      <button onClick={() => setDupConfirming(false)} disabled={dupRemoving}
+                        className="px-3 py-1.5 rounded-lg border border-glass-200 text-sm text-gray-200 hover:bg-glass-100 disabled:opacity-50">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {dupResult && (
+          <div className="text-sm text-green-400 flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4" /> Removed {dupResult.deleted.toLocaleString()} duplicate(s).
+            {dupResult.skipped > 0 && <span className="text-dark-400"> ({dupResult.skipped} skipped)</span>}
+          </div>
+        )}
+
+        <div className="flex items-start gap-2 text-[11px] text-dark-400 border-t border-glass-100 pt-3">
+          <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0 text-dark-300" />
+          <span>Removes rows from your <strong>local</strong> log only — never from QRZ / LoTW / eQSL.</span>
         </div>
       </div>
     </div>

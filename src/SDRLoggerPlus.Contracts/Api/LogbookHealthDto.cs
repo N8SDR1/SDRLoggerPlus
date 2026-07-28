@@ -40,3 +40,34 @@ public record QsoTimeAuditResult(
     int Ambiguous,
     IReadOnlyList<QsoTimeIssue> FixableSamples,
     IReadOnlyList<QsoTimeIssue> AmbiguousSamples);
+
+// ── Find duplicates ─────────────────────────────────────────────────────────────
+
+/// <summary>One QSO in a duplicate group.</summary>
+public record QsoDuplicateMember(
+    string Id,
+    string Callsign,
+    DateTime QsoDate,
+    string Band,
+    string Mode,
+    bool Synced,
+    /// <summary>True for the row we keep; false for the redundant copies proposed for deletion.</summary>
+    bool Keep,
+    /// <summary>Why this row was chosen as the keeper (shown in the UI).</summary>
+    string? KeepReason);
+
+/// <summary>A set of QSOs sharing one canonical identity (call + UTC date + minute + band).</summary>
+public record QsoDuplicateGroup(string Key, IReadOnlyList<QsoDuplicateMember> Members);
+
+/// <summary>Read-only result of a whole-log duplicate scan.</summary>
+public record QsoDuplicateScanResult(
+    int Total,
+    int GroupCount,
+    int RedundantCount,
+    IReadOnlyList<QsoDuplicateGroup> Groups);
+
+/// <summary>Request body: the redundant QSO ids to delete (the non-keeper rows).</summary>
+public record QsoDuplicateRemoveRequest(IReadOnlyList<string> Ids);
+
+/// <summary>Outcome of removing duplicates.</summary>
+public record QsoDuplicateRemoveResult(int Requested, int Deleted, int Skipped);

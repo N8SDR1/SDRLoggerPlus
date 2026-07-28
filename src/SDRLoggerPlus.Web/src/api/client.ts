@@ -1185,6 +1185,14 @@ class ApiClient {
       method: 'POST', body: JSON.stringify({ ids }),
     });
   }
+  async scanDuplicates(): Promise<QsoDuplicateScanResult> {
+    return this.fetch<QsoDuplicateScanResult>('/logbookhealth/duplicates');
+  }
+  async removeDuplicates(ids: string[]): Promise<QsoDuplicateRemoveResult> {
+    return this.fetch<QsoDuplicateRemoveResult>('/logbookhealth/duplicates/remove', {
+      method: 'POST', body: JSON.stringify({ ids }),
+    });
+  }
 
   // ── Multi-op coordination (S-COORD) ──────────────────────────────────
   async reportPresence(stationId: string, operator: string | undefined, band: string | undefined, mode: string | undefined): Promise<StationPresenceEvent[]> {
@@ -1232,6 +1240,25 @@ export interface QsoTimeAuditResult {
   ambiguousSamples: QsoTimeIssue[];
 }
 export interface QsoTimeRepairResult { requested: number; repaired: number; skipped: number; }
+
+export interface QsoDuplicateMember {
+  id: string;
+  callsign: string;
+  qsoDate: string;
+  band: string;
+  mode: string;
+  synced: boolean;
+  keep: boolean;
+  keepReason: string | null;
+}
+export interface QsoDuplicateGroup { key: string; members: QsoDuplicateMember[]; }
+export interface QsoDuplicateScanResult {
+  total: number;
+  groupCount: number;
+  redundantCount: number;
+  groups: QsoDuplicateGroup[];
+}
+export interface QsoDuplicateRemoveResult { requested: number; deleted: number; skipped: number; }
 export interface AuthDevice { id: string; name: string; createdUtc: string; lastSeenUtc?: string; }
 
 // QRZ Types
