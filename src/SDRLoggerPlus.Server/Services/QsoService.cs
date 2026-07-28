@@ -155,7 +155,7 @@ public class QsoService : IQsoService
         var qso = new Qso
         {
             Callsign = request.Callsign.ToUpperInvariant(),
-            QsoDate = request.QsoDate,
+            QsoDate = CanonicalUtc(request.QsoDate),
             TimeOn = request.TimeOn,
             Band = request.Band,
             Mode = request.Mode,
@@ -294,7 +294,7 @@ public class QsoService : IQsoService
         if (existing is null) return null;
 
         if (request.Callsign != null) existing.Callsign = request.Callsign.ToUpperInvariant();
-        if (request.QsoDate.HasValue) existing.QsoDate = request.QsoDate.Value;
+        if (request.QsoDate.HasValue) existing.QsoDate = CanonicalUtc(request.QsoDate.Value);
         if (request.TimeOn != null) existing.TimeOn = request.TimeOn;
         if (request.Band != null) existing.Band = request.Band;
         if (request.Mode != null) existing.Mode = request.Mode;
@@ -346,6 +346,19 @@ public class QsoService : IQsoService
         }
         return await _repository.GetStatisticsAsync(myCall);
     }
+
+    /// <summary>
+    /// Pin an incoming QSO time to the canonical UTC frame (see
+    /// docs/design/timezone-architecture.md). The API contract is UTC, but a client
+    /// can hand us any Kind: a <c>Z</c> instant (Utc) or an offset (Local) convert
+    /// correctly; a <b>naive</b> value (Unspecified) is <b>assumed UTC</b> — the ham/ADIF
+    /// convention — and labelled as such rather than shifted as if it were local time,
+    /// which would move the instant by the server's offset (the historical double-shift bug).
+    /// </summary>
+    private static DateTime CanonicalUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(value, DateTimeKind.Utc)
+            : value.ToUniversalTime();
 
     private static QsoResponse MapToResponse(Qso qso) => new(
         qso.Id,
