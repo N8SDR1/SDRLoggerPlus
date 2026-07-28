@@ -73,8 +73,10 @@ public class ClubLogService
         var sb = new StringBuilder();
         sb.Append(Field("CALL", qso.Callsign));
         sb.Append(Field("STATION_CALLSIGN", stationCallsign));
-        sb.Append(Field("QSO_DATE", qso.QsoDate.ToString("yyyyMMdd")));
-        sb.Append(Field("TIME_ON", qso.TimeOn?.Replace(":", "") is { Length: > 6 } t ? t[..6] : qso.TimeOn?.Replace(":", "")));
+        // QSO_DATE + TIME_ON are UTC, derived from one QsoDate instant so they can't drift.
+        var utc = qso.QsoDate.ToUniversalTime();
+        sb.Append(Field("QSO_DATE", utc.ToString("yyyyMMdd")));
+        sb.Append(Field("TIME_ON", utc.ToString("HHmmss")));
         sb.Append(Field("BAND", qso.Band));
         sb.Append(Field("MODE", qso.Mode));
         // Qso.Frequency is kHz; ADIF FREQ is MHz.

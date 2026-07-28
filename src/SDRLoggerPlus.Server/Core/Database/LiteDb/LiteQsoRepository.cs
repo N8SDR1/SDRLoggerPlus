@@ -80,16 +80,19 @@ public class LiteQsoRepository : IQsoRepository
         if (!string.IsNullOrEmpty(criteria.Mode))
             query = query.Where(q => q.Mode == criteria.Mode);
 
+        // Range bounds are bare calendar dates (yyyy-MM-dd); interpret them as UTC days so the
+        // filter matches the UTC dates shown in the grid. Pin Kind=Utc, or LiteDB's serializer
+        // would treat a naive bound as local and shift it by the server offset.
         if (criteria.FromDate.HasValue)
         {
-            var fromDate = criteria.FromDate.Value;
+            var fromDate = DateTime.SpecifyKind(criteria.FromDate.Value.Date, DateTimeKind.Utc);
             query = query.Where(q => q.QsoDate >= fromDate);
         }
 
         if (criteria.ToDate.HasValue)
         {
-            var toDate = criteria.ToDate.Value.AddDays(1);
-            query = query.Where(q => q.QsoDate <= toDate);
+            var toDate = DateTime.SpecifyKind(criteria.ToDate.Value.Date, DateTimeKind.Utc).AddDays(1);
+            query = query.Where(q => q.QsoDate < toDate);
         }
 
         if (criteria.Dxcc.HasValue)
@@ -258,15 +261,12 @@ public class LiteQsoRepository : IQsoRepository
         var all = _context.Qsos.FindAll()
             .Where(q => SDRLoggerPlus.Server.Services.QsoOwnership.IsPersonalQso(q, myCall)).ToList();
 
-        // "Today" = the operator's LOCAL calendar day. In-app QSOs (manual, FT8
-        // auto-log, SAT) store a local QsoDate, so the old DateTime.UtcNow.Date
-        // comparison under-counted evening QSOs once UTC had already rolled past
-        // midnight — a 21:33 local QSO on the 17th read as "before" 00:00 UTC on
-        // the 18th and dropped to 0. Normalise every QsoDate to local time (a
-        // no-op for the local rows, a proper conversion for UTC-imported rows)
-        // and match today's local date.
-        var today = DateTime.Now.Date;
-        var qsosToday = all.Count(q => q.QsoDate.ToLocalTime().Date == today);
+        // "Today" = the UTC calendar day — the operating day every logger (N1MM, N3FJP,
+        // Log4OM, Logger32, HRD) and every date column in this app uses. QSOs are stored and
+        // shown in UTC, so the count must bucket by UTC too, or it disagrees with the grid.
+        // (See docs/design/timezone-architecture.md — one frame, UTC, everywhere.)
+        var today = DateTime.UtcNow.Date;
+        var qsosToday = all.Count(q => q.QsoDate.ToUniversalTime().Date == today);
 
         // Qso stores DXCC / Country / Grid on the nested StationInfo (v2
         // schema) and ALSO carries legacy top-level columns for older rows —

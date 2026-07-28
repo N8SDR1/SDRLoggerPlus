@@ -581,10 +581,12 @@ public class QrzService : IQrzService
     {
         var sb = new StringBuilder();
 
-        // Required fields
+        // Required fields. QSO_DATE and TIME_ON are UTC by ADIF spec and are derived from the
+        // SAME QsoDate instant so they can never drift (matches AdifService.ExportQsoRecord).
+        var utc = qso.QsoDate.ToUniversalTime();
         AppendAdifField(sb, "CALL", qso.Callsign);
-        AppendAdifField(sb, "QSO_DATE", qso.QsoDate.ToString("yyyyMMdd"));
-        AppendAdifField(sb, "TIME_ON", qso.TimeOn.Replace(":", ""));
+        AppendAdifField(sb, "QSO_DATE", utc.ToString("yyyyMMdd"));
+        AppendAdifField(sb, "TIME_ON", utc.ToString("HHmmss"));
         AppendAdifField(sb, "BAND", qso.Band);
         AppendAdifField(sb, "MODE", qso.Mode);
 

@@ -65,8 +65,10 @@ public static class CabrilloExporter
     {
         var freq = FreqKhz(qso);
         var mode = CabrilloMode(qso.Mode);
-        var date = qso.QsoDate.ToUniversalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var time = Hhmm(qso.TimeOn);
+        // Cabrillo date + time are UTC, derived from one QsoDate instant so they can't drift.
+        var utc = qso.QsoDate.ToUniversalTime();
+        var date = utc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var time = utc.ToString("HHmm", CultureInfo.InvariantCulture);
 
         var sent = sentFields.Select(f => SentValue(f, me, qso));
         var rcvd = rcvdFields.Select(f => RcvdValue(f, qso));
@@ -188,10 +190,4 @@ public static class CabrilloExporter
         return BandKhz.TryGetValue(qso.Band ?? "", out var k) ? k.ToString(CultureInfo.InvariantCulture) : "0";
     }
 
-    private static string Hhmm(string? timeOn)
-    {
-        var t = new string((timeOn ?? "").Where(char.IsDigit).ToArray());
-        if (t.Length >= 4) return t[..4];
-        return t.PadRight(4, '0');
-    }
 }

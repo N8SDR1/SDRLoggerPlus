@@ -55,8 +55,8 @@ public class ClubLogServiceTests
     {
         Id = "1",
         Callsign = "K5XYZ",
-        QsoDate = new DateTime(2026, 6, 11, 0, 0, 0, DateTimeKind.Utc),
-        TimeOn = "18:30",
+        QsoDate = new DateTime(2026, 6, 11, 18, 30, 0, DateTimeKind.Utc),
+        TimeOn = "1830",
         Band = "20m",
         Mode = "SSB",
         Frequency = 14.250,
@@ -71,7 +71,7 @@ public class ClubLogServiceTests
         adif.Should().Contain("<CALL:5>K5XYZ");
         adif.Should().Contain("<STATION_CALLSIGN:4>N9BC");
         adif.Should().Contain("<QSO_DATE:8>20260611");
-        adif.Should().Contain("<TIME_ON:4>1830");
+        adif.Should().Contain("<TIME_ON:6>183000");
         adif.Should().Contain("<BAND:3>20m");
         adif.Should().Contain("<MODE:3>SSB");
         adif.Should().Contain("<RST_SENT:2>59");

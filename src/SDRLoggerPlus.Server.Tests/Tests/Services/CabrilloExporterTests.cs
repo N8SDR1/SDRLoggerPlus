@@ -24,7 +24,9 @@ public class CabrilloExporterTests
         Band = "20m",
         Mode = "CW",
         Frequency = 14042.0, // kHz
-        QsoDate = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc),
+        // The app stores the full UTC instant in QsoDate (post-0c88056); Cabrillo derives
+        // both the date and time from it, so the real time-of-day lives here.
+        QsoDate = new DateTime(2026, 5, 30, 12, 1, 30, DateTimeKind.Utc),
         TimeOn = "120130",
         RstSent = "599",
         RstRcvd = "599",

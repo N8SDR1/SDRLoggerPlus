@@ -1346,7 +1346,7 @@ export function LogHistoryPlugin() {
                 <div key={q.id} className="flex items-baseline justify-between gap-3 py-0.5">
                   <span className="text-accent-primary font-mono font-bold text-sm">{q.callsign}</span>
                   <span className="text-xs text-dark-300 font-mono">
-                    {new Date(q.qsoDate).toLocaleDateString()} • {q.band} • {q.mode}
+                    {new Date(q.qsoDate).toLocaleDateString('en-US', { timeZone: 'UTC' })} • {q.band} • {q.mode}
                   </span>
                 </div>
               ))}
@@ -1401,7 +1401,7 @@ export function LogHistoryPlugin() {
             <div className="bg-dark-700/50 rounded p-3 mb-6">
               <p className="text-accent-primary font-mono font-bold">{deletingQso.callsign}</p>
               <p className="text-sm text-dark-300 font-mono">
-                {new Date(deletingQso.qsoDate).toLocaleDateString()} • {deletingQso.band} • {deletingQso.mode}
+                {new Date(deletingQso.qsoDate).toLocaleDateString('en-US', { timeZone: 'UTC' })} • {deletingQso.band} • {deletingQso.mode}
               </p>
             </div>
             <p className="text-sm text-accent-danger mb-4">
