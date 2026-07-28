@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DecodeAlertsSection } from './settings/DecodeAlertsSection';
 import { ServerSection } from './settings/ServerSection';
+import { LogbookHealthSection } from './settings/LogbookHealthSection';
 import {
   loadAnnouncementVoices,
   applyAnnouncementVoice,
@@ -28,6 +29,7 @@ import {
   WifiOff,
   Loader2,
   Server,
+  Stethoscope,
   ExternalLink,
   ChevronDown,
   ChevronUp,
@@ -128,6 +130,12 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     name: 'Backup & Restore',
     icon: <Archive className="w-5 h-5" />,
     description: 'Logbook backups + settings export / import',
+  },
+  {
+    id: 'logbookhealth',
+    name: 'Logbook Health',
+    icon: <Stethoscope className="w-5 h-5" />,
+    description: 'Verify QSO times + find duplicates',
   },
   {
     id: 'sat',
@@ -5367,6 +5375,8 @@ export function SettingsPanel() {
         return <RbnAlertsSettingsSection />;
       case 'backup':
         return <BackupSettingsSection />;
+      case 'logbookhealth':
+        return <LogbookHealthSection />;
       case 'alerts':
         return <AlertsSection />;
       case 'sat':

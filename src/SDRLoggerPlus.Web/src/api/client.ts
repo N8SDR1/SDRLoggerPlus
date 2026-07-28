@@ -1176,6 +1176,16 @@ class ApiClient {
     return this.fetch<TimeSyncState>('/time/offset');
   }
 
+  // ── Logbook health — Verify QSO times (docs/design/timezone-architecture.md §5a) ──
+  async scanQsoTimes(): Promise<QsoTimeAuditResult> {
+    return this.fetch<QsoTimeAuditResult>('/logbookhealth/qso-times');
+  }
+  async repairQsoTimes(ids: string[]): Promise<QsoTimeRepairResult> {
+    return this.fetch<QsoTimeRepairResult>('/logbookhealth/qso-times/repair', {
+      method: 'POST', body: JSON.stringify({ ids }),
+    });
+  }
+
   // ── Multi-op coordination (S-COORD) ──────────────────────────────────
   async reportPresence(stationId: string, operator: string | undefined, band: string | undefined, mode: string | undefined): Promise<StationPresenceEvent[]> {
     return this.fetch<StationPresenceEvent[]>('/data/coord/presence', {
@@ -1203,6 +1213,25 @@ export interface ServerConfig {
 export interface SaveServerConfigRequest { mode: 'host' | 'client'; hostUrl?: string; token?: string; shareOnNetwork?: boolean; }
 export interface TimeSyncState { isHost: boolean; offsetMs: number; lastSyncUtc?: string; }
 export interface ServerTestResult { ok: boolean; detail: string; }
+
+// Logbook health — Verify QSO times
+export interface QsoTimeIssue {
+  id: string;
+  callsign: string;
+  qsoDate: string;
+  timeOn: string | null;
+  bucket: number;             // QsoTimeBucket enum (0 Consistent / 1 Fixable / 2 Ambiguous)
+  proposedQsoDate: string | null;
+}
+export interface QsoTimeAuditResult {
+  total: number;
+  consistent: number;
+  fixableLostTime: number;
+  ambiguous: number;
+  fixableSamples: QsoTimeIssue[];
+  ambiguousSamples: QsoTimeIssue[];
+}
+export interface QsoTimeRepairResult { requested: number; repaired: number; skipped: number; }
 export interface AuthDevice { id: string; name: string; createdUtc: string; lastSeenUtc?: string; }
 
 // QRZ Types

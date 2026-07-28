@@ -519,7 +519,7 @@ export interface ModeLayouts {
   contest: string | null;
 }
 
-export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'decodealerts' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'sat' | 'dxcoach' | 'voice' | 'server' | 'about';
+export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'decodealerts' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'logbookhealth' | 'sat' | 'dxcoach' | 'voice' | 'server' | 'about';
 
 interface SettingsState {
   // Settings data
