@@ -347,6 +347,23 @@ export function LogEntryPlugin() {
   useEffect(() => {
     try { localStorage.setItem('sdrl_auto_rst_s', autoRstEnabled ? '1' : '0'); } catch { /* no-op */ }
   }, [autoRstEnabled]);
+
+  // #40: auto-filter the Log History panel to the typed callsign. Default ON (current behaviour).
+  // Purely a display toggle for the history panel — does NOT affect the callbook lookup, the
+  // auto-populate of the entry, AI talk points (focused callsign), or DX Coach (spot-driven).
+  const [autoHistory, setAutoHistory] = useState<boolean>(() => {
+    try { return localStorage.getItem('sdrl_auto_history') !== '0'; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('sdrl_auto_history', autoHistory ? '1' : '0'); } catch { /* no-op */ }
+  }, [autoHistory]);
+  // Reference so the typing/suggestion callbacks always read the latest without re-creating them.
+  const autoHistoryRef = useRef(autoHistory);
+  useEffect(() => {
+    autoHistoryRef.current = autoHistory;
+    // Turning it off clears any active history-panel filter immediately.
+    if (!autoHistory) setLogHistoryCallsignFilter(null);
+  }, [autoHistory, setLogHistoryCallsignFilter]);
   const [rstRcvdAuto, setRstRcvdAuto] = useState(true);  // field is AUTO vs operator-edited
 
   // Super Check Partial: the merged call set (master.scp ∪ your logged calls), fetched once
@@ -666,8 +683,8 @@ export function LogEntryPlugin() {
     const callsign = value.toUpperCase();
     setFormData(prev => ({ ...prev, callsign }));
 
-    // Update log history filter to show matching entries
-    setLogHistoryCallsignFilter(callsign.length > 0 ? callsign : null);
+    // Update log history filter to show matching entries (unless the operator turned it off, #40)
+    setLogHistoryCallsignFilter(autoHistoryRef.current && callsign.length > 0 ? callsign : null);
 
     // Super Check Partial: local match, ranked worked-before first, then prefix before contains.
     if (callsign.length >= 2 && scpAll.length > 0) {
@@ -709,7 +726,7 @@ export function LogEntryPlugin() {
     setScpOpen(false);
     setScpMatches([]);
     setFormData(prev => ({ ...prev, callsign: call }));
-    setLogHistoryCallsignFilter(call);
+    if (autoHistoryRef.current) setLogHistoryCallsignFilter(call);
     focusCallsign(call, 'log-entry');
     applyCallHistory(call);
   }, [focusCallsign, setLogHistoryCallsignFilter, applyCallHistory]);
@@ -1323,17 +1340,32 @@ export function LogEntryPlugin() {
         {/* Callsign, Band, Mode on one line */}
         <div className="flex gap-2 items-end">
           <div className="flex-1 relative">
-            <label className="text-xs font-ui text-dark-200 flex items-center gap-1 mb-1">
-              {isLookingUpCallsign ? (
-                <Loader2 className="w-3 h-3 animate-spin text-accent-primary" />
-              ) : (
-                <Search className="w-3 h-3" />
-              )}
-              Callsign
-              {isLookingUpCallsign && (
-                <span className="text-accent-primary text-[10px]">Looking up...</span>
-              )}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-ui text-dark-200 flex items-center gap-1">
+                {isLookingUpCallsign ? (
+                  <Loader2 className="w-3 h-3 animate-spin text-accent-primary" />
+                ) : (
+                  <Search className="w-3 h-3" />
+                )}
+                Callsign
+                {isLookingUpCallsign && (
+                  <span className="text-accent-primary text-[10px]">Looking up...</span>
+                )}
+              </label>
+              {/* #40: toggle auto-filtering the Log History panel to this callsign. Display-only —
+                  does not affect the callbook lookup, auto-populate, AI talk points, or DX Coach. */}
+              <button
+                type="button"
+                onClick={() => setAutoHistory(v => !v)}
+                title={autoHistory
+                  ? 'History auto-filter ON — the Log History panel filters to this callsign. Click to turn off.'
+                  : 'History auto-filter OFF — the Log History panel is not filtered by callsign. Click to turn on.'}
+                className={`text-[10px] font-ui px-1.5 py-0.5 rounded transition-colors ${
+                  autoHistory ? 'text-accent-primary hover:bg-accent-primary/10' : 'text-dark-400 hover:bg-dark-700/40'}`}
+              >
+                History {autoHistory ? 'On' : 'Off'}
+              </button>
+            </div>
             <input
               type="text"
               value={formData.callsign}
