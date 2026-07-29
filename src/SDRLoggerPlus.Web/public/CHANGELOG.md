@@ -3,6 +3,38 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-28 — v2.13.0 "Vega"
+
+**A batch of quality-of-life features from the issue tracker — plus the first multi-op contest-serial coordination.**
+
+### New — Multi-op contest serials come from the host
+When you're logging to a shared host (multi-op networked logging), contest serial numbers are now
+drawn from the **host's** sequence instead of each machine counting on its own — so two operators
+never log the same number. The on-screen "next serial" preview reflects the host's count, and if the
+host briefly drops out, logging falls back to a local number rather than stalling. This matches how
+N1MM and N3FJP behave in multi-op. (#52)
+
+### New — Sort DXCC by prefix in Statistics
+The DXCC breakdown can now be sorted by **primary prefix**, and the prefix is shown alongside each
+entity — handy when you think in prefixes rather than country names. (#49)
+
+### New — Q65 and MSK144 modes
+Added **Q65** and **MSK144** to the mode dropdown for logging meteor-scatter and weak-signal
+contacts. (#50)
+
+### New — QRZ profile shows LoTW / eQSL / QSL badges
+The QRZ profile card now shows at a glance whether a station accepts **LoTW**, **eQSL**, and paper
+**QSL** — so you know how to confirm before you even finish the QSO. *(Thanks to Brent, @n9bc, for
+this contribution.)* (#39)
+
+### New — Turn off auto-filtering of Log History by callsign
+The Log History panel auto-filters to the callsign you're entering. If you'd rather keep the full
+history in view, there's now a **History On/Off** toggle next to the callsign field; your choice is
+remembered. The AI and DX Coach features are unaffected either way. (#40)
+
+### Docs
+Help & Guide updated to cover the DXCC prefix sort, the Log History toggle, and the QRZ QSL badges.
+
 ## 2026-07-28 — v2.12.0 "Arcturus"
 
 **Correct time, everywhere — plus new Logbook Health tools, an NTP clock sync, and a cleaner Help & Settings.**
