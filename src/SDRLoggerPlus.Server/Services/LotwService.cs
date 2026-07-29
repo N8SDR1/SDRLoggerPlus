@@ -301,10 +301,12 @@ public class LotwService : ILotwService
 
         // Explicit hand-picked selection wins over everything: upload exactly these QSOs,
         // ignoring band/mode/date and the not-yet-sent rule, so a deliberate re-send works.
+        // Null limit on both branches: upload selection must see the WHOLE log. A cap
+        // here silently excluded any QSO past it — same trap as the old export cap.
         var ids = filter.QsoIds?.Where(s => !string.IsNullOrWhiteSpace(s)).ToHashSet();
         if (ids is { Count: > 0 })
         {
-            var (all, _) = await _qsoRepository.SearchAsync(new QsoSearchRequest(Limit: 100_000));
+            var (all, _) = await _qsoRepository.SearchAsync(new QsoSearchRequest(Limit: null));
             return all.Where(q => q.Id != null && ids.Contains(q.Id))
                 .Where(q => QsoOwnership.IsPersonalQso(q, myCall)).ToList();
         }
@@ -312,7 +314,7 @@ public class LotwService : ILotwService
         var searchRequest = new QsoSearchRequest(
             FromDate: filter.DateFrom,
             ToDate: filter.DateTo,
-            Limit: 100_000);
+            Limit: null);
         var (qsos, _) = await _qsoRepository.SearchAsync(searchRequest);
 
         var bands = filter.Bands?.Where(b => !string.IsNullOrWhiteSpace(b))

@@ -335,6 +335,20 @@ public class LiteQsoRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SearchAsync_NullLimit_ReturnsEveryMatch()
+    {
+        // Whole-log operations (ADIF export, LoTW selection) pass Limit: null and
+        // must get everything — 60 rows deliberately exceeds the default page of 50.
+        for (int i = 0; i < 60; i++)
+            await _repo.CreateAsync(CreateQso(callsign: $"N{i}XX"));
+
+        var (items, total) = await _repo.SearchAsync(new QsoSearchRequest(Limit: null));
+
+        items.Should().HaveCount(60);
+        total.Should().Be(60);
+    }
+
+    [Fact]
     public async Task SearchAsync_Skip_PaginatesCorrectly()
     {
         for (int i = 0; i < 5; i++)

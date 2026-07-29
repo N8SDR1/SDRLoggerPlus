@@ -138,14 +138,17 @@ public class QsoService : IQsoService
     public async Task<PaginatedQsoResponse> GetQsosAsync(QsoSearchRequest request)
     {
         var (items, totalCount) = await _repository.SearchAsync(request);
-        var totalPages = (int)Math.Ceiling(totalCount / (double)request.Limit);
-        var page = (request.Skip / request.Limit) + 1;
+
+        // A null Limit means the unbounded whole-log form: everything is one page.
+        var pageSize = request.Limit ?? Math.Max(totalCount, 1);
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+        var page = (request.Skip / pageSize) + 1;
 
         return new PaginatedQsoResponse(
             Items: items.Select(MapToResponse),
             TotalCount: totalCount,
             Page: page,
-            PageSize: request.Limit,
+            PageSize: pageSize,
             TotalPages: totalPages
         );
     }

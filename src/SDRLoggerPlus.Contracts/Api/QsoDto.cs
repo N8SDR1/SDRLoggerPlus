@@ -151,7 +151,10 @@ public record QsoSearchRequest(
     DateTime? FromDate = null,
     DateTime? ToDate = null,
     int? Dxcc = null,
-    int Limit = 50,
+    // Page size; null means UNBOUNDED — every match. The null form exists for
+    // whole-log operations (ADIF export, LoTW upload selection) where a cap
+    // would silently truncate someone's backup. Grids should keep paging.
+    int? Limit = 50,
     int Skip = 0
 );
 

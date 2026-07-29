@@ -559,13 +559,17 @@ public partial class AdifService : IAdifService
 
     public async Task<string> ExportQsosAsync(AdifExportRequest? request = null)
     {
+        // Export must NEVER truncate. This is the path people use as a backup, and
+        // a "large" cap here once silently dropped everything past 100k QSOs — an
+        // export that completes successfully while missing contacts is the worst
+        // failure mode a backup can have.
         var searchRequest = new QsoSearchRequest(
             Callsign: request?.Callsign,
             Band: request?.Band,
             Mode: request?.Mode,
             FromDate: request?.FromDate,
             ToDate: request?.ToDate,
-            Limit: 100000 // Large limit for export
+            Limit: null
         );
 
         var (qsos, _) = await _qsoRepository.SearchAsync(searchRequest);

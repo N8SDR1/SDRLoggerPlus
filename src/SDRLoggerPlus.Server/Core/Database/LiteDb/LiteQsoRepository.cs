@@ -105,13 +105,15 @@ public class LiteQsoRepository : IQsoRepository
         var allMatches = query.ToList();
         var totalCount = allMatches.Count;
 
-        // Apply sorting, skip, and limit in-memory
-        var items = allMatches
+        // Apply sorting, skip, and limit in-memory. A null Limit means every
+        // match — the whole-log contract export and LoTW selection rely on.
+        var page = allMatches
             .OrderByDescending(q => q.QsoDate)
             .ThenByDescending(q => q.TimeOn)
-            .Skip(criteria.Skip)
-            .Take(criteria.Limit)
-            .ToList();
+            .Skip(criteria.Skip);
+        if (criteria.Limit is { } limit)
+            page = page.Take(limit);
+        var items = page.ToList();
 
         return Task.FromResult<(IEnumerable<Qso> Items, int TotalCount)>((items, totalCount));
     }
