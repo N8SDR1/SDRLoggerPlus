@@ -3,9 +3,29 @@ import { Radio, AlertTriangle, Send, Users, MessageSquare } from 'lucide-react';
 import { api } from '../api/client';
 import { useMultiOpStore } from '../store/multiOpStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useAppStore } from '../store/appStore';
 
 const BANDS = ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '70cm'];
 const MODES = ['CW', 'USB', 'LSB', 'FM', 'RTTY', 'FT8', 'FT4', 'PSK'];
+
+/**
+ * Collapse a rig's mode string to the coarse family this board coordinates on (a shared, consistent
+ * value so the same-band/mode desense check lines up across stations). Unknown modes pass through so
+ * the dropdown can still show the real state.
+ */
+function coordMode(raw?: string): string {
+  const m = (raw || '').toUpperCase();
+  if (!m) return '';
+  if (m.includes('FT8')) return 'FT8';
+  if (m.includes('FT4')) return 'FT4';
+  if (m.includes('RTTY') || m.includes('FSK')) return 'RTTY';
+  if (m.includes('PSK')) return 'PSK';
+  if (m.startsWith('CW')) return 'CW';
+  if (m.includes('FM')) return 'FM';
+  if (m.startsWith('USB') || m.startsWith('DIGU') || m.includes('DATA-U') || m.includes('PKT-U') || m === 'SSB') return 'USB';
+  if (m.startsWith('LSB') || m.startsWith('DIGL') || m.includes('DATA-L') || m.includes('PKT-L')) return 'LSB';
+  return m;
+}
 
 /** A stable per-machine id so a station's presence updates in place across reloads. */
 function useStationId(): string {
@@ -27,12 +47,27 @@ function useStationId(): string {
 export function CoordPlugin() {
   const stationId = useStationId();
   const myCall = useSettingsStore((s) => s.settings.station.callsign);
+  const followRadio = useSettingsStore((s) => s.settings.radio.followRadio);
   const { presence, messages, setPresence } = useMultiOpStore();
+  const { radioStates, selectedRadioId } = useAppStore();
 
   const [band, setBand] = useState<string>('');
   const [mode, setMode] = useState<string>('');
   const [draft, setDraft] = useState('');
   const msgEndRef = useRef<HTMLDivElement>(null);
+
+  // When a rig is connected and "follow radio" is on, the app already knows the band/mode we're on —
+  // mirror it here (same source the Log Entry uses) so presence tracks the rig without re-declaring it.
+  // The selects stay editable; a later rig change re-syncs, just like the Log Entry.
+  const currentRadioState = selectedRadioId ? radioStates.get(selectedRadioId) : null;
+  const rigBand = currentRadioState?.band;
+  const rigMode = coordMode(currentRadioState?.mode);
+  const followingRig = !!(followRadio && currentRadioState);
+  useEffect(() => {
+    if (!followingRig) return;
+    if (rigBand) setBand(rigBand);
+    if (rigMode) setMode(rigMode);
+  }, [followingRig, rigBand, rigMode]);
 
   // Seed the board once, then live updates arrive via SignalR into the store.
   useEffect(() => { api.getPresenceBoard().then(setPresence).catch(() => {}); }, [setPresence]);
@@ -69,12 +104,19 @@ export function CoordPlugin() {
         <span className="text-dark-300 text-xs">You're on</span>
         <select value={band} onChange={(e) => setBand(e.target.value)} className="glass-input text-xs px-2 py-1">
           <option value="">band…</option>
+          {(band && !BANDS.includes(band)) && <option value={band}>{band}</option>}
           {BANDS.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
         <select value={mode} onChange={(e) => setMode(e.target.value)} className="glass-input text-xs px-2 py-1">
           <option value="">mode…</option>
+          {(mode && !MODES.includes(mode)) && <option value={mode}>{mode}</option>}
           {MODES.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
+        {followingRig && (
+          <span className="text-[10px] text-accent-success/80 flex items-center gap-1" title="Band/mode are following your connected rig">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-success inline-block" /> following rig
+          </span>
+        )}
       </div>
 
       {/* RF-collision warning */}
