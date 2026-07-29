@@ -57,12 +57,10 @@ public class HamlibController : ControllerBase
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             await client.ConnectAsync(host, port, cts.Token);
 
-            using var stream = client.GetStream();
-            using var reader = new System.IO.StreamReader(stream, System.Text.Encoding.ASCII);
-            using var writer = new System.IO.StreamWriter(stream, System.Text.Encoding.ASCII) { AutoFlush = true };
+            using var connection = new RotatorConnection(client);
 
             IRotatorProtocol rotator = isArco ? new ArcoTcpProtocol() : new RotctldProtocol();
-            var raw = await rotator.PollAzimuthAsync(reader, writer, cts.Token);
+            var raw = await rotator.PollAzimuthAsync(connection, cts.Token);
 
             if (raw is double azimuth)
             {

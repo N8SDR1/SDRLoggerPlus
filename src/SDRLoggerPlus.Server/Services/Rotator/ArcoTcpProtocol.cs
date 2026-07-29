@@ -13,19 +13,22 @@ namespace SDRLoggerPlus.Server.Services.Rotator;
 /// </list>
 /// Commands are raw CR-terminated; M/S produce no response. Elevation is parsed off the
 /// reply but ignored for now (azimuth-only). Unlike SDRLogger+, which opens a short-lived
-/// socket per set/stop, this reuses RotatorService's single persistent connection — ARCO's
-/// M/S are silent, so they never desync the C2 poll on the shared socket.
+/// socket per set/stop, this reuses RotatorService's single persistent connection.
 /// </summary>
 public sealed partial class ArcoTcpProtocol : IRotatorProtocol
 {
+    private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(2);
+
     // First signed 3–4 digit run in the reply = azimuth (e.g. "+0270" from "+0270+0000").
     [GeneratedRegex(@"[+\-]?\d{3,4}")]
     private static partial Regex AzimuthRegex();
 
-    public async Task<double?> PollAzimuthAsync(StreamReader reader, StreamWriter writer, CancellationToken ct)
+    public async Task<double?> PollAzimuthAsync(IRotatorChannel channel, CancellationToken ct)
     {
-        await writer.WriteAsync("C2\r");
-        var line = await reader.ReadLineAsync(ct);
+        channel.Drain();
+        await channel.WriteAsync("C2\r", ct);
+
+        var line = await channel.ReadLineAsync(ReplyTimeout, ct);
         if (string.IsNullOrWhiteSpace(line)) return null;
 
         var match = AzimuthRegex().Match(line);
@@ -34,12 +37,12 @@ public sealed partial class ArcoTcpProtocol : IRotatorProtocol
             ? az : null;
     }
 
-    public Task SetAzimuthAsync(double azimuth, StreamReader reader, StreamWriter writer, CancellationToken ct)
+    public Task SetAzimuthAsync(double azimuth, IRotatorChannel channel, CancellationToken ct)
     {
         var degrees = (int)azimuth; // truncate, matching SDRLogger+ int(az)
-        return writer.WriteAsync($"M{degrees:D3}\r");
+        return channel.WriteAsync(FormattableString.Invariant($"M{degrees:D3}\r"), ct);
     }
 
-    public Task StopAsync(StreamReader reader, StreamWriter writer, CancellationToken ct)
-        => writer.WriteAsync("S\r");
+    public Task StopAsync(IRotatorChannel channel, CancellationToken ct)
+        => channel.WriteAsync("S\r", ct);
 }
