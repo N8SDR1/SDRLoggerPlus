@@ -123,12 +123,16 @@ if (unsafeBind is not null)
     Environment.Exit(1);
 }
 var enforceAuth = RemoteAccessGuard.ShouldEnforce(bindUrls, forceAuth);
+// When we enforce only because the backend was opened to the LAN (hosting), the operator's own
+// desktop UI still reaches it over loopback and must not be locked out — it carries no token. When
+// auth is force-required (a reverse proxy in front, itself on loopback), do NOT exempt loopback.
+var exemptLoopback = enforceAuth && !forceAuth;
 if (enforceAuth)
-    Log.Information("Remote access: token auth ENFORCED ({Count} device(s) registered).",
-        authStore.List().Count);
+    Log.Information("Remote access: token auth ENFORCED ({Count} device(s) registered){Loopback}.",
+        authStore.List().Count, exemptLoopback ? ", loopback exempt (local desktop)" : "");
 
 builder.Services.AddSingleton(authStore);
-builder.Services.AddSingleton(new AuthOptions(enforceAuth));
+builder.Services.AddSingleton(new AuthOptions(enforceAuth, exemptLoopback));
 
 // Register the same instance used at startup so DI callers see the resolved config
 builder.Services.AddSingleton<IUserConfigService>(userConfigService);

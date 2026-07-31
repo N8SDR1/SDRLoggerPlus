@@ -129,18 +129,21 @@ public class TokenAuthMiddlewareTests : IDisposable
     public void RequiresAuth_gatesApiAndHubsOnly(string path, bool gated) =>
         TokenAuthMiddleware.RequiresAuth(new PathString(path)).Should().Be(gated);
 
-    private static DefaultHttpContext Ctx(string path, string? bearer = null, string? accessToken = null)
+    private static DefaultHttpContext Ctx(string path, string? bearer = null, string? accessToken = null,
+        System.Net.IPAddress? remoteIp = null)
     {
         var ctx = new DefaultHttpContext();
         ctx.Request.Path = path;
         if (bearer != null) ctx.Request.Headers.Authorization = $"Bearer {bearer}";
         if (accessToken != null) ctx.Request.QueryString = new QueryString($"?access_token={accessToken}");
+        if (remoteIp != null) ctx.Connection.RemoteIpAddress = remoteIp;
         ctx.Response.Body = new MemoryStream();
         return ctx;
     }
 
-    private static TokenAuthMiddleware Mw(AuthTokenStore store, bool enforce, Action onNext) =>
-        new(_ => { onNext(); return Task.CompletedTask; }, store, new AuthOptions(enforce));
+    private static TokenAuthMiddleware Mw(AuthTokenStore store, bool enforce, Action onNext,
+        bool exemptLoopback = false) =>
+        new(_ => { onNext(); return Task.CompletedTask; }, store, new AuthOptions(enforce, exemptLoopback));
 
     [Fact]
     public async Task Enforced_apiWithoutToken_is401_andBlocks()
@@ -194,5 +197,49 @@ public class TokenAuthMiddlewareTests : IDisposable
         var called = false;
         await Mw(store, enforce: false, () => called = true).Invoke(Ctx("/api/qsos"));
         called.Should().BeTrue();
+    }
+
+    // Hosting on the LAN enforces auth, but the operator's own desktop UI (loopback, no token) must
+    // still reach its backend — otherwise turning on "Share on network" locks the host out of its own
+    // app (GitHub #57). Remote stations still need a token.
+    [Theory]
+    [InlineData("127.0.0.1")]
+    [InlineData("::1")]
+    [InlineData("::ffff:127.0.0.1")] // IPv4-mapped IPv6 loopback (Kestrel's dual-stack form)
+    public async Task Enforced_withLoopbackExempt_localUiPassesWithoutToken(string ip)
+    {
+        var store = new AuthTokenStore(_path);
+        store.Issue("d");
+        var called = false;
+        var ctx = Ctx("/hubs/log", remoteIp: System.Net.IPAddress.Parse(ip));
+        await Mw(store, enforce: true, () => called = true, exemptLoopback: true).Invoke(ctx);
+        called.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Enforced_withLoopbackExempt_remoteStationStillNeedsToken()
+    {
+        var store = new AuthTokenStore(_path);
+        store.Issue("d");
+        var called = false;
+        var ctx = Ctx("/api/qsos", remoteIp: System.Net.IPAddress.Parse("192.168.1.77"));
+        await Mw(store, enforce: true, () => called = true, exemptLoopback: true).Invoke(ctx);
+
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+        called.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Enforced_forceRequire_doesNotExemptLoopback()
+    {
+        // A reverse proxy also arrives over loopback; when auth is force-required it must present a token.
+        var store = new AuthTokenStore(_path);
+        store.Issue("d");
+        var called = false;
+        var ctx = Ctx("/api/qsos", remoteIp: System.Net.IPAddress.Loopback);
+        await Mw(store, enforce: true, () => called = true, exemptLoopback: false).Invoke(ctx);
+
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+        called.Should().BeFalse();
     }
 }
