@@ -3,6 +3,44 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-31 — v2.14.0 "Antares"
+
+**Whole-log filtering & export, ARRL-rules grid counting, cluster spot diagnostics, and a country-name cleanup tool.**
+
+### ⚠ Heads-up — grid confirmation counts now default to LoTW + card
+Grid Tracker, the map overlay, and VUCC now count **award-valid confirmations (LoTW + paper card)** by
+default — the ARRL rule — instead of counting any confirmation. If you also count **eQSL / QRZ**, flip the
+new **All conf** toggle and your numbers return. Nothing in your log changed; only what the grid views count.
+
+### New — Filter the whole log, export what you see
+Log History can now filter your **entire** log in the browser (call, name, band, mode, date range), and
+**Export** gives you exactly the filtered set — across all pages, not just the current one. (#41)
+
+### New — Standardize country names (Settings → Logbook Health)
+Imported logs keep whatever the source file wrote for the country, so one entity can show up as
+**"USA"**, **"UNITED STATES OF AMERICA"** and **"United States"** all at once. The new tool finds entities
+logged under more than one spelling — grouped by **DXCC number**, so they're provably the same country —
+and unifies them to a standard name. Opt-in, preview first, **backup taken automatically**, and **local-only**
+— it never re-uploads to or changes QRZ / LoTW / eQSL.
+
+### New — See what the DX cluster says when you spot
+When you send a spot, SDRLogger+ now **reads the cluster's reply** and shows it — so a silently-rejected
+spot (e.g. an unregistered user) tells you why instead of looking like it worked. Plus a per-cluster
+**VE7CC extended (CC11)** toggle: turn it off to connect in plain mode like most loggers (no `-0` on your
+call), which some nodes need to accept your spots.
+
+### Improved — Awards & export
+- **ARRL-rules confirmation counting** for grids/VUCC, with the LoTW+Card / All-conf toggle above. (#46)
+- **Whole-log export/upload no longer truncates** — ADIF export and LoTW selection see every QSO, even past
+  100k. Already-uploaded QSOs are still skipped, so nothing is re-sent. (#56)
+
+### Fixed
+- **Rotator (PSTRotator)** — resynchronises the controller stream so the beam stops lagging, and rebuilds
+  the connection on a wider range of faults. (#58)
+
+*Thanks to Brent (@n9bc) for the log-filtering, grid-counting, export and rotator work, and to Tic (YO8RFS)
+and K3UK for the cluster and country-name reports.*
+
 ## 2026-07-31 — v2.13.1 "Vega"
 
 **Fixes a lockout when hosting a shared log, and lets the multi-op panel follow your rig.**
