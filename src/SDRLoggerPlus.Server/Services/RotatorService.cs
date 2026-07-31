@@ -218,7 +218,17 @@ public class RotatorService : BackgroundService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Error polling rotator position");
+            // A non-IOException fault (e.g. ObjectDisposedException on a dead socket) is still a
+            // failed poll — count it toward the silent-poll budget and rebuild if the controller has
+            // gone quiet, otherwise a persistent non-IO fault would loop forever without reconnecting.
+            _silentPolls++;
+            _logger.LogWarning(ex, "Error polling rotator position (attempt {Attempt} of {Max})",
+                _silentPolls, MaxSilentPolls);
+            if (_silentPolls >= MaxSilentPolls || connection.IsClosed)
+            {
+                _logger.LogWarning("Rotator not answering — reconnecting to resynchronise");
+                Disconnect();
+            }
             return;
         }
         finally

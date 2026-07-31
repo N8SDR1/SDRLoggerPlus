@@ -330,7 +330,9 @@ public class LotwService : ILotwService
             .ToList();
     }
 
-    private static bool IsEligibleForUpload(Qso qso, LotwUploadFilter filter)
+    // internal for test access — this is the upload-safety gate: it must keep excluding already-sent
+    // ("Y") QSOs from the filter/whole-log selection so #56's cap removal can't cause re-uploads.
+    internal static bool IsEligibleForUpload(Qso qso, LotwUploadFilter filter)
     {
         // Matches pblog's `WHERE upper(lotw_qsl_sent) IN (...) OR lotw_qsl_sent IS NULL`
         // (LotwDialog.cpp:123). Always eligible: null/empty, 'R', 'Q'. Optional: 'I', 'N'.
