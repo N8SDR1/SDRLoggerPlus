@@ -192,7 +192,9 @@ export function POTAPlugin() {
     const spot = event.data;
     if (spot) {
       const freqKhz = parseFloat(spot.frequency);
-      await selectSpot(spot.activator, freqKhz, spot.mode);
+      // Carry the park reference so the log entry can fill the worked-park field (POTA mode) or a
+      // Remarks note (General mode) — #59.
+      await selectSpot(spot.activator, freqKhz, spot.mode, spot.reference);
     }
   };
 

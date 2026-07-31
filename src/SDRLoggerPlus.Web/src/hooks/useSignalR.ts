@@ -404,8 +404,8 @@ export function useSignalR() {
     await signalRService.focusCallsign({ callsign, source });
   }, [setFocusedCallsign, setFocusedCallsignInfo, setLookingUpCallsign]);
 
-  const selectSpot = useCallback(async (dxCall: string, frequency: number, mode?: string) => {
-    await signalRService.selectSpot({ dxCall, frequency, mode });
+  const selectSpot = useCallback(async (dxCall: string, frequency: number, mode?: string, potaRef?: string) => {
+    await signalRService.selectSpot({ dxCall, frequency, mode, potaRef });
   }, []);
 
   const commandRotator = useCallback(async (targetAzimuth: number, source: string) => {

@@ -198,6 +198,8 @@ export interface SpotSelectedEvent {
   frequency: number;
   mode?: string;
   grid?: string;
+  /** Worked station's POTA park (e.g. "US-1234") when the spot came from the POTA panel. */
+  potaRef?: string;
 }
 
 // Lyra ↔ SDRLogger+ "Combo" link state (docs/COMBO_LINK.md). Lyra owns the

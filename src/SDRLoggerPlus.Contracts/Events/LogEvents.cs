@@ -178,7 +178,10 @@ public record SpotSelectedEvent(
     string DxCall,
     double Frequency,
     string? Mode,
-    string? Grid
+    string? Grid,
+    // The worked station's POTA park reference (e.g. "US-1234") when the spot came from the POTA
+    // panel, so the log entry can fill the worked-park field / a Remarks note. Null for other spots.
+    string? PotaRef = null
 );
 
 /// <summary>

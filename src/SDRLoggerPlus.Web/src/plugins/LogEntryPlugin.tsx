@@ -231,7 +231,11 @@ export function LogEntryPlugin() {
     grid: '',
     contest: '',
     remarks: '',
-    // POTA park-to-park — the WORKED station's park (pota_ref on the QSO).
+    // The WORKED station's POTA park (pota_ref / SIG_INFO on the QSO). Auto-fills from a clicked POTA
+    // spot; valid whether you're activating or hunting from home. This is the field that exports.
+    workedPark: '',
+    // Explicit Park-to-Park designator — an entry convenience that mirrors into workedPark. P2P itself
+    // is derived from (myPotaRef set AND potaRef set), so it needs no separate stored value. (#59)
     p2pPark: '',
     // SAT fields — auto-populate from S.A.T. controller when tracking,
     // editable otherwise. Freqs in MHz (v1.x + ADIF convention). satGrid
@@ -542,19 +546,33 @@ export function LogEntryPlugin() {
       const frequencyMhz = spotKhzToMhzString(selectedSpot.frequency);
       const band = getBandFromFrequency(spotKhzToHz(selectedSpot.frequency));
       const mode = selectedSpot.mode ? normalizeMode(selectedSpot.mode) : formData.mode;
+      const park = selectedSpot.potaRef?.trim();
 
-      setFormData(prev => ({
-        ...prev,
-        callsign: selectedSpot.dxCall,
-        frequency: frequencyMhz,
-        band: band || prev.band,
-        mode: mode,
-      }));
+      setFormData(prev => {
+        const next = {
+          ...prev,
+          callsign: selectedSpot.dxCall,
+          frequency: frequencyMhz,
+          band: band || prev.band,
+          mode: mode,
+        };
+        // #59: carry the worked station's park. In POTA mode it fills the Park field (→ SIG_INFO);
+        // in General mode it drops a note into Remarks (POTA credit belongs to POTA mode).
+        if (park) {
+          if (logMode === 'pota') {
+            next.workedPark = park;
+          } else if (!(prev.remarks || '').toUpperCase().includes(park.toUpperCase())) {
+            const note = `POTA ${park}`;
+            next.remarks = prev.remarks ? `${prev.remarks} ${note}` : note;
+          }
+        }
+        return next;
+      });
 
       // Clear the selected spot after processing to allow re-selection of same spot
       setSelectedSpot(null);
     }
-  }, [selectedSpot, setSelectedSpot]);
+  }, [selectedSpot, setSelectedSpot, logMode]);
 
   // Update RST defaults when mode changes
   useEffect(() => {
@@ -669,6 +687,7 @@ export function LogEntryPlugin() {
         frequency: '',
         rstSentPlus: '',
         rstRcvdPlus: '',
+        workedPark: '',
         p2pPark: '',
         // Clear per-QSO SAT worked-station fields but KEEP the satellite
         // name + freq/mode — they belong to the pass, not the QSO, and
@@ -763,6 +782,7 @@ export function LogEntryPlugin() {
       grid: '',
       contest: '',
       remarks: '',
+      workedPark: '',
       p2pPark: '',
       // handleClear is the Escape/Clear-button path — a full reset.
       // Wipe SAT fields too; the auto-fill effect will re-populate them
@@ -841,7 +861,9 @@ export function LogEntryPlugin() {
       // so a General QSO doesn't accidentally get tagged with a
       // leftover activatingPark value from a prior session.
       myPotaRef: logMode === 'pota' && activatingPark ? activatingPark : undefined,
-      potaRef: logMode === 'pota' && formData.p2pPark ? formData.p2pPark : undefined,
+      // The worked park (SIG_INFO). workedPark is the source of truth; the P2P box mirrors into it,
+      // so fall back to p2pPark if only that was filled. P2P is derived from both parks being set.
+      potaRef: logMode === 'pota' ? (formData.workedPark || formData.p2pPark || undefined) : undefined,
       // SAT — only send SAT fields when actually in SAT mode. Uplink
       // freq/mode become the QSO's top-level Frequency/Mode server-side;
       // satellite name + downlink freq/mode land in AdifExtra. satGrid
@@ -1755,21 +1777,44 @@ export function LogEntryPlugin() {
           </div>
         </div>
 
-        {/* POTA — P2P Park Ref (worked station's park for park-to-park
-            contacts). Optional; when set, backend stores as `pota_ref`
-            in AdifExtra so PotaStatistics picks it up as a hunt. */}
+        {/* POTA — the WORKED station's park (SIG_INFO / pota_ref). Auto-fills from a clicked POTA spot
+            and is valid whether you're activating or hunting from home; this is the field that exports
+            for POTA hunt credit. (#59) */}
+        {logMode === 'pota' && (
+          <div>
+            <label className="text-xs font-ui text-dark-200 mb-1 block flex items-center gap-1">
+              <Trees className="w-3 h-3 text-green-400" />
+              Park (worked)
+              <span className="text-[10px] text-dark-400 font-normal ml-1">(their park — auto-fills from a clicked POTA spot)</span>
+            </label>
+            <input
+              type="text"
+              value={formData.workedPark}
+              onChange={(e) => setFormData(prev => ({ ...prev, workedPark: e.target.value.toUpperCase() }))}
+              placeholder="US-1234"
+              className="glass-input w-full font-mono text-sm"
+            />
+          </div>
+        )}
+
+        {/* POTA — explicit Park-to-Park designator. Typing here mirrors into "Park (worked)" so it still
+            exports as SIG_INFO; a true P2P is one where your activating park AND this park are both set. */}
         {logMode === 'pota' && (
           <div>
             <label className="text-xs font-ui text-dark-200 mb-1 block flex items-center gap-1">
               <Trees className="w-3 h-3 text-green-400" />
               P2P Park Ref
-              <span className="text-[10px] text-dark-400 font-normal ml-1">(optional — their park if P2P contact)</span>
+              <span className="text-[10px] text-dark-400 font-normal ml-1">(their park when you're activating too — copies into Park)</span>
             </label>
             <input
               type="text"
               value={formData.p2pPark}
-              onChange={(e) => setFormData(prev => ({ ...prev, p2pPark: e.target.value.toUpperCase() }))}
-              placeholder="K-5678"
+              onChange={(e) => {
+                const v = e.target.value.toUpperCase();
+                // Mirror into the worked-park field (the export source) so P2P credit lands as SIG_INFO.
+                setFormData(prev => ({ ...prev, p2pPark: v, workedPark: v }));
+              }}
+              placeholder="US-5678"
               className="glass-input w-full font-mono text-sm"
             />
           </div>
