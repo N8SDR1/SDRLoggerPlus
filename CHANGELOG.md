@@ -3,6 +3,17 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-31 — v2.14.1 "Antares"
+
+**Hotfix — DX cluster spots now work in comma-decimal locales.**
+
+### Fixed — "Error - Commas not allowed" when spotting
+On systems whose regional format uses a **comma decimal separator** (e.g. Romanian, German), the spot's
+frequency was sent as `21074,0` instead of `21074.0`, and DX cluster nodes reject the comma — so the spot
+was refused. Frequencies are now always formatted with a period regardless of your locale, and any commas
+in the comment are stripped too. *(Caught in the wild by YO8RFS thanks to v2.14.0's new cluster-reply
+messages — which is exactly what surfaced the reason.)*
+
 ## 2026-07-31 — v2.14.0 "Antares"
 
 **Whole-log filtering & export, ARRL-rules grid counting, cluster spot diagnostics, and a country-name cleanup tool.**
