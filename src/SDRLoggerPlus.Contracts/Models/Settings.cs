@@ -935,6 +935,12 @@ public class ClusterConnection
 
     [BsonElement("filterFt8")]
     public bool FilterFt8 { get; set; } = false;  // Drop FT8 spots entirely (skimmer filter usually enough)
+
+    [BsonElement("cc11Mode")]
+    // Send "set/ve7cc" to request VE7CC's extended CC11 spot format (richer received spots). Turning
+    // this OFF connects in plain DX-cluster mode like most loggers — no CC-User "-0" stream id, which
+    // can matter for outbound spotting on some nodes (see YO8RFS). Default on for backward behaviour.
+    public bool Cc11Mode { get; set; } = true;
 }
 
 [BsonIgnoreExtraElements]

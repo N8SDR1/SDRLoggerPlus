@@ -298,6 +298,9 @@ export interface ClusterConnection {
   password: string | null;  // Optional password for closed clusters
   enabled: boolean;
   autoReconnect: boolean;
+  /** VE7CC extended CC11 spot format ("set/ve7cc"). Off = plain mode like most loggers (no "-0"
+   *  stream id), which some nodes need to accept your outbound spots. Undefined treated as true. */
+  cc11Mode?: boolean;
 }
 
 export interface ClusterSettings {

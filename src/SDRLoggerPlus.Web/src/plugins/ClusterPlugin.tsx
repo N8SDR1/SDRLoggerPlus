@@ -448,6 +448,19 @@ function ClusterSettingsPanel({
                   />
                   <span className="text-sm font-ui text-dark-300">Auto-reconnect</span>
                 </label>
+
+                {/* CC11 (VE7CC extended format) — off = plain mode like most loggers, which some
+                    nodes need to accept your outbound spots (no "-0" stream id). */}
+                <label className="flex items-center gap-2 cursor-pointer"
+                       title="VE7CC extended spot format. Turn OFF if your spots aren't posting — connects in plain mode like most loggers (no “-0” on your call).">
+                  <input
+                    type="checkbox"
+                    checked={conn.cc11Mode !== false}
+                    onChange={(e) => onUpdateConnection(conn.id, { cc11Mode: e.target.checked })}
+                    className="w-4 h-4 rounded border-glass-200 bg-dark-900 text-accent-primary focus:ring-accent-primary/40"
+                  />
+                  <span className="text-sm font-ui text-dark-300">VE7CC extended (CC11)</span>
+                </label>
               </div>
 
               {/* Connect/Disconnect Button */}

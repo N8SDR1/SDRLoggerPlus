@@ -255,6 +255,7 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
             config.AutoReconnect,
             config.FilterSkimmer,
             config.FilterFt8,
+            config.Cc11Mode,
             _logger,
             OnSpotReceived,
             OnStatusChanged
@@ -365,8 +366,13 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
                 "Spotting needs a DX cluster connection. SpotHole (the default source) only receives spots — it can’t send them. Add a telnet DX cluster under Settings → Cluster to spot your own QSOs.");
         }
 
-        var ok = await target.SendSpotAsync(callsign, freqKhz, comment, ct);
-        return new SendSpotResult(ok, ok ? 1 : 0, ok ? target.Name : "Cluster write failed");
+        var (ok, note) = await target.SendSpotAsync(callsign, freqKhz, comment, ct);
+        if (!ok && note is null)
+            return new SendSpotResult(false, 0, "Cluster write failed");
+        if (!ok)
+            // The node answered but didn't post it — show its own words (e.g. "not a registered user").
+            return new SendSpotResult(false, 0, $"{target.Name} didn’t accept the spot: {note}");
+        return new SendSpotResult(true, 1, note is null ? target.Name : $"{target.Name}: {note}");
     }
 
     /// <summary>
@@ -657,7 +663,12 @@ internal class ClusterConnectionHandler
     private readonly bool _autoReconnect;
     private readonly bool _filterSkimmer;
     private readonly bool _filterFt8;
+    private readonly bool _cc11;
     private readonly ILogger _logger;
+    // While non-null, the receive loop tees incoming lines here so a just-sent spot can read back the
+    // node's reply (accepted / rejected / silent). Set by SendSpotAsync for a short window. (#YO8RFS)
+    private volatile System.Collections.Concurrent.ConcurrentQueue<string>? _spotEcho;
+    private const int SpotEchoWindowMs = 2500;
     private readonly Func<ParsedSpot, string, string, Task> _onSpotReceived;
     private readonly Action<string, string, string, string?> _onStatusChanged;
     private TcpClient? _tcpClient;
@@ -696,6 +707,7 @@ internal class ClusterConnectionHandler
         bool autoReconnect,
         bool filterSkimmer,
         bool filterFt8,
+        bool cc11,
         ILogger logger,
         Func<ParsedSpot, string, string, Task> onSpotReceived,
         Action<string, string, string, string?> onStatusChanged)
@@ -709,6 +721,7 @@ internal class ClusterConnectionHandler
         _autoReconnect = autoReconnect;
         _filterSkimmer = filterSkimmer;
         _filterFt8 = filterFt8;
+        _cc11 = cc11;
         _logger = logger;
         _onSpotReceived = onSpotReceived;
         _onStatusChanged = onStatusChanged;
@@ -849,6 +862,7 @@ internal class ClusterConnectionHandler
                 {
                     var line = rawLine.TrimEnd('\r');
                     _logger.LogDebug("Cluster {Name} recv: {Line}", _name, line);
+                    _spotEcho?.Enqueue(line); // tee for a just-sent spot to read the node's reply
 
                     if (HandleInteractivePrompt(line, writer, ref loginSent, ref passwordSent,
                             ref ccModeEnabled, ref filtersSent, ct))
@@ -889,28 +903,86 @@ internal class ClusterConnectionHandler
     /// "DX de MYCALL:..." line — same net effect as v1's raw-telnet
     /// send. Returns false when not connected or the write fails.
     /// </summary>
-    public async Task<bool> SendSpotAsync(string callsign, double freqKhz, string? comment, CancellationToken ct)
+    // Cluster replies that indicate the node did NOT post the spot (registration/permission/format).
+    private static readonly string[] SpotRejectHints =
+        { "not ", "invalid", "reject", "error", "sorry", "denied", "unable", "must be",
+          "register", "permission", "no spot", "cannot", "can't", "refused" };
+
+    /// <summary>
+    /// Sends a DX spot and reads back the node's reply for a short window so a silent rejection
+    /// (e.g. an unregistered user) surfaces instead of looking like success. Returns whether the
+    /// spot was accepted (best-effort) and the node's own words when it said anything. (#YO8RFS)
+    /// </summary>
+    public async Task<(bool ok, string? note)> SendSpotAsync(string callsign, double freqKhz, string? comment, CancellationToken ct)
     {
         var w = _writer;
-        if (w is null || _tcpClient?.Connected != true) return false;
+        if (w is null || _tcpClient?.Connected != true) return (false, null);
 
-        var line = $"dx {freqKhz:F1} {callsign.ToUpperInvariant()} {(comment ?? "").Trim()}".TrimEnd();
+        var call = callsign.ToUpperInvariant();
+        var line = $"dx {freqKhz:F1} {call} {(comment ?? "").Trim()}".TrimEnd();
+        var echo = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        _spotEcho = echo;
         await _writeLock.WaitAsync(ct);
         try
         {
             await w.WriteLineAsync(line.AsMemory(), ct);
             _logger.LogInformation("Cluster {Name}: sent spot '{Line}'", _name, line);
-            return true;
         }
         catch (Exception ex)
         {
+            _spotEcho = null;
             _logger.LogWarning(ex, "Cluster {Name}: send-spot failed", _name);
-            return false;
+            return (false, null);
         }
         finally
         {
             _writeLock.Release();
         }
+
+        // Let the node answer, then read back what it said about our spot.
+        try { await Task.Delay(SpotEchoWindowMs, ct); } catch { }
+        _spotEcho = null;
+        return InterpretSpotEcho(echo, call);
+    }
+
+    /// <summary>
+    /// Classify the lines the node emitted just after our spot. A message naming a rejection reason
+    /// means it wasn't posted; a line echoing our call is a benign ack; nothing = no acknowledgement
+    /// (most nodes stay silent on a good spot, so treat that as accepted).
+    /// </summary>
+    private (bool ok, string? note) InterpretSpotEcho(IEnumerable<string> echo, string call)
+    {
+        var result = ClassifySpotEcho(echo, call);
+        if (!result.ok)
+            _logger.LogWarning("Cluster {Name}: node did not accept the spot — '{Reply}'", _name, result.note);
+        return result;
+    }
+
+    /// <summary>
+    /// Pure classification of the node's post-spot lines (no logging) so it can be unit-tested.
+    /// A line naming a rejection reason ⇒ (false, that line); a non-spot line echoing our call ⇒
+    /// (true, that line) as an ack; nothing meaningful ⇒ (true, null) — most nodes stay silent on
+    /// a good spot.
+    /// </summary>
+    internal static (bool ok, string? note) ClassifySpotEcho(IEnumerable<string> echo, string call)
+    {
+        // Ignore prompts and actual spot traffic that happened to arrive in the window — the node's
+        // reply to a command is a plain line, not a DX/CC spot record.
+        var candidates = echo
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0 && !l.EndsWith(">")
+                        && !DxSpotRegex.IsMatch(l) && !CcSpotRegex.IsMatch(l))
+            .ToList();
+        if (candidates.Count == 0) return (true, null);
+
+        static string Clip(string s) => s.Length > 200 ? s[..200] + "…" : s;
+
+        var reject = candidates.FirstOrDefault(l =>
+            SpotRejectHints.Any(h => l.Contains(h, StringComparison.OrdinalIgnoreCase)));
+        if (reject != null) return (false, Clip(reject));
+
+        var mention = candidates.FirstOrDefault(l => l.Contains(call, StringComparison.OrdinalIgnoreCase));
+        return (true, mention is null ? null : Clip(mention));
     }
 
     /// <summary>
@@ -956,14 +1028,19 @@ internal class ClusterConnectionHandler
         }
 
         // Enable CC cluster mode for extended info after seeing the cluster prompt
-        // DXSpider prompts end with ">" (e.g. "N9BC de HB9VQQ-2 ... dxspider >")
+        // DXSpider prompts end with ">" (e.g. "N9BC de HB9VQQ-2 ... dxspider >").
+        // Skipped when Cc11Mode is off — then we connect in plain mode like most loggers (no CC-User
+        // "-0" stream id), which some nodes require to accept outbound spots (see YO8RFS).
         if (loginSent && !ccModeEnabled && text.TrimEnd().EndsWith(">"))
         {
-            Task.Delay(500, ct).Wait(ct);
-            _logger.LogInformation("Enabling CC cluster mode on {Name}", _name);
-            writer.WriteLine("set/ve7cc");
-            ccModeEnabled = true;
-            return true;
+            ccModeEnabled = true; // mark handled either way so we don't re-check every prompt
+            if (_cc11)
+            {
+                Task.Delay(500, ct).Wait(ct);
+                _logger.LogInformation("Enabling CC cluster mode on {Name}", _name);
+                writer.WriteLine("set/ve7cc");
+                return true;
+            }
         }
 
         // After CC mode is on, send mode/source filters at the next prompt.

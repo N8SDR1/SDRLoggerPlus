@@ -521,4 +521,55 @@ public class DxClusterServiceParsingTests
     }
 
     #endregion
+
+    #region Outbound spot reply classification (#YO8RFS)
+
+    [Fact]
+    public void ClassifySpotEcho_rejectionMessage_isNotOk_andSurfacesTheReason()
+    {
+        var lines = new[] { "YO8RFS You are not a registered user - spot ignored" };
+        var (ok, note) = ClusterConnectionHandler.ClassifySpotEcho(lines, "YO8RFS");
+        ok.Should().BeFalse();
+        note.Should().Contain("not a registered user");
+    }
+
+    [Theory]
+    [InlineData("Sorry, invalid frequency")]
+    [InlineData("Spot rejected: unknown call")]
+    [InlineData("You must be registered to spot")]
+    public void ClassifySpotEcho_rejectHints_areCaught(string reply)
+    {
+        var (ok, _) = ClusterConnectionHandler.ClassifySpotEcho(new[] { reply }, "YO8RFS");
+        ok.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ClassifySpotEcho_silence_isTreatedAsAccepted()
+    {
+        // Most nodes say nothing on a good spot. Empty / prompt-only ⇒ accepted, no note.
+        var (ok, note) = ClusterConnectionHandler.ClassifySpotEcho(new[] { "", "ve7cc >" }, "YO8RFS");
+        ok.Should().BeTrue();
+        note.Should().BeNull();
+    }
+
+    [Fact]
+    public void ClassifySpotEcho_ignoresRealSpotTrafficInTheWindow()
+    {
+        // A normal DX spot that arrived in the wait window must not be mistaken for our reply.
+        var lines = new[] { "DX de W1AW:      14025.0  DL1ABC     CQ                     1230Z" };
+        var (ok, note) = ClusterConnectionHandler.ClassifySpotEcho(lines, "YO8RFS");
+        ok.Should().BeTrue();
+        note.Should().BeNull();
+    }
+
+    [Fact]
+    public void ClassifySpotEcho_ackMentioningOurCall_isReturnedAsNote()
+    {
+        var lines = new[] { "YO8RFS de VE7CC   Spot queued for 14025.0" };
+        var (ok, note) = ClusterConnectionHandler.ClassifySpotEcho(lines, "YO8RFS");
+        ok.Should().BeTrue();
+        note.Should().Contain("Spot queued");
+    }
+
+    #endregion
 }
