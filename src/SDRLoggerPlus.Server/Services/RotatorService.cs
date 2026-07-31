@@ -1,5 +1,5 @@
+using System.Diagnostics;
 using System.Net.Sockets;
-using System.Text;
 using Microsoft.AspNetCore.SignalR;
 using SDRLoggerPlus.Contracts.Events;
 using SDRLoggerPlus.Contracts.Models;
@@ -15,6 +15,11 @@ namespace SDRLoggerPlus.Server.Services;
 /// <see cref="IRotatorProtocol"/>, selected by <see cref="RotatorSettings.Protocol"/>:
 /// - "rotctld": hamlib rotctld (default, port 4533)
 /// - "arco_tcp": microHAM ARCO (GS-232A emulation over TCP)
+///
+/// Poll and command share one socket, so every exchange runs under <see cref="_io"/>.
+/// Without it a heading commanded from the UI could interleave with a poll already in
+/// flight, and the two would take each other's reply lines — the reported position then
+/// lagged further behind with each command until the connection was rebuilt.
 /// </summary>
 public class RotatorService : BackgroundService
 {
@@ -29,18 +34,28 @@ public class RotatorService : BackgroundService
     private IRotatorProtocol Protocol =>
         _settings.Protocol == "arco_tcp" ? _arco : _rotctld;
 
-    private TcpClient? _client;
-    private NetworkStream? _stream;
-    private StreamReader? _reader;
-    private StreamWriter? _writer;
+    /// <summary>Serialises every exchange on the shared socket (poll, set, stop).</summary>
+    private readonly SemaphoreSlim _io = new(1, 1);
+
+    /// <summary>Settings live in LiteDB and every read decrypts credentials; polling at
+    /// 2 Hz does not need that, and a busy database would stall the loop behind it.</summary>
+    private static readonly TimeSpan SettingsRefreshInterval = TimeSpan.FromSeconds(2);
+
+    /// <summary>A stalled SignalR client must not hold up the next poll for everyone else.</summary>
+    private static readonly TimeSpan BroadcastTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>Unanswered polls tolerated before rebuilding the connection.</summary>
+    private const int MaxSilentPolls = 3;
+
+    private RotatorConnection? _connection;
+    private readonly Stopwatch _sinceSettingsRefresh = Stopwatch.StartNew();
+    private int _silentPolls;
 
     private RotatorSettings _settings = new();
     private double _currentAzimuth;
     private double? _targetAzimuth;
     private bool _isMoving;
     private bool _isConnected;
-    private DateTime _lastPositionUpdate = DateTime.MinValue;
-    private readonly object _lock = new();
 
     public RotatorService(
         ILogger<RotatorService> logger,
@@ -63,8 +78,11 @@ public class RotatorService : BackgroundService
         {
             try
             {
-                // Periodically refresh settings in case they changed
-                await RefreshSettingsAsync();
+                if (_sinceSettingsRefresh.Elapsed >= SettingsRefreshInterval)
+                {
+                    await RefreshSettingsAsync();
+                    _sinceSettingsRefresh.Restart();
+                }
 
                 if (!_settings.Enabled)
                 {
@@ -146,14 +164,12 @@ public class RotatorService : BackgroundService
             _logger.LogInformation("Connecting to rotctld at {Ip}:{Port}...",
                 _settings.IpAddress, _settings.Port);
 
-            _client = new TcpClient();
-            await _client.ConnectAsync(_settings.IpAddress, _settings.Port, ct);
+            var client = new TcpClient();
+            await client.ConnectAsync(_settings.IpAddress!, _settings.Port, ct);
 
-            _stream = _client.GetStream();
-            _reader = new StreamReader(_stream, Encoding.ASCII);
-            _writer = new StreamWriter(_stream, Encoding.ASCII) { AutoFlush = true };
-
+            _connection = new RotatorConnection(client);
             _isConnected = true;
+            _silentPolls = 0;
             _logger.LogInformation("Connected to rotctld at {Ip}:{Port}",
                 _settings.IpAddress, _settings.Port);
 
@@ -172,71 +188,84 @@ public class RotatorService : BackgroundService
     {
         try
         {
-            _reader?.Dispose();
-            _writer?.Dispose();
-            _stream?.Dispose();
-            _client?.Dispose();
+            _connection?.Dispose();
         }
         catch { }
         finally
         {
-            _reader = null;
-            _writer = null;
-            _stream = null;
-            _client = null;
+            _connection = null;
             _isConnected = false;
+            _silentPolls = 0;
         }
     }
 
     private async Task PollPositionAsync(CancellationToken ct)
     {
+        var connection = _connection;
+        if (connection == null) return;
+
+        double? raw;
+        await _io.WaitAsync(ct);
         try
         {
-            if (_writer == null || _reader == null)
-                return;
-
-            var raw = await Protocol.PollAzimuthAsync(_reader, _writer, ct);
-
-            if (raw is double azimuth)
-            {
-                // Normalize azimuth to 0-360 (rotctld can return negative values like -75 for 285°)
-                azimuth = ((azimuth % 360) + 360) % 360;
-
-                var previousAzimuth = _currentAzimuth;
-                _currentAzimuth = azimuth;
-
-                // Determine if moving (azimuth changed since last poll)
-                _isMoving = Math.Abs(_currentAzimuth - previousAzimuth) > 0.5;
-
-                // Clear target if we've reached it
-                if (_targetAzimuth.HasValue && Math.Abs(_currentAzimuth - _targetAzimuth.Value) < 2.0)
-                {
-                    _targetAzimuth = null;
-                    _isMoving = false;
-                }
-
-                _logger.LogDebug("Rotator position: {Azimuth:F1}° (moving: {IsMoving})",
-                    _currentAzimuth, _isMoving);
-
-                // Broadcast position update
-                await BroadcastPositionAsync();
-
-                _lastPositionUpdate = DateTime.UtcNow;
-            }
-            else
-            {
-                _logger.LogWarning("Failed to parse rotator position");
-            }
+            raw = await Protocol.PollAzimuthAsync(connection, ct);
         }
         catch (IOException ex)
         {
             _logger.LogWarning("Lost connection to rotctld: {Message}", ex.Message);
             Disconnect();
+            return;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Error polling rotator position");
+            return;
         }
+        finally
+        {
+            _io.Release();
+        }
+
+        if (raw is not double azimuth)
+        {
+            // Either the controller said nothing within the protocol's timeout or its answer
+            // did not parse. Rebuild the connection rather than keep reading a stream we may
+            // no longer be in step with — a fresh socket is the one state we can trust.
+            _silentPolls++;
+            _logger.LogWarning("No usable rotator position (attempt {Attempt} of {Max})",
+                _silentPolls, MaxSilentPolls);
+
+            if (_silentPolls >= MaxSilentPolls || connection.IsClosed)
+            {
+                _logger.LogWarning("Rotator not answering — reconnecting to resynchronise");
+                Disconnect();
+            }
+            return;
+        }
+
+        _silentPolls = 0;
+
+        // Normalize azimuth to 0-360 (rotctld can return negative values like -75 for 285°)
+        azimuth = ((azimuth % 360) + 360) % 360;
+
+        var previousAzimuth = _currentAzimuth;
+        _currentAzimuth = azimuth;
+
+        // Determine if moving (azimuth changed since last poll)
+        _isMoving = Math.Abs(_currentAzimuth - previousAzimuth) > 0.5;
+
+        // Clear target if we've reached it
+        if (_targetAzimuth.HasValue && Math.Abs(_currentAzimuth - _targetAzimuth.Value) < 2.0)
+        {
+            _targetAzimuth = null;
+            _isMoving = false;
+        }
+
+        _logger.LogDebug("Rotator position: {Azimuth:F1}° (moving: {IsMoving})",
+            _currentAzimuth, _isMoving);
+
+        // Broadcast position update
+        await BroadcastPositionAsync();
     }
 
     private async Task BroadcastPositionAsync()
@@ -248,7 +277,16 @@ public class RotatorService : BackgroundService
             _targetAzimuth
         );
 
-        await _hubContext.Clients.All.OnRotatorPosition(evt);
+        try
+        {
+            await _hubContext.Clients.All.OnRotatorPosition(evt).WaitAsync(BroadcastTimeout);
+        }
+        catch (TimeoutException)
+        {
+            // One slow client (a backgrounded tab, a multi-op operator on a poor link) must
+            // not pace the polling loop for everyone.
+            _logger.LogDebug("Rotator position broadcast timed out");
+        }
     }
 
     /// <summary>
@@ -262,7 +300,8 @@ public class RotatorService : BackgroundService
 
         _logger.LogInformation("Commanding rotator to {Azimuth}°", targetAzimuth);
 
-        if (!_isConnected || _writer == null || _reader == null)
+        var connection = _connection;
+        if (!_isConnected || connection == null)
         {
             _logger.LogWarning("Cannot command rotator - not connected");
 
@@ -278,7 +317,15 @@ public class RotatorService : BackgroundService
             _targetAzimuth = targetAzimuth;
             _isMoving = true;
 
-            await Protocol.SetAzimuthAsync(targetAzimuth, _reader, _writer, CancellationToken.None);
+            await _io.WaitAsync();
+            try
+            {
+                await Protocol.SetAzimuthAsync(targetAzimuth, connection, CancellationToken.None);
+            }
+            finally
+            {
+                _io.Release();
+            }
 
             // Broadcast updated state
             await BroadcastPositionAsync();
@@ -297,7 +344,8 @@ public class RotatorService : BackgroundService
     {
         _logger.LogInformation("Stopping rotator");
 
-        if (!_isConnected || _writer == null || _reader == null)
+        var connection = _connection;
+        if (!_isConnected || connection == null)
         {
             _logger.LogWarning("Cannot stop rotator - not connected");
             return;
@@ -305,7 +353,15 @@ public class RotatorService : BackgroundService
 
         try
         {
-            await Protocol.StopAsync(_reader, _writer, CancellationToken.None);
+            await _io.WaitAsync();
+            try
+            {
+                await Protocol.StopAsync(connection, CancellationToken.None);
+            }
+            finally
+            {
+                _io.Release();
+            }
 
             _isMoving = false;
             _targetAzimuth = null;

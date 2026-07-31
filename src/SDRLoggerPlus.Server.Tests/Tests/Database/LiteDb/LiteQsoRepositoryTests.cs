@@ -554,11 +554,13 @@ public class LiteQsoRepositoryTests : IDisposable
     public async Task GetStatisticsAsync_CountsQsosToday()
     {
         await _repo.DeleteAllAsync();
-        // "Today" is the operator's LOCAL calendar day (see GetStatisticsAsync) —
-        // in-app QSOs are logged with a local timestamp, so count by local date.
-        var now = DateTime.Now;
-        await _repo.CreateAsync(CreateQso(qsoDate: now));               // today (local)
-        await _repo.CreateAsync(CreateQso(qsoDate: now.AddDays(-1)));   // yesterday (local)
+        // "Today" is the UTC calendar day (see GetStatisticsAsync) — QSOs are stored
+        // and bucketed in UTC everywhere. Building these from DateTime.Now made the
+        // test fail whenever the local date differed from the UTC date (evenings in
+        // the US, most of the day in NZ) — exactly what the timezone-matrix CI runs.
+        var now = DateTime.UtcNow;
+        await _repo.CreateAsync(CreateQso(qsoDate: now));               // today (UTC)
+        await _repo.CreateAsync(CreateQso(qsoDate: now.AddDays(-1)));   // yesterday (UTC)
 
         var stats = await _repo.GetStatisticsAsync();
         stats.TotalQsos.Should().Be(2);
