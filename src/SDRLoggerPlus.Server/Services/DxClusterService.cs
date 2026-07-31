@@ -913,13 +913,26 @@ internal class ClusterConnectionHandler
     /// (e.g. an unregistered user) surfaces instead of looking like success. Returns whether the
     /// spot was accepted (best-effort) and the node's own words when it said anything. (#YO8RFS)
     /// </summary>
+    /// <summary>
+    /// Build the "dx &lt;freq&gt; &lt;call&gt; &lt;comment&gt;" line. Frequency is formatted with InvariantCulture so a
+    /// comma-decimal locale (e.g. ro-RO: "21074,0") never leaks in — DX cluster nodes reject commas
+    /// ("Error - Commas not allowed", seen by YO8RFS). Commas are also stripped from the comment for
+    /// the same reason. internal for tests. Callsign is expected already upper-cased.
+    /// </summary>
+    internal static string BuildDxSpotLine(double freqKhz, string callsign, string? comment)
+    {
+        var freq = freqKhz.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+        var safeComment = (comment ?? "").Replace(',', ' ').Trim();
+        return $"dx {freq} {callsign} {safeComment}".TrimEnd();
+    }
+
     public async Task<(bool ok, string? note)> SendSpotAsync(string callsign, double freqKhz, string? comment, CancellationToken ct)
     {
         var w = _writer;
         if (w is null || _tcpClient?.Connected != true) return (false, null);
 
         var call = callsign.ToUpperInvariant();
-        var line = $"dx {freqKhz:F1} {call} {(comment ?? "").Trim()}".TrimEnd();
+        var line = BuildDxSpotLine(freqKhz, call, comment);
         var echo = new System.Collections.Concurrent.ConcurrentQueue<string>();
         _spotEcho = echo;
         await _writeLock.WaitAsync(ct);

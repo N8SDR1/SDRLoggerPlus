@@ -572,4 +572,34 @@ public class DxClusterServiceParsingTests
     }
 
     #endregion
+
+    #region Outbound spot line formatting (#YO8RFS — "Commas not allowed")
+
+    [Theory]
+    [InlineData("ro-RO")] // Romanian: decimal separator is a comma
+    [InlineData("de-DE")] // German: same
+    [InlineData("en-US")]
+    public void BuildDxSpotLine_usesPeriodDecimal_regardlessOfCulture(string culture)
+    {
+        var original = System.Threading.Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture =
+                System.Globalization.CultureInfo.GetCultureInfo(culture);
+            var line = ClusterConnectionHandler.BuildDxSpotLine(21074.0, "TF/N7JMV", null);
+            line.Should().Be("dx 21074.0 TF/N7JMV");
+            line.Should().NotContain(",", "DX cluster nodes reject commas");
+        }
+        finally { System.Threading.Thread.CurrentThread.CurrentCulture = original; }
+    }
+
+    [Fact]
+    public void BuildDxSpotLine_stripsCommasFromComment()
+    {
+        var line = ClusterConnectionHandler.BuildDxSpotLine(14025.0, "K1ABC", "Bothell, WA, USA");
+        line.Should().NotContain(",");
+        line.Should().StartWith("dx 14025.0 K1ABC ");
+    }
+
+    #endregion
 }
