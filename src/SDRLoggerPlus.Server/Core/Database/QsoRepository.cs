@@ -71,4 +71,11 @@ public interface IQsoRepository
     /// "Verify QSO times" tool (docs/design/timezone-architecture.md §5a).
     /// </summary>
     Task<bool> RepairQsoDateAsync(string id, DateTime qsoDateUtc);
+
+    /// <summary>
+    /// Repair ONLY the Country name (and Station.Country to match), preserving every sync flag and
+    /// NOT bumping UpdatedAt. Like RepairQsoDateAsync it bypasses UpdateAsync, so normalising a
+    /// country name (Logbook Health) never re-queues a QRZ/LoTW upload.
+    /// </summary>
+    Task<bool> RepairQsoCountryAsync(string id, string country);
 }

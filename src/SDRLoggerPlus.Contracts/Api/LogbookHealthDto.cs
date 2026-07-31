@@ -76,3 +76,36 @@ public record QsoDuplicateRemoveRequest(IReadOnlyList<string> Ids);
 
 /// <summary>Outcome of removing duplicates.</summary>
 public record QsoDuplicateRemoveResult(int Requested, int Deleted, int Skipped);
+
+// ── Normalize country names ─────────────────────────────────────────────────────
+
+/// <summary>One country-name spelling used within a DXCC entity, and how many QSOs use it.</summary>
+public record CountryNameVariant(string Country, int Count);
+
+/// <summary>
+/// A DXCC entity whose QSOs are stored under more than one country-name spelling (e.g. "USA",
+/// "UNITED STATES OF AMERICA", "United States") — all the SAME entity by DXCC number, so they can
+/// be safely unified. Only QSOs carrying a DXCC number are considered.
+/// </summary>
+public record CountryNameGroup(
+    int Dxcc,
+    /// <summary>The name every QSO in this entity would be set to (cty.dat's canonical name).</summary>
+    string Canonical,
+    IReadOnlyList<CountryNameVariant> Variants,
+    /// <summary>How many QSOs would actually change (their Country differs from Canonical).</summary>
+    int ChangeCount);
+
+/// <summary>Read-only result of a country-name consistency scan.</summary>
+public record CountryNameAuditResult(
+    int TotalQsos,
+    /// <summary>QSOs with no DXCC number — skipped, since they can't be grouped by entity safely.</summary>
+    int WithoutDxcc,
+    int GroupCount,
+    int ChangeCount,
+    IReadOnlyList<CountryNameGroup> Groups);
+
+/// <summary>Request body: which DXCC entities to normalize (from the scan). Empty = all proposed.</summary>
+public record CountryNameNormalizeRequest(IReadOnlyList<int> Dxccs);
+
+/// <summary>Outcome of a country-name normalization.</summary>
+public record CountryNameNormalizeResult(int Requested, int Changed, int Skipped);

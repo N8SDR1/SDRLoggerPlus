@@ -1209,6 +1209,15 @@ class ApiClient {
       method: 'POST', body: JSON.stringify({ ids }),
     });
   }
+  async scanCountryNames(): Promise<CountryNameAuditResult> {
+    return this.fetch<CountryNameAuditResult>('/logbookhealth/country-names');
+  }
+  // dxccs empty = normalize all proposed entities.
+  async normalizeCountryNames(dxccs: number[]): Promise<CountryNameNormalizeResult> {
+    return this.fetch<CountryNameNormalizeResult>('/logbookhealth/country-names/normalize', {
+      method: 'POST', body: JSON.stringify({ dxccs }),
+    });
+  }
 
   // ── Multi-op coordination (S-COORD) ──────────────────────────────────
   async reportPresence(stationId: string, operator: string | undefined, band: string | undefined, mode: string | undefined): Promise<StationPresenceEvent[]> {
@@ -1277,6 +1286,23 @@ export interface QsoDuplicateScanResult {
   groups: QsoDuplicateGroup[];
 }
 export interface QsoDuplicateRemoveResult { requested: number; deleted: number; skipped: number; }
+
+export interface CountryNameVariant { country: string; count: number; }
+export interface CountryNameGroup {
+  dxcc: number;
+  canonical: string;
+  variants: CountryNameVariant[];
+  changeCount: number;
+}
+export interface CountryNameAuditResult {
+  totalQsos: number;
+  withoutDxcc: number;
+  groupCount: number;
+  changeCount: number;
+  groups: CountryNameGroup[];
+}
+export interface CountryNameNormalizeResult { requested: number; changed: number; skipped: number; }
+
 export interface AuthDevice { id: string; name: string; createdUtc: string; lastSeenUtc?: string; }
 
 // QRZ Types

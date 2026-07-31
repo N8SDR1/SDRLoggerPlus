@@ -242,4 +242,7 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
     // lives on the host, so it must be run there, not proxied.
     public Task<bool> RepairQsoDateAsync(string id, DateTime qsoDateUtc) =>
         throw new NotSupportedException("Repairing QSO times must be done on the host, not a connected client.");
+
+    public Task<bool> RepairQsoCountryAsync(string id, string country) =>
+        throw new NotSupportedException("Normalising country names must be done on the host, not a connected client.");
 }

@@ -81,4 +81,32 @@ public class LogbookHealthController : ControllerBase
             result.Deleted, result.Skipped, result.Requested);
         return Ok(result);
     }
+
+    /// <summary>Read-only scan: DXCC entities logged under more than one country-name spelling.</summary>
+    [HttpGet("country-names")]
+    public async Task<ActionResult<CountryNameAuditResult>> ScanCountryNames()
+        => Ok(await _health.AuditCountryNamesAsync());
+
+    /// <summary>
+    /// Unify country names for the chosen DXCC entities (empty = all proposed) to each entity's
+    /// canonical name. Takes a backup first; writes are LOCAL-ONLY via the flag-preserving path, so
+    /// they never re-upload to or change QRZ / LoTW / eQSL.
+    /// </summary>
+    [HttpPost("country-names/normalize")]
+    public async Task<ActionResult<CountryNameNormalizeResult>> NormalizeCountryNames([FromBody] CountryNameNormalizeRequest request)
+    {
+        var dxccs = request?.Dxccs ?? Array.Empty<int>();
+        var result = await _health.NormalizeCountryNamesAsync(
+            dxccs,
+            snapshotBefore: async () =>
+            {
+                _logger.LogInformation("Normalize country names: taking a backup before rewriting {Count} entit(ies)",
+                    dxccs.Count == 0 ? -1 : dxccs.Count);
+                await _backup.RunNowAsync("country-normalize");
+            });
+
+        _logger.LogInformation("Normalize country names: changed {Changed}, skipped {Skipped} of {Requested}",
+            result.Changed, result.Skipped, result.Requested);
+        return Ok(result);
+    }
 }

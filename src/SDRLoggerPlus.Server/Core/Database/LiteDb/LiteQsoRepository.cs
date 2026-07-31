@@ -235,6 +235,24 @@ public class LiteQsoRepository : IQsoRepository
         return Task.FromResult(success);
     }
 
+    /// <summary>
+    /// Repairs ONLY the Country name (top-level + Station.Country to match), leaving every sync flag
+    /// and UpdatedAt untouched. Same flag-preserving path as RepairQsoDateAsync: normalising a
+    /// country name must never re-queue a QRZ/LoTW upload. Country feeds DXCC-fallback grouping, so
+    /// Commit() keeps awards current.
+    /// </summary>
+    public Task<bool> RepairQsoCountryAsync(string id, string country)
+    {
+        var qso = _context.Qsos.FindById(new BsonValue(id));
+        if (qso == null) return Task.FromResult(false);
+
+        qso.Country = country;
+        if (qso.Station != null) qso.Station.Country = country;
+        var success = _context.Qsos.Update(qso);
+        Commit();
+        return Task.FromResult(success);
+    }
+
     public Task<IEnumerable<Qso>> GetQslFailuresAsync(string service)
     {
         // Filtered in memory: the ledger is a nested document and LiteDB's

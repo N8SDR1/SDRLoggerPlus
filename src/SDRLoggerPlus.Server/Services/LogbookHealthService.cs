@@ -297,4 +297,117 @@ public class LogbookHealthService
         if (hh > 23 || mm > 59) return null;
         return hh * 60 + mm;
     }
+
+    // ── Normalize country names ──────────────────────────────────────────────────────────────────
+    private const int CountryGroupCap = 500;
+
+    /// <summary>
+    /// Read-only: find DXCC entities whose QSOs are stored under more than one country-name spelling.
+    /// Grouping is by DXCC NUMBER, so every QSO in a group is provably the SAME entity — unifying
+    /// their country strings can't merge two different countries. QSOs without a DXCC number are
+    /// skipped (we can't be sure of their entity). The canonical is cty.dat's own name for the entity.
+    /// </summary>
+    public async Task<CountryNameAuditResult> AuditCountryNamesAsync()
+    {
+        var all = (await _repository.GetAllAsync()).ToList();
+        var byDxcc = new Dictionary<int, List<Qso>>();
+        int withoutDxcc = 0;
+        foreach (var q in all)
+        {
+            if (q.Dxcc is not int dx) { withoutDxcc++; continue; }
+            if (!byDxcc.TryGetValue(dx, out var list)) byDxcc[dx] = list = new();
+            list.Add(q);
+        }
+
+        var groups = new List<CountryNameGroup>();
+        int totalChange = 0;
+        foreach (var (dxcc, qsos) in byDxcc)
+        {
+            var variants = CountryVariants(qsos);
+            if (variants.Count < 2) continue; // one spelling (or all blank) — nothing to unify
+
+            var canonical = CanonicalCountryFor(qsos, variants);
+            if (canonical is null) continue;
+
+            var change = qsos.Count(q => DiffersFrom(q, canonical));
+            if (change == 0) continue;
+            totalChange += change;
+            if (groups.Count < CountryGroupCap)
+                groups.Add(new CountryNameGroup(dxcc, canonical, variants, change));
+        }
+
+        return new CountryNameAuditResult(
+            all.Count, withoutDxcc, groups.Count, totalChange,
+            groups.OrderByDescending(g => g.ChangeCount).ToList());
+    }
+
+    /// <summary>
+    /// Set every QSO in the chosen DXCC entities (empty = all proposed) to that entity's canonical
+    /// country name. The canonical is re-derived server-side (never trust a client-sent name), each
+    /// write goes through the flag-preserving RepairQsoCountryAsync (no sync flag, no UpdatedAt, never
+    /// UpdateAsync → nothing re-uploaded), and the backup snapshot is taken once before the first write.
+    /// </summary>
+    public async Task<CountryNameNormalizeResult> NormalizeCountryNamesAsync(
+        IReadOnlyCollection<int> dxccs, Func<Task>? snapshotBefore = null)
+    {
+        var all = (await _repository.GetAllAsync()).ToList();
+        var target = dxccs is { Count: > 0 } ? new HashSet<int>(dxccs) : null; // null = all proposed
+
+        int requested = 0, changed = 0, skipped = 0;
+        var snapshotted = false;
+
+        foreach (var group in all.Where(q => q.Dxcc is int).GroupBy(q => q.Dxcc!.Value))
+        {
+            if (target is not null && !target.Contains(group.Key)) continue;
+            var qsos = group.ToList();
+            var variants = CountryVariants(qsos);
+            if (variants.Count < 2) continue;
+            var canonical = CanonicalCountryFor(qsos, variants);
+            if (canonical is null) continue;
+
+            foreach (var q in qsos)
+            {
+                if (q.Id is null || !DiffersFrom(q, canonical)) continue;
+                requested++;
+                if (!snapshotted)
+                {
+                    if (snapshotBefore is not null) await snapshotBefore();
+                    snapshotted = true;
+                }
+                if (await _repository.RepairQsoCountryAsync(q.Id, canonical)) changed++;
+                else skipped++;
+            }
+        }
+
+        return new CountryNameNormalizeResult(requested, changed, skipped);
+    }
+
+    private static bool DiffersFrom(Qso q, string canonical) =>
+        !string.Equals((q.Country ?? "").Trim(), canonical, StringComparison.Ordinal);
+
+    private static List<CountryNameVariant> CountryVariants(IEnumerable<Qso> qsos) =>
+        qsos.Select(q => (q.Country ?? "").Trim())
+            .Where(c => c.Length > 0)
+            .GroupBy(c => c, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new CountryNameVariant(g.First(), g.Count()))
+            .OrderByDescending(v => v.Count)
+            .ToList();
+
+    /// <summary>
+    /// The name to unify a DXCC group on: cty.dat's own name for the entity (what native logging
+    /// stores), taken as the MAJORITY resolution across the group's callsigns so a single odd call
+    /// can't skew it. Falls back to the most common stored spelling — it never invents a name.
+    /// </summary>
+    private static string? CanonicalCountryFor(IEnumerable<Qso> qsos, List<CountryNameVariant> variants)
+    {
+        var ctyName = qsos
+            .Select(q => CtyService.GetCountryFromCallsign(q.Callsign ?? "").Country)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .GroupBy(c => c!, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.First())
+            .FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(ctyName)) return ctyName;
+        return variants.Count > 0 ? variants[0].Country : null;
+    }
 }
