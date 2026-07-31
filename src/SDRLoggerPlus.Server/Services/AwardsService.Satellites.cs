@@ -35,9 +35,10 @@ public partial class AwardsService
     public const string SatelliteVuccBand = "sat";
 
     /// <summary>
-    /// The grid a satellite QSO credits, 4-char and uppercased. Top-level Grid
-    /// first (what VUCC reads) with Station.Grid as fallback (what the grid map
-    /// reads), so the SAT tab and the VUCC satellite row always agree.
+    /// The grid a satellite QSO credits, 4-char and uppercased. Satellite QSOs keep
+    /// top-level Grid first (the worked grid entered on the SAT tab), with Station.Grid
+    /// as fallback. Note this is the opposite precedence from the band-VUCC path
+    /// (Station.Grid first); they only differ in the rare case a QSO carries both.
     /// </summary>
     private static string? SatelliteGrid(Qso q) => NormalizeGrid(q.Grid ?? q.Station?.Grid);
 

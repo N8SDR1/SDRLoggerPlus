@@ -439,6 +439,17 @@ export function LogHistoryPlugin() {
 
   const handleUploadSelected = useCallback(async (target: 'lotw' | 'qrz') => {
     if (selectedQsos.length === 0 || uploadingSelectedTo) return;
+    // Selected-upload deliberately bypasses the not-yet-sent rule (a re-send). With whole-log
+    // filtering + "select all", this set can be the entire filtered log, so confirm before we
+    // re-send to a public logbook — an accidental click could duplicate thousands of QSOs online.
+    const label = target === 'qrz' ? 'QRZ' : 'LoTW';
+    const n = selectedQsos.length;
+    const ok = window.confirm(
+      `Re-send ${n} selected QSO${n === 1 ? '' : 's'} to ${label}?\n\n` +
+      `Selected QSOs are uploaded even if they were already sent, so this can create duplicate ` +
+      `entries in your ${label} logbook. Only continue if you mean to re-send them.`
+    );
+    if (!ok) return;
     const ids = selectedQsos.map(q => q.id);
     setUploadingSelectedTo(target);
     setSelectedUploadResult(null);
