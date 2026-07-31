@@ -930,9 +930,16 @@ internal class TciRadioConnection
     /// Maps application-level mode names to TCI protocol mode strings.
     /// TCI modes vary by radio. Common: LSB, USB, DSB, CW, FMN, AM, DIGU, SPEC, DIGL, SAM, DRM
     /// </summary>
-    private static string MapToTciMode(string appMode, long frequencyHz)
+    internal static string MapToTciMode(string appMode, long frequencyHz)
     {
-        switch (appMode.ToUpperInvariant())
+        // A blank/missing mode (e.g. a POTA spot with no mode in the feed) must NOT send an empty
+        // "modulation:rx,;" that leaves the rig on a wrong/digital mode — fall back to the sane phone
+        // mode for the band, same as "SSB". (#59 — Zuzudaddy's clicked-spot-sets-DIGU report.)
+        var m = (appMode ?? "").Trim().ToUpperInvariant();
+        if (m.Length == 0)
+            return frequencyHz > 0 && frequencyHz < 10_000_000 ? "LSB" : "USB";
+
+        switch (m)
         {
             case "CW":
             case "CWU":
@@ -964,7 +971,7 @@ internal class TciRadioConnection
             case "DRM":
                 return "DRM";
             default:
-                return appMode.ToUpperInvariant();
+                return m;
         }
     }
 

@@ -475,9 +475,15 @@ public partial class HamlibService : BackgroundService
     /// Hamlib modes: AM, CW, CWR, USB, LSB, RTTY, RTTYR, FM, WFM, AMS,
     ///               PKTLSB, PKTUSB, PKTFM, ECSSUSB, ECSSLSB, FAX, SAM, SAL, SAH, DSB, FMN, PKTAM
     /// </summary>
-    private static string MapToHamlibMode(string appMode, long frequencyHz)
+    internal static string MapToHamlibMode(string appMode, long frequencyHz)
     {
-        switch (appMode.ToUpperInvariant())
+        // A blank/missing mode must not fall through as an empty string — pick the band's phone mode,
+        // same as "SSB", so a spot with no mode never mis-sets the rig. (#59)
+        var m = (appMode ?? "").Trim().ToUpperInvariant();
+        if (m.Length == 0)
+            return frequencyHz > 0 && frequencyHz < 10_000_000 ? "LSB" : "USB";
+
+        switch (m)
         {
             case "CW":
             case "CWU":
@@ -510,7 +516,7 @@ public partial class HamlibService : BackgroundService
             case "SAM":
                 return "SAM";
             default:
-                return appMode.ToUpperInvariant();
+                return m;
         }
     }
 
