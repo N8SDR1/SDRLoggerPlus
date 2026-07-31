@@ -3,6 +3,35 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-07-31 — v2.13.1 "Vega"
+
+**Fixes a lockout when hosting a shared log, and lets the multi-op panel follow your rig.**
+
+### Fixed — "Share on network" could lock you out of your own app
+Turning on **Share this log on my network** made the app require an access token for *every*
+connection — including its own desktop UI, which doesn't send one. The result was an endless
+"Reconnecting to the server…" screen that also blocked you from getting back into Settings to turn
+hosting off. The local machine is now trusted on its own backend (only *other* stations on the
+network need a token), so hosting works without locking yourself out. If you hit this on 2.13.0,
+updating fixes it. (#57)
+
+### Fixed — Never get trapped by a connection screen again
+If the connection can't be re-established after a few tries, the reconnect overlay now offers
+**"Continue to app (work offline)"** so you can always reach Settings and fix your connection —
+reconnection keeps retrying in the background.
+
+### New — Multi-op panel follows your rig
+The **Multi-op Coordination** panel's *You're on* band/mode now auto-fill from your connected rig
+(with "Follow radio" on) and update as you tune, instead of starting blank — so your presence on the
+who's-on-what board is right without re-declaring it. The selectors stay editable.
+
+### New — POTA spot fills the park you worked
+Clicking a station in the **POTA** panel now carries its **park reference** into the log, not just the
+callsign and frequency. In **POTA mode** it fills a new **Park (worked)** field — valid whether you're
+activating or hunting from home — which uploads as a proper POTA hunt (`SIG_INFO`); the explicit
+**P2P** field stays and mirrors into it. In **General mode** it drops a `POTA US-1234` note into
+Remarks. (#59)
+
 ## 2026-07-28 — v2.13.0 "Vega"
 
 **A batch of quality-of-life features from the issue tracker — plus the first multi-op contest-serial coordination.**
