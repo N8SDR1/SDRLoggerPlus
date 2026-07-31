@@ -26,13 +26,11 @@ public partial class AwardsService
     }
 
     /// <summary>
-    /// FFMA counts a grid only when it's confirmed by LoTW or a paper QSL — deliberately
-    /// narrower than the shared <c>IsConfirmed</c>, which also accepts eQSL/QRZ. The award
-    /// rules name QSL cards or LoTW, so nothing else counts here.
+    /// FFMA counts a grid only when it's confirmed by LoTW or a paper QSL — the award
+    /// rules name nothing else. Delegates to the shared policy so every ARRL view
+    /// answers "confirmed?" identically (#46).
     /// </summary>
-    private static bool IsFfmaConfirmed(Qso qso) =>
-        string.Equals(qso.Qsl?.Lotw?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(qso.Qsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase);
+    private static bool IsFfmaConfirmed(Qso qso) => ConfirmationPolicy.AwardRules(qso);
 
     /// <summary>
     /// Pure tally: reduce each 6 m QSO to its four-char grid, keep only the required

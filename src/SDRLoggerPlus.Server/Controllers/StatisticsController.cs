@@ -52,14 +52,16 @@ public class StatisticsController : ControllerBase
         [FromQuery] string? mode = null,
         [FromQuery] string? status = null,
         [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null)
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] ConfirmationRule confirmations = ConfirmationRule.Any)
     {
         var filters = new StatisticsFilters(
             Band: band,
             Mode: mode,
             Status: status,
             FromDate: fromDate,
-            ToDate: toDate
+            ToDate: toDate,
+            Confirmations: confirmations
         );
 
         var statistics = await _awardsService.GetVuccStatisticsAsync(filters);
@@ -76,9 +78,11 @@ public class StatisticsController : ControllerBase
         [FromQuery] string? band = null,
         [FromQuery] string? mode = null,
         [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null)
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] ConfirmationRule confirmations = ConfirmationRule.Any)
     {
-        var filters = new StatisticsFilters(Band: band, Mode: mode, FromDate: fromDate, ToDate: toDate);
+        var filters = new StatisticsFilters(Band: band, Mode: mode, FromDate: fromDate,
+            ToDate: toDate, Confirmations: confirmations);
         return Ok(await _awardsService.GetGridMapAsync(filters));
     }
 

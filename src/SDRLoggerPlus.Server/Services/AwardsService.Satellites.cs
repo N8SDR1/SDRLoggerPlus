@@ -45,7 +45,8 @@ public partial class AwardsService
     /// Satellite grids as VUCC rows, from an already-filtered QSO set. Shared
     /// with <c>GetVuccStatisticsAsync</c> so both surfaces count identically.
     /// </summary>
-    private static List<GridDetail> BuildSatelliteGridRows(IEnumerable<Qso> qsos, string? status)
+    private static List<GridDetail> BuildSatelliteGridRows(IEnumerable<Qso> qsos, string? status,
+        Func<Qso, bool> isConfirmed)
     {
         var rows = new List<GridDetail>();
 
@@ -56,7 +57,7 @@ public partial class AwardsService
                      .GroupBy(x => x.Grid!, StringComparer.Ordinal))
         {
             var groupQsos = group.Select(x => x.Qso).ToList();
-            var confirmed = groupQsos.Any(IsConfirmed);
+            var confirmed = groupQsos.Any(isConfirmed);
 
             if (!string.IsNullOrEmpty(status))
             {

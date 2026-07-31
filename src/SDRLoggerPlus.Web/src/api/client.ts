@@ -209,6 +209,8 @@ export interface VuccFilters {
   status?: string;
   fromDate?: string;
   toDate?: string;
+  /** 'awardRules' = LoTW + paper card only (ARRL counting); omitted = any channel. */
+  confirmations?: 'awardRules' | 'any';
 }
 
 // FFMA (Fred Fish Memorial Award) — 488 grids on 6m, confirmed by LoTW/paper QSL.
@@ -446,6 +448,7 @@ class ApiClient {
     if (filters?.status) params.append('status', filters.status);
     if (filters?.fromDate) params.append('fromDate', filters.fromDate);
     if (filters?.toDate) params.append('toDate', filters.toDate);
+    if (filters?.confirmations) params.append('confirmations', filters.confirmations);
     const qs = params.toString();
     return this.fetch<VuccStatistics>(`/statistics/vucc${qs ? `?${qs}` : ''}`);
   }
@@ -692,10 +695,12 @@ class ApiClient {
   }
 
   /** Worked grids (all bands, or a band/mode) for the Grid Tracker panel. */
-  async getGridMap(band?: string, mode?: string): Promise<GridMapStatistics> {
+  async getGridMap(band?: string, mode?: string,
+    confirmations?: 'awardRules' | 'any'): Promise<GridMapStatistics> {
     const p = new URLSearchParams();
     if (band) p.set('band', band);
     if (mode) p.set('mode', mode);
+    if (confirmations) p.set('confirmations', confirmations);
     const q = p.toString();
     return this.fetch(`/statistics/gridmap${q ? `?${q}` : ''}`);
   }

@@ -3,9 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Grid3x3, Plus, Minus, Locate, Map as MapIcon, LayoutGrid } from 'lucide-react';
 import { api } from '../api/client';
 import { GlassPanel } from '../components/GlassPanel';
+import { ConfirmationRuleToggle } from '../components/ConfirmationRuleToggle';
 import { GridTrackerMapView } from '../components/GridTrackerMapView';
 import { TILE_LAYERS, type TileLayerKey } from '../geo/tileLayers';
 import { useSettingsStore } from '../store/settingsStore';
+import { useConfirmationRuleStore } from '../store/confirmationRuleStore';
 import { useWsjtxDecodeStore } from '../store/wsjtxDecodeStore';
 import { isDecodeNeeded } from '../utils/decodeNeeds';
 import worldRaw from '../geo/world-outline.json';
@@ -96,9 +98,13 @@ export function GridTrackerPlugin() {
   const effectiveBand = fdd && liveBand ? liveBand : band;
   const effectiveMode = fdd ? 'All' : mode;
 
+  // Confirmed = LoTW+card (ARRL counting) by default, so green here agrees
+  // with the FFMA/VUCC screens; the toggle widens it to any channel (#46).
+  const confirmationRule = useConfirmationRuleStore((s) => s.rule);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['gridmap', effectiveBand, effectiveMode],
-    queryFn: () => api.getGridMap(effectiveBand === 'All' ? undefined : effectiveBand, effectiveMode === 'All' ? undefined : effectiveMode),
+    queryKey: ['gridmap', effectiveBand, effectiveMode, confirmationRule],
+    queryFn: () => api.getGridMap(effectiveBand === 'All' ? undefined : effectiveBand, effectiveMode === 'All' ? undefined : effectiveMode, confirmationRule),
     refetchInterval: 5 * 60 * 1000,
   });
 
@@ -277,6 +283,7 @@ export function GridTrackerPlugin() {
             className={`px-2 py-1 rounded border text-xs font-medium ${showNeeded ? 'bg-red-500/20 border-red-400 text-red-300' : 'bg-dark-700 border-dark-500 text-dark-300 hover:bg-dark-600'}`}>
             Needed
           </button>
+          <ConfirmationRuleToggle />
           {fdd && <span className="text-[11px] text-cyan-300/80 whitespace-nowrap">following {liveBand ?? '—'}{cqOnly ? ' · CQ' : ''}{neededOnly ? ' · needed' : ''}</span>}
           <span className="flex-1" />
           <span className="flex items-center gap-2 text-[11px] text-dark-300">
