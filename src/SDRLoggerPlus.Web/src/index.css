@@ -616,6 +616,11 @@ html:not(.dark) .flexlayout__tab_toolbar_button:hover {
   --ag-border-color: rgb(var(--surface-600));
   --ag-header-foreground-color: rgb(var(--accent-secondary));
   --ag-foreground-color: rgb(var(--text-foreground));
+  /* The paging panel text and the paging arrows use the SECONDARY/DISABLED foreground. Without these
+     they fell back to AG Grid's own low-contrast defaults and vanished on dark themes (W1DFC report).
+     Tied to the theme's --text-foreground so this reads correctly on EVERY theme. */
+  --ag-secondary-foreground-color: rgb(var(--text-foreground));
+  --ag-disabled-foreground-color: rgb(var(--text-foreground) / 0.45);
   --ag-row-border-color: rgb(var(--surface-600) / 0.5);
   --ag-font-family: 'JetBrains Mono', 'Consolas', monospace;
   --ag-font-size: 13px;
@@ -636,6 +641,8 @@ html:not(.dark) .ag-theme-alpine-dark {
   --ag-header-background-color: #f5f3f0;
   --ag-header-foreground-color: #524e48;
   --ag-foreground-color: #2a2825;
+  --ag-secondary-foreground-color: #2a2825;
+  --ag-disabled-foreground-color: rgba(42, 40, 37, 0.4);
   --ag-border-color: #cdc8c0;
   --ag-row-border-color: #e8e5de;
   --ag-header-column-separator-color: #cdc8c0;
@@ -660,6 +667,26 @@ html:not(.dark) .ag-theme-alpine-dark {
 
 .dark .ag-theme-alpine-dark .ag-root-wrapper {
   border-color: rgb(var(--accent-primary) / 0.1) !important;
+}
+
+/* Paging controls (bottom of Log History): force the panel text + arrow icons to the theme
+   foreground so they stay legible on every dark theme (W1DFC couldn't see them). */
+.ag-theme-alpine-dark .ag-paging-panel,
+.ag-theme-alpine-dark .ag-paging-row-summary-panel,
+.ag-theme-alpine-dark .ag-paging-page-summary-panel {
+  color: rgb(var(--text-foreground)) !important;
+}
+.ag-theme-alpine-dark .ag-paging-button .ag-icon {
+  color: rgb(var(--text-foreground)) !important;
+}
+.ag-theme-alpine-dark .ag-paging-button.ag-disabled {
+  opacity: 0.4;
+}
+html:not(.dark) .ag-theme-alpine-dark .ag-paging-panel,
+html:not(.dark) .ag-theme-alpine-dark .ag-paging-row-summary-panel,
+html:not(.dark) .ag-theme-alpine-dark .ag-paging-page-summary-panel,
+html:not(.dark) .ag-theme-alpine-dark .ag-paging-button .ag-icon {
+  color: #2a2825 !important;
 }
 
 .ag-theme-alpine-dark .ag-header {
