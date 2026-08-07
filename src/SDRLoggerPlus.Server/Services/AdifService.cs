@@ -319,6 +319,19 @@ public partial class AdifService : IAdifService
         return $"{callsign.ToUpperInvariant()}|{band.ToUpperInvariant()}|{NormalizeModeForMatch(mode)}";
     }
 
+    /// <summary>
+    /// The exported ADIF MODE. The app stores CW sideband variants (CWU/CWL) for rig control, but the
+    /// ADIF spec — and LoTW/TQSL — only know "CW"; uploading MODE=CWL fails validation ("error on line
+    /// N", reported by K3UK). Collapse the CW family to CW on export; everything else passes through
+    /// uppercased. USB/LSB are left alone — TQSL accepts them as valid modes. internal for tests.
+    /// </summary>
+    internal static string? ToAdifExportMode(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode)) return null;
+        var m = mode.Trim().ToUpperInvariant();
+        return m is "CWU" or "CWL" or "CWR" or "CW-R" ? "CW" : m;
+    }
+
     /// <summary>Collapse sideband/sub-mode variants so a report matches the log.</summary>
     private static string NormalizeModeForMatch(string? mode)
     {
@@ -863,7 +876,7 @@ public partial class AdifService : IAdifService
         AppendAdifField(sb, "QSO_DATE", qsoUtc.ToString("yyyyMMdd"));
         AppendAdifField(sb, "TIME_ON", qsoUtc.ToString("HHmmss"));
         AppendAdifField(sb, "BAND", qso.Band?.ToUpperInvariant());
-        AppendAdifField(sb, "MODE", qso.Mode?.ToUpperInvariant());
+        AppendAdifField(sb, "MODE", ToAdifExportMode(qso.Mode));
 
         // Optional standard fields
         if (!string.IsNullOrEmpty(qso.TimeOff))

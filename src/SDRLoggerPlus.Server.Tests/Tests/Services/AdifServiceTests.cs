@@ -306,6 +306,34 @@ public class AdifServiceTests
         adif.Should().Contain("PROGRAMID");
     }
 
+    [Theory]
+    [InlineData("CWL")]
+    [InlineData("CWU")]
+    [InlineData("cwl")]
+    public void ExportToAdif_CwSidebandVariants_ExportAsCw(string loggedMode)
+    {
+        // LoTW/TQSL reject CWU/CWL ("error on line N", K3UK) — the only valid ADIF CW mode is "CW".
+        var qso = CreateTestQso("W1AW", "40m", loggedMode, new DateTime(2024, 1, 15, 14, 30, 0, DateTimeKind.Utc));
+
+        var adif = _service.ExportToAdif(new[] { qso });
+
+        adif.Should().Contain("<MODE:2>CW");
+        adif.Should().NotContain("CWL");
+        adif.Should().NotContain("CWU");
+    }
+
+    [Theory]
+    [InlineData("CWU", "CW")]
+    [InlineData("CWL", "CW")]
+    [InlineData("CWR", "CW")]
+    [InlineData("CW", "CW")]
+    [InlineData("SSB", "SSB")]
+    [InlineData("USB", "USB")]   // TQSL accepts USB/LSB — left unchanged
+    [InlineData("LSB", "LSB")]
+    [InlineData("FT8", "FT8")]
+    public void ToAdifExportMode_mapsCwFamilyToCw_andPassesOthers(string input, string expected)
+        => AdifService.ToAdifExportMode(input).Should().Be(expected);
+
     [Fact]
     public void ExportToAdif_WithStationCallsign_IncludesIt()
     {
