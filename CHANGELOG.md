@@ -3,6 +3,26 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-08-01 — v2.14.2 "Antares"
+
+**Three fixes from the field — LoTW CW uploads, dark-theme paging buttons, and spot modes.**
+
+### Fixed — LoTW/QRZ rejected CW contacts logged as CWL/CWU
+SDRLogger+ tracks which CW sideband you're on (CWU/CWL) for rig control, but LoTW (TQSL) and the ADIF
+spec only accept plain **`CW`** — so uploading a CWL contact failed validation ("error on line …").
+Exports now emit **`CW`** for the whole CW family, across **LoTW, QRZ and file export**, so they
+validate. USB/LSB and other modes are unchanged. *(Thanks K3UK.)*
+
+### Fixed — Log History page buttons were invisible on dark themes
+The pager arrows and "page X of Y" text weren't getting enough contrast on the dark themes (they use a
+grid control whose secondary colors we hadn't themed). They now follow each theme's text color and read
+clearly on **every** dark theme — verified from ~11:1 to 16:1 contrast. *(Thanks W1DFC.)*
+
+### Fixed — a spot with no mode could leave the rig on the wrong mode
+Clicking a spot whose feed carries a blank mode used to send an empty mode command to the radio, which
+could land it on a wrong/digital mode. It now falls back to the band's phone mode (LSB below 10 MHz, USB
+above). *(Thanks Zuzudaddy.)*
+
 ## 2026-07-31 — v2.14.1 "Antares"
 
 **Hotfix — DX cluster spots now work in comma-decimal locales.**
