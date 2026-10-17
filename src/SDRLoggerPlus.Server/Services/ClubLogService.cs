@@ -90,27 +90,35 @@ public class ClubLogService
 
     /// <summary>
     /// Verifies credentials via getlotwstate.php — a safe read-only endpoint
-    /// (200 = valid, 403 = invalid). NEVER test via realtime.php: repeated
+    /// (200 = valid, 403 = refused). NEVER test via realtime.php: repeated
     /// failed POSTs trigger Club Log's reactive IP firewall. A successful test
     /// clears the one-strike block.
     /// </summary>
-    public async Task<(bool Ok, string Message)> TestAsync(CancellationToken ct = default)
+    /// <param name="draft">
+    /// Values currently in the settings form. When set, these are what gets
+    /// tested — not the last saved copy — so the reply matches what the
+    /// operator just typed. Null uses the saved settings.
+    /// </param>
+    public async Task<(bool Ok, string Message)> TestAsync(ClubLogSettings? draft = null, CancellationToken ct = default)
     {
-        var settings = (await _settingsService.GetSettingsAsync()).ClubLog;
-        if (string.IsNullOrWhiteSpace(settings.ApiKey))
+        var saved = await _settingsService.GetSettingsAsync();
+        var settings = draft ?? saved.ClubLog;
+        var apiKey = settings.ApiKey?.Trim();
+        var email = settings.Email?.Trim();
+        var password = settings.Password?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
             return (false, "Enter your Club Log application key first");
-        if (string.IsNullOrWhiteSpace(settings.Email) || string.IsNullOrWhiteSpace(settings.Password))
-            return (false, "Enter your Club Log email and password first");
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+            return (false, "Enter your Club Log email and application password first");
 
-        var station = (await _settingsService.GetSettingsAsync()).Station;
-        var callsign = !string.IsNullOrWhiteSpace(settings.Callsign) ? settings.Callsign! : station.Callsign ?? "";
+        var callsign = !string.IsNullOrWhiteSpace(settings.Callsign) ? settings.Callsign!.Trim() : saved.Station?.Callsign ?? "";
         if (string.IsNullOrWhiteSpace(callsign))
             return (false, "Set your callsign first");
 
         try
         {
-            var url = $"https://clublog.org/getlotwstate.php?api={Uri.EscapeDataString(settings.ApiKey!.Trim())}" +
-                      $"&email={Uri.EscapeDataString(settings.Email!)}&password={Uri.EscapeDataString(settings.Password!)}" +
+            var url = $"https://clublog.org/getlotwstate.php?api={Uri.EscapeDataString(apiKey)}" +
+                      $"&email={Uri.EscapeDataString(email)}&password={Uri.EscapeDataString(password)}" +
                       $"&callsign={Uri.EscapeDataString(callsign)}";
             var response = await _http.GetAsync(url, ct);
             if (response.IsSuccessStatusCode)
@@ -118,12 +126,50 @@ public class ClubLogService
                 ResetBlock();
                 return (true, $"Club Log credentials verified for {callsign}.");
             }
-            return (false, $"Club Log rejected the credentials (HTTP {(int)response.StatusCode}).");
+
+            var body = await response.Content.ReadAsStringAsync(ct);
+            var message = FormatRejection((int)response.StatusCode, body, password, apiKey);
+            _logger.LogInformation("Club Log credential test failed: {Message}", message);
+            return (false, message);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return (false, $"Club Log test failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Club Log's body is the actual reason when they send one (callsign not
+    /// on the account, login rejected, invalid API key). A stock "403 Forbidden"
+    /// page from their proxy has no reason, so say what to check instead of
+    /// repeating that page.
+    /// </summary>
+    internal static string FormatRejection(int statusCode, string? body, string? password, string? apiKey)
+    {
+        var detail = SummarizeBody(body);
+        detail = SecretScrubber.Redact(detail, password, apiKey) ?? "";
+        detail = SecretScrubber.Head(detail, 180).Trim();
+        if (string.IsNullOrEmpty(detail) || IsGenericStatusPage(detail))
+            return $"Club Log refused the login (HTTP {statusCode}). Use an application password from Club Log → Settings → App Passwords (not the website sign-in password), a callsign on that account, and the application key issued for this program.";
+        return $"Club Log rejected the request (HTTP {statusCode}): {detail}";
+    }
+
+    private static bool IsGenericStatusPage(string detail)
+    {
+        var generic = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "400", "401", "403", "404", "500", "forbidden", "unauthorized",
+            "not", "found", "error", "http", "nginx", "apache", "cloudflare",
+        };
+        var tokens = detail.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return tokens.Length > 0 && tokens.All(t => generic.Contains(t.TrimEnd('.', ':', '-')));
+    }
+
+    private static string SummarizeBody(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return "";
+        var text = Regex.Replace(body, "<[^>]+>", " ");
+        return Regex.Replace(text, @"\s+", " ").Trim();
     }
 
     /// <summary>Uploads one QSO. Returns (success, errorMessage).</summary>

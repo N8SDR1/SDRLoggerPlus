@@ -16,11 +16,13 @@ public class ClubLogServiceTests
         public HttpStatusCode Status = HttpStatusCode.OK;
         public string Body = "OK";
         public int Calls;
+        public Uri? LastUri;
         public Dictionary<string, string>? LastForm;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             Calls++;
+            LastUri = request.RequestUri;
             if (request.Content != null)
             {
                 var text = await request.Content.ReadAsStringAsync(ct);
@@ -172,5 +174,90 @@ public class ClubLogServiceTests
         var result2 = await service.UploadQsoAsync(MakeQso());
         var ok2 = result2.Ok;
         ok2.Should().BeTrue(); // not blocked
+    }
+
+    [Fact]
+    public async Task Test_403_IncludesClubLogsOwnReason()
+    {
+        ConfigureEnabled();
+        _handler.Status = HttpStatusCode.Forbidden;
+        _handler.Body = "Callsign is not registered to this account";
+
+        var (_, message) = await CreateService().TestAsync();
+
+        message.Should().Contain("HTTP 403");
+        message.Should().Contain("Callsign is not registered to this account");
+        message.Should().NotContain("rejected the credentials");
+    }
+
+    [Fact]
+    public async Task Test_403_StripsHtmlAndRedactsThePassword()
+    {
+        ConfigureEnabled();
+        _userSettings.ClubLog.Password = "super-secret-password";
+        _handler.Status = HttpStatusCode.Forbidden;
+        _handler.Body = "<html><body><p>Login rejected for super-secret-password</p></body></html>";
+
+        var (_, message) = await CreateService().TestAsync();
+
+        message.Should().Contain("HTTP 403");
+        message.Should().Contain("Login rejected");
+        message.Should().NotContain("super-secret-password");
+        message.Should().NotContain("<p>");
+    }
+
+    [Fact]
+    public async Task Test_403_WithNoBody_StillReportsTheStatus()
+    {
+        ConfigureEnabled();
+        _handler.Status = HttpStatusCode.Forbidden;
+        _handler.Body = "   ";
+
+        var (ok, message) = await CreateService().TestAsync();
+
+        ok.Should().BeFalse();
+        message.Should().Contain("HTTP 403");
+        message.Should().Contain("application password");
+        message.Should().NotContain("rejected the credentials");
+    }
+
+    [Fact]
+    public async Task Test_403_GenericNginxPage_ExplainsWhatToCheck()
+    {
+        ConfigureEnabled();
+        _handler.Status = HttpStatusCode.Forbidden;
+        _handler.Body = "<html><head><title>403 Forbidden</title></head><body><h1>403 Forbidden</h1><hr><center>nginx</center></body></html>";
+
+        var (_, message) = await CreateService().TestAsync();
+
+        message.Should().Contain("application password");
+        message.Should().Contain("callsign on that account");
+        message.Should().NotContain("nginx");
+    }
+
+    [Fact]
+    public async Task Test_DraftCredentials_AreWhatGetSent()
+    {
+        ConfigureEnabled();
+        _handler.Status = HttpStatusCode.OK;
+        _handler.Body = "[]";
+
+        var draft = new ClubLogSettings
+        {
+            Email = "other@example.com",
+            Password = "app-password",
+            Callsign = "K1ABC",
+            ApiKey = "draft-key",
+        };
+
+        var (ok, message) = await CreateService().TestAsync(draft);
+
+        ok.Should().BeTrue();
+        message.Should().Contain("K1ABC");
+        var query = _handler.LastUri!.Query;
+        query.Should().Contain("email=other%40example.com");
+        query.Should().Contain("callsign=K1ABC");
+        query.Should().Contain("api=draft-key");
+        query.Should().NotContain("op%40example.com");
     }
 }

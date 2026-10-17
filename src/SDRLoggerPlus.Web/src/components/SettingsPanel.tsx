@@ -2011,7 +2011,17 @@ function ClubLogSettingsSection() {
     setTestStatus('testing');
     setTestMessage('');
     try {
-      const response = await fetch('/api/clublog/test', { method: 'POST', signal: AbortSignal.timeout(15000) });
+      const response = await fetch('/api/clublog/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: clubLog.email,
+          password: clubLog.password,
+          callsign: clubLog.callsign,
+          apiKey: clubLog.apiKey,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
       const result = await response.json();
       setTestStatus(result.success ? 'ok' : 'fail');
       setTestMessage(result.message ?? '');
@@ -2026,8 +2036,9 @@ function ClubLogSettingsSection() {
       <div>
         <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">Club Log</h3>
         <p className="text-sm text-dark-300">
-          Upload each QSO to Club Log in real time as you log it. Save your settings, then use
-          Test Credentials — a successful test also re-enables uploads after an authentication failure.
+          Upload each QSO to Club Log in real time as you log it. Test Credentials checks the
+          values in this form and shows Club Log's own reply. Save before uploads use them.
+          A successful test also re-enables uploads after an authentication failure.
         </p>
       </div>
 
@@ -2057,14 +2068,17 @@ function ClubLogSettingsSection() {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium font-ui text-dark-200">Password</label>
+            <label className="text-sm font-medium font-ui text-dark-200">Application password</label>
             <input
               type="password"
               value={clubLog.password}
               onChange={(e) => updateClubLogSettings({ password: e.target.value })}
-              placeholder="Club Log password"
+              placeholder="Application password"
               className="glass-input w-full"
             />
+            <p className="text-xs text-dark-300">
+              Club Log → Settings → App Passwords. The password you use to sign in to the website is not accepted.
+            </p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium font-ui text-dark-200">Callsign</label>
@@ -2102,7 +2116,7 @@ function ClubLogSettingsSection() {
             Test Credentials
           </button>
           {testMessage && (
-            <p className={`text-sm ${testStatus === 'ok' ? 'text-accent-success' : 'text-accent-danger'}`}>{testMessage}</p>
+            <p className={`text-sm break-words ${testStatus === 'ok' ? 'text-accent-success' : 'text-accent-danger'}`}>{testMessage}</p>
           )}
         </div>
 
