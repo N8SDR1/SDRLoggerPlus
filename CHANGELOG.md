@@ -3,6 +3,46 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-10-17 — v2.14.3 "Antares"
+
+**LoTW contact count, History Off for decoder and cluster clicks, Club Log test replies, CQ modifiers on decodes, and a QRZ Profile callsign box.**
+
+### New — Log History counts individual QSOs confirmed by LoTW
+The Log History summary now shows how many contacts have **LoTW received**
+(`LOTW_QSL_RCVD = Y`), next to the log size. The number is how many contacts
+LoTW has confirmed. Award screens still count DXCC entities and states on their
+own. A paper card, eQSL, QRZ confirmation, or a LoTW upload that is still
+unconfirmed stays out of this total. *(Thanks K3UK.)*
+
+### Fixed — History Off now covers WSJT-X and cluster spots
+**History Off** already stopped a typed callsign from filtering Log History. A
+WSJT-X / JTDX DX Call, and a click on a cluster spot, still applied that filter.
+The same switch now gates those too. Log Entry and the QRZ lookup still fill. (#62)
+
+### Fixed — Club Log Test Credentials shows why it was refused
+**Test Credentials** used to replace Club Log's reply with "rejected the
+credentials". It now shows the reason Club Log sent. When the reply is only a
+stock 403 page, the message says to use an **application password** (Club Log →
+Settings → App Passwords, not the website sign-in password), a callsign on that
+account, and the application key issued for this program. The test uses the
+values currently in the form. (#64)
+
+### New — CQ modifiers on Digital Decodes
+A CQ such as `CQ POTA W1AW` or `CQ DX` keeps the words between **CQ** and the
+callsign (POTA, SOTA, DX, 070, and combinations of those). Digital Decodes shows
+that text beside the call (`CQ POTA`, `CQ DX`, …), and the **CQ type** box
+filters the list by it. The same filter applies on the grid map while **Follow
+Digital Decodes** is on. A blank box shows every decode; typing `CQ` matches
+every CQ. (#61)
+
+### New — QRZ Profile callsign box, and confirmations you can edit
+The **QRZ Profile** panel has a callsign box. A call typed there is looked up
+and fills **Log Entry** with the same call; a call typed in Log Entry fills the
+profile. **Edit QSO** can mark **LoTW received**, **eQSL received**, **QRZ
+received**, **Card received**, and **Card sent**. Received marks are the
+confirmations the log already stores. Card sent records the paper card that was
+mailed. (#60, #48)
+
 ## 2026-08-01 — v2.14.2 "Antares"
 
 **Three fixes from the field — LoTW CW uploads, dark-theme paging buttons, and spot modes.**
