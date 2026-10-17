@@ -9,8 +9,12 @@ export const TILE_LAYERS = {
   },
   dark: {
     name: 'Dark',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    // CARTO started gating its free basemap CDN behind an API key — it now serves "API KEY REQUIRED"
+    // placeholder tiles, which broke the default Dark basemap for everyone (nothing changed on our
+    // side). Esri's World Dark Gray Base is a keyless dark basemap from the same provider as the
+    // Satellite layer below, which has always loaded without a key.
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; <a href="https://www.esri.com/">Esri</a>',
   },
   satellite: {
     name: 'Satellite',
