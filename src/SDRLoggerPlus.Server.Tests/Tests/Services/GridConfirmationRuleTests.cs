@@ -94,6 +94,16 @@ public class GridConfirmationRuleTests
         ConfirmationPolicy.Any(Q(grid: "EN82")).Should().BeFalse();
     }
 
+    [Fact]
+    public void LotwCountsTheContactNotTheOtherChannels()
+    {
+        ConfirmationPolicy.Lotw(Q(grid: "EN82", lotw: "Y")).Should().BeTrue();
+        ConfirmationPolicy.Lotw(Q(grid: "EN82", lotw: "y")).Should().BeTrue();
+        ConfirmationPolicy.Lotw(Q(grid: "EN82", paper: "Y", eqsl: "Y", qrz: "Y")).Should().BeFalse();
+        ConfirmationPolicy.Lotw(Q(grid: "EN82", lotw: "N")).Should().BeFalse();
+        ConfirmationPolicy.Lotw(Q(grid: "EN82", lotw: "V")).Should().BeFalse();
+    }
+
     // ─── Grid map honors the rule ────────────────────────────────────────
 
     [Fact]

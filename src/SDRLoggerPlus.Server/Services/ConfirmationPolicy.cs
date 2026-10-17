@@ -31,8 +31,14 @@ public static class ConfirmationPolicy
     public static Func<Qso, bool> For(ConfirmationRule rule) =>
         rule == ConfirmationRule.AwardRules ? AwardRules : Any;
 
+    /// <summary>
+    /// This individual QSO is confirmed on LoTW (<c>LOTW_QSL_RCVD = Y</c>).
+    /// Award screens count entities; this counts the contact itself.
+    /// </summary>
+    public static bool Lotw(Qso qso) => Received(qso.Qsl?.Lotw?.Rcvd);
+
     private static bool IsLotwOrCard(Qso qso) =>
-        Received(qso.Qsl?.Lotw?.Rcvd) || Received(qso.Qsl?.Rcvd);
+        Lotw(qso) || Received(qso.Qsl?.Rcvd);
 
     // ADIF stores these as single-character flags (Y/N/R/I/V); only "Y" means a
     // confirmation is in hand. Unchanged from the predicate this replaced.

@@ -341,7 +341,10 @@ public class LiteQsoRepository : IQsoRepository
             QsosByBand: all.GroupBy(q => (q.Band ?? "Unknown").Trim().ToLowerInvariant())
                 .ToDictionary(g => g.Key, g => g.Count()),
             QsosByMode: all.GroupBy(q => (q.Mode ?? "Unknown").Trim().ToUpperInvariant())
-                .ToDictionary(g => g.Key, g => g.Count())
+                .ToDictionary(g => g.Key, g => g.Count()),
+            // Contact count, not an award count: a QSO is LoTW-confirmed only
+            // when LOTW_QSL_RCVD is Y. Paper, eQSL, and QRZ do not count here.
+            LotwConfirmedQsos: all.Count(SDRLoggerPlus.Server.Services.ConfirmationPolicy.Lotw)
         );
 
         return Task.FromResult(stats);

@@ -137,6 +137,8 @@ export interface QsoStatistics {
   qsosToday: number;
   qsosByBand: Record<string, number>;
   qsosByMode: Record<string, number>;
+  /** Individual QSOs confirmed by LoTW. Not a DXCC or state count. */
+  lotwConfirmedQsos?: number;
 }
 
 // Statistics / Awards Types
