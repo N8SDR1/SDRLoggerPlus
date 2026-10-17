@@ -3,15 +3,27 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-10-17 — v2.14.4 "Antares"
+
+**Bugfix — marking a confirmation no longer re-sends the QSO to QRZ.**
+
+### Fixed — editable confirmations no longer re-queue a QRZ upload
+In 2.14.3, marking a QSO as LoTW / eQSL / card confirmed from the log went through the same write
+path as a data edit, which re-queued the contact for a QRZ re-upload on the next sync. QRZ de-dupes,
+so no logbook was ever doubled — but it was needless traffic (and could hit QRZ's rate limit if you
+confirmed a lot at once). Confirmation-only edits are now saved **without** touching the upload queue;
+a genuine data edit (call, grid, mode, …) still re-uploads the correction as before.
+
 ## 2026-10-17 — v2.14.3 "Antares"
 
 **LoTW contact count, History Off for decoder and cluster clicks, Club Log test replies, CQ modifiers on decodes, and a QRZ Profile callsign box.**
 
 ### New — Log History counts individual QSOs confirmed by LoTW
 The Log History summary now shows how many contacts have **LoTW received**
-(`LOTW_QSL_RCVD = Y`), next to the log size. It is a **contact count** — a DXCC
-or state total is a different number. A paper card, eQSL, QRZ confirmation, or a
-LoTW upload that is still unconfirmed does not add to it. *(Thanks K3UK.)*
+(`LOTW_QSL_RCVD = Y`), next to the log size. The number is how many contacts
+LoTW has confirmed. Award screens still count DXCC entities and states on their
+own. A paper card, eQSL, QRZ confirmation, or a LoTW upload that is still
+unconfirmed stays out of this total. *(Thanks K3UK.)*
 
 ### Fixed — History Off now covers WSJT-X and cluster spots
 **History Off** already stopped a typed callsign from filtering Log History. A
