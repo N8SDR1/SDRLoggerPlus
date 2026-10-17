@@ -55,7 +55,16 @@ public record UpdateQsoRequest(
     string? Country = null,
     string? State = null,
     string? County = null,
-    string? Comment = null
+    string? Comment = null,
+    // Confirmation edits. Null leaves the stored flag alone, so a grid edit
+    // cannot wipe a LoTW "N" or a card date. True sets the ADIF received/sent
+    // value to Y; false clears a Y back to blank. These are confirmations, not
+    // the upload queue.
+    bool? LotwRcvd = null,
+    bool? EqslRcvd = null,
+    bool? QrzRcvd = null,
+    bool? CardRcvd = null,
+    bool? CardSent = null
 );
 
 public record QsoResponse(
@@ -92,7 +101,9 @@ public record QsoResponse(
     string? Qth = null,
     // The operating callsign this QSO was made under (contest sessions); null = personal/global.
     // Non-null + != station call → Log History badges it and it's excluded from personal upload/awards.
-    string? StationCallsign = null
+    string? StationCallsign = null,
+    // Paper card mailed (QSL_SENT=Y). Distinct from ConfirmedCard, which is a card received.
+    bool CardSent = false
 );
 
 /// <summary>Upload state for one QSL service, as shown in Log History.</summary>

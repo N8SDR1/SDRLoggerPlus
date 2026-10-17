@@ -1,6 +1,8 @@
+import { useEffect, useRef, useState } from 'react';
 import { User, ContactRound, MapPin, Navigation, Globe, ExternalLink, Check, X } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useSignalR } from '../hooks/useSignalR';
 import { GlassPanel } from '../components/GlassPanel';
 import { getCountryFlag } from '../core/countryFlags';
 import { formatDistance } from '../utils/units';
@@ -30,8 +32,33 @@ export function QslBadge({ label, accepts }: { label: string; accepts?: boolean 
 }
 
 export function QrzProfilePlugin() {
-  const { focusedCallsignInfo, isLookingUpCallsign } = useAppStore();
+  const {
+    focusedCallsignInfo, isLookingUpCallsign, focusedCallsign,
+    setFocusedCallsign, setFocusedCallsignInfo, requestProfileCall,
+  } = useAppStore();
+  const { focusCallsign } = useSignalR();
   const distanceUnit = useSettingsStore((s) => s.settings.appearance.distanceUnit);
+  const editing = useRef(false);
+  const [draft, setDraft] = useState('');
+
+  // Log Entry (and cluster clicks) update the focused call. Reflect that here
+  // unless the operator is in the middle of typing a different one.
+  useEffect(() => {
+    if (editing.current) return;
+    setDraft((focusedCallsign ?? focusedCallsignInfo?.callsign ?? '').toUpperCase());
+  }, [focusedCallsign, focusedCallsignInfo?.callsign]);
+
+  const commitCall = (raw: string) => {
+    const call = raw.trim().toUpperCase();
+    if (call.length >= 3) {
+      focusCallsign(call, 'qrz-profile');
+      requestProfileCall(call);
+    } else if (call.length === 0) {
+      setFocusedCallsign(null);
+      setFocusedCallsignInfo(null);
+      requestProfileCall('');
+    }
+  };
 
   const callsign = focusedCallsignInfo?.callsign;
   // For a compound call ("F/HB9GUX") link to the base call's QRZ page — the
@@ -55,6 +82,34 @@ export function QrzProfilePlugin() {
       icon={<ContactRound className="w-5 h-5" />}
     >
       <div className="p-4 h-full flex flex-col">
+        <form
+          className="mb-3"
+          onSubmit={(e) => { e.preventDefault(); commitCall(draft); }}
+        >
+          <label htmlFor="qrz-profile-callsign" className="block text-xs font-ui text-dark-300 mb-1">
+            Callsign
+          </label>
+          <input
+            id="qrz-profile-callsign"
+            aria-label="Callsign"
+            value={draft}
+            onFocus={() => { editing.current = true; }}
+            onBlur={() => {
+              editing.current = false;
+              if (draft.trim().length >= 3 || draft.trim().length === 0) commitCall(draft);
+              else setDraft((focusedCallsign ?? '').toUpperCase());
+            }}
+            onChange={(e) => {
+              const call = e.target.value.toUpperCase();
+              setDraft(call);
+              if (call.trim().length >= 3 || call.trim().length === 0) commitCall(call);
+            }}
+            placeholder="Callsign"
+            className="glass-input w-full font-mono font-bold tracking-wider uppercase text-center text-xl"
+            autoCapitalize="characters"
+            spellCheck={false}
+          />
+        </form>
         {/* Loading state */}
         {isLookingUpCallsign && (
           <div className="flex-1 flex items-center justify-center">
@@ -72,7 +127,7 @@ export function QrzProfilePlugin() {
               <ContactRound className="w-16 h-16 text-dark-300 mx-auto mb-4" />
               <p className="text-dark-300 text-lg font-medium font-ui mb-2">No Callsign Selected</p>
               <p className="text-dark-300 text-sm font-ui">
-                Enter a callsign in the Log Entry to see profile information.
+                Type a callsign above, or enter one in Log Entry. Either one fills both.
               </p>
             </div>
           </div>
@@ -104,13 +159,10 @@ export function QrzProfilePlugin() {
                 <span className="text-4xl" title={focusedCallsignInfo.country}>
                   {getCountryFlag(focusedCallsignInfo.country, '🏳️')}
                 </span>
-                <h2 className="text-2xl font-mono font-bold text-accent-primary">
-                  {focusedCallsignInfo.callsign}
-                </h2>
+                <p className="text-lg text-dark-200 font-ui">
+                  {focusedCallsignInfo.name || 'No name on file'}
+                </p>
               </div>
-              <p className="text-lg text-dark-200 font-ui">
-                {focusedCallsignInfo.name || 'No name on file'}
-              </p>
               {/* Compound / portable call notice — explains that the profile
                   below is the base call the callbook was queried with. */}
               {focusedCallsignInfo.compoundNote && (

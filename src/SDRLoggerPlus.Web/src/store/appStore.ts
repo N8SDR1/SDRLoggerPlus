@@ -61,6 +61,11 @@ interface AppState {
   contestSpotCall: { call: string; at: number } | null;
   setContestSpotCall: (call: string) => void;
 
+  // Call typed in the QRZ profile box. Log Entry copies it into its callsign
+  // field. `at` changes on every keystroke so the same call still applies.
+  profileCallRequest: { call: string; at: number } | null;
+  requestProfileCall: (call: string) => void;
+
   // Set by the Electron View > Layouts > "Save current layout…" menu item to ask
   // the Layout Presets panel to open its name input (Electron has no prompt()).
   // The panel clears it once consumed.
@@ -294,6 +299,9 @@ export const useAppStore = create<AppState>((set) => ({
   contestSpotCall: null,
   // `at` timestamp makes repeated clicks of the same call still trigger the effect.
   setContestSpotCall: (call) => set({ contestSpotCall: { call, at: Date.now() } }),
+
+  profileCallRequest: null,
+  requestProfileCall: (call) => set({ profileCallRequest: { call, at: Date.now() } }),
 
   pendingLayoutSave: null,
   requestLayoutSave: () => set({ pendingLayoutSave: Date.now() }),

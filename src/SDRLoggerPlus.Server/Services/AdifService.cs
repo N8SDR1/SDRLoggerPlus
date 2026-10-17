@@ -972,6 +972,12 @@ public partial class AdifService : IAdifService
                 if (!string.IsNullOrEmpty(qso.Qsl.Eqsl.Rcvd))
                     AppendAdifField(sb, "EQSL_QSL_RCVD", qso.Qsl.Eqsl.Rcvd);
             }
+
+            // QRZ Logbook confirmation. Emitted from the canonical flag so a
+            // manual confirm round-trips. The import copy in AdifExtra is
+            // skipped below when this one is written.
+            if (string.Equals(qso.Qsl.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase))
+                AppendAdifField(sb, "APP_QRZLOG_STATUS", "C");
         }
 
         // Contest info
@@ -998,6 +1004,7 @@ public partial class AdifService : IAdifService
         {
             // Whether a CNTY was already written above (from Station.County).
             var cntyEmitted = !string.IsNullOrEmpty(qso.Station?.County) && !string.IsNullOrEmpty(qso.Station?.State);
+            var qrzStatusEmitted = string.Equals(qso.Qsl?.Qrz?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase);
             foreach (var element in qso.AdifExtra)
             {
                 // Legacy QSOs (imported before CNTY was a mapped field) carry
@@ -1006,6 +1013,8 @@ public partial class AdifService : IAdifService
                 // also emitted, a second CNTY would be a duplicate — and the
                 // stale copy at that.
                 if (cntyEmitted && string.Equals(element.Name, "cnty", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (qrzStatusEmitted && string.Equals(element.Name, "app_qrzlog_status", StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 var value = element.Value?.ToString();

@@ -89,6 +89,29 @@ public class AdifExportTimeTests
         Field(adif, "QSO_DATE").Should().Be(qso.QsoDate.ToUniversalTime().ToString("yyyyMMdd"));
     }
 
+    [Fact]
+    public async Task Export_QrzConfirmation_WritesTheStatusOnce()
+    {
+        ReturnsQso(new Qso
+        {
+            Callsign = "W1AW",
+            QsoDate = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+            TimeOn = "030405",
+            Band = "20m",
+            Mode = "FT8",
+            Qsl = new QslStatus { Qrz = new QrzStatus { Rcvd = "Y" } },
+            AdifExtra = new MongoDB.Bson.BsonDocument { { "app_qrzlog_status", "C" } },
+        });
+
+        var adif = await _service.ExportQsosAsync();
+
+        var marker = "<APP_QRZLOG_STATUS:";
+        var first = adif.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        first.Should().BeGreaterThan(-1);
+        adif.IndexOf(marker, first + marker.Length, StringComparison.OrdinalIgnoreCase).Should().Be(-1);
+        Field(adif, "APP_QRZLOG_STATUS").Should().Be("C");
+    }
+
     /// <summary>
     /// A local-frame QsoDate (what the in-app create path stores) must still export
     /// the UTC date and time — the LoTW-dropping case the export code guards against.

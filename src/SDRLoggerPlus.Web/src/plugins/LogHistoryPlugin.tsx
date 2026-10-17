@@ -1844,6 +1844,25 @@ export function LogHistoryPlugin() {
   );
 }
 
+function QslCheck({ label, checked, onChange, title }: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  title: string;
+}) {
+  return (
+    <label title={title} className="flex items-center gap-2 text-sm text-dark-200 font-ui cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="accent-accent-primary"
+      />
+      {label}
+    </label>
+  );
+}
+
 // Edit QSO Modal Component
 function EditQsoModal({
   qso,
@@ -1874,6 +1893,11 @@ function EditQsoModal({
     state: qso.station?.state || '',
     county: qso.station?.county || '',
     comment: qso.comment || '',
+    lotwRcvd: !!qso.confirmedLotw,
+    eqslRcvd: !!qso.confirmedEqsl,
+    qrzRcvd: !!qso.confirmedQrz,
+    cardRcvd: !!qso.confirmedCard,
+    cardSent: !!qso.cardSent,
   });
 
   // Band and mode come out of the log in whatever spelling was imported —
@@ -1913,6 +1937,11 @@ function EditQsoModal({
       state: formData.state || undefined,
       county: formData.county || undefined,
       comment: formData.comment || undefined,
+      lotwRcvd: formData.lotwRcvd,
+      eqslRcvd: formData.eqslRcvd,
+      qrzRcvd: formData.qrzRcvd,
+      cardRcvd: formData.cardRcvd,
+      cardSent: formData.cardSent,
     });
   };
 
@@ -2083,6 +2112,29 @@ function EditQsoModal({
                 className="glass-input w-full"
                 placeholder="Hennepin"
               />
+            </div>
+          </div>
+
+          {/* Confirmations. Received Y counts for awards. Card sent is the paper
+              card that was mailed. Upload / queued state stays on the Sync column. */}
+          <div>
+            <p className="text-sm text-dark-300 mb-2 font-ui">Confirmations</p>
+            <div className="grid grid-cols-2 gap-2">
+              <QslCheck label="LoTW received" checked={formData.lotwRcvd}
+                title="LoTW has confirmed this contact. Counts for awards and the LoTW QSO total."
+                onChange={(v) => setFormData({ ...formData, lotwRcvd: v })} />
+              <QslCheck label="eQSL received" checked={formData.eqslRcvd}
+                title="eQSL has confirmed this contact."
+                onChange={(v) => setFormData({ ...formData, eqslRcvd: v })} />
+              <QslCheck label="QRZ received" checked={formData.qrzRcvd}
+                title="QRZ Logbook has confirmed this contact."
+                onChange={(v) => setFormData({ ...formData, qrzRcvd: v })} />
+              <QslCheck label="Card received" checked={formData.cardRcvd}
+                title="A paper card was received for this contact."
+                onChange={(v) => setFormData({ ...formData, cardRcvd: v })} />
+              <QslCheck label="Card sent" checked={formData.cardSent}
+                title="A paper card was mailed for this contact. This is not a confirmation received."
+                onChange={(v) => setFormData({ ...formData, cardSent: v })} />
             </div>
           </div>
 
