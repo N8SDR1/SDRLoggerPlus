@@ -696,4 +696,22 @@ public class LiteQsoRepositoryTests : IDisposable
         var all = (await _repo.GetAllAsync()).ToList();
         all.Should().HaveCount(2);
     }
+
+    [Fact]
+    public async Task UpdateAsync_bumpSyncStateFalse_preservesSyncedAndUpdatedAt()
+    {
+        // Upload-safety: a confirmation-only edit (bumpSyncState: false) must leave a Synced QSO
+        // Synced and not bump UpdatedAt, so it is NOT re-queued for QRZ — while still saving the edit.
+        var created = await _repo.CreateAsync(CreateQso(syncStatus: SyncStatus.Synced));
+        var updatedAtBefore = (await _repo.GetByIdAsync(created.Id))!.UpdatedAt;
+
+        created.Qsl = new QslStatus { Lotw = new LotwStatus { Rcvd = "Y" } };
+        await _repo.UpdateAsync(created.Id, created, bumpSyncState: false);
+
+        var after = await _repo.GetByIdAsync(created.Id);
+        after!.QrzSyncStatus.Should().Be(SyncStatus.Synced, "a confirmation edit must not re-queue QRZ");
+        after.UpdatedAt.Should().Be(updatedAtBefore, "and must not bump UpdatedAt");
+        after.Qsl!.Lotw!.Rcvd.Should().Be("Y", "but the confirmation is still saved");
+        (await _repo.GetUnsyncedToQrzAsync()).Should().NotContain(q => q.Id == created.Id);
+    }
 }

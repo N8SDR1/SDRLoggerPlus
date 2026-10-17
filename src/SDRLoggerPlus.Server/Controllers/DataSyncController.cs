@@ -71,8 +71,10 @@ public class DataSyncController : ControllerBase
     public async Task<ActionResult<List<Qso>>> All() => Ok((await _repo.GetAllAsync()).ToList());
 
     [HttpPut("{id}")]
-    public async Task<ActionResult<bool>> Update(string id, [FromBody] Qso qso) =>
-        Ok(await _repo.UpdateAsync(id, qso));
+    public async Task<ActionResult<bool>> Update(string id, [FromBody] Qso qso, [FromQuery] bool requeue = true) =>
+        // requeue=false when a field a connected client changed doesn't warrant a QRZ re-upload
+        // (a confirmation-only edit), so the shared log isn't needlessly re-queued on the host.
+        Ok(await _repo.UpdateAsync(id, qso, requeue));
 
     [HttpDelete("{id}")]
     public async Task<ActionResult<bool>> Delete(string id) => Ok(await _repo.DeleteAsync(id));

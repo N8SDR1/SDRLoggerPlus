@@ -123,12 +123,16 @@ public sealed class RemoteApiQsoRepository : IQsoRepository
         },
         () => _cache.GetAllAsync());
 
-    public async Task<bool> UpdateAsync(string id, Qso qso)
+    public async Task<bool> UpdateAsync(string id, Qso qso, bool bumpSyncState = true)
     {
-        var res = await _http.PutAsJsonAsync($"api/data/qsos/{Uri.EscapeDataString(id)}", qso, _json);
+        // Forward the flag to the host so a confirmation-only edit doesn't re-queue the shared QSO for
+        // QRZ there either; the host does the actual upload in multi-op.
+        var url = $"api/data/qsos/{Uri.EscapeDataString(id)}";
+        if (!bumpSyncState) url += "?requeue=false";
+        var res = await _http.PutAsJsonAsync(url, qso, _json);
         res.EnsureSuccessStatusCode();
         var ok = await res.Content.ReadFromJsonAsync<bool>();
-        if (ok) await _cache.UpdateAsync(id, qso);
+        if (ok) await _cache.UpdateAsync(id, qso, bumpSyncState);
         return ok;
     }
 

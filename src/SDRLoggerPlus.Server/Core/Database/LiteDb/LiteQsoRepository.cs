@@ -179,14 +179,20 @@ public class LiteQsoRepository : IQsoRepository
         return Task.FromResult<IEnumerable<Qso>>(qsoList);
     }
 
-    public Task<bool> UpdateAsync(string id, Qso qso)
+    public Task<bool> UpdateAsync(string id, Qso qso, bool bumpSyncState = true)
     {
-        qso.UpdatedAt = DateTime.UtcNow;
-
-        // If QSO was previously synced, mark as Modified (like QLog's trigger)
-        if (qso.QrzSyncStatus == SyncStatus.Synced)
+        // A genuine data edit re-queues the QSO for QRZ. A confirmation-only edit passes
+        // bumpSyncState=false so it leaves UpdatedAt and the sync flags alone — the same
+        // flag-preserving contract as RepairQsoDateAsync / UpdateQslSyncAsync.
+        if (bumpSyncState)
         {
-            qso.QrzSyncStatus = SyncStatus.Modified;
+            qso.UpdatedAt = DateTime.UtcNow;
+
+            // If QSO was previously synced, mark as Modified (like QLog's trigger)
+            if (qso.QrzSyncStatus == SyncStatus.Synced)
+            {
+                qso.QrzSyncStatus = SyncStatus.Modified;
+            }
         }
 
         qso.Id = id;

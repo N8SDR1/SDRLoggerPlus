@@ -29,6 +29,7 @@ public class QsoEditPersistenceTests
     private readonly Mock<IQsoRepository> _repo = new();
     private readonly QsoService _service;
     private Qso _stored = null!;
+    private bool? _lastBumpSyncState;
 
     public QsoEditPersistenceTests()
     {
@@ -53,8 +54,8 @@ public class QsoEditPersistenceTests
         };
 
         _repo.Setup(r => r.GetByIdAsync("qso-1")).ReturnsAsync(() => _stored);
-        _repo.Setup(r => r.UpdateAsync("qso-1", It.IsAny<Qso>()))
-            .Callback<string, Qso>((_, q) => _stored = q)
+        _repo.Setup(r => r.UpdateAsync("qso-1", It.IsAny<Qso>(), It.IsAny<bool>()))
+            .Callback<string, Qso, bool>((_, q, bump) => { _stored = q; _lastBumpSyncState = bump; })
             .ReturnsAsync(true);
 
         var hub = new Mock<IHubContext<LogHub, ILogHubClient>>();
@@ -216,5 +217,34 @@ public class QsoEditPersistenceTests
 
         _stored.Qsl.Qrz.Rcvd.Should().BeNull();
         (_stored.AdifExtra == null || !_stored.AdifExtra.Contains("app_qrzlog_status")).Should().BeTrue();
+    }
+
+    // ── Upload safety: a confirmation is not a reason to re-upload to QRZ ──
+
+    [Fact]
+    public async Task ConfirmationOnlyEdit_doesNotRequeueForQrzUpload()
+    {
+        // Marking a confirmation must persist WITHOUT asking the repository to re-queue the QSO for
+        // QRZ (no UpdatedAt bump / Synced→Modified flip) — QRZ never carries our record of their QSL.
+        await _service.UpdateAsync("qso-1", new UpdateQsoRequest(LotwRcvd: true));
+        _lastBumpSyncState.Should().BeFalse("a confirmation edit changes no field QRZ uploads");
+    }
+
+    [Fact]
+    public async Task ConfirmationEditThatReSendsUnchangedData_stillDoesNotRequeue()
+    {
+        // The edit dialog re-sends every field; re-sending the SAME data next to a confirmation
+        // change must not be mistaken for a data edit.
+        await _service.UpdateAsync("qso-1", new UpdateQsoRequest(
+            Callsign: "N9GRID", Band: "20m", Mode: "SSB", Grid: "AA00",
+            Name: "OrigName", Country: "United States", CardRcvd: true));
+        _lastBumpSyncState.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RealDataEdit_requeuesForQrzUpload()
+    {
+        await _service.UpdateAsync("qso-1", new UpdateQsoRequest(Grid: "BB11"));
+        _lastBumpSyncState.Should().BeTrue("a genuine data change must still re-upload the correction");
     }
 }

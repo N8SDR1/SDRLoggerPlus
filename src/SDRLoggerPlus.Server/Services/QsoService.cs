@@ -296,6 +296,12 @@ public class QsoService : IQsoService
         var existing = await _repository.GetByIdAsync(id);
         if (existing is null) return null;
 
+        // Snapshot the fields QRZ actually uploads (exactly the data fields this method can edit).
+        // If none of them change, this was a confirmation-only edit — persist it WITHOUT re-queuing
+        // the QSO for QRZ re-upload (QRZ never carries our record of their confirmation). This holds
+        // even when the edit dialog re-sends every field unchanged.
+        var dataSigBefore = QrzDataSignature(existing);
+
         if (request.Callsign != null) existing.Callsign = request.Callsign.ToUpperInvariant();
         if (request.QsoDate.HasValue) existing.QsoDate = CanonicalUtc(request.QsoDate.Value);
         if (request.TimeOn != null) existing.TimeOn = request.TimeOn;
@@ -341,9 +347,24 @@ public class QsoService : IQsoService
             ApplyReceived(existing, cardSent, q => q.Sent, _ => { },
                 (q, v) => q.Sent = v, q => q.SentDate, (q, d) => q.SentDate = d);
 
-        await _repository.UpdateAsync(id, existing);
+        // Re-queue for QRZ only when a field QRZ uploads actually changed. A confirmation-only edit
+        // leaves the signature identical, so it's persisted flag-preserving (no UpdatedAt bump, no
+        // Synced→Modified flip) — consistent with how the automatic confirmation merge writes.
+        var dataChanged = QrzDataSignature(existing) != dataSigBefore;
+        await _repository.UpdateAsync(id, existing, bumpSyncState: dataChanged);
         return MapToResponse(existing);
     }
+
+    /// <summary>
+    /// A stable signature of just the fields QRZ uploads (and that <see cref="UpdateAsync"/> can edit),
+    /// so a QSO edit can tell a genuine data change from a confirmation-only change. Confirmation flags
+    /// are deliberately excluded — QRZ never carries them, so changing one must not re-queue an upload.
+    /// </summary>
+    private static string QrzDataSignature(Qso q) => string.Join('\u001f',
+        q.Callsign, q.QsoDate.Ticks, q.TimeOn, q.Band, q.Mode, q.Frequency,
+        q.RstSent, q.RstRcvd, q.Comment,
+        q.Name, q.Grid, q.Country,
+        q.Station?.Name, q.Station?.Grid, q.Station?.Country, q.Station?.State, q.Station?.County);
 
     public async Task<bool> DeleteAsync(string id)
     {

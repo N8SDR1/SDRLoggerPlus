@@ -12,7 +12,13 @@ public interface IQsoRepository
     Task<(IEnumerable<Qso> Items, int TotalCount)> SearchAsync(QsoSearchRequest criteria);
     Task<Qso> CreateAsync(Qso qso);
     Task<IEnumerable<Qso>> CreateBulkAsync(IEnumerable<Qso> qsos);
-    Task<bool> UpdateAsync(string id, Qso qso);
+    /// <summary>
+    /// Update a QSO. With <paramref name="bumpSyncState"/> (the default) this bumps UpdatedAt and flips
+    /// a Synced QSO to Modified so a genuine data edit re-uploads to QRZ. Pass <c>false</c> for a change
+    /// that must NOT re-queue an upload — e.g. editing only a confirmation flag (LoTW/eQSL/card received),
+    /// which QRZ never carries, so re-sending it would be pointless churn.
+    /// </summary>
+    Task<bool> UpdateAsync(string id, Qso qso, bool bumpSyncState = true);
     Task<bool> DeleteAsync(string id);
 
     /// <summary>
