@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
+using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Services;
 
 namespace SDRLoggerPlus.Server.Controllers;
+
+public record ClubLogTestRequest(string? Email, string? Password, string? Callsign, string? ApiKey);
 
 [ApiController]
 [Route("api/clublog")]
@@ -21,9 +24,18 @@ public class ClubLogController : ControllerBase
     /// </summary>
     [HttpPost("test")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    public async Task<ActionResult> Test(CancellationToken ct)
+    public async Task<ActionResult> Test([FromBody] ClubLogTestRequest? draft, CancellationToken ct)
     {
-        var (ok, message) = await _clubLog.TestAsync(ct);
+        // The form values, when the client sends them. A body-less call keeps
+        // testing whatever was last saved.
+        ClubLogSettings? probe = draft is null ? null : new ClubLogSettings
+        {
+            Email = draft.Email,
+            Password = draft.Password,
+            Callsign = draft.Callsign,
+            ApiKey = draft.ApiKey,
+        };
+        var (ok, message) = await _clubLog.TestAsync(probe, ct);
         return Ok(new { success = ok, message, blocked = _clubLog.IsBlocked });
     }
 }
