@@ -8,6 +8,7 @@ import { useMultiOpStore } from '../store/multiOpStore';
 import { useToastStore } from '../store/toastStore';
 import { useWsjtxDecodeStore } from '../store/wsjtxDecodeStore';
 import { runDecodeAlerts } from '../utils/decodeAlertEngine';
+import { isAutoHistoryEnabled } from '../utils/autoHistory';
 import { announceHotSpot, shouldAnnounce } from '../utils/hotSpotAnnouncer';
 
 /**
@@ -235,8 +236,10 @@ export function useSignalRConnection() {
             console.log('Spot selected:', evt.dxCall, evt.frequency, evt.mode);
             // Store selected spot for log entry auto-population
             setSelectedSpot(evt);
-            // Set the callsign for log history filter
-            setLogHistoryCallsignFilter(evt.dxCall);
+            // #62: WSJT-X / JTDX DX Call arrives on this same path as a cluster
+            // click. History Off must apply here too — the log entry and the
+            // QRZ lookup below still run.
+            if (isAutoHistoryEnabled()) setLogHistoryCallsignFilter(evt.dxCall);
             // Trigger QRZ lookup for the callsign (will populate name, grid, country)
             setFocusedCallsign(evt.dxCall);
             setFocusedCallsignInfo(null);

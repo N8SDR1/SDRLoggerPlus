@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Send, Search, User, MapPin, NotebookPen, Link, Unlink, Clock, Lock, LockOpen, Loader2, X, ChevronDown, ExternalLink, Trees, Satellite, Swords, Radio as RadioIcon, Pencil, Megaphone, ArrowUp, ArrowDown, AlertTriangle } from 'lucide-react';
 import { api, CreateQsoRequest, QsoResponse, SatState } from '../api/client';
+import { AUTO_HISTORY_KEY, isAutoHistoryEnabled } from '../utils/autoHistory';
 import { formatDupeWarning, MIN_CALLSIGN_LENGTH } from '../utils/dupeWarning';
 import { signalRService, setTciMetersCallback, clearTciMetersCallback, addSatStateCallback, removeSatStateCallback, type TciMetersEvent } from '../api/signalr';
 import { S9_DBM, DB_PER_S_UNIT } from '../utils/smeter';
@@ -352,14 +353,13 @@ export function LogEntryPlugin() {
     try { localStorage.setItem('sdrl_auto_rst_s', autoRstEnabled ? '1' : '0'); } catch { /* no-op */ }
   }, [autoRstEnabled]);
 
-  // #40: auto-filter the Log History panel to the typed callsign. Default ON (current behaviour).
-  // Purely a display toggle for the history panel — does NOT affect the callbook lookup, the
-  // auto-populate of the entry, AI talk points (focused callsign), or DX Coach (spot-driven).
-  const [autoHistory, setAutoHistory] = useState<boolean>(() => {
-    try { return localStorage.getItem('sdrl_auto_history') !== '0'; } catch { return true; }
-  });
+  // #40 / #62: auto-filter Log History to the current callsign. Default ON.
+  // Applies to a typed callsign and to a spot selection (cluster click or
+  // WSJT-X / JTDX DX Call). Display only — does not affect the callbook
+  // lookup, log-entry fill, AI talk points, or DX Coach.
+  const [autoHistory, setAutoHistory] = useState<boolean>(isAutoHistoryEnabled);
   useEffect(() => {
-    try { localStorage.setItem('sdrl_auto_history', autoHistory ? '1' : '0'); } catch { /* no-op */ }
+    try { localStorage.setItem(AUTO_HISTORY_KEY, autoHistory ? '1' : '0'); } catch { /* no-op */ }
   }, [autoHistory]);
   // Reference so the typing/suggestion callbacks always read the latest without re-creating them.
   const autoHistoryRef = useRef(autoHistory);
