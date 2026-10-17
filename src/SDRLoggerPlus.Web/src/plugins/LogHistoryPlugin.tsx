@@ -1182,6 +1182,15 @@ export function LogHistoryPlugin() {
               )}
               <span className="text-[13px] text-dark-300">QSOs</span>
             </span>
+            <span
+              className="flex items-baseline gap-2"
+              title="Individual QSOs confirmed by LoTW. This is a contact count, not DXCC entities or states."
+            >
+              <span className="font-display font-bold text-accent-secondary text-xl leading-none">
+                {(stats.lotwConfirmedQsos ?? 0).toLocaleString()}
+              </span>
+              <span className="text-[13px] text-dark-300">LoTW</span>
+            </span>
             <span className="flex items-baseline gap-2">
               <span className="font-display font-bold text-accent-success text-xl leading-none">{stats.uniqueCountries}</span>
               <span className="text-[13px] text-dark-300">Countries</span>

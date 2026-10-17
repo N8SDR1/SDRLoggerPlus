@@ -184,5 +184,9 @@ public record QsoStatistics(
     int UniqueGrids,
     int QsosToday,
     Dictionary<string, int> QsosByBand,
-    Dictionary<string, int> QsosByMode
+    Dictionary<string, int> QsosByMode,
+    // Individual QSOs with LOTW_QSL_RCVD = Y. Award screens count entities
+    // (DXCC, states); this counts contacts. Defaulted so an older host that
+    // omits the field still deserializes on a newer client.
+    int LotwConfirmedQsos = 0
 );

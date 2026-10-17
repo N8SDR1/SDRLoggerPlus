@@ -562,6 +562,7 @@ public class LiteQsoRepositoryTests : IDisposable
         stats.UniqueCountries.Should().Be(0);
         stats.UniqueGrids.Should().Be(0);
         stats.QsosToday.Should().Be(0);
+        stats.LotwConfirmedQsos.Should().Be(0);
     }
 
     [Fact]
@@ -635,6 +636,37 @@ public class LiteQsoRepositoryTests : IDisposable
 
         var stats = await _repo.GetStatisticsAsync();
         stats.UniqueCountries.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetStatisticsAsync_CountsLotwConfirmedQsos()
+    {
+        // K3UK: how many individual QSOs are LoTW-confirmed, not how many
+        // DXCC entities or states. Paper, eQSL, and a sent-but-unconfirmed
+        // LoTW upload must not add to the count.
+        await _repo.DeleteAllAsync();
+
+        var confirmed = CreateQso("K1ABC");
+        confirmed.Qsl = new QslStatus { Lotw = new LotwStatus { Rcvd = "Y" } };
+        await _repo.CreateAsync(confirmed);
+
+        var confirmedLower = CreateQso("K2ABC");
+        confirmedLower.Qsl = new QslStatus { Lotw = new LotwStatus { Rcvd = "y" } };
+        await _repo.CreateAsync(confirmedLower);
+
+        var sentOnly = CreateQso("K3ABC");
+        sentOnly.Qsl = new QslStatus { Lotw = new LotwStatus { Sent = "Y" } };
+        await _repo.CreateAsync(sentOnly);
+
+        var paperOnly = CreateQso("K4ABC");
+        paperOnly.Qsl = new QslStatus { Rcvd = "Y" };
+        await _repo.CreateAsync(paperOnly);
+
+        await _repo.CreateAsync(CreateQso("K5ABC"));
+
+        var stats = await _repo.GetStatisticsAsync();
+        stats.TotalQsos.Should().Be(5);
+        stats.LotwConfirmedQsos.Should().Be(2);
     }
 
     // =========================================================================
