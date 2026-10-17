@@ -141,10 +141,25 @@ public class WsjtxServiceTests
         d.Callsign.Should().Be("K1ABC");
         d.Grid.Should().Be("FN42");
         d.IsCq.Should().BeTrue();
+        d.CqModifier.Should().BeNull();
         d.AudioOffsetHz.Should().Be(1500);
         d.FrequencyHz.Should().Be(14_075_500);
         d.Band.Should().Be("20m");
         _service.GetRecentDecodes().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Decode_CqModifier_CarriedOnEvent()
+    {
+        await _service.HandleDatagramAsync(BuildStatusDatagram(14_074_000));
+        await _service.HandleDatagramAsync(BuildDecodeDatagram("CQ POTA W1AW FN31", audioOffsetHz: 1200));
+
+        _decodes.Should().ContainSingle();
+        var d = _decodes[0];
+        d.Callsign.Should().Be("W1AW");
+        d.Grid.Should().Be("FN31");
+        d.IsCq.Should().BeTrue();
+        d.CqModifier.Should().Be("POTA");
     }
 
     [Fact]

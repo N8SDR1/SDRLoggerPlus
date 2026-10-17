@@ -8,8 +8,10 @@ namespace SDRLoggerPlus.Server.Services.Wsjtx;
 /// <see cref="DxCall"/> is who they were calling (null for a CQ);
 /// <see cref="Grid"/> is the 4-char Maidenhead locator when the message carries
 /// one (CQ and grid-reply messages), else null.
+/// <see cref="CqModifier"/> is the directional or activity text between CQ and
+/// the callsign ("POTA", "DX", "070", "DX POTA"), or null for a plain CQ.
 /// </summary>
-public record WsjtxDecodeParse(string? Callsign, string? DxCall, string? Grid, bool IsCq);
+public record WsjtxDecodeParse(string? Callsign, string? DxCall, string? Grid, bool IsCq, string? CqModifier = null);
 
 /// <summary>
 /// Parses the free-form text of a WSJT-X Decode message into the transmitting
@@ -17,8 +19,9 @@ public record WsjtxDecodeParse(string? Callsign, string? DxCall, string? Grid, b
 ///   • "CQ [dir] CALL [GRID]"      — CALL is the transmitter (available to work)
 ///   • "TOCALL DECALL GRID|REPORT" — DECALL (2nd) is the transmitter
 /// Directional CQ tokens (DX, NA, POTA, a directed frequency, …) sit between CQ
-/// and the callsign and are skipped. Returns null for free text / telemetry that
-/// carries no callsign.
+/// and the callsign. They are kept, space-joined, as the CQ modifier so the
+/// Decodes panel can show "CQ POTA" and filter on it. Returns null for free
+/// text / telemetry that carries no callsign.
 /// </summary>
 public static class WsjtxDecodeParser
 {
@@ -44,12 +47,18 @@ public static class WsjtxDecodeParser
 
         if (tokens[0] == "CQ")
         {
-            // Skip CQ and any directional tokens; the first callsign after is the caller.
+            // Tokens between CQ and the first callsign are the modifier (POTA, DX, 070, …).
+            var modifiers = new List<string>();
             for (var i = 1; i < tokens.Length; i++)
             {
-                if (!IsCallsign(tokens[i])) continue;
+                if (!IsCallsign(tokens[i]))
+                {
+                    modifiers.Add(tokens[i]);
+                    continue;
+                }
                 var grid = i + 1 < tokens.Length && IsGrid(tokens[i + 1]) ? tokens[i + 1] : null;
-                return new WsjtxDecodeParse(tokens[i], DxCall: null, Grid: grid, IsCq: true);
+                var modifier = modifiers.Count == 0 ? null : string.Join(" ", modifiers);
+                return new WsjtxDecodeParse(tokens[i], DxCall: null, Grid: grid, IsCq: true, CqModifier: modifier);
             }
             return null;
         }

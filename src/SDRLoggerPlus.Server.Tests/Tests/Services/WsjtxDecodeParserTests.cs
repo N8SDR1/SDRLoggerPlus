@@ -48,6 +48,23 @@ public class WsjtxDecodeParserTests
     public void Parse_Unparseable_ReturnsNull(string? message)
         => WsjtxDecodeParser.Parse(message).Should().BeNull();
 
+    [Theory]
+    [InlineData("CQ K1ABC FN42", null)]
+    [InlineData("CQ DX DL1XYZ JO31", "DX")]
+    [InlineData("CQ NA VE3ABC FN25", "NA")]
+    [InlineData("CQ POTA W1AW FN31", "POTA")]
+    [InlineData("CQ SOTA K1ABC FN42", "SOTA")]
+    [InlineData("CQ 070 K1ABC FN42", "070")]
+    [InlineData("CQ DX POTA W1AW FN31", "DX POTA")]
+    [InlineData("cq pota w1aw fn31", "POTA")]
+    [InlineData("K1ABC W9XYZ FN42", null)]
+    public void Parse_CqModifier(string message, string? modifier)
+    {
+        var r = WsjtxDecodeParser.Parse(message);
+        r.Should().NotBeNull();
+        r!.CqModifier.Should().Be(modifier);
+    }
+
     [Fact]
     public void Parse_GridNotMistakenForCallsign()
     {

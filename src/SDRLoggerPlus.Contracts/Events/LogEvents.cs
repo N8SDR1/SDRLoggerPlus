@@ -147,7 +147,11 @@ public record WsjtxDecodeEvent(
     uint TimeMsSinceMidnight = 0,
     string? RawMessage = null,
     bool LowConfidence = false,
-    string? RawMode = null
+    string? RawMode = null,
+    // Words between CQ and the callsign ("POTA", "DX", "070", "DX POTA").
+    // Null for a plain CQ and for every non-CQ exchange. Trailing and optional
+    // so older clients and existing constructors stay valid.
+    string? CqModifier = null
 );
 
 /// <summary>
