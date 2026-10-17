@@ -3,6 +3,18 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-10-17 — v2.14.5 "Antares"
+
+**Bugfix — the Dark map works again (no API key needed).**
+
+### Fixed — "API KEY REQUIRED" on the map basemap
+CARTO, the provider of the default **Dark** basemap, started requiring an API key for their free tile
+service — so the map filled with "API KEY REQUIRED" placeholder tiles. Nothing changed in SDRLogger+;
+this was a change on CARTO's end. The Dark basemap now uses a **keyless** dark map (Esri World Dark
+Gray), so it loads again with nothing to configure. OpenStreetMap, Satellite and Terrain were never
+affected. There is no API key to enter anywhere — if you want to switch basemaps, use the picker on
+the 2D Map / Grid Tracker.
+
 ## 2026-10-17 — v2.14.4 "Antares"
 
 **Bugfix — marking a confirmation no longer re-sends the QSO to QRZ.**
