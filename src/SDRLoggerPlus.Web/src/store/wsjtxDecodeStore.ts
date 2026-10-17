@@ -19,11 +19,14 @@ interface WsjtxDecodeState {
   // mirrors the exact filter state of the Digital Decodes panel.
   neededOnly: boolean;
   cqOnly: boolean;
+  /** Free-text CQ modifier filter (POTA, SOTA, DX, 070). Blank shows every decode. */
+  cqModifier: string;
   /** Show only decodes that match an enabled Digital Decode Alert rule
    *  (need × region × band/mode) — ties the geo-scoped alert rules to the list. */
   matchAlerts: boolean;
   setNeededOnly: (v: boolean) => void;
   setCqOnly: (v: boolean) => void;
+  setCqModifier: (v: string) => void;
   setMatchAlerts: (v: boolean) => void;
 }
 
@@ -34,8 +37,10 @@ export const useWsjtxDecodeStore = create<WsjtxDecodeState>((set) => ({
   clear: () => set({ decodes: [] }),
   neededOnly: false,
   cqOnly: false,
+  cqModifier: '',
   matchAlerts: false,
   setNeededOnly: (v) => set({ neededOnly: v }),
   setCqOnly: (v) => set({ cqOnly: v }),
+  setCqModifier: (v) => set({ cqModifier: v }),
   setMatchAlerts: (v) => set({ matchAlerts: v }),
 }));

@@ -10,6 +10,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useConfirmationRuleStore } from '../store/confirmationRuleStore';
 import { useWsjtxDecodeStore } from '../store/wsjtxDecodeStore';
 import { isDecodeNeeded } from '../utils/decodeNeeds';
+import { matchesCqModifier } from '../utils/cqModifier';
 import worldRaw from '../geo/world-outline.json';
 
 /**
@@ -77,6 +78,7 @@ export function GridTrackerPlugin() {
   const decodes = useWsjtxDecodeStore((s) => s.decodes);
   const neededOnly = useWsjtxDecodeStore((s) => s.neededOnly);
   const cqOnly = useWsjtxDecodeStore((s) => s.cqOnly);
+  const cqModifier = useWsjtxDecodeStore((s) => s.cqModifier);
   const [band, setBand] = useState('All');
   const [mode, setMode] = useState('All');
   const [showNeeded, setShowNeeded] = useState(false);
@@ -124,6 +126,7 @@ export function GridTrackerPlugin() {
       if (fdd) {
         if (liveBand && d.band !== liveBand) continue;
         if (cqOnly && !d.isCq) continue;
+        if (!matchesCqModifier(d, cqModifier)) continue;
         if (neededOnly && !isDecodeNeeded(d)) continue;
       }
       const g = d.grid.slice(0, 4).toUpperCase();
@@ -134,7 +137,7 @@ export function GridTrackerPlugin() {
       m.set(g, m.get(g) || needed);
     }
     return m;
-  }, [decodes, worked, fdd, liveBand, cqOnly, neededOnly]);
+  }, [decodes, worked, fdd, liveBand, cqOnly, cqModifier, neededOnly]);
 
   // Same live grids, but carrying the callsign(s) heard in each — for the Map view tooltips.
   const liveInfo = useMemo(() => {
@@ -144,6 +147,7 @@ export function GridTrackerPlugin() {
       if (fdd) {
         if (liveBand && d.band !== liveBand) continue;
         if (cqOnly && !d.isCq) continue;
+        if (!matchesCqModifier(d, cqModifier)) continue;
         if (neededOnly && !isDecodeNeeded(d)) continue;
       }
       const g = d.grid.slice(0, 4).toUpperCase();
@@ -153,7 +157,7 @@ export function GridTrackerPlugin() {
       m.set(g, cur);
     }
     return m;
-  }, [decodes, worked, fdd, liveBand, cqOnly, neededOnly]);
+  }, [decodes, worked, fdd, liveBand, cqOnly, cqModifier, neededOnly]);
 
   // Default view centered on the operator's grid.
   const home = gridCorner(myGrid.slice(0, 4)) ?? { lon: -86, lat: 39 };
@@ -284,7 +288,7 @@ export function GridTrackerPlugin() {
             Needed
           </button>
           <ConfirmationRuleToggle />
-          {fdd && <span className="text-[11px] text-cyan-300/80 whitespace-nowrap">following {liveBand ?? '—'}{cqOnly ? ' · CQ' : ''}{neededOnly ? ' · needed' : ''}</span>}
+          {fdd && <span className="text-[11px] text-cyan-300/80 whitespace-nowrap">following {liveBand ?? '—'}{cqOnly ? ' · CQ' : ''}{cqModifier.trim() ? ` · ${cqModifier.trim()}` : ''}{neededOnly ? ' · needed' : ''}</span>}
           <span className="flex-1" />
           <span className="flex items-center gap-2 text-[11px] text-dark-300">
             <span><span style={{ background: GREEN }} className="inline-block w-2.5 h-2.5 rounded-sm align-middle" /> worked/conf</span>

@@ -8,6 +8,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useToastStore } from '../store/toastStore';
 import { isDecodeNeeded } from '../utils/decodeNeeds';
 import { matchesAnyRule } from '../utils/decodeAlertEngine';
+import { cqBadge, matchesCqModifier } from '../utils/cqModifier';
 
 /**
  * Live WSJT-X / JTDX / MSHV decode list (Phase 1 of the decode-alerts feature).
@@ -28,9 +29,11 @@ export function DecodesPlugin() {
 
   const neededOnly = useWsjtxDecodeStore((s) => s.neededOnly);
   const cqOnly = useWsjtxDecodeStore((s) => s.cqOnly);
+  const cqModifier = useWsjtxDecodeStore((s) => s.cqModifier);
   const matchAlerts = useWsjtxDecodeStore((s) => s.matchAlerts);
   const setNeededOnly = useWsjtxDecodeStore((s) => s.setNeededOnly);
   const setCqOnly = useWsjtxDecodeStore((s) => s.setCqOnly);
+  const setCqModifier = useWsjtxDecodeStore((s) => s.setCqModifier);
   const setMatchAlerts = useWsjtxDecodeStore((s) => s.setMatchAlerts);
 
   // Enabled Digital Decode Alert rules (Settings → Digital Decode Alerts) — the
@@ -57,11 +60,12 @@ export function DecodesPlugin() {
   const filtered = useMemo(() => {
     return decodes.filter((d) => {
       if (cqOnly && !d.isCq) return false;
+      if (!matchesCqModifier(d, cqModifier)) return false;
       if (neededOnly && !isDecodeNeeded(d)) return false;
       if (matchAlertsActive && !matchesAnyRule(d, enabledRules)) return false;
       return true;
     });
-  }, [decodes, cqOnly, neededOnly, matchAlertsActive, enabledRules]);
+  }, [decodes, cqOnly, cqModifier, neededOnly, matchAlertsActive, enabledRules]);
 
   const neededCount = useMemo(() => decodes.filter(isDecodeNeeded).length, [decodes]);
 
@@ -95,6 +99,14 @@ export function DecodesPlugin() {
         <FilterPill active={cqOnly} onClick={() => setCqOnly(!cqOnly)} title="Show only stations calling CQ (available to work)">
           CQ only
         </FilterPill>
+        <input
+          value={cqModifier}
+          onChange={(e) => setCqModifier(e.target.value)}
+          placeholder="CQ type"
+          aria-label="CQ modifier filter"
+          title="Show only CQs whose modifier contains this text (POTA, SOTA, DX, 070). Blank shows every decode. CQ matches every CQ."
+          className="glass-input py-1 px-2 text-[10px] font-mono w-24"
+        />
         <FilterPill
           active={matchAlertsActive}
           disabled={!hasRules}
@@ -175,7 +187,7 @@ function DecodeRow({ d, colors, onCall }: {
     >
       <td className="px-2 py-1 font-mono text-[11px] text-dark-400 whitespace-nowrap">{fmtTime(d.decodedAtUtc)}</td>
       <td className="px-2 py-1 font-mono font-bold whitespace-nowrap" style={status.color ? { color: status.color } : undefined}>
-        {d.isCq && <span className="text-[9px] text-accent-primary/80 mr-1 align-middle">CQ</span>}
+        {d.isCq && <span className="text-[9px] text-accent-primary/80 mr-1 align-middle">{cqBadge(d)}</span>}
         {d.callsign}
       </td>
       <td className="px-2 py-1 text-right font-mono text-dark-300 tabular-nums">{d.snr > 0 ? `+${d.snr}` : d.snr}</td>

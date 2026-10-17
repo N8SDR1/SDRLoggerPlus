@@ -458,7 +458,8 @@ public class WsjtxService : BackgroundService
             RawMessage: decode.Message,
             LowConfidence: decode.LowConfidence,
             // Verbatim wire mode for the Reply echo — NOT the resolved display Mode above.
-            RawMode: decode.Mode);
+            RawMode: decode.Mode,
+            CqModifier: parsed.CqModifier);
 
         lock (_decodesLock)
         {

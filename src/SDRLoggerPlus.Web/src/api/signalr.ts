@@ -121,6 +121,8 @@ export interface WsjtxDecodeEvent {
   // Original one-char wire mode code ("~"/"+"); the Reply must echo this, not the
   // resolved display `mode`, or the decoder won't recognise the transmission.
   rawMode?: string;
+  /** Words between CQ and the callsign (POTA, DX, 070). Absent on a plain CQ. */
+  cqModifier?: string;
 }
 
 export interface SatPassQso {
