@@ -138,4 +138,83 @@ public class QsoEditPersistenceTests
         response!.Station!.Grid.Should().Be("CC22");
         _stored.Grid.Should().Be("CC22");
     }
+
+    [Fact]
+    public async Task MarkingLotwReceivedSetsTheFlagAndLeavesSentAlone()
+    {
+        var response = await _service.UpdateAsync("qso-1", new UpdateQsoRequest(LotwRcvd: true));
+
+        response!.ConfirmedLotw.Should().BeTrue();
+        _stored.Qsl!.Lotw!.Rcvd.Should().Be("Y");
+        _stored.Qsl.Lotw.RcvdDate.Should().NotBeNull();
+        _stored.Qsl.Lotw.Sent.Should().BeNull("a confirmation is not an upload");
+    }
+
+    [Fact]
+    public async Task ClearingLotwReceivedRemovesTheFlagAndItsDate()
+    {
+        _stored.Qsl = new QslStatus
+        {
+            Lotw = new LotwStatus { Rcvd = "Y", RcvdDate = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc) },
+        };
+
+        var response = await _service.UpdateAsync("qso-1", new UpdateQsoRequest(LotwRcvd: false));
+
+        response!.ConfirmedLotw.Should().BeFalse();
+        _stored.Qsl!.Lotw!.Rcvd.Should().BeNull();
+        _stored.Qsl.Lotw.RcvdDate.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AGridEditLeavesAnExplicitLotwNoUntouched()
+    {
+        _stored.Qsl = new QslStatus { Lotw = new LotwStatus { Rcvd = "N" } };
+
+        await _service.UpdateAsync("qso-1", new UpdateQsoRequest(Grid: "BB11"));
+
+        _stored.Qsl!.Lotw!.Rcvd.Should().Be("N");
+    }
+
+    [Fact]
+    public async Task SavingTheSameLotwYesDoesNotRefreshTheDate()
+    {
+        var date = new DateTime(2024, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        _stored.Qsl = new QslStatus { Lotw = new LotwStatus { Rcvd = "Y", RcvdDate = date } };
+
+        await _service.UpdateAsync("qso-1", new UpdateQsoRequest(LotwRcvd: true));
+
+        _stored.Qsl!.Lotw!.RcvdDate.Should().Be(date);
+    }
+
+    [Fact]
+    public async Task CardSentAndReceivedAreIndependent()
+    {
+        var response = await _service.UpdateAsync("qso-1",
+            new UpdateQsoRequest(CardSent: true, CardRcvd: true));
+
+        response!.CardSent.Should().BeTrue();
+        response.ConfirmedCard.Should().BeTrue();
+        _stored.Qsl!.Sent.Should().Be("Y");
+        _stored.Qsl.SentDate.Should().NotBeNull();
+        _stored.Qsl.Rcvd.Should().Be("Y");
+        _stored.Qsl.RcvdDate.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task EqslAndQrzReceivedRoundTrip()
+    {
+        var response = await _service.UpdateAsync("qso-1",
+            new UpdateQsoRequest(EqslRcvd: true, QrzRcvd: true));
+
+        response!.ConfirmedEqsl.Should().BeTrue();
+        response.ConfirmedQrz.Should().BeTrue();
+        _stored.Qsl!.Eqsl!.Rcvd.Should().Be("Y");
+        _stored.Qsl.Qrz!.Rcvd.Should().Be("Y");
+        _stored.AdifExtra!["app_qrzlog_status"].AsString.Should().Be("C");
+
+        await _service.UpdateAsync("qso-1", new UpdateQsoRequest(QrzRcvd: false));
+
+        _stored.Qsl.Qrz.Rcvd.Should().BeNull();
+        (_stored.AdifExtra == null || !_stored.AdifExtra.Contains("app_qrzlog_status")).Should().BeTrue();
+    }
 }

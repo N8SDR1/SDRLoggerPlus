@@ -32,6 +32,8 @@ export interface QsoResponse {
   confirmedEqsl?: boolean;
   confirmedQrz?: boolean;
   confirmedCard?: boolean;
+  /** Paper card mailed (QSL_SENT=Y). Separate from confirmedCard. */
+  cardSent?: boolean;
   // Upload state per QSL service. Undefined means the QSO predates upload
   // tracking — deliberately different from "nothing sent yet".
   qslSync?: QslSync;
@@ -120,6 +122,12 @@ export interface UpdateQsoRequest {
   state?: string;
   county?: string;
   comment?: string;
+  /** Null on the wire means "leave the stored flag alone". */
+  lotwRcvd?: boolean;
+  eqslRcvd?: boolean;
+  qrzRcvd?: boolean;
+  cardRcvd?: boolean;
+  cardSent?: boolean;
 }
 
 export interface BulkDeleteQsosResponse {

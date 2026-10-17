@@ -323,6 +323,24 @@ public class QsoService : IQsoService
             existing.Station.County = Counties.CountyNameNormalizer.SplitStatePrefix(request.County).County
                 is { Length: > 0 } county ? county : null;
 
+        // Confirmation flags. Null means "this edit didn't touch it". A true/false
+        // that already matches the stored Y/not-Y is also a no-op, so opening Edit
+        // and saving a grid change cannot turn a stored "N" into a blank.
+        if (request.LotwRcvd is bool lotw)
+            ApplyReceived(existing, lotw, q => q.Lotw?.Rcvd, q => { q.Lotw ??= new LotwStatus(); },
+                (q, v) => q.Lotw!.Rcvd = v, q => q.Lotw?.RcvdDate, (q, d) => q.Lotw!.RcvdDate = d);
+        if (request.EqslRcvd is bool eqsl)
+            ApplyReceived(existing, eqsl, q => q.Eqsl?.Rcvd, q => { q.Eqsl ??= new EqslStatus(); },
+                (q, v) => q.Eqsl!.Rcvd = v, _ => null, null);
+        if (request.QrzRcvd is bool qrz)
+            ApplyQrzReceived(existing, qrz);
+        if (request.CardRcvd is bool cardRcvd)
+            ApplyReceived(existing, cardRcvd, q => q.Rcvd, _ => { },
+                (q, v) => q.Rcvd = v, q => q.RcvdDate, (q, d) => q.RcvdDate = d);
+        if (request.CardSent is bool cardSent)
+            ApplyReceived(existing, cardSent, q => q.Sent, _ => { },
+                (q, v) => q.Sent = v, q => q.SentDate, (q, d) => q.SentDate = d);
+
         await _repository.UpdateAsync(id, existing);
         return MapToResponse(existing);
     }
@@ -395,8 +413,62 @@ public class QsoService : IQsoService
         string.Equals(qso.Qsl?.Rcvd, "Y", StringComparison.OrdinalIgnoreCase),
         MapQslSync(qso.QslSync),
         qso.Station?.Qth,
-        qso.Contest?.StationCallsign
+        qso.Contest?.StationCallsign,
+        string.Equals(qso.Qsl?.Sent, "Y", StringComparison.OrdinalIgnoreCase)
     );
+
+    private static bool IsYes(string? value) =>
+        string.Equals(value, "Y", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Turn a confirmation on or off. Dates are stamped only when a Y is new,
+    /// and cleared only when that Y is removed, so an untouched "N" survives.
+    /// </summary>
+    private static void ApplyReceived(
+        Qso qso,
+        bool requested,
+        Func<QslStatus, string?> current,
+        Action<QslStatus> ensure,
+        Action<QslStatus, string?> setValue,
+        Func<QslStatus, DateTime?> currentDate,
+        Action<QslStatus, DateTime?>? setDate)
+    {
+        var qsl = qso.Qsl;
+        if (requested == IsYes(qsl is null ? null : current(qsl))) return;
+
+        qso.Qsl ??= new QslStatus();
+        ensure(qso.Qsl);
+        if (requested)
+        {
+            setValue(qso.Qsl, "Y");
+            if (setDate != null && currentDate(qso.Qsl) is null)
+                setDate(qso.Qsl, DateTime.UtcNow);
+        }
+        else
+        {
+            setValue(qso.Qsl, null);
+            setDate?.Invoke(qso.Qsl, null);
+        }
+    }
+
+    /// <summary>
+    /// QRZ Logbook's confirmation is APP_QRZLOG_STATUS=C on the wire and "Y" on
+    /// <see cref="QrzStatus.Rcvd"/>. Keep the ADIF extra in step so a manual
+    /// confirm exports once, and a manual clear does not leave a stale C behind.
+    /// </summary>
+    private static void ApplyQrzReceived(Qso qso, bool requested)
+    {
+        if (requested == IsYes(qso.Qsl?.Qrz?.Rcvd)) return;
+
+        qso.Qsl ??= new QslStatus();
+        qso.Qsl.Qrz ??= new QrzStatus();
+        qso.Qsl.Qrz.Rcvd = requested ? "Y" : null;
+
+        qso.AdifExtra ??= new BsonDocument();
+        if (requested) qso.AdifExtra["app_qrzlog_status"] = "C";
+        else qso.AdifExtra.Remove("app_qrzlog_status");
+        if (qso.AdifExtra.ElementCount == 0) qso.AdifExtra = null;
+    }
 
     /// <summary>
     /// Null in, null out — a QSO with no ledger predates upload tracking, and

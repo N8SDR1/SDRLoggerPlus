@@ -411,6 +411,22 @@ export function LogEntryPlugin() {
       }));
     } catch { /* best-effort prefill */ }
   }, []);
+
+  // A callsign typed on the QRZ profile (#60) lands in this form and runs the
+  // same history filter and call-history prefill as typing it here.
+  const profileCallRequest = useAppStore((s) => s.profileCallRequest);
+  useEffect(() => {
+    if (!profileCallRequest) return;
+    const call = profileCallRequest.call.toUpperCase();
+    setFormData(prev => prev.callsign === call ? prev : { ...prev, callsign: call });
+    if (call.length >= 3) {
+      if (autoHistoryRef.current) setLogHistoryCallsignFilter(call);
+      applyCallHistory(call);
+    } else if (call.length === 0 && autoHistoryRef.current) {
+      setLogHistoryCallsignFilter(null);
+    }
+  }, [profileCallRequest, setLogHistoryCallsignFilter, applyCallHistory]);
+
   const peakRxDbmRef = useRef<number | null>(null);      // peak-hold of received dBm, this QSO
 
   // Update time every second when locked
