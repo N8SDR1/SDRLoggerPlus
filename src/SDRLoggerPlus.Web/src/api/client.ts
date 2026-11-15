@@ -919,18 +919,32 @@ class ApiClient {
   }
 
   // AI
-  async generateTalkPoints(request: GenerateTalkPointsRequest): Promise<GenerateTalkPointsResponse> {
-    return this.fetch<GenerateTalkPointsResponse>('/ai/talk-points', {
+  // The server answers AI failures with { error } written for the operator
+  // (bad key, retired model, quota, Ollama not running…), so surface it rather
+  // than a bare status code.
+  private async aiPost<T>(url: string, body: unknown): Promise<T> {
+    const response = await fetch(`${API_BASE}${url}`, {
       method: 'POST',
-      body: JSON.stringify(request),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.error || `AI request failed (${response.status})`);
+    }
+    return response.json();
+  }
+
+  async generateTalkPoints(request: GenerateTalkPointsRequest): Promise<GenerateTalkPointsResponse> {
+    return this.aiPost<GenerateTalkPointsResponse>('/ai/talk-points', request);
   }
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
-    return this.fetch<ChatResponse>('/ai/chat', {
-      method: 'POST',
-      body: JSON.stringify(request),
-    });
+    return this.aiPost<ChatResponse>('/ai/chat', request);
+  }
+
+  async listAiModels(request: ListAiModelsRequest): Promise<ListAiModelsResponse> {
+    return this.aiPost<ListAiModelsResponse>('/ai/models', request);
   }
 
   async chatStream(request: ChatRequest, onToken: (token: string) => void): Promise<void> {
@@ -941,8 +955,11 @@ class ApiClient {
     });
 
     if (!response.ok) {
+      // Errors arrive as an SSE frame: `data: {"error":"…"}`.
       const text = await response.text().catch(() => '');
-      throw new Error(`API error: ${response.status}${text ? ` - ${text}` : ''}`);
+      let message = '';
+      try { message = JSON.parse(text.replace(/^data:\s*/, '').trim()).error ?? ''; } catch { /* not JSON */ }
+      throw new Error(message || `AI request failed (${response.status})`);
     }
 
     const reader = response.body?.getReader();
@@ -1155,6 +1172,11 @@ class ApiClient {
   // Propagation
   async getPropagation(dxLat: number, dxLon: number): Promise<PropagationPrediction> {
     return this.fetch<PropagationPrediction>(`/propagation?dxLat=${dxLat}&dxLon=${dxLon}`);
+  }
+
+  /** Live ionosonde readings (last hour). Empty list when the feed is down. */
+  async getIonosondes(): Promise<IonosondeSnapshot> {
+    return this.fetch<IonosondeSnapshot>('/propagation/ionosondes');
   }
 
   async getGenericConditions(): Promise<GenericBandConditions> {
@@ -1712,9 +1734,28 @@ export interface ChatMessage {
 }
 
 export interface TestApiKeyRequest {
-  provider: string; // "anthropic" or "openai"
+  provider: string; // AiProvider id
   apiKey: string;
   model: string;
+  baseUrl?: string;
+}
+
+export interface ListAiModelsRequest {
+  provider: string; // AiProvider id
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+export interface AiModelInfo {
+  id: string;
+  name?: string;
+  free: boolean;
+}
+
+export interface ListAiModelsResponse {
+  success: boolean;
+  models: AiModelInfo[];
+  errorMessage?: string;
 }
 
 export interface TestApiKeyResponse {
@@ -1753,6 +1794,17 @@ export interface PropagationPrediction {
   heatmapData: number[][];
   bandNames: string[];
   timestamp: string;
+  /** How the model's level was set: live ionosondes near the path, elsewhere, or none. */
+  forecastSource: 'measured' | 'calibrated' | 'model';
+  /** Live correction applied to the model's MUF (1 = none). */
+  calibration: number;
+  attribution?: string | null;
+}
+
+export interface IonosondeSnapshot {
+  readings: import('../utils/propagationGate').IonosondeReading[];
+  attribution: string;
+  fetchedUtc: string;
 }
 
 export interface BandConditionEntry {

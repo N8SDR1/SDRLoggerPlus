@@ -185,6 +185,10 @@ export interface Spot {
   cqZone?: number;
   zoneStatus?: 'newZone' | 'newZoneBand';
   isHot?: boolean;
+  /** The spotter is on the operator's own continent — evidence the band is open from here. */
+  heardFromMyContinent?: boolean;
+  /** Where the spotter is; precise = their own QTH, else their country's centroid. */
+  spotterLocation?: { lat: number; lon: number; precise: boolean };
   dxStation?: {
     country?: string;
     dxcc?: number;

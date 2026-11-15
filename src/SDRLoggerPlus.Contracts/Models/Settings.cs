@@ -409,12 +409,13 @@ public class PotaSettings
 public class DxCoachSettings
 {
     /// <summary>
-    /// Minimum predicted path reliability (0–99%) an opportunity must clear to
-    /// appear in the DX Coach. Opportunities with no propagation data (no QTH,
-    /// or unresolved DX location) are always shown. 0 = show every opportunity.
+    /// Hide opportunities whose only evidence is a forecast saying the path is
+    /// unlikely. Spots heard near the operator (or by them) are never hidden.
+    /// Off by default: the Coach ranks by workability rather than hiding, so a
+    /// wrong forecast costs a ranking position, not a missed DXCC.
     /// </summary>
-    [BsonElement("minReliability")]
-    public int MinReliability { get; set; } = 30;
+    [BsonElement("hideUnlikely")]
+    public bool HideUnlikely { get; set; } = false;
 
     /// <summary>Speak newly-arriving high-value opportunities (new DXCC / new zone) aloud.</summary>
     [BsonElement("voice")]
@@ -961,7 +962,7 @@ public class AiSettings
 {
     [BsonElement("provider")]
     // Preset id: "anthropic" uses the native Claude API; everything else
-    // ("openai" | "groq" | "openrouter" | "ollama" | "custom") speaks
+    // ("openai" | "gemini" | "groq" | "openrouter" | "ollama" | "custom") speaks
     // the OpenAI chat-completions format against BaseUrl.
     public string? Provider { get; set; } = "anthropic";
 
@@ -969,7 +970,9 @@ public class AiSettings
     public string? ApiKey { get; set; } = string.Empty; // Encrypted at rest; optional for local providers (Ollama)
 
     [BsonElement("model")]
-    public string? Model { get; set; } = "claude-sonnet-4-5-20250929"; // Provider-specific model name
+    // Provider-specific model id, picked from the provider's live list in Settings.
+    // No default: model ids are retired every few months, so a baked-in one rots.
+    public string? Model { get; set; } = string.Empty;
 
     [BsonElement("baseUrl")]
     // OpenAI-compatible API base, e.g. https://api.groq.com/openai/v1. Blank = the

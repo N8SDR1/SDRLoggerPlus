@@ -549,21 +549,22 @@ function HelpTab() {
 
         <Section id="ai" title="AI Talk Points">
           <p><B>AI talk points</B> suggest a few friendly conversation starters for the callsign you're working — drawn from their QRZ profile and your past QSOs — so you always have something to say. Focus a callsign in the Log Entry (with auto-generate on) and they appear; the <B>Chat AI</B> panel also lets you ask follow-up questions. Your API key is stored locally and calls go straight to the provider — nothing routes through SDRLoggerPlus.</p>
-          <p>Set it up in <P>Settings → Chat AI</P>: pick a <B>provider</B>, paste a key (if needed), choose a model, and hit <B>Test connection</B>. Providers:</p>
+          <p>Set it up in <P>Settings → Chat AI</P>: pick a <B>provider</B>, paste a key (if needed), pick a model from the list (it loads live from the provider, so it's always current), and hit <B>Test connection</B>. Providers:</p>
           <ul className="ml-4 list-disc space-y-1.5">
             <li><B>Ollama</B> — a model running <B>locally on your PC</B>: free, private, offline, <B>no API key</B>. Setup below.</li>
-            <li><B>Groq</B> — free cloud key, very fast (Llama 3.3); generous free limits — plenty for talk points.</li>
-            <li><B>OpenRouter</B> — one key, many models including free ones.</li>
-            <li><B>OpenAI</B> / <B>Anthropic</B> — paid, top-tier. <B>Custom</B> — any other OpenAI-compatible endpoint (enter its Base URL).</li>
+            <li><B>Google Gemini</B> — free key with a Google account (aistudio.google.com); generous daily limits.</li>
+            <li><B>Groq</B> — free cloud key, very fast; free limits are plenty for talk points.</li>
+            <li><B>OpenRouter</B> — one key, many models; the free ones are marked ★ and listed first.</li>
+            <li><B>OpenAI</B> / <B>Anthropic</B> — paid, top-tier. <B>Custom</B> — LM Studio or any other OpenAI-compatible endpoint (enter its Base URL).</li>
           </ul>
           <p className="pt-1"><B>Set up Ollama (free, local, no key):</B></p>
           <ol className="ml-4 list-decimal space-y-1.5">
             <li>Install Ollama from{' '}
               <button onClick={() => openLink('https://ollama.com')} className="font-bold text-accent-primary hover:underline" title="Download Ollama">ollama.com</button>{' '}
               (Windows / macOS / Linux).</li>
-            <li>Pull a model — in a terminal run <span className="font-mono text-[11px] text-dark-100">ollama pull llama3.2</span> (a good small default; <span className="font-mono text-[11px] text-dark-100">phi3</span>, <span className="font-mono text-[11px] text-dark-100">gemma2</span>, <span className="font-mono text-[11px] text-dark-100">mistral</span> also work).</li>
+            <li>Pull a model — in a terminal run <span className="font-mono text-[11px] text-dark-100">ollama pull llama3.2</span> (a good small default; any model from ollama.com/library works).</li>
             <li>Ollama then serves it locally at <span className="font-mono text-[11px] text-dark-100">http://localhost:11434</span> (started automatically).</li>
-            <li>In <P>Settings → Chat AI</P> set <B>Provider → Ollama</B> — no key needed, model defaults to <span className="font-mono text-[11px] text-dark-100">llama3.2</span> — then <B>Test connection</B>.</li>
+            <li>In <P>Settings → Chat AI</P> set <B>Provider → Ollama</B> — no key needed; your installed models appear in the Model list — then <B>Test connection</B>.</li>
           </ol>
           <p className="text-xs text-dark-300">A mid-range PC handles small models (a few GB) fine; larger models want more RAM/VRAM. It runs on your machine, so there are no usage limits or costs.</p>
         </Section>

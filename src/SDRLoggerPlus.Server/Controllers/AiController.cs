@@ -42,7 +42,7 @@ public class AiController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error generating talk points for {Callsign}", request.Callsign);
-            return StatusCode(500, new { error = "Failed to generate talk points" });
+            return StatusCode(502, new { error = OperatorMessage(ex) });
         }
     }
 
@@ -68,7 +68,7 @@ public class AiController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing chat for {Callsign}", request.Callsign);
-            return StatusCode(500, new { error = "Failed to process chat request" });
+            return StatusCode(502, new { error = OperatorMessage(ex) });
         }
     }
 
@@ -115,14 +115,35 @@ public class AiController : ControllerBase
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Error streaming chat for {Callsign}", request.Callsign);
-            if (!Response.HasStarted)
-            {
-                Response.StatusCode = 500;
-                var errorJson = JsonSerializer.Serialize(new { error = ex.Message });
-                await Response.WriteAsync($"data: {errorJson}\n\n");
-            }
+            // Mid-stream the status line is already sent, so report the failure as
+            // an SSE error event either way; the client throws on it.
+            if (!Response.HasStarted) Response.StatusCode = 502;
+            var errorJson = JsonSerializer.Serialize(new { error = OperatorMessage(ex) });
+            await Response.WriteAsync($"data: {errorJson}\n\n");
         }
     }
+
+    /// <summary>
+    /// List the chat models this provider offers for this key (or local install) right now.
+    /// </summary>
+    [HttpPost("models")]
+    [ProducesResponseType(typeof(ListAiModelsResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ListAiModelsResponse>> ListModels([FromBody] ListAiModelsRequest request)
+    {
+        var response = await _aiService.ListModelsAsync(request, HttpContext.RequestAborted);
+        return Ok(response);
+    }
+
+    // Provider failures carry a message written for the operator; anything else
+    // is an internal fault, so keep its details in the log.
+    private static string OperatorMessage(Exception ex) => ex switch
+    {
+        AiProviderException => ex.Message,
+        TaskCanceledException => "The AI provider took too long to answer (over 60 seconds).",
+        HttpRequestException { StatusCode: null } =>
+            "Can't reach the AI provider. Check your internet connection, or that Ollama is running.",
+        _ => "Something went wrong talking to the AI provider. See the app log for details.",
+    };
 
     /// <summary>
     /// Test an AI API key

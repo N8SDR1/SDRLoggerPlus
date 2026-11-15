@@ -65,23 +65,31 @@ public class SpotStatusServiceTests
 
     #region GetSpotStatus — null country
 
-    [Fact]
-    public async Task GetSpotStatus_NullCountry_ReturnsNull()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task GetSpotStatus_NoFeedCountry_UsesTheCallsignsEntity(string? feedCountry)
     {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("K1JAK", country: "United States", band: "40m", mode: "SSB"),
+        });
         await _service.StartAsync(CancellationToken.None);
         await _service.CacheReady;
 
-        _service.GetSpotStatus("W1ABC", null, 14000.0, "SSB")
-            .Should().BeNull();
+        // The feed gave no country, but W1ABC is plainly the USA — worked, new on 20m.
+        _service.GetSpotStatus("W1ABC", feedCountry, 14000.0, "SSB")
+            .Should().Be("newBand");
     }
 
     [Fact]
-    public async Task GetSpotStatus_EmptyCountry_ReturnsNull()
+    public async Task GetSpotStatus_NoCountryAnywhere_ReturnsNull()
     {
         await _service.StartAsync(CancellationToken.None);
         await _service.CacheReady;
 
-        _service.GetSpotStatus("W1ABC", "", 14000.0, "SSB")
+        // No feed country and a callsign cty.dat can't place: no verdict, rather than a guess.
+        _service.GetSpotStatus("#####", null, 14000.0, "SSB")
             .Should().BeNull();
     }
 
@@ -441,6 +449,40 @@ public class SpotStatusServiceTests
         // Spot arrives with cty.dat name "Fed. Rep. of Germany" — should NOT be newDxcc
         _service.GetSpotStatus("DL2RH", "Fed. Rep. of Germany", 14000.0, "SSB")
             .Should().Be("worked");
+    }
+
+    /// <summary>
+    /// Spothole names the USA "United States of America"; the log and cty.dat say
+    /// "United States". Matching on the feed's spelling alone flagged every US spot
+    /// as a new DXCC (seen in the field: a dozen K/W/N spots in the DX Coach).
+    /// </summary>
+    [Fact]
+    public async Task GetSpotStatus_FeedSpellsCountryDifferently_ResolvedFromCallsign()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("K1JAK", country: "United States", band: "10m", mode: "FT8"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        _service.GetSpotStatus("KE8SRV", "United States of America", 28074.0, "FT8")
+            .Should().Be("worked");
+        _service.GetSpotStatus("K1DC", "United States of America", 14074.0, "FT8")
+            .Should().Be("newBand");
+    }
+
+    [Fact]
+    public async Task GetSpotStatus_UnworkedEntity_StillNewDxcc_WhateverTheFeedCallsIt()
+    {
+        _qsoRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Qso>
+        {
+            MakeQso("K1JAK", country: "United States", band: "10m", mode: "FT8"),
+        });
+        await _service.StartAsync(CancellationToken.None);
+        await _service.CacheReady;
+
+        _service.GetSpotStatus("TK4TH", "Corsica", 28096.0, "RTTY").Should().Be("newDxcc");
     }
 
     [Fact]

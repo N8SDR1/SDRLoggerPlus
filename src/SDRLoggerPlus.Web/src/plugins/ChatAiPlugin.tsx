@@ -42,11 +42,14 @@ export function ChatAiPlugin() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const callsign = focusedCallsignInfo?.callsign;
-  const hasApiKey = settings.ai.apiKey && settings.ai.apiKey.length > 0;
+  // Ready = a model is chosen and, for cloud providers, a key is set. Local
+  // servers (Ollama, LM Studio via Custom) need no key.
+  const needsKey = !['ollama', 'custom'].includes(settings.ai.provider);
+  const isConfigured = !!settings.ai.model && (!needsKey || settings.ai.apiKey.trim().length > 0);
 
   // Auto-generate talk points when callsign changes (if enabled)
   useEffect(() => {
-    if (callsign && hasApiKey && settings.ai.autoGenerateTalkPoints) {
+    if (callsign && isConfigured && settings.ai.autoGenerateTalkPoints) {
       handleGenerate();
     } else if (!callsign) {
       // Clear when no callsign
@@ -78,7 +81,7 @@ export function ChatAiPlugin() {
       setChatMessages([]); // Clear chat when regenerating
     } catch (err) {
       console.error('Failed to generate talk points:', err);
-      setError('Failed to generate talk points. Check your API key and try again.');
+      setError(err instanceof Error ? err.message : 'Failed to generate talk points.');
     } finally {
       setIsGenerating(false);
     }
@@ -136,18 +139,20 @@ export function ChatAiPlugin() {
     }
   };
 
-  // Empty state - no API key
-  if (!hasApiKey) {
+  // Empty state - AI not set up yet
+  if (!isConfigured) {
     return (
       <GlassPanel title="Chat AI" icon={<BotMessageSquare className="w-5 h-5" />}>
         <div className="p-4 h-full flex flex-col items-center justify-center">
           <Key className="w-16 h-16 text-amber-500 mb-4" />
-          <p className="text-lg font-medium text-gray-300 mb-2">API Key Required</p>
+          <p className="text-lg font-medium text-gray-300 mb-2">Set Up Chat AI</p>
           <p className="text-sm text-gray-500 text-center mb-6 max-w-md">
-            To use Chat AI, add your API key from OpenAI or Anthropic in the settings.
+            {needsKey && !settings.ai.apiKey.trim()
+              ? 'Add an API key and choose a model in Settings → Chat AI.'
+              : 'Choose a model in Settings → Chat AI.'}
             <br />
             <br />
-            Your key is stored locally and never sent to SDRLoggerPlus servers.
+            Free options: Ollama (runs on your PC, no key), Google Gemini, Groq, or OpenRouter's free models.
           </p>
           <button
             onClick={openSettings}

@@ -463,6 +463,8 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
         string? spotterCountry = null;
         int? spotterDxcc = null;
         string? spotterContinent = null;
+        string? operatorCall = null;
+        var spotterLocation = parsedSpot.SpotterLocation;
 
         try
         {
@@ -471,23 +473,22 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
 
             if (rbnService != null)
             {
-                var (grid, _, _, country) = await rbnService.LookupSkimmerLocationAsync(parsedSpot.Spotter);
-                spotterGrid = grid;
-                spotterCountry = country;
+                // A position the feed already gave as precise wins; otherwise QRZ
+                // (precise) or the spotter's country centroid (not precise).
+                if (spotterLocation is not { Precise: true })
+                    spotterLocation = await rbnService.LookupStationLocationAsync(parsedSpot.Spotter) ?? spotterLocation;
             }
 
-            // Fall back to a cty.dat prefix lookup so the spotter-country
-            // filter below works even without a QRZ result
-            if (string.IsNullOrEmpty(spotterCountry))
-            {
-                (spotterCountry, spotterContinent) =
-                    CtyService.GetCountryFromCallsign(parsedSpot.Spotter.Split('-')[0]);
-            }
+            // Spotter country/continent from cty.dat (the spotter-country filter
+            // below and the DX Coach both use it).
+            (spotterCountry, spotterContinent) =
+                CtyService.GetCountryFromCallsign(parsedSpot.Spotter.Split('-')[0]);
 
             // Global spotter-country filter — applies to ALL spot sources
             // (telnet clusters AND spothole), not just the spothole poller.
-            var clusterSettings = (await scope.ServiceProvider
-                .GetRequiredService<ISettingsService>().GetSettingsAsync()).Cluster;
+            var settings = await scope.ServiceProvider.GetRequiredService<ISettingsService>().GetSettingsAsync();
+            var clusterSettings = settings.Cluster;
+            operatorCall = settings.Station?.Callsign;
             var countryFilter = clusterSettings.SpotholeSpotterCountry;
             // Only drop a spot when we positively know the spotter is in a
             // different country. Spots whose spotter country could not be
@@ -524,10 +525,26 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
             _logger.LogWarning(ex, "Failed to determine spot status for {DxCall}", parsedSpot.DxCall);
         }
 
-        // Approximate DX location from the cty.dat country centroid (offline,
-        // cached, no rate limit) so the DX Coach can run its propagation gate
-        // without a per-spot QRZ lookup. Coarse by design.
-        var dxCentroid = CtyService.GetCentroidFromCallsign(parsedSpot.DxCall);
+        // A spotter on the operator's own continent heard this DX: real evidence
+        // the band is open from here, independent of any propagation model.
+        // Resolve the spotter's continent from cty.dat when the skimmer lookup
+        // supplied a country but no continent.
+        spotterContinent ??= CtyService.GetCountryFromCallsign(parsedSpot.Spotter.Split('-')[0]).Continent;
+        bool? heardFromMyContinent = null;
+        var myContinent = string.IsNullOrWhiteSpace(operatorCall)
+            ? null
+            : CtyService.GetCountryFromCallsign(operatorCall).Continent;
+        if (myContinent != null && spotterContinent != null)
+            heardFromMyContinent = string.Equals(myContinent, spotterContinent, StringComparison.OrdinalIgnoreCase);
+
+        // DX location for the DX Coach propagation read: the feed's precise home
+        // QTH when it has one, else the cty.dat country centroid (offline, cached,
+        // no rate limit — no per-spot QRZ lookup for the DX). Coarse by design.
+        var dxLocation = parsedSpot.DxLocation is { Precise: true } preciseDx
+            ? preciseDx
+            : CtyService.GetCentroidFromCallsign(parsedSpot.DxCall) is { } c
+                ? new StationLocation(c.Lat, c.Lon, Precise: false)
+                : null;
 
         // Broadcast to clients (spots are kept in memory on frontend only, not persisted)
         var evt = new SpotReceivedEvent(
@@ -548,10 +565,14 @@ public class DxClusterService : IDxClusterService, IHostedService, IDisposable
             spotterContinent,
             spotStatus,
             _hotListService.IsHot(parsedSpot.DxCall),
-            dxCentroid?.Lat,
-            dxCentroid?.Lon,
+            dxLocation?.Lat,
+            dxLocation?.Lon,
             cqZone,
-            zoneStatus
+            zoneStatus,
+            heardFromMyContinent,
+            spotterLocation?.Lat,
+            spotterLocation?.Lon,
+            spotterLocation?.Precise ?? false
         );
 
         // Keep a short replay buffer: spots are ephemeral broadcasts, and any
@@ -648,7 +669,11 @@ internal record ParsedSpot(
     string? Country,
     string? Continent,
     int? Dxcc,
-    string? Grid
+    string? Grid,
+    // Positions a spot feed supplies itself (Spothole's home-QTH fields); null
+    // for telnet clusters, which only carry callsigns.
+    StationLocation? SpotterLocation = null,
+    StationLocation? DxLocation = null
 );
 
 internal class ClusterConnectionHandler

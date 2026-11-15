@@ -44,22 +44,22 @@ public class RbnController : ControllerBase
     {
         try
         {
-            var (grid, lat, lon, country) = await _rbnService.LookupSkimmerLocationAsync(callsign);
-
-            // Grid is always null by design (RbnService resolves only lat/lon via QRZ/cty.dat);
-            // presence is keyed off coordinates so a resolved skimmer isn't reported as 404.
-            if (lat == null || lon == null)
+            var location = await _rbnService.LookupStationLocationAsync(callsign);
+            if (location is null)
             {
                 return NotFound(new { error = "Location not found" });
             }
 
+            // grid/country stay in the response shape for existing clients; the
+            // lookup resolves coordinates only (QRZ or cty.dat centroid).
             return Ok(new
             {
                 callsign = callsign,
-                grid = grid,
-                lat = lat,
-                lon = lon,
-                country = country
+                grid = (string?)null,
+                lat = location.Lat,
+                lon = location.Lon,
+                country = (string?)null,
+                precise = location.Precise
             });
         }
         catch (Exception ex)
@@ -85,8 +85,8 @@ public class RbnController : ControllerBase
         var reports = new List<RbnHeardMeReport>();
         foreach (var s in matches)
         {
-            var (_, lat, lon, _) = await _rbnService.LookupSkimmerLocationAsync(s.Callsign);
-            if (lat is not { } la || lon is not { } lo) continue; // no location → can't draw an arc
+            if (await _rbnService.LookupStationLocationAsync(s.Callsign) is not { } loc) continue; // no location → can't draw an arc
+            var (la, lo) = (loc.Lat, loc.Lon);
             reports.Add(new RbnHeardMeReport
             {
                 Skimmer = s.Callsign,

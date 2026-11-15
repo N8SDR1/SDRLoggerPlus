@@ -2,58 +2,22 @@ import { useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Target } from 'lucide-react';
 import { GlassPanel } from '../components/GlassPanel';
-import { useAppStore, Spot } from '../store/appStore';
+import { useAppStore } from '../store/appStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSignalR } from '../hooks/useSignalR';
-import { getBandFromFrequency, bandClassForFrequency } from '../utils/spotBands';
+import { getBandFromFrequency } from '../utils/spotBands';
 import { gridToLatLon } from '../utils/maidenhead';
-import { assessPropagation, PropAssessment, BandOpenState } from '../utils/propagationGate';
+import { buildOpportunities, type Confidence, type ReasonKind } from '../utils/dxCoach';
+import { useMyReceptionReports } from '../hooks/useMyReceptionReports';
 import { spellCallsign } from '../utils/hotSpotAnnouncer';
 import { applyAnnouncementVoice } from '../utils/announcementVoice';
 import { api } from '../api/client';
 
 /**
- * DX Coach — Phase 1 (award engine) + Phase 2 (propagation gate).
- *
- * The engine scans live DX-cluster spots and surfaces the ones that fill an
- * award gap, using the per-spot needs the backend already computes:
- *   • DXCC  — newDxcc (whole new entity) / newBand (worked entity, new band)
- *   • WAZ   — newZone (whole new CQ zone) / newZoneBand (worked zone, new band)
- * A single spot can satisfy more than one (a new country that's also a new
- * zone), so each opportunity carries a list of reasons. Phase 2 annotates each
- * with a soft propagation read (coarse open/marginal/closed + gray-line timing)
- * that nudges ranking within an award tier but never outranks the award itself.
- * WAS (US states) is deliberately not here — a state isn't resolvable per-spot
- * offline. See docs/design/ai-dx-coach.md.
+ * DX Coach — live spots that fill an award gap (DXCC / WAZ), ranked by the best
+ * evidence that you can work them. The engine lives in utils/dxCoach.ts; this is
+ * the panel. See docs/design/ai-dx-coach.md.
  */
-type ReasonKind = 'newDxcc' | 'newZone' | 'newBand' | 'newZoneBand';
-
-interface AwardReason {
-  kind: ReasonKind;
-  chip: string;
-  detail: string;
-}
-
-interface Opportunity {
-  spot: Spot;
-  band: string;
-  reasons: AwardReason[];
-  onRigBand: boolean;
-  prop: PropAssessment;
-  score: number;
-  /** How many live spots collapsed into this one opportunity (call+band). */
-  count: number;
-}
-
-// Ranking weight per reason — DXCC entity is the crown jewel, a new CQ zone is
-// next (rare + hard), then band-fills. An opportunity scores by its best reason.
-const REASON_SCORE: Record<ReasonKind, number> = {
-  newDxcc: 100,
-  newZone: 85,
-  newBand: 50,
-  newZoneBand: 45,
-};
-
 const REASON_CLASS: Record<ReasonKind, string> = {
   newDxcc: 'bg-accent-primary/20 text-accent-primary',
   newZone: 'bg-violet-500/25 text-violet-200',
@@ -61,10 +25,16 @@ const REASON_CLASS: Record<ReasonKind, string> = {
   newZoneBand: 'bg-violet-500/15 text-violet-200/90',
 };
 
-const OPEN_META: Record<Exclude<BandOpenState, 'unknown'>, { dot: string; label: string; text: string }> = {
-  open: { dot: 'bg-accent-success', label: 'Open', text: 'text-accent-success' },
-  marginal: { dot: 'bg-accent-warning', label: 'Marginal', text: 'text-accent-warning' },
-  closed: { dot: 'bg-dark-400', label: 'Closed', text: 'text-dark-400' },
+// Evidence colours: green = someone actually heard it (you, near you, your
+// region); amber/grey = forecast only.
+const CONFIDENCE_META: Record<Confidence, { dot: string; text: string }> = {
+  heardMe: { dot: 'bg-accent-success', text: 'text-accent-success font-semibold' },
+  heardNear: { dot: 'bg-accent-success', text: 'text-accent-success font-semibold' },
+  heardRegion: { dot: 'bg-accent-success/70', text: 'text-accent-success/90' },
+  likely: { dot: 'bg-sky-400', text: 'text-sky-300' },
+  possible: { dot: 'bg-accent-warning', text: 'text-accent-warning' },
+  unlikely: { dot: 'bg-dark-400', text: 'text-dark-300' },
+  unknown: { dot: 'bg-dark-500', text: 'text-dark-400' },
 };
 
 /** Speak a high-value opportunity aloud, using the shared announcement voice. */
@@ -85,25 +55,6 @@ function speakOpportunity(
   applyAnnouncementVoice(u); // shared voice / accent / rate / volume
   // No cancel() — queue so several fresh opportunities don't cut each other off.
   speechSynthesis.speak(u);
-}
-
-/** Build the ordered reason list for a spot from its DXCC + WAZ status. */
-function reasonsFor(spot: Spot, band: string): AwardReason[] {
-  const out: AwardReason[] = [];
-  if (spot.status === 'newDxcc') {
-    out.push({ kind: 'newDxcc', chip: '🌍 New DXCC', detail: 'New country for DXCC' });
-  } else if (spot.status === 'newBand') {
-    out.push({ kind: 'newBand', chip: '📻 New band', detail: `New band-slot on ${band}` });
-  }
-  const zone = spot.cqZone;
-  if (spot.zoneStatus === 'newZone') {
-    out.push({ kind: 'newZone', chip: `🧭 New zone ${zone ?? ''}`.trim(), detail: `New CQ zone ${zone ?? ''}`.trim() });
-  } else if (spot.zoneStatus === 'newZoneBand') {
-    out.push({ kind: 'newZoneBand', chip: `📶 Zone ${zone ?? ''} · band`.trim(), detail: `Zone ${zone ?? ''} — new on ${band}`.trim() });
-  }
-  // Highest-value reason first.
-  out.sort((a, b) => REASON_SCORE[b.kind] - REASON_SCORE[a.kind]);
-  return out;
 }
 
 export function DxCoachPlugin() {
@@ -142,71 +93,26 @@ export function DxCoachPlugin() {
     return rig?.frequencyHz != null ? getBandFromFrequency(rig.frequencyHz / 1000) : null;
   }, [selectedRadioId, radioStates]);
 
-  const opportunities = useMemo<Opportunity[]>(() => {
-    const sfi = space?.solarFluxIndex ?? null;
-    const kIndex = space?.kIndex ?? null;
-    // Collapse duplicate spots of the same station on the same band (multiple
-    // spotters / repeats) into one opportunity, tracking how many landed.
-    const byKey = new Map<string, Opportunity>();
-    for (const s of spots) {
-      const band = getBandFromFrequency(s.frequency);
+  // Who has heard YOUR signal lately — the Coach's strongest evidence.
+  const heardMe = useMyReceptionReports(station.callsign);
 
-      // What award gaps does this spot fill? DXCC and/or WAZ — filtered by the
-      // operator's chosen award types. No reasons → skip.
-      const reasons = reasonsFor(s, band).filter((r) =>
-        r.kind === 'newDxcc' || r.kind === 'newBand' ? coach.showDxcc : coach.showWaz,
-      );
-      if (reasons.length === 0) continue;
+  // Live ionosondes correct the forecast's level (server caches 15 min).
+  const { data: iono } = useQuery({
+    queryKey: ['ionosondes'],
+    queryFn: () => api.getIonosondes(),
+    refetchInterval: 15 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+  });
+  const ionosondes = iono?.readings;
 
-      // Band-class filter — an HF-only op has no use for 2m/70cm opportunities.
-      const cls = bandClassForFrequency(s.frequency);
-      if (cls === 'MF' && !coach.showLowBand) continue;
-      if (cls === 'HF' && !coach.showHf) continue;
-      if (cls === '6M' && !coach.show6m) continue;
-      if (cls === 'VHF' && !coach.showVhf) continue;
-      if (cls === 'UHF' && !coach.showUhf) continue;
-
-      const key = `${s.dxCall.toUpperCase()}|${band}`;
-      const existing = byKey.get(key);
-      if (existing) {
-        // Same call+band already surfaced — merge: bump the count and keep the
-        // most recent spot as the representative row.
-        existing.count += 1;
-        if (s.timestamp > existing.spot.timestamp) existing.spot = s;
-        continue;
-      }
-
-      const onRigBand = rigBand != null && rigBand !== '?' && band === rigBand;
-
-      const prop = assessPropagation({
-        freqMHz: s.frequency / 1000,
-        deLat: qth?.lat ?? null,
-        deLon: qth?.lon ?? null,
-        dxLat: s.dxStation?.lat ?? null,
-        dxLon: s.dxStation?.lon ?? null,
-        sfi,
-        kIndex,
-      });
-
-      // Threshold filter: hide low-odds paths so the panel stays "right and
-      // rare". Only judges spots we can actually score — a spot with no prop
-      // data (no QTH, or no DX centroid) is always kept.
-      if (prop.reliability != null && prop.reliability < coach.minReliability) continue;
-
-      // Score by the best reason; soft prop/rig nudges re-order within a tier.
-      let score = REASON_SCORE[reasons[0].kind];
-      if (onRigBand) score += 15;
-      if (prop.open === 'open') score += 12;
-      else if (prop.open === 'marginal') score += 4;
-      else if (prop.open === 'closed') score -= 8;
-      if (prop.grayLine) score += prop.grayLine.active ? 10 : 6;
-
-      byKey.set(key, { spot: s, band, reasons, onRigBand, prop, score, count: 1 });
-    }
-    const out = [...byKey.values()];
-    out.sort((a, b) => b.score - a.score || (b.spot.timestamp > a.spot.timestamp ? 1 : -1));
-    return out;
-  }, [spots, rigBand, qth, space, coach]);
+  const { opportunities, hiddenUnlikely } = useMemo(() => {
+    const ctx = { qth, sfi: space?.solarFluxIndex ?? null, kIndex: space?.kIndex ?? null, rigBand, heardMe, ionosondes };
+    const shown = buildOpportunities(spots, coach, ctx);
+    // How many "unlikely" ones the optional filter is holding back, so a short
+    // or empty list says why instead of looking broken.
+    const all = coach.hideUnlikely ? buildOpportunities(spots, { ...coach, hideUnlikely: false }, ctx).length : shown.length;
+    return { opportunities: shown, hiddenUnlikely: all - shown.length };
+  }, [spots, rigBand, qth, space, coach, heardMe, ionosondes]);
 
   // Voice: announce newly-arriving high-value opportunities (new DXCC / new
   // zone) aloud, throttled. Enabling only speaks opportunities that appear
@@ -254,26 +160,37 @@ export function DxCoachPlugin() {
       }
     >
       <div className="flex flex-col h-full">
-        <div className="px-4 pt-3 pb-2 text-xs text-dark-400 border-b border-glass-100">
+        <div className="px-4 pt-3 pb-2 text-sm text-dark-300 border-b border-glass-100">
           Live spots that fill an award gap — <span className="text-accent-primary">new DXCC</span>,{' '}
-          <span className="text-violet-300">new CQ zone</span>, or a new band-slot — with a coarse propagation read.
-          Click one to tune.{' '}
+          <span className="text-violet-300">new CQ zone</span>, or a new band-slot — best chances first. Click one to tune.
           {!propReady && (
-            <span className="opacity-70">
-              (Set your QTH grid in Settings → Station for the propagation gate.)
+            <span className="block mt-1 text-accent-warning">
+              Set your grid square in Settings → Station so the Coach can tell which spotters are near you.
+            </span>
+          )}
+          {ionosondes && ionosondes.length > 0 && (
+            <span className="block mt-1 text-xs text-dark-400">
+              Forecasts use {ionosondes.length} live ionosonde readings. {iono?.attribution}
+            </span>
+          )}
+          {hiddenUnlikely > 0 && (
+            <span className="block mt-1 text-dark-400">
+              {hiddenUnlikely} unlikely path{hiddenUnlikely === 1 ? '' : 's'} hidden (Settings → DX Coach).
             </span>
           )}
         </div>
         <div className="flex-1 overflow-auto px-3 py-3 space-y-2 min-h-0">
           {opportunities.length === 0 ? (
             <div className="text-center py-10 text-dark-300 text-sm px-4">
-              {anyStatus
-                ? 'No award opportunities in the current spots — as spots arrive that fill a DXCC, zone, or band gap, they show up here, ranked.'
-                : 'Waiting for spots. Connect a DX cluster (and make sure DX-cluster spot status is enabled) so the Coach can see what you still need.'}
+              {!anyStatus
+                ? 'Waiting for spots. Connect a DX cluster (and make sure DX-cluster spot status is enabled) so the Coach can see what you still need.'
+                : hiddenUnlikely > 0
+                ? `Only unlikely paths right now, and "Hide unlikely paths" is on (${hiddenUnlikely} hidden). Turn it off in Settings → DX Coach to see them.`
+                : 'No award opportunities in the current spots — as spots arrive that fill a DXCC, zone, or band gap, they show up here, ranked.'}
             </div>
           ) : (
             opportunities.map((o) => {
-              const openMeta = o.prop.open !== 'unknown' ? OPEN_META[o.prop.open] : null;
+              const ev = CONFIDENCE_META[o.evidence.confidence];
               // Activity tier for the spot-count chip: neutral (2), amber (3–5),
               // red (>5 — a pileup worth noticing).
               const countClass =
@@ -286,7 +203,7 @@ export function DxCoachPlugin() {
                 <button
                   key={o.spot.id}
                   onClick={() => selectSpot(o.spot.dxCall, o.spot.frequency, o.spot.mode)}
-                  title={`Tune the radio to this spot — ${o.prop.summary}`}
+                  title={`Tune the radio to this spot — ${o.evidence.detail}`}
                   className="w-full text-left rounded-lg border border-glass-100 bg-dark-700/50 hover:bg-dark-700 hover:border-accent-primary/40 transition-colors p-3"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -341,30 +258,24 @@ export function DxCoachPlugin() {
                     <span className="opacity-50">·</span>
                     <span className="text-dark-400">{o.reasons.map((r) => r.detail).join(' + ')}</span>
                   </div>
-                  {(openMeta || o.prop.grayLine) && (
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      {openMeta && (
-                        <span className={`inline-flex items-center gap-1.5 text-[11px] font-ui ${openMeta.text}`}>
-                          <span className={`w-2 h-2 rounded-full ${openMeta.dot}`} />
-                          {openMeta.label}
-                          {o.prop.reliability != null && (
-                            <span className="text-dark-400">{o.prop.reliability}%</span>
-                          )}
-                        </span>
-                      )}
-                      {o.prop.grayLine && (
-                        <span
-                          className={`text-[11px] font-ui px-1.5 py-0.5 rounded whitespace-nowrap ${
-                            o.prop.grayLine.active
-                              ? 'bg-amber-400/20 text-amber-300'
-                              : 'bg-amber-400/10 text-amber-200/80'
-                          }`}
-                        >
-                          🌅 {o.prop.grayLine.label}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  <div className="mt-2 flex items-start gap-2 flex-wrap text-sm">
+                    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap ${ev.text}`}>
+                      <span className={`w-2.5 h-2.5 rounded-full ${ev.dot}`} />
+                      {o.evidence.label}
+                    </span>
+                    <span className="text-dark-300 min-w-0">{o.evidence.detail}</span>
+                    {o.prop.grayLine && (
+                      <span
+                        className={`text-xs font-ui px-1.5 py-0.5 rounded whitespace-nowrap ${
+                          o.prop.grayLine.active
+                            ? 'bg-amber-400/20 text-amber-300'
+                            : 'bg-amber-400/10 text-amber-200/80'
+                        }`}
+                      >
+                        🌅 {o.prop.grayLine.label}
+                      </span>
+                    )}
+                  </div>
                 </button>
               );
             })

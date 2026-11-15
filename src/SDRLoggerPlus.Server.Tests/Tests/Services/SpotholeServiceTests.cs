@@ -105,4 +105,60 @@ public class SpotholeServiceTests
 
         cursor.Should().Be(1781222727.633025);
     }
+
+    // ── nulls (Spothole sends "field": null for unknowns) ───────
+
+    /// <summary>
+    /// A null number used to throw out of JsonElement.TryGetDouble and abort the
+    /// whole poll — seen in the field as "requires an element of type 'Number',
+    /// but the target element has type 'Null'", dropping the startup backlog.
+    /// </summary>
+    [Fact]
+    public void MapSpot_NullFreq_ReturnsNullWithoutThrowing()
+    {
+        var act = () => SpotholeService.MapSpot(Parse("""{ "dx_call": "VE2ACP", "freq": null }"""));
+        act.Should().NotThrow();
+        act().Should().BeNull();
+    }
+
+    [Fact]
+    public void MapSpot_NullTimeAndDxcc_StillMaps()
+    {
+        var spot = SpotholeService.MapSpot(Parse(
+            """{ "dx_call": "VE2ACP", "freq": 28028000, "time": null, "dx_dxcc_id": null, "dx_country": "Canada" }"""));
+
+        spot.Should().NotBeNull();
+        spot!.Frequency.Should().Be(28028);
+        spot.Dxcc.Should().BeNull();
+        spot.Timestamp.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public void MapSpot_CarriesStationPositions_PreciseOnlyWhenNotCountryCentroid()
+    {
+        var spot = SpotholeService.MapSpot(Parse("""
+            { "dx_call": "DL1ABC", "freq": 28025000,
+              "de_call": "W8XX", "de_latitude": 40.1, "de_longitude": -83.0, "de_location_source": "HOME QTH",
+              "dx_latitude": 51.0, "dx_longitude": 10.0, "dx_location_source": "DXCC" }
+            """))!;
+
+        spot.SpotterLocation.Should().Be(new StationLocation(40.1, -83.0, true));
+        spot.DxLocation.Should().Be(new StationLocation(51.0, 10.0, false));
+    }
+
+    [Fact]
+    public void MapSpot_NullPosition_GivesNoLocation()
+    {
+        var spot = SpotholeService.MapSpot(Parse(
+            """{ "dx_call": "DL1ABC", "freq": 28025000, "de_latitude": null, "de_longitude": -83.0 }"""))!;
+        spot.SpotterLocation.Should().BeNull();
+    }
+
+    [Fact]
+    public void Cursor_NullReceivedTime_KeepsCursor()
+    {
+        var act = () => SpotholeService.AdvanceCursor(42.0, Parse("""{ "received_time": null }"""));
+        act.Should().NotThrow();
+        act().Should().Be(42.0);
+    }
 }

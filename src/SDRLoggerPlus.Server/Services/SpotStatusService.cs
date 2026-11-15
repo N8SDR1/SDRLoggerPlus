@@ -113,32 +113,38 @@ public class SpotStatusService : ISpotStatusService, IHostedService
         if (!_cacheReady.Task.IsCompleted)
             return null;
 
-        if (string.IsNullOrEmpty(country))
+        // Every name the spot's entity goes by. Spot feeds spell countries their own
+        // way (Spothole sends "United States of America" where the log and cty.dat
+        // say "United States"), so a feed name alone made every US spot a "new
+        // DXCC". The callsign's cty.dat entity is the name the worked cache is
+        // also indexed under, so it's checked alongside the feed's name.
+        var names = new[] { country, CtyService.GetCountryFromCallsign(dxCall).Country }
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Select(n => NormalizeCountryName(n!))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (names.Length == 0)
             return null;
 
         var band = BandHelper.GetBand((long)(frequencyKhz * 1000));
         if (band == "Unknown")
             return null;
 
-        var normalizedCountry = NormalizeCountryName(country);
-
         lock (_cacheLock)
         {
-            // New DXCC - never worked this country/entity
-            if (!_workedCountries.Contains(normalizedCountry))
+            // New DXCC - never worked this country/entity under any of its names
+            if (!names.Any(_workedCountries.Contains))
                 return "newDxcc";
 
             // New Band - worked this country but not on this band
-            var countryBandKey = $"{normalizedCountry}:{band}";
-            if (!_workedCountryBands.Contains(countryBandKey))
+            if (!names.Any(n => _workedCountryBands.Contains($"{n}:{band}")))
                 return "newBand";
 
             // Worked - country+band+mode match (already worked this entity on this band+mode)
             if (mode != null)
             {
                 var normalizedMode = NormalizeMode(mode);
-                var countryBandModeKey = $"{normalizedCountry}:{band}:{normalizedMode}";
-                if (_workedCountryBandModes.Contains(countryBandModeKey))
+                if (names.Any(n => _workedCountryBandModes.Contains($"{n}:{band}:{normalizedMode}")))
                     return "worked";
             }
         }

@@ -14,10 +14,8 @@ public class RbnHeardMeControllerTests
     {
         public IReadOnlyList<RbnSpot> Spots = Array.Empty<RbnSpot>();
         public IReadOnlyList<RbnSpot> GetRecentSpots(int minutes = 5) => Spots;
-        public Task<(string? Grid, double? Lat, double? Lon, string? Country)> LookupSkimmerLocationAsync(string callsign)
-            => Task.FromResult(callsign == "W3LPL"
-                ? ((string?)null, (double?)39.0, (double?)-77.0, (string?)null)
-                : ((string?)null, (double?)null, (double?)null, (string?)null));
+        public Task<StationLocation?> LookupStationLocationAsync(string callsign)
+            => Task.FromResult(callsign == "W3LPL" ? new StationLocation(39.0, -77.0, true) : null);
 
         public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

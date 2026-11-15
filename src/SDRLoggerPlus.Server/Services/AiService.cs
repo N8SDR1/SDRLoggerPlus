@@ -36,10 +36,7 @@ public class AiService : IAiService
         var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
         var aiSettings = settings.Ai;
 
-        if (RequiresApiKey(aiSettings) && string.IsNullOrEmpty(aiSettings.ApiKey))
-        {
-            throw new InvalidOperationException("AI API key not configured");
-        }
+        EnsureConfigured(aiSettings);
 
         // Gather context data
         var previousQsos = await GetPreviousQsosAsync(request.Callsign);
@@ -77,10 +74,7 @@ public class AiService : IAiService
         var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
         var aiSettings = settings.Ai;
 
-        if (RequiresApiKey(aiSettings) && string.IsNullOrEmpty(aiSettings.ApiKey))
-        {
-            throw new InvalidOperationException("AI API key not configured");
-        }
+        EnsureConfigured(aiSettings);
 
         // Gather context for this callsign
         var previousQsos = await GetPreviousQsosAsync(request.Callsign);
@@ -111,10 +105,7 @@ public class AiService : IAiService
         var settings = await _settingsRepository.GetAsync() ?? new UserSettings();
         var aiSettings = settings.Ai;
 
-        if (RequiresApiKey(aiSettings) && string.IsNullOrEmpty(aiSettings.ApiKey))
-        {
-            throw new InvalidOperationException("AI API key not configured");
-        }
+        EnsureConfigured(aiSettings);
 
         var previousQsos = await GetPreviousQsosAsync(request.Callsign);
         var qrzProfile = aiSettings.IncludeQrzProfile
@@ -140,24 +131,57 @@ public class AiService : IAiService
     {
         try
         {
-            var testPrompt = "Reply with 'OK' if you can read this.";
-            var response = await CallLlmAsync(
-                new AiSettings
-                {
-                    Provider = request.Provider,
-                    ApiKey = request.ApiKey,
-                    Model = request.Model,
-                    BaseUrl = request.BaseUrl
-                },
-                testPrompt
-            );
+            var settings = new AiSettings
+            {
+                Provider = request.Provider,
+                ApiKey = request.ApiKey,
+                Model = request.Model,
+                BaseUrl = request.BaseUrl
+            };
+            EnsureConfigured(settings);
+            await CallLlmAsync(settings, "Reply with 'OK' if you can read this.");
 
             return new TestApiKeyResponse(true);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "API key test failed");
-            return new TestApiKeyResponse(false, ex.Message);
+            return new TestApiKeyResponse(false, DescribeFailure(ex, request.Provider));
+        }
+    }
+
+    public async Task<ListAiModelsResponse> ListModelsAsync(ListAiModelsRequest request, CancellationToken cancellationToken = default)
+    {
+        var settings = new AiSettings
+        {
+            Provider = request.Provider,
+            ApiKey = request.ApiKey,
+            BaseUrl = request.BaseUrl
+        };
+
+        if (RequiresApiKey(settings) && string.IsNullOrWhiteSpace(settings.ApiKey))
+            return new ListAiModelsResponse(false, new(), "Enter your API key first.");
+
+        try
+        {
+            var models = IsAnthropic(settings)
+                ? await ListAnthropicModelsAsync(settings, cancellationToken)
+                : await ListOpenAiCompatibleModelsAsync(settings, cancellationToken);
+
+            if (models.Count == 0)
+            {
+                var hint = IsProvider(settings, "ollama")
+                    ? "Ollama is running but has no models yet. Open a terminal and run: ollama pull llama3.2"
+                    : "The provider returned no chat models for this key.";
+                return new ListAiModelsResponse(false, models, hint);
+            }
+
+            return new ListAiModelsResponse(true, models);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Listing AI models failed for {Provider}", request.Provider);
+            return new ListAiModelsResponse(false, new(), DescribeFailure(ex, request.Provider));
         }
     }
 
@@ -284,7 +308,7 @@ public class AiService : IAiService
         return sb.ToString();
     }
 
-    private List<object> BuildChatMessages(
+    private List<LlmMessage> BuildChatMessages(
         string myCallsign,
         string theirCallsign,
         List<PreviousQsoSummary> previousQsos,
@@ -292,7 +316,7 @@ public class AiService : IAiService
         string question,
         List<ChatMessage>? conversationHistory)
     {
-        var messages = new List<object>();
+        var messages = new List<LlmMessage>();
 
         // System message with context
         var systemContent = new StringBuilder();
@@ -319,118 +343,210 @@ public class AiService : IAiService
             }
         }
 
-        messages.Add(new { role = "system", content = systemContent.ToString() });
+        messages.Add(new LlmMessage("system", systemContent.ToString()));
 
         // Add conversation history
         if (conversationHistory != null)
         {
+            // Drop blanks (an aborted reply leaves an empty assistant turn, which
+            // Anthropic rejects) and anything that isn't a plain user/assistant turn.
             foreach (var msg in conversationHistory)
             {
-                messages.Add(new { role = msg.Role, content = msg.Content });
+                if (string.IsNullOrWhiteSpace(msg.Content)) continue;
+                var role = string.Equals(msg.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "assistant" : "user";
+                messages.Add(new LlmMessage(role, msg.Content));
             }
         }
 
         // Add current question
-        messages.Add(new { role = "user", content = question });
+        messages.Add(new LlmMessage("user", question));
 
         return messages;
     }
 
-    private async Task<string> CallLlmAsync(AiSettings settings, string prompt)
-    {
-        var messages = new List<object>
-        {
-            new { role = "user", content = prompt }
-        };
+    // ── LLM transport ────────────────────────────────────────────────────────
+    // Two wire formats cover every supported provider: Anthropic's native
+    // Messages API, and OpenAI chat-completions, which OpenAI, Google Gemini,
+    // Groq, OpenRouter, Ollama, LM Studio and any "custom" server all speak.
+    //
+    // Model names are never hard-coded here or in the UI: providers retire them
+    // every few months, which is what broke every AI feature last time. The
+    // Settings screen asks the provider for its live list (ListModelsAsync).
 
-        return await CallLlmWithMessagesAsync(settings, messages);
+    private const string AnthropicApi = "https://api.anthropic.com/v1";
+    private const string AnthropicVersion = "2023-06-01";
+    private const int AnthropicMaxTokens = 1024;
+
+    // Reasoning models (GPT-5 / o-series, Gemini 2.5, gpt-oss, Qwen3, DeepSeek-R1…)
+    // spend part of this budget thinking before they write anything; at 1024 they
+    // can finish with an empty reply. 4096 leaves room for both.
+    private const int OpenAiMaxTokens = 4096;
+
+    private record LlmMessage(
+        [property: JsonPropertyName("role")] string Role,
+        [property: JsonPropertyName("content")] string Content);
+
+    private Task<string> CallLlmAsync(AiSettings settings, string prompt) =>
+        CallLlmWithMessagesAsync(settings, new List<LlmMessage> { new("user", prompt) });
+
+    private async Task<string> CallLlmWithMessagesAsync(
+        AiSettings settings, List<LlmMessage> messages, CancellationToken ct = default)
+    {
+        using var httpRequest = BuildChatRequest(settings, messages, stream: false);
+        using var response = await _httpClient.SendAsync(httpRequest, ct);
+        await EnsureSuccessOrThrowAsync(response, ct);
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return IsAnthropic(settings) ? ReadAnthropicReply(body) : ReadOpenAiReply(body);
     }
 
-    private async Task<string> CallLlmWithMessagesAsync(AiSettings settings, List<object> messages)
+    private HttpRequestMessage BuildChatRequest(AiSettings settings, List<LlmMessage> messages, bool stream)
     {
-        // Anthropic uses its native Messages API; every other preset speaks the
-        // OpenAI chat-completions format (OpenAI, Groq, Gemini, OpenRouter, Ollama…).
+        var body = new Dictionary<string, object?> { ["model"] = settings.Model };
+        string url;
+
         if (IsAnthropic(settings))
         {
-            return await CallAnthropicAsync(settings, messages);
+            // Anthropic takes the system prompt as a top-level field; a "system"
+            // role inside messages is rejected with a 400.
+            var system = string.Join("\n\n", messages.Where(m => m.Role == "system").Select(m => m.Content));
+            body["max_tokens"] = AnthropicMaxTokens;
+            body["messages"] = messages.Where(m => m.Role != "system").ToList();
+            if (system.Length > 0) body["system"] = system;
+            url = AnthropicApi + "/messages";
         }
-        return await CallOpenAiAsync(settings, messages);
-    }
-
-    private async Task<string> CallAnthropicAsync(AiSettings settings, List<object> messages)
-    {
-        var request = new
+        else
         {
-            model = settings.Model,
-            max_tokens = 1024,
-            messages = messages
-        };
+            var baseUrl = ResolveOpenAiBaseUrl(settings);
+            body["messages"] = messages;
+            // OpenAI's own API wants max_completion_tokens (its reasoning models
+            // refuse max_tokens); every other OpenAI-compatible server takes max_tokens.
+            body[IsOpenAiHost(baseUrl) ? "max_completion_tokens" : "max_tokens"] = OpenAiMaxTokens;
+            url = baseUrl + "/chat/completions";
+        }
 
-        var json = JsonSerializer.Serialize(request);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        if (stream) body["stream"] = true;
 
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
-        httpRequest.Headers.Add("x-api-key", settings.ApiKey);
-        httpRequest.Headers.Add("anthropic-version", "2023-06-01");
-        httpRequest.Content = content;
-
-        var response = await _httpClient.SendAsync(httpRequest);
-        await EnsureSuccessOrThrowAsync(response);
-
-        var responseJson = await response.Content.ReadAsStringAsync();
-        var responseObj = JsonSerializer.Deserialize<AnthropicResponse>(responseJson);
-
-        return responseObj?.Content?.FirstOrDefault()?.Text ?? "No response from AI";
-    }
-
-    private async Task<string> CallOpenAiAsync(AiSettings settings, List<object> messages)
-    {
-        var request = new
+        var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            model = settings.Model,
-            messages = messages,
-            max_completion_tokens = 1024
+            Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
         };
-
-        var json = JsonSerializer.Serialize(request);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ResolveOpenAiBaseUrl(settings) + "/chat/completions");
-        if (!string.IsNullOrEmpty(settings.ApiKey))
-            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
-        httpRequest.Content = content;
-
-        var response = await _httpClient.SendAsync(httpRequest);
-        await EnsureSuccessOrThrowAsync(response);
-
-        var responseJson = await response.Content.ReadAsStringAsync();
-        var responseObj = JsonSerializer.Deserialize<OpenAiResponse>(responseJson);
-
-        return responseObj?.Choices?.FirstOrDefault()?.Message?.Content ?? "No response from AI";
+        AddAuth(request, settings);
+        return request;
     }
 
-    private static bool IsAnthropic(AiSettings s) =>
-        string.Equals(s.Provider, "anthropic", StringComparison.OrdinalIgnoreCase);
+    private static void AddAuth(HttpRequestMessage request, AiSettings settings)
+    {
+        if (IsAnthropic(settings))
+        {
+            request.Headers.Add("x-api-key", settings.ApiKey ?? "");
+            request.Headers.Add("anthropic-version", AnthropicVersion);
+            return;
+        }
 
-    // Local providers (Ollama) don't need a key; everything else does.
+        if (!string.IsNullOrWhiteSpace(settings.ApiKey))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey.Trim());
+
+        if (IsProvider(settings, "openrouter"))
+            request.Headers.Add("X-Title", "SDRLogger+");
+    }
+
+    private static string ReadAnthropicReply(string body)
+    {
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        var text = new StringBuilder();
+        if (root.TryGetProperty("content", out var blocks) && blocks.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var block in blocks.EnumerateArray())
+            {
+                if (block.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String)
+                    text.Append(t.GetString());
+            }
+        }
+
+        if (text.Length > 0) return text.ToString();
+
+        var stop = root.TryGetProperty("stop_reason", out var sr) ? sr.GetString() : null;
+        throw new AiProviderException(stop == "max_tokens"
+            ? "The model ran out of room before answering. Pick a different model."
+            : "The model returned an empty reply.");
+    }
+
+    private static string ReadOpenAiReply(string body)
+    {
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        if (root.TryGetProperty("choices", out var choices) &&
+            choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+        {
+            var choice = choices[0];
+            string? content = null;
+            if (choice.TryGetProperty("message", out var msg) &&
+                msg.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
+            {
+                content = StripThinking(c.GetString());
+            }
+
+            if (!string.IsNullOrWhiteSpace(content)) return content;
+
+            var finish = choice.TryGetProperty("finish_reason", out var fr) && fr.ValueKind == JsonValueKind.String
+                ? fr.GetString() : null;
+            if (finish == "length")
+                throw new AiProviderException(
+                    "The model used its whole reply budget thinking and wrote nothing. Pick a smaller or non-reasoning model.");
+        }
+
+        var error = TryExtractErrorMessage(body);
+        throw new AiProviderException(error ?? "The model returned an empty reply.");
+    }
+
+    // Local reasoning models (DeepSeek-R1, Qwen3 on older Ollama builds) put their
+    // chain of thought inline as <think>…</think>; the operator only wants the answer.
+    private static string? StripThinking(string? text) =>
+        text == null ? null : System.Text.RegularExpressions.Regex
+            .Replace(text, @"<think>[\s\S]*?</think>", "").Trim();
+
+    private static bool IsAnthropic(AiSettings s) => IsProvider(s, "anthropic");
+
+    private static bool IsProvider(AiSettings s, string provider) =>
+        string.Equals(s.Provider, provider, StringComparison.OrdinalIgnoreCase);
+
+    // Cloud providers need a key. Local servers (Ollama, LM Studio via "custom")
+    // usually don't, so for those the key is optional.
     private static bool RequiresApiKey(AiSettings s) =>
-        !string.Equals(s.Provider, "ollama", StringComparison.OrdinalIgnoreCase);
+        (s.Provider?.ToLowerInvariant()) is "anthropic" or "openai" or "gemini" or "groq" or "openrouter";
+
+    private static void EnsureConfigured(AiSettings s)
+    {
+        if (RequiresApiKey(s) && string.IsNullOrWhiteSpace(s.ApiKey))
+            throw new InvalidOperationException("AI API key not configured. Add it in Settings → Chat AI.");
+        if (string.IsNullOrWhiteSpace(s.Model))
+            throw new InvalidOperationException("No AI model selected. Choose one in Settings → Chat AI.");
+    }
 
     // The OpenAI-compatible base URL for this provider. An explicit BaseUrl wins;
     // otherwise fall back to the preset's known default.
     private static string ResolveOpenAiBaseUrl(AiSettings s)
     {
         if (!string.IsNullOrWhiteSpace(s.BaseUrl))
-            return s.BaseUrl.TrimEnd('/');
+            return s.BaseUrl.Trim().TrimEnd('/');
 
         return (s.Provider?.ToLowerInvariant()) switch
         {
+            "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai",
             "groq" => "https://api.groq.com/openai/v1",
             "openrouter" => "https://openrouter.ai/api/v1",
             "ollama" => "http://localhost:11434/v1",
             _ => "https://api.openai.com/v1",
         };
     }
+
+    private static bool IsOpenAiHost(string baseUrl) =>
+        Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) &&
+        uri.Host.Equals("api.openai.com", StringComparison.OrdinalIgnoreCase);
 
     // EnsureSuccessStatusCode() throws away the response body, so a bad model
     // name or parameter surfaces only as "400 Bad Request". Read the provider's
@@ -448,9 +564,18 @@ public class AiService : IAiService
         if (string.IsNullOrWhiteSpace(detail) && !string.IsNullOrWhiteSpace(body))
             detail = body.Length > 300 ? body[..300] + "…" : body;
 
-        var suffix = string.IsNullOrWhiteSpace(detail) ? "" : $" — {detail!.Trim()}";
-        throw new HttpRequestException(
-            $"AI provider returned {(int)response.StatusCode} {response.ReasonPhrase}{suffix}");
+        var status = (int)response.StatusCode;
+        var lead = status switch
+        {
+            401 or 403 => "The provider rejected the API key",
+            404 => "The provider doesn't recognise that model or address. Refresh the model list in Settings → Chat AI",
+            429 => "Rate limit or quota reached. Free tiers allow only so many requests per minute/day",
+            >= 500 => "The provider is having trouble right now. Try again shortly",
+            _ => "The provider refused the request",
+        };
+
+        var suffix = string.IsNullOrWhiteSpace(detail) ? "" : $": {detail!.Trim()}";
+        throw new AiProviderException($"{lead} ({status}){suffix}");
     }
 
     // Pull the human message from a provider error body. Handles the common
@@ -475,143 +600,216 @@ public class AiService : IAiService
                 if (err.ValueKind == JsonValueKind.String)
                     return err.GetString();
             }
-            if (root.TryGetProperty("message", out var rootMsg))
+            if (root.TryGetProperty("message", out var rootMsg) && rootMsg.ValueKind == JsonValueKind.String)
                 return rootMsg.GetString();
         }
         catch (Exception) { }
         return null;
     }
 
-    private IAsyncEnumerable<string> StreamLlmAsync(
-        AiSettings settings, List<object> messages, CancellationToken cancellationToken)
+    /// <summary>Turn any failure into one sentence the operator can act on.</summary>
+    private static string DescribeFailure(Exception ex, string? provider)
     {
-        if (IsAnthropic(settings))
-            return StreamAnthropicAsync(settings, messages, cancellationToken);
-        return StreamOpenAiAsync(settings, messages, cancellationToken);
+        var isOllama = string.Equals(provider, "ollama", StringComparison.OrdinalIgnoreCase);
+        return ex switch
+        {
+            AiProviderException or InvalidOperationException => ex.Message,
+            TaskCanceledException or TimeoutException =>
+                "The provider took too long to answer (over 60 seconds).",
+            HttpRequestException { StatusCode: null } when isOllama =>
+                "Can't reach Ollama on this PC. Install it from ollama.com and make sure it is running.",
+            HttpRequestException { StatusCode: null } =>
+                $"Can't reach the provider. Check your internet connection and the API Base URL ({ex.Message}).",
+            JsonException => "The provider sent back something that isn't a valid reply. Check the API Base URL.",
+            _ => ex.Message,
+        };
     }
 
-    private async IAsyncEnumerable<string> StreamAnthropicAsync(
-        AiSettings settings, List<object> messages,
+    // ── Live model lists ─────────────────────────────────────────────────────
+
+    private async Task<List<AiModelInfo>> ListAnthropicModelsAsync(AiSettings settings, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, AnthropicApi + "/models?limit=1000");
+        AddAuth(request, settings);
+        using var response = await _httpClient.SendAsync(request, ct);
+        await EnsureSuccessOrThrowAsync(response, ct);
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var models = new List<AiModelInfo>();
+        if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+        {
+            // Anthropic lists newest first — keep that order.
+            foreach (var m in data.EnumerateArray())
+            {
+                var id = m.TryGetProperty("id", out var i) ? i.GetString() : null;
+                if (string.IsNullOrWhiteSpace(id)) continue;
+                var name = m.TryGetProperty("display_name", out var n) ? n.GetString() : null;
+                models.Add(new AiModelInfo(id, name));
+            }
+        }
+        return models;
+    }
+
+    // Model ids that are not text-chat models (embeddings, speech, images, video,
+    // moderation…). Providers mix these into /models, and choosing one fails.
+    private static readonly System.Text.RegularExpressions.Regex NonChatModel = new(
+        @"embed|whisper|tts|transcri|speech|audio|realtime|dall-e|image|imagen|veo|sora|moderation|guard|aqa|davinci|babbage|computer-use|search-preview|deep-research",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private async Task<List<AiModelInfo>> ListOpenAiCompatibleModelsAsync(AiSettings settings, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, ResolveOpenAiBaseUrl(settings) + "/models");
+        AddAuth(request, settings);
+        using var response = await _httpClient.SendAsync(request, ct);
+        await EnsureSuccessOrThrowAsync(response, ct);
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var isOpenRouter = IsProvider(settings, "openrouter");
+        var models = new List<AiModelInfo>();
+
+        if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var m in data.EnumerateArray())
+            {
+                var id = m.TryGetProperty("id", out var i) ? i.GetString() : null;
+                if (string.IsNullOrWhiteSpace(id)) continue;
+
+                // Gemini returns "models/gemini-2.5-flash"; chat calls take the bare name.
+                if (id.StartsWith("models/", StringComparison.Ordinal)) id = id["models/".Length..];
+
+                if (NonChatModel.IsMatch(id)) continue;
+
+                // Groq flags retired models as inactive.
+                if (m.TryGetProperty("active", out var active) && active.ValueKind == JsonValueKind.False) continue;
+
+                // OpenRouter: skip models that can't produce text.
+                if (m.TryGetProperty("architecture", out var arch) &&
+                    arch.TryGetProperty("output_modalities", out var outs) && outs.ValueKind == JsonValueKind.Array &&
+                    !outs.EnumerateArray().Any(o => o.GetString() == "text"))
+                    continue;
+
+                var name = m.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
+                var free = isOpenRouter && (id.EndsWith(":free", StringComparison.Ordinal) || IsZeroPriced(m));
+                models.Add(new AiModelInfo(id, name, free));
+            }
+        }
+
+        return models
+            .DistinctBy(m => m.Id)
+            .OrderByDescending(m => m.Free)
+            .ThenBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool IsZeroPriced(JsonElement model)
+    {
+        if (!model.TryGetProperty("pricing", out var p) || p.ValueKind != JsonValueKind.Object) return false;
+        static bool Zero(JsonElement pricing, string key) =>
+            pricing.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String &&
+            decimal.TryParse(v.GetString(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var d) && d == 0m;
+        return Zero(p, "prompt") && Zero(p, "completion");
+    }
+
+    // ── Streaming ────────────────────────────────────────────────────────────
+
+    private async IAsyncEnumerable<string> StreamLlmAsync(
+        AiSettings settings, List<LlmMessage> messages,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var requestBody = new
-        {
-            model = settings.Model,
-            max_tokens = 1024,
-            messages = messages,
-            stream = true
-        };
-
-        var json = JsonSerializer.Serialize(requestBody);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
-        httpRequest.Headers.Add("x-api-key", settings.ApiKey);
-        httpRequest.Headers.Add("anthropic-version", "2023-06-01");
-        httpRequest.Content = content;
-
+        using var httpRequest = BuildChatRequest(settings, messages, stream: true);
         using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         await EnsureSuccessOrThrowAsync(response, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);
 
+        var anthropic = IsAnthropic(settings);
+        var produced = false;
+        string? finish = null;
+
         string? line;
         while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
         {
-            if (cancellationToken.IsCancellationRequested) yield break;
-            if (line.Length == 0 || !line.StartsWith("data: "))
-                continue;
+            if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
+            var data = line[5..].Trim();
+            if (data.Length == 0) continue;
+            if (data == "[DONE]") break;
 
-            var data = line.Substring(6);
-            string? token = null;
-            var shouldStop = false;
-
-            try
+            var chunk = anthropic ? ParseAnthropicChunk(data) : ParseOpenAiChunk(data);
+            if (chunk.Error != null) throw new AiProviderException(chunk.Error);
+            if (chunk.Finish != null) finish = chunk.Finish;
+            if (!string.IsNullOrEmpty(chunk.Token))
             {
-                using var doc = JsonDocument.Parse(data);
-                var type = doc.RootElement.GetProperty("type").GetString();
-
-                if (type == "content_block_delta")
-                {
-                    token = doc.RootElement.GetProperty("delta").GetProperty("text").GetString();
-                }
-                else if (type == "message_stop")
-                {
-                    shouldStop = true;
-                }
+                produced = true;
+                yield return chunk.Token;
             }
-            catch (JsonException)
-            {
-                // Skip malformed JSON lines
-            }
-
-            if (shouldStop) yield break;
-            if (!string.IsNullOrEmpty(token))
-                yield return token;
+            if (chunk.Stop) break;
         }
+
+        if (!produced)
+            throw new AiProviderException(finish is "length" or "max_tokens"
+                ? "The model used its whole reply budget thinking and wrote nothing. Pick a smaller or non-reasoning model."
+                : "The model returned an empty reply.");
     }
 
-    private async IAsyncEnumerable<string> StreamOpenAiAsync(
-        AiSettings settings, List<object> messages,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+    private readonly record struct StreamChunk(string? Token, string? Finish, string? Error, bool Stop);
+
+    private static StreamChunk ParseAnthropicChunk(string data)
     {
-        var requestBody = new
+        try
         {
-            model = settings.Model,
-            messages = messages,
-            max_completion_tokens = 1024,
-            stream = true
-        };
-
-        var json = JsonSerializer.Serialize(requestBody);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ResolveOpenAiBaseUrl(settings) + "/chat/completions");
-        if (!string.IsNullOrEmpty(settings.ApiKey))
-            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
-        httpRequest.Content = content;
-
-        using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        await EnsureSuccessOrThrowAsync(response, cancellationToken);
-
-        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var reader = new StreamReader(stream);
-
-        string? line;
-        while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
-        {
-            if (cancellationToken.IsCancellationRequested) yield break;
-            if (line.Length == 0 || !line.StartsWith("data: "))
-                continue;
-
-            var data = line.Substring(6);
-            if (data == "[DONE]")
-                yield break;
-
-            string? token = null;
-
-            try
+            using var doc = JsonDocument.Parse(data);
+            var root = doc.RootElement;
+            var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+            switch (type)
             {
-                using var doc = JsonDocument.Parse(data);
-                var choices = doc.RootElement.GetProperty("choices");
-                if (choices.GetArrayLength() > 0)
-                {
-                    var delta = choices[0].GetProperty("delta");
-                    if (delta.TryGetProperty("content", out var contentProp))
-                    {
-                        token = contentProp.GetString();
-                    }
-                }
+                case "content_block_delta":
+                    var token = root.TryGetProperty("delta", out var d) && d.TryGetProperty("text", out var tx)
+                        ? tx.GetString() : null;
+                    return new StreamChunk(token, null, null, false);
+                case "message_delta":
+                    var stop = root.TryGetProperty("delta", out var md) && md.TryGetProperty("stop_reason", out var s)
+                        ? s.GetString() : null;
+                    return new StreamChunk(null, stop, null, false);
+                case "message_stop":
+                    return new StreamChunk(null, null, null, true);
+                case "error":
+                    return new StreamChunk(null, null, TryExtractErrorMessage(data) ?? "The provider reported an error.", true);
             }
-            catch (JsonException)
-            {
-                // Skip malformed JSON lines
-            }
-
-            if (!string.IsNullOrEmpty(token))
-                yield return token;
         }
+        catch (JsonException) { }
+        return default;
+    }
+
+    private static StreamChunk ParseOpenAiChunk(string data)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(data);
+            var root = doc.RootElement;
+
+            // OpenRouter and some local servers report mid-stream failures as an
+            // error object instead of an HTTP status.
+            if (root.TryGetProperty("error", out _))
+                return new StreamChunk(null, null, TryExtractErrorMessage(data) ?? "The provider reported an error.", true);
+
+            if (!root.TryGetProperty("choices", out var choices) ||
+                choices.ValueKind != JsonValueKind.Array || choices.GetArrayLength() == 0)
+                return default;
+
+            var choice = choices[0];
+            string? token = null;
+            if (choice.TryGetProperty("delta", out var delta) &&
+                delta.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
+                token = c.GetString();
+
+            var finish = choice.TryGetProperty("finish_reason", out var fr) && fr.ValueKind == JsonValueKind.String
+                ? fr.GetString() : null;
+            return new StreamChunk(token, finish, null, false);
+        }
+        catch (JsonException) { }
+        return default;
     }
 
     private List<string> ParseTalkPoints(string response)
@@ -641,36 +839,5 @@ public class AiService : IAiService
         }
 
         return talkPoints;
-    }
-
-    // Response models for deserialization
-    private class AnthropicResponse
-    {
-        [JsonPropertyName("content")]
-        public List<AnthropicContent>? Content { get; set; }
-    }
-
-    private class AnthropicContent
-    {
-        [JsonPropertyName("text")]
-        public string? Text { get; set; }
-    }
-
-    private class OpenAiResponse
-    {
-        [JsonPropertyName("choices")]
-        public List<OpenAiChoice>? Choices { get; set; }
-    }
-
-    private class OpenAiChoice
-    {
-        [JsonPropertyName("message")]
-        public OpenAiMessage? Message { get; set; }
-    }
-
-    private class OpenAiMessage
-    {
-        [JsonPropertyName("content")]
-        public string? Content { get; set; }
     }
 }

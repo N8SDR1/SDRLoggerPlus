@@ -121,12 +121,10 @@ export interface VoiceSettings {
 
 export interface DxCoachSettings {
   /**
-   * Minimum predicted path reliability (0–99%) an opportunity must clear to
-   * appear in the DX Coach. Spots with no propagation data (no QTH set, or no
-   * DX location resolved) are always shown — they can't be fairly judged.
-   * 0 = show every opportunity.
+   * Hide opportunities whose only evidence is a forecast saying the path is
+   * unlikely. Spots heard near you (or that heard you) are never hidden.
    */
-  minReliability: number;
+  hideUnlikely: boolean;
   /** Speak newly-arriving high-value opportunities (new DXCC / new zone) aloud. */
   voice: boolean;
   /** Coach DXCC opportunities (new entity / new band-slot). */
@@ -456,7 +454,7 @@ export interface BackupSettings {
   liveMirrorPath?: string | null; // S6: continuously-current ADIF copy on a (USB) drive
 }
 
-export type AiProvider = 'anthropic' | 'openai' | 'groq' | 'openrouter' | 'ollama' | 'custom';
+export type AiProvider = 'anthropic' | 'openai' | 'gemini' | 'groq' | 'openrouter' | 'ollama' | 'custom';
 
 export interface AiSettings {
   provider: AiProvider;
@@ -650,7 +648,7 @@ const defaultSettings: Settings = {
     followRigMode: false,
   },
   dxCoach: {
-    minReliability: 30,
+    hideUnlikely: false,
     voice: false,
     showDxcc: true,
     showWaz: true,
@@ -807,7 +805,7 @@ const defaultSettings: Settings = {
   ai: {
     provider: 'anthropic',
     apiKey: '',
-    model: 'claude-sonnet-4-5-20250929',
+    model: '', // picked from the provider's live model list in Settings → Chat AI
     baseUrl: '',
     autoGenerateTalkPoints: true,
     includeQrzProfile: true,

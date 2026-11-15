@@ -105,6 +105,36 @@ public class AiServiceTests
         return new HttpClient(handler.Object);
     }
 
+    /// <summary>
+    /// Records each request's URL and JSON body as it is sent (the service disposes
+    /// the request afterwards, so the body can't be read back later).
+    /// </summary>
+    private static HttpClient CreateBodyCapturingHttpClient(
+        HttpStatusCode statusCode, string responseBody, List<(string Url, string Body, HttpRequestMessage Request)> captured)
+    {
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) =>
+                captured.Add((req.RequestUri!.ToString(), req.Content?.ReadAsStringAsync().Result ?? "", req)))
+            .ReturnsAsync(() => new HttpResponseMessage
+            {
+                StatusCode = statusCode,
+                Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
+            });
+
+        return new HttpClient(handler.Object);
+    }
+
+    private void SetupNoQrz()
+    {
+        _qrzServiceMock.Setup(s => s.LookupCallsignAsync(It.IsAny<string>())).ReturnsAsync((QrzCallsignInfo?)null);
+        _qrzServiceMock.Setup(s => s.GetBiographyAsync(It.IsAny<string>())).ReturnsAsync((string?)null);
+    }
+
     #region GenerateTalkPointsAsync
 
     [Fact]
@@ -346,8 +376,12 @@ public class AiServiceTests
     [Fact]
     public async Task TestApiKeyAsync_UnrecognisedProvider_UsesOpenAiCompatiblePath()
     {
+        var openAiResponse = JsonSerializer.Serialize(new
+        {
+            choices = new[] { new { message = new { content = "OK" } } }
+        });
         var captured = new List<HttpRequestMessage>();
-        var httpClient = CreateCapturingHttpClient(HttpStatusCode.OK, "{}", captured);
+        var httpClient = CreateCapturingHttpClient(HttpStatusCode.OK, openAiResponse, captured);
         var service = CreateService(httpClient);
 
         var result = await service.TestApiKeyAsync(new TestApiKeyRequest("unrecognised", "key", "model"));
@@ -407,6 +441,227 @@ public class AiServiceTests
         result.TalkPoints.Should().NotBeEmpty();
         captured.Should().ContainSingle();
         captured[0].RequestUri!.ToString().Should().StartWith("https://api.openai.com/v1");
+    }
+
+    #endregion
+
+    #region Wire format
+
+    /// <summary>
+    /// Anthropic rejects a "system" role inside messages with a 400, which broke
+    /// every Chat AI question on Claude. The prompt must go in the top-level field.
+    /// </summary>
+    [Fact]
+    public async Task ChatAsync_Anthropic_SendsSystemPromptAsTopLevelField()
+    {
+        SetupSettingsWithAi("anthropic", "key", "claude-test");
+        SetupEmptyQsoHistory();
+        SetupNoQrz();
+
+        var captured = new List<(string Url, string Body, HttpRequestMessage Request)>();
+        var reply = JsonSerializer.Serialize(new { content = new[] { new { type = "text", text = "Hi" } } });
+        var service = CreateService(CreateBodyCapturingHttpClient(HttpStatusCode.OK, reply, captured));
+
+        var history = new List<ChatMessage> { new("user", "Who?"), new("assistant", ""), new("assistant", "ARRL HQ") };
+        await service.ChatAsync(new ChatRequest("W1AW", "Grid?", history));
+
+        captured.Should().ContainSingle();
+        captured[0].Url.Should().Be("https://api.anthropic.com/v1/messages");
+        using var doc = JsonDocument.Parse(captured[0].Body);
+        doc.RootElement.GetProperty("system").GetString().Should().Contain("W1AW");
+        var roles = doc.RootElement.GetProperty("messages").EnumerateArray()
+            .Select(m => m.GetProperty("role").GetString()).ToList();
+        roles.Should().NotContain("system");
+        roles.Should().Equal("user", "assistant", "user"); // the blank assistant turn is dropped
+    }
+
+    [Fact]
+    public async Task ChatAsync_OpenAiCompatibleProvider_SendsMaxTokensToItsOwnEndpoint()
+    {
+        SetupSettingsWithAi("groq", "key", "some-model");
+        SetupEmptyQsoHistory();
+        SetupNoQrz();
+
+        var captured = new List<(string Url, string Body, HttpRequestMessage Request)>();
+        var reply = JsonSerializer.Serialize(new { choices = new[] { new { message = new { content = "Hi" } } } });
+        var service = CreateService(CreateBodyCapturingHttpClient(HttpStatusCode.OK, reply, captured));
+
+        await service.ChatAsync(new ChatRequest("W1AW", "Hello"));
+
+        captured[0].Url.Should().Be("https://api.groq.com/openai/v1/chat/completions");
+        using var doc = JsonDocument.Parse(captured[0].Body);
+        doc.RootElement.TryGetProperty("max_tokens", out _).Should().BeTrue();
+        doc.RootElement.TryGetProperty("max_completion_tokens", out _).Should().BeFalse();
+        doc.RootElement.GetProperty("messages")[0].GetProperty("role").GetString().Should().Be("system");
+    }
+
+    [Fact]
+    public async Task ChatAsync_OpenAi_SendsMaxCompletionTokens()
+    {
+        SetupSettingsWithAi("openai", "key", "some-model");
+        SetupEmptyQsoHistory();
+        SetupNoQrz();
+
+        var captured = new List<(string Url, string Body, HttpRequestMessage Request)>();
+        var reply = JsonSerializer.Serialize(new { choices = new[] { new { message = new { content = "Hi" } } } });
+        var service = CreateService(CreateBodyCapturingHttpClient(HttpStatusCode.OK, reply, captured));
+
+        await service.ChatAsync(new ChatRequest("W1AW", "Hello"));
+
+        using var doc = JsonDocument.Parse(captured[0].Body);
+        doc.RootElement.TryGetProperty("max_completion_tokens", out _).Should().BeTrue();
+        doc.RootElement.TryGetProperty("max_tokens", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GenerateTalkPointsAsync_Ollama_NeedsNoApiKey()
+    {
+        SetupSettingsWithAi("ollama", "", "llama3.2");
+        SetupEmptyQsoHistory();
+        SetupNoQrz();
+
+        var captured = new List<(string Url, string Body, HttpRequestMessage Request)>();
+        var reply = JsonSerializer.Serialize(new { choices = new[] { new { message = new { content = "<think>hmm</think>- Ask about the rig" } } } });
+        var service = CreateService(CreateBodyCapturingHttpClient(HttpStatusCode.OK, reply, captured));
+
+        var result = await service.GenerateTalkPointsAsync(new GenerateTalkPointsRequest("W1AW"));
+
+        captured[0].Url.Should().Be("http://localhost:11434/v1/chat/completions");
+        captured[0].Request.Headers.Authorization.Should().BeNull();
+        result.TalkPoints.Should().Equal("Ask about the rig");
+    }
+
+    [Fact]
+    public async Task GenerateTalkPointsAsync_NoModel_ThrowsInvalidOperation()
+    {
+        SetupSettingsWithAi("groq", "key", "");
+        var service = CreateService(CreateMockHttpClient(HttpStatusCode.OK, "{}"));
+
+        var act = () => service.GenerateTalkPointsAsync(new GenerateTalkPointsRequest("W1AW"));
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*model*");
+    }
+
+    [Fact]
+    public async Task ChatAsync_ReasoningModelOutOfBudget_ThrowsReadableError()
+    {
+        SetupSettingsWithAi("openai", "key", "reasoner");
+        SetupEmptyQsoHistory();
+        SetupNoQrz();
+
+        var reply = JsonSerializer.Serialize(new { choices = new[] { new { message = new { content = "" }, finish_reason = "length" } } });
+        var service = CreateService(CreateMockHttpClient(HttpStatusCode.OK, reply));
+
+        var act = () => service.ChatAsync(new ChatRequest("W1AW", "Hello"));
+
+        await act.Should().ThrowAsync<AiProviderException>().WithMessage("*budget*");
+    }
+
+    [Fact]
+    public async Task ChatAsync_RetiredModel_ReportsProviderMessage()
+    {
+        SetupSettingsWithAi("anthropic", "key", "claude-old");
+        SetupEmptyQsoHistory();
+        SetupNoQrz();
+
+        var body = """{"type":"error","error":{"type":"not_found_error","message":"model: claude-old"}}""";
+        var service = CreateService(CreateMockHttpClient(HttpStatusCode.NotFound, body));
+
+        var act = () => service.ChatAsync(new ChatRequest("W1AW", "Hello"));
+
+        await act.Should().ThrowAsync<AiProviderException>().WithMessage("*Refresh the model list*model: claude-old*");
+    }
+
+    #endregion
+
+    #region ListModelsAsync
+
+    [Fact]
+    public async Task ListModelsAsync_Anthropic_ReturnsLiveModels()
+    {
+        var captured = new List<(string Url, string Body, HttpRequestMessage Request)>();
+        var body = JsonSerializer.Serialize(new
+        {
+            data = new[] { new { id = "claude-new", display_name = "Claude New" }, new { id = "claude-older", display_name = "Claude Older" } }
+        });
+        var service = CreateService(CreateBodyCapturingHttpClient(HttpStatusCode.OK, body, captured));
+
+        var result = await service.ListModelsAsync(new ListAiModelsRequest("anthropic", "key"));
+
+        result.Success.Should().BeTrue();
+        result.Models.Select(m => m.Id).Should().Equal("claude-new", "claude-older");
+        captured[0].Url.Should().StartWith("https://api.anthropic.com/v1/models");
+        captured[0].Request.Headers.GetValues("x-api-key").Should().Equal("key");
+    }
+
+    [Fact]
+    public async Task ListModelsAsync_OpenRouter_FlagsFreeFirstAndDropsNonChat()
+    {
+        var body = """
+        { "data": [
+          { "id": "vendor/paid", "name": "Paid", "pricing": { "prompt": "0.000001", "completion": "0.000002" } },
+          { "id": "vendor/zero", "name": "Zero", "pricing": { "prompt": "0", "completion": "0" } },
+          { "id": "vendor/thing:free", "name": "Thing" },
+          { "id": "vendor/picture", "architecture": { "output_modalities": ["image"] } },
+          { "id": "vendor/text-embedding-3" }
+        ] }
+        """;
+        var service = CreateService(CreateMockHttpClient(HttpStatusCode.OK, body));
+
+        var result = await service.ListModelsAsync(new ListAiModelsRequest("openrouter", "key"));
+
+        result.Models.Select(m => (m.Id, m.Free)).Should().Equal(
+            ("vendor/thing:free", true), ("vendor/zero", true), ("vendor/paid", false));
+    }
+
+    [Fact]
+    public async Task ListModelsAsync_Gemini_StripsModelsPrefix()
+    {
+        var captured = new List<(string Url, string Body, HttpRequestMessage Request)>();
+        var body = """{ "data": [ { "id": "models/gemini-x-flash" }, { "id": "models/gemini-embedding-001" } ] }""";
+        var service = CreateService(CreateBodyCapturingHttpClient(HttpStatusCode.OK, body, captured));
+
+        var result = await service.ListModelsAsync(new ListAiModelsRequest("gemini", "key"));
+
+        captured[0].Url.Should().Be("https://generativelanguage.googleapis.com/v1beta/openai/models");
+        result.Models.Select(m => m.Id).Should().Equal("gemini-x-flash");
+    }
+
+    [Fact]
+    public async Task ListModelsAsync_OllamaWithNoModels_SaysHowToPullOne()
+    {
+        var service = CreateService(CreateMockHttpClient(HttpStatusCode.OK, """{ "data": [] }"""));
+
+        var result = await service.ListModelsAsync(new ListAiModelsRequest("ollama"));
+
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("ollama pull");
+    }
+
+    [Fact]
+    public async Task ListModelsAsync_OllamaNotRunning_SaysSo()
+    {
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("No connection could be made"));
+        var service = CreateService(new HttpClient(handler.Object));
+
+        var result = await service.ListModelsAsync(new ListAiModelsRequest("ollama"));
+
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("ollama.com");
+    }
+
+    [Fact]
+    public async Task ListModelsAsync_CloudProviderWithoutKey_AsksForKey()
+    {
+        var service = CreateService(CreateMockHttpClient(HttpStatusCode.OK, "{}"));
+
+        var result = await service.ListModelsAsync(new ListAiModelsRequest("groq", ""));
+
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("API key");
     }
 
     #endregion

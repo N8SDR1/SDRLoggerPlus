@@ -90,6 +90,12 @@ export interface SpotReceivedEvent {
   /** CQ zone (WAZ) of the DX station + whether it's new vs the log. */
   cqZone?: number;
   zoneStatus?: 'newZone' | 'newZoneBand';
+  /** Spotter is on the operator's own continent (null/absent = unknown). */
+  heardFromMyContinent?: boolean | null;
+  /** Spotter position; spotterLocationPrecise = own QTH, false = country centroid. */
+  spotterLat?: number | null;
+  spotterLon?: number | null;
+  spotterLocationPrecise?: boolean;
 }
 
 /** One decoded FT8/FT4 transmission from WSJT-X/JTDX/MSHV, needed-status stamped. */

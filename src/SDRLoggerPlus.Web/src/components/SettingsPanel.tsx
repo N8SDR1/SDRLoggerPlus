@@ -62,7 +62,7 @@ import {
 } from 'lucide-react';
 import { useSettingsStore, SettingsSection, StationSettings, WsjtxSource, type AiProvider } from '../store/settingsStore';
 import { getSeedColors, type ThemeId, type CustomColors } from '../theme/themes';
-import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot } from '../api/client';
+import { api, type BackupStatus, type WsjtxStatus, type SavedLayoutSlot, type AiModelInfo } from '../api/client';
 import { useLayoutStore } from '../store/layoutStore';
 import { STARTER_LAYOUTS } from '../layouts/starterLayouts';
 import { useAppStore } from '../store/appStore';
@@ -2491,8 +2491,8 @@ function DxCoachSettingsSection() {
       <div>
         <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">DX Coach</h3>
         <p className="text-sm text-dark-300">
-          The DX Coach panel surfaces live spots that would fill an award gap, ranked, with a coarse
-          propagation read. These preferences tune what it shows.
+          The DX Coach panel surfaces live spots that would fill an award gap, ranked by the best
+          evidence that you can work them. These preferences tune what it shows.
         </p>
       </div>
 
@@ -2554,31 +2554,37 @@ function DxCoachSettingsSection() {
       </div>
 
       <div className="p-4 bg-dark-700/50 rounded-lg border border-glass-100 space-y-3">
-        <div className="flex items-center justify-between">
-          <label className="text-sm font-medium text-dark-200">Minimum path reliability</label>
-          <span className="text-xs text-dark-300 font-mono">
-            {coach.minReliability === 0 ? 'Off (show all)' : `${coach.minReliability}%`}
-          </span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={90}
-          step={5}
-          value={coach.minReliability}
-          onChange={(e) => updateDxCoachSettings({ minReliability: parseInt(e.target.value) || 0 })}
-          className="w-full accent-[rgb(var(--accent-primary))] cursor-pointer"
-        />
-        <p className="text-xs text-dark-300">
-          Hide opportunities whose predicted contact reliability falls below this, so the panel keeps
-          only realistic chances instead of listing dead paths. Set to <span className="font-mono">0</span> to show every
-          opportunity. Spots with no propagation data are always shown — they can't be fairly judged.
+        <h4 className="text-sm font-medium text-dark-200">How the Coach judges a path</h4>
+        <p className="text-sm text-dark-300">
+          Every opportunity is ranked by the best evidence that you can work it, strongest first:
         </p>
+        <ul className="text-sm text-dark-300 space-y-1 ml-4 list-disc">
+          <li><span className="text-accent-success font-medium">Your signal heard there</span> — PSKReporter or RBN heard <i>you</i> near that station on that band.</li>
+          <li><span className="text-accent-success font-medium">Heard near you</span> — a spotter within about 1,500 km of you heard the station.</li>
+          <li><span className="text-accent-success/80 font-medium">Heard in your region</span> — a spotter on your continent heard it.</li>
+          <li><span className="text-dark-200 font-medium">Forecast</span> — likely, possible or unlikely, from live ionosphere data or the solar-flux model.</li>
+        </ul>
+        <p className="text-sm text-dark-300">
+          Nothing is hidden by default: a forecast can be wrong, a spot is proof someone is working that station.
+        </p>
+        <label className="flex items-center justify-between gap-3 p-3 bg-dark-800/40 rounded-lg border border-glass-100 cursor-pointer">
+          <div>
+            <div className="text-sm font-medium text-dark-100">Hide unlikely paths</div>
+            <div className="text-xs text-dark-300">
+              Hide opportunities whose only evidence is a forecast saying &ldquo;unlikely&rdquo;. Anything heard near you is always shown.
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={coach.hideUnlikely}
+            onChange={(e) => updateDxCoachSettings({ hideUnlikely: e.target.checked })}
+            className="w-5 h-5 rounded border-gray-600 text-accent-primary focus:ring-accent-primary shrink-0"
+          />
+        </label>
         {!hasQth && (
-          <p className="text-xs text-accent-warning">
-            The propagation gate needs your station location. Set your grid square (or lat/lon) in{' '}
-            <span className="font-medium">Settings → Station</span>, otherwise this threshold has nothing to
-            filter and every opportunity is shown.
+          <p className="text-sm text-accent-warning">
+            Set your grid square (or lat/lon) in <span className="font-medium">Settings → Station</span> so the Coach
+            can tell which spotters are near you and forecast your paths.
           </p>
         )}
       </div>
@@ -3798,23 +3804,35 @@ function HeaderSettingsSection() {
 // AI Settings Section
 // AI provider presets. Anthropic uses its native API; every other preset speaks
 // the OpenAI chat-completions format against baseUrl — so free/cheap providers
-// (Groq, Gemini, OpenRouter, Ollama) work with just a URL + model.
-const AI_PRESETS: Record<AiProvider, { label: string; baseUrl: string; defaultModel: string; keyUrl: string; needsKey: boolean; free?: boolean; note?: string }> = {
-  anthropic:  { label: 'Anthropic (Claude)',        baseUrl: '',                                                        defaultModel: 'claude-sonnet-4-5-20250929',              keyUrl: 'https://console.anthropic.com/settings/keys', needsKey: true },
-  openai:     { label: 'OpenAI',                     baseUrl: '',                                                        defaultModel: 'gpt-4o-mini',                             keyUrl: 'https://platform.openai.com/api-keys',        needsKey: true },
-  groq:       { label: 'Groq — free & fast',         baseUrl: 'https://api.groq.com/openai/v1',                          defaultModel: 'llama-3.3-70b-versatile',                 keyUrl: 'https://console.groq.com/keys',               needsKey: true, free: true },
-  openrouter: { label: 'OpenRouter — free models',   baseUrl: 'https://openrouter.ai/api/v1',                            defaultModel: 'meta-llama/llama-3.3-70b-instruct:free',  keyUrl: 'https://openrouter.ai/keys',                  needsKey: true, free: true },
-  ollama:     { label: 'Ollama — local, no key',     baseUrl: 'http://localhost:11434/v1',                               defaultModel: 'llama3.2',                                keyUrl: '',                                            needsKey: false, free: true, note: 'ollama' },
-  custom:     { label: 'Custom (OpenAI-compatible)', baseUrl: '',                                                        defaultModel: '',                                        keyUrl: '',                                            needsKey: false },
+// (Gemini, Groq, OpenRouter, Ollama, LM Studio) work with just a URL + key.
+//
+// No model names live here. Providers retire models every few months, and the
+// hard-coded defaults that used to sit here are what broke every AI feature.
+// The model list is fetched live from the provider (POST /api/ai/models).
+type AiPreset = {
+  label: string;
+  baseUrl: string;
+  keyUrl: string;
+  needsKey: boolean;
+  blurb: string;
 };
 
-const AI_MODEL_SUGGESTIONS: Record<AiProvider, string[]> = {
-  anthropic:  ['claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'],
-  openai:     ['gpt-4o-mini', 'gpt-4o'],
-  groq:       ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
-  openrouter: ['meta-llama/llama-3.3-70b-instruct:free', 'google/gemma-2-9b-it:free', 'deepseek/deepseek-chat'],
-  ollama:     ['llama3.2', 'phi3', 'gemma2', 'mistral'],
-  custom:     [],
+// Listed free/local first — that's what most operators want.
+const AI_PRESETS: Record<AiProvider, AiPreset> = {
+  ollama:     { label: 'Ollama: free, runs on your PC, no key',            baseUrl: 'http://localhost:11434/v1',                               keyUrl: '',                                            needsKey: false,
+                blurb: 'Private and offline. Needs a reasonably modern PC; small models (3–8B) run fine on most.' },
+  gemini:     { label: 'Google Gemini: free key',                         baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', keyUrl: 'https://aistudio.google.com/apikey',          needsKey: true,
+                blurb: 'Free tier with a Google account. Generous daily limits, plenty for talk points.' },
+  groq:       { label: 'Groq: free key, very fast',                       baseUrl: 'https://api.groq.com/openai/v1',                          keyUrl: 'https://console.groq.com/keys',               needsKey: true,
+                blurb: 'Free tier with per-minute limits. Very fast replies.' },
+  openrouter: { label: 'OpenRouter: free and paid models',                baseUrl: 'https://openrouter.ai/api/v1',                            keyUrl: 'https://openrouter.ai/keys',                  needsKey: true,
+                blurb: 'One key for hundreds of models. Free ones are marked ★ and listed first.' },
+  anthropic:  { label: 'Anthropic Claude: paid',                          baseUrl: '',                                                        keyUrl: 'https://console.anthropic.com/settings/keys', needsKey: true,
+                blurb: 'Pay-as-you-go. Talk points cost a fraction of a cent each.' },
+  openai:     { label: 'OpenAI ChatGPT: paid',                            baseUrl: '',                                                        keyUrl: 'https://platform.openai.com/api-keys',        needsKey: true,
+                blurb: 'Pay-as-you-go API key (separate from a ChatGPT subscription).' },
+  custom:     { label: 'Custom: LM Studio or another OpenAI-compatible server', baseUrl: '',                                                 keyUrl: '',                                            needsKey: false,
+                blurb: 'Any OpenAI-compatible endpoint. LM Studio\'s local server is http://localhost:1234/v1.' },
 };
 
 function AiSettingsSection() {
@@ -3823,71 +3841,113 @@ function AiSettingsSection() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message?: string } | null>(null);
+  const [models, setModels] = useState<AiModelInfo[] | null>(null);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
 
   const preset = AI_PRESETS[ai.provider] ?? AI_PRESETS.custom;
   const keyRequired = preset.needsKey;
   const showKey = ai.provider !== 'ollama';
+  const canQuery = !keyRequired || ai.apiKey.trim().length > 0;
 
   const selectProvider = (p: AiProvider) => {
-    const next = AI_PRESETS[p];
-    updateAiSettings({ provider: p, baseUrl: next.baseUrl, model: next.defaultModel || ai.model });
+    // The saved model belongs to the old provider, so clear it; the live list
+    // for the new provider fills it in.
+    updateAiSettings({ provider: p, baseUrl: AI_PRESETS[p].baseUrl, model: '' });
+    setModels(null);
+    setModelsError(null);
     setTestResult(null);
   };
 
-  const handleTestApiKey = async () => {
-    if (keyRequired && !ai.apiKey) return;
+  const loadModels = useCallback(async () => {
+    if (!canQuery) return;
+    setModelsLoading(true);
+    setModelsError(null);
+    try {
+      const result = await api.listAiModels({ provider: ai.provider, apiKey: ai.apiKey, baseUrl: ai.baseUrl });
+      setModels(result.models);
+      if (!result.success) setModelsError(result.errorMessage || 'Could not load the model list.');
+      // First time on this provider: pick the top of the list (free first) so
+      // the operator has something that works without hunting.
+      const current = useSettingsStore.getState().settings.ai.model;
+      if (result.success && !current && result.models.length > 0) {
+        updateAiSettings({ model: result.models[0].id });
+      }
+    } catch (e) {
+      setModels(null);
+      setModelsError(e instanceof Error ? e.message : 'Could not load the model list.');
+    } finally {
+      setModelsLoading(false);
+    }
+  }, [ai.provider, ai.apiKey, ai.baseUrl, canQuery, updateAiSettings]);
+
+  // Fetch the live list whenever the provider, key or address settles.
+  useEffect(() => {
+    if (!canQuery) { setModels(null); return; }
+    const t = setTimeout(loadModels, 700);
+    return () => clearTimeout(t);
+  }, [loadModels, canQuery]);
+
+  const handleTest = async () => {
+    if (!canQuery || !ai.model) return;
     setIsTesting(true);
     setTestResult(null);
     try {
-      const response = await fetch('/api/ai/test-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: ai.provider, apiKey: ai.apiKey, model: ai.model, baseUrl: ai.baseUrl }),
-      });
-      const result = await response.json();
-      setTestResult({ success: result.isValid, message: result.errorMessage || 'Connection works!' });
-    } catch (error) {
-      setTestResult({ success: false, message: 'Failed to reach the provider' });
+      const result = await api.testApiKey({ provider: ai.provider, apiKey: ai.apiKey, model: ai.model, baseUrl: ai.baseUrl });
+      setTestResult({ success: result.isValid, message: result.isValid ? 'Working! AI features are ready.' : result.errorMessage });
+    } catch {
+      setTestResult({ success: false, message: 'Could not reach SDRLogger+\'s server.' });
     } finally {
       setIsTesting(false);
     }
   };
 
+  const modelInList = !!models?.some((m) => m.id === ai.model);
+  const staleModel = models && models.length > 0 && ai.model && !modelInList;
+
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-gray-100 mb-1">AI Provider Settings</h3>
-        <p className="text-sm text-gray-500">Pick an LLM provider for AI talk points. Free options: <b>Ollama</b> (local, no key), <b>Groq</b>, <b>OpenRouter</b>.</p>
+        <p className="text-sm text-gray-400">
+          Powers Chat AI and talk points. Free choices: <b>Ollama</b> (on your PC), <b>Gemini</b>, <b>Groq</b>, and OpenRouter's free models.
+        </p>
         <p className="text-xs text-dark-400 mt-1">
           🔊 This chooses the AI <span className="font-medium text-dark-200">source</span>. Any spoken output uses the shared voice in <span className="font-medium text-dark-200">Settings → Voice</span>.
         </p>
       </div>
+
       <div className="space-y-2">
         <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
           <Bot className="w-4 h-4 text-accent-primary" />
           Provider
         </label>
-        <select value={ai.provider} onChange={(e) => selectProvider(e.target.value as AiProvider)} className="glass-input w-full">
+        <select value={ai.provider} onChange={(e) => selectProvider(e.target.value as AiProvider)} className="glass-input w-full text-base">
           {(Object.keys(AI_PRESETS) as AiProvider[]).map((p) => (
             <option key={p} value={p}>{AI_PRESETS[p].label}</option>
           ))}
         </select>
+        <p className="text-sm text-gray-400">{preset.blurb}</p>
         {ai.provider === 'ollama' && (
-          <p className="text-xs text-amber-300/80">
-            Runs on your PC — install from{' '}
-            <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">ollama.com</a>
-            , then run <code className="text-amber-200">ollama pull llama3.2</code>
-          </p>
+          <div className="text-sm text-amber-200/90 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 space-y-1">
+            <div>1. Install Ollama from{' '}
+              <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline font-semibold">ollama.com</a>
+            </div>
+            <div>2. Open a terminal and run <code className="text-amber-100 font-mono">ollama pull llama3.2</code> (or any model from ollama.com/library)</div>
+            <div>3. Click <b>Refresh</b> below. Your installed models will appear.</div>
+          </div>
         )}
       </div>
+
       {ai.provider !== 'anthropic' && (
         <div className="space-y-2">
           <label className="text-sm font-medium text-gray-300">API Base URL</label>
           <input type="text" value={ai.baseUrl} onChange={(e) => updateAiSettings({ baseUrl: e.target.value })}
-            placeholder={preset.baseUrl || 'https://api.openai.com/v1'} className="glass-input w-full font-mono text-sm" />
+            placeholder={preset.baseUrl || 'http://localhost:1234/v1'} className="glass-input w-full font-mono text-sm" />
           <p className="text-xs text-gray-500">OpenAI-compatible endpoint. Leave blank to use the provider's default.</p>
         </div>
       )}
+
       {showKey && (
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-medium text-gray-300">
@@ -3895,43 +3955,79 @@ function AiSettingsSection() {
             API Key{!keyRequired && <span className="text-gray-500 font-normal">(optional)</span>}
           </label>
           <div className="relative">
-            <input type={showApiKey ? 'text' : 'password'} value={ai.apiKey} onChange={(e) => updateAiSettings({ apiKey: e.target.value })} placeholder={ai.provider === 'anthropic' ? 'sk-ant-...' : 'sk-...'} className="glass-input w-full font-mono pr-10" />
+            <input type={showApiKey ? 'text' : 'password'} value={ai.apiKey} onChange={(e) => updateAiSettings({ apiKey: e.target.value.trim() })}
+              placeholder="Paste your key here" className="glass-input w-full font-mono pr-10" />
             <button type="button" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-gray-300 transition-colors">
               {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
           {preset.keyUrl && (
-            <p className="text-xs text-gray-500">
-              Get a{preset.free ? ' free' : 'n'} API key from{' '}
-              <a href={preset.keyUrl} target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">
+            <p className="text-sm text-gray-400">
+              Get your key at{' '}
+              <a href={preset.keyUrl} target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline font-semibold">
                 {preset.keyUrl.replace(/^https?:\/\//, '')}
               </a>
             </p>
           )}
         </div>
       )}
-      <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={handleTestApiKey} disabled={isTesting || (keyRequired && !ai.apiKey)} className="glass-button px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed">
-          {isTesting ? <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Testing…</span> : 'Test connection'}
-        </button>
-        {testResult && <div className={`text-sm flex items-center gap-2 ${testResult.success ? 'text-green-400' : 'text-red-400'}`}>{testResult.success ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}{testResult.message}</div>}
-      </div>
+
       <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-300">Model</label>
-        {(AI_MODEL_SUGGESTIONS[ai.provider] ?? []).length > 0 && (
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-gray-300">Model</label>
+          <button type="button" onClick={loadModels} disabled={!canQuery || modelsLoading}
+            className="glass-button px-3 py-1 text-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+            {modelsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            Refresh
+          </button>
+        </div>
+
+        {!canQuery && <p className="text-sm text-gray-400">Enter your API key and the available models will load here.</p>}
+
+        {models && models.length > 0 && (
           <select
-            value={(AI_MODEL_SUGGESTIONS[ai.provider] ?? []).includes(ai.model) ? ai.model : ''}
-            onChange={(e) => { if (e.target.value) updateAiSettings({ model: e.target.value }); }}
-            className="glass-input w-full"
+            value={modelInList ? ai.model : ''}
+            onChange={(e) => { if (e.target.value) { updateAiSettings({ model: e.target.value }); setTestResult(null); } }}
+            className="glass-input w-full text-base"
           >
             <option value="" disabled>Choose a model…</option>
-            {(AI_MODEL_SUGGESTIONS[ai.provider] ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.free ? '★ ' : ''}{m.name && m.name !== m.id ? `${m.name}  (${m.id})` : m.id}
+              </option>
+            ))}
           </select>
         )}
-        <input type="text" value={ai.model} onChange={(e) => updateAiSettings({ model: e.target.value })}
-          placeholder={preset.defaultModel || 'model name'} className="glass-input w-full font-mono text-sm" />
-        <p className="text-xs text-gray-500">Pick a suggested model above, or type any model your key supports.</p>
+
+        {modelsError && (
+          <div className="text-sm text-red-300 flex items-start gap-2"><AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />{modelsError}</div>
+        )}
+        {staleModel && (
+          <div className="text-sm text-amber-300 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>Your saved model <code className="font-mono">{ai.model}</code> isn't offered by this provider any more. Pick one from the list.</span>
+          </div>
+        )}
+
+        <details className="text-sm text-gray-400" open={!!modelsError && ai.provider === 'custom'}>
+          <summary className="cursor-pointer select-none">Type a model name instead</summary>
+          <input type="text" value={ai.model} onChange={(e) => updateAiSettings({ model: e.target.value.trim() })}
+            placeholder="model id" className="glass-input w-full font-mono text-sm mt-2" />
+        </details>
       </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <button onClick={handleTest} disabled={isTesting || !canQuery || !ai.model} className="glass-button px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed">
+          {isTesting ? <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Testing…</span> : 'Test connection'}
+        </button>
+        {testResult && (
+          <div className={`text-sm flex items-start gap-2 ${testResult.success ? 'text-green-400' : 'text-red-400'}`}>
+            {testResult.success ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+            {testResult.message}
+          </div>
+        )}
+      </div>
+
       <div className="border-t border-glass-100 pt-4">
         <h4 className="text-sm font-medium text-gray-300 mb-3">Behavior</h4>
         <div className="space-y-3">
@@ -3950,7 +4046,7 @@ function AiSettingsSection() {
         </div>
       </div>
       <div className="bg-dark-700/50 rounded-lg p-4 border border-glass-100">
-        <p className="text-sm text-gray-400"><Key className="w-4 h-4 inline mr-2 text-accent-primary" />Your API key is stored locally and calls go directly to the provider. No data is sent through SDRLoggerPlus servers.</p>
+        <p className="text-sm text-gray-400"><Key className="w-4 h-4 inline mr-2 text-accent-primary" />Your API key is stored locally (encrypted) and calls go directly to the provider. No data is sent through SDRLoggerPlus servers.</p>
       </div>
     </div>
   );

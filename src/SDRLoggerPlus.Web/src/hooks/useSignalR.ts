@@ -201,6 +201,10 @@ export function useSignalRConnection() {
               status: evt.spotStatus,
               cqZone: evt.cqZone,
               zoneStatus: evt.zoneStatus,
+              heardFromMyContinent: evt.heardFromMyContinent ?? undefined,
+              spotterLocation: evt.spotterLat != null && evt.spotterLon != null
+                ? { lat: evt.spotterLat, lon: evt.spotterLon, precise: !!evt.spotterLocationPrecise }
+                : undefined,
               isHot: evt.isHot,
               dxStation: (evt.country || evt.dxcc || evt.grid || evt.dxLat != null) ? {
                 country: evt.country,

@@ -19,10 +19,10 @@ public static class RbnHeardMeLogic
             .ToList();
     }
 
-    /// <summary>QRZ coords when BOTH present, else the cty centroid, else null.</summary>
-    public static (double Lat, double Lon)? PickLocation(double? qrzLat, double? qrzLon, (double Lat, double Lon)? ctyCentroid)
+    /// <summary>QRZ coords when BOTH present (precise), else the cty centroid (not precise), else null.</summary>
+    public static StationLocation? PickLocation(double? qrzLat, double? qrzLon, (double Lat, double Lon)? ctyCentroid)
     {
-        if (qrzLat is { } la && qrzLon is { } lo) return (la, lo);
-        return ctyCentroid;
+        if (qrzLat is { } la && qrzLon is { } lo) return new StationLocation(la, lo, Precise: true);
+        return ctyCentroid is { } c ? new StationLocation(c.Lat, c.Lon, Precise: false) : null;
     }
 }

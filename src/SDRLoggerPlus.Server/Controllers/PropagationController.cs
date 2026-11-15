@@ -9,15 +9,18 @@ namespace SDRLoggerPlus.Server.Controllers;
 public class PropagationController : ControllerBase
 {
     private readonly IPropagationService _propagationService;
+    private readonly IIonosondeService _ionosondeService;
     private readonly ISettingsService _settingsService;
     private readonly ILogger<PropagationController> _logger;
 
     public PropagationController(
         IPropagationService propagationService,
+        IIonosondeService ionosondeService,
         ISettingsService settingsService,
         ILogger<PropagationController> logger)
     {
         _propagationService = propagationService;
+        _ionosondeService = ionosondeService;
         _settingsService = settingsService;
         _logger = logger;
     }
@@ -47,6 +50,17 @@ public class PropagationController : ControllerBase
             deLat.Value, deLon.Value, dxLat, dxLon);
 
         return Ok(prediction);
+    }
+
+    /// <summary>
+    /// Live ionosonde readings (measured within the last hour). The DX Coach uses
+    /// them to calibrate its per-spot forecasts. Empty when the feed is down.
+    /// </summary>
+    [HttpGet("ionosondes")]
+    [ProducesResponseType(typeof(IonosondeSnapshot), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IonosondeSnapshot>> GetIonosondes()
+    {
+        return Ok(await _ionosondeService.GetReadingsAsync(HttpContext.RequestAborted));
     }
 
     /// <summary>

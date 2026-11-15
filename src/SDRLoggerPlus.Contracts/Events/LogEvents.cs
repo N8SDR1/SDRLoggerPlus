@@ -108,7 +108,18 @@ public record SpotReceivedEvent(
     // CQ zone (WAZ) for the DX station, and whether it's a new zone / new
     // zone-on-band vs the operator's log ("newZone" | "newZoneBand" | null).
     int? CqZone = null,
-    string? ZoneStatus = null
+    string? ZoneStatus = null,
+    // True when the spotter is on the operator's own continent — an observation
+    // that the band is open from the operator's part of the world, which the DX
+    // Coach trusts over its propagation estimate. Null when either continent is
+    // unknown (no station callsign set, or an unresolvable spotter).
+    bool? HeardFromMyContinent = null,
+    // Where the spotter is. SpotterLocationPrecise = their own QTH (QRZ / feed);
+    // false = their country's centroid, too coarse to call "near you" in a big
+    // country. The DX Coach measures spotter→operator distance from this.
+    double? SpotterLat = null,
+    double? SpotterLon = null,
+    bool SpotterLocationPrecise = false
 );
 
 /// <summary>

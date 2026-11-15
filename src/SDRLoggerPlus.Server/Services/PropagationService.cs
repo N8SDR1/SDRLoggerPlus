@@ -26,7 +26,13 @@ public record PropagationPrediction(
     BandPrediction[] CurrentBands,
     int[][] HeatmapData,
     string[] BandNames,
-    DateTime Timestamp
+    DateTime Timestamp,
+    // How the model's level was set: "measured" (live ionosondes near the path),
+    // "calibrated" (live ionosondes elsewhere), or "model" (solar flux only).
+    string ForecastSource = "model",
+    // Live correction applied to the model's MUF (1.0 = none).
+    double Calibration = 1.0,
+    string? Attribution = null
 );
 
 public record GenericBandConditions(
@@ -55,6 +61,7 @@ public interface IPropagationService
 public class PropagationService : IPropagationService
 {
     private readonly ISpaceWeatherService _spaceWeatherService;
+    private readonly IIonosondeService _ionosondeService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<PropagationService> _logger;
 
@@ -76,10 +83,12 @@ public class PropagationService : IPropagationService
 
     public PropagationService(
         ISpaceWeatherService spaceWeatherService,
+        IIonosondeService ionosondeService,
         IHttpClientFactory httpClientFactory,
         ILogger<PropagationService> logger)
     {
         _spaceWeatherService = spaceWeatherService;
+        _ionosondeService = ionosondeService;
         _httpClient = httpClientFactory.CreateClient();
         _httpClient.Timeout = TimeSpan.FromSeconds(10);
         _logger = logger;
@@ -105,6 +114,13 @@ public class PropagationService : IPropagationService
         var now = DateTime.UtcNow;
         int currentHour = now.Hour;
 
+        // Live ionosondes correct the model's level (it under-reads at moderate
+        // flux). The correction is measured now and applied to the whole day's
+        // curve; the model still supplies the day/night shape.
+        var ionosondes = await _ionosondeService.GetReadingsAsync();
+        var calibration = IonosondeCalibration.ForPath(
+            ionosondes.Readings, ssn, deLat, deLon, dxLat, dxLon, now);
+
         // Compute 24-hour heatmap: [bandIdx][hourIdx]
         int[][] heatmap = new int[HfBands.Length][];
         for (int b = 0; b < HfBands.Length; b++)
@@ -113,14 +129,14 @@ public class PropagationService : IPropagationService
             for (int h = 0; h < 24; h++)
             {
                 var utcAtHour = now.Date.AddHours(h);
-                double muf = CalculateMuf(ssn, distKm, midLat, midLon, utcAtHour);
+                double muf = CalculatePathMuf(ssn, deLat, deLon, dxLat, dxLon, utcAtHour, calibration.Factors);
                 double luf = CalculateLuf(ssn, distKm, midLat, midLon, utcAtHour, kIndex);
                 heatmap[b][h] = CalculateReliability(HfBands[b].FreqMHz, muf, luf, kIndex, hops);
             }
         }
 
         // Current-hour MUF/LUF
-        double currentMuf = CalculateMuf(ssn, distKm, midLat, midLon, now);
+        double currentMuf = CalculatePathMuf(ssn, deLat, deLon, dxLat, dxLon, now, calibration.Factors);
         double currentLuf = CalculateLuf(ssn, distKm, midLat, midLon, now, kIndex);
 
         // Current-hour per-band predictions
@@ -141,7 +157,10 @@ public class PropagationService : IPropagationService
             currentBands,
             heatmap,
             HfBands.Select(b => b.Name).ToArray(),
-            DateTime.UtcNow
+            DateTime.UtcNow,
+            calibration.Source.ToString().ToLowerInvariant(),
+            Math.Round(calibration.Factors.Min(), 2),
+            calibration.Source == Services.ForecastSource.Model ? null : ionosondes.Attribution
         );
 
         // Update cache (evict stale entries if too many)
@@ -289,47 +308,82 @@ public class PropagationService : IPropagationService
     }
 
     /// <summary>
-    /// Calculate Maximum Usable Frequency for a path.
-    /// Based on OpenHamClock's built-in estimation model.
+    /// Maximum Usable Frequency of a whole path, ITU-R P.533 style: the F2 critical
+    /// frequency at each control point (model, times that point's live ionosonde
+    /// correction) times the hop's M-factor; the weakest control point limits the
+    /// path. <paramref name="factors"/> aligns with <see cref="ControlPoints"/>;
+    /// null = uncorrected model.
     /// </summary>
-    public static double CalculateMuf(int ssn, double distanceKm, double midLat, double midLon, DateTime utc)
+    public static double CalculatePathMuf(
+        int ssn, double deLat, double deLon, double dxLat, double dxLon, DateTime utc,
+        IReadOnlyList<double>? factors = null)
     {
-        double zenith = SolarZenithAngle(midLat, midLon, utc);
+        double distanceKm = HaversineDistanceKm(deLat, deLon, dxLat, dxLon);
         int hops = Math.Max(1, (int)Math.Ceiling(distanceKm / 3500.0));
+        double m = HopMFactor(distanceKm / hops);
 
-        // foF2: Critical frequency of F2 layer
+        double foF2 = ControlPoints(deLat, deLon, dxLat, dxLon)
+            .Select((p, i) => EstimateFoF2(ssn, p.Lat, p.Lon, utc) * (factors?[i] ?? 1.0))
+            .Min();
+        return Math.Max(2.0, foF2 * m);
+    }
+
+    /// <summary>
+    /// MUF ÷ foF2 for one hop of the given length (the "M-factor"): low-angle long
+    /// hops reflect frequencies ~3.5× the critical frequency, short hops far less.
+    /// </summary>
+    public static double HopMFactor(double hopKm)
+        => 1.0 + 2.5 * Math.Sin(ToRad(Math.Min(90, hopKm / 3500.0 * 90)));
+
+    /// <summary>
+    /// Where the ionosphere sets a path's MUF: the midpoint for paths up to 4,000 km,
+    /// else the points 2,000 km in from each end (ITU-R P.533).
+    /// </summary>
+    public static IReadOnlyList<(double Lat, double Lon)> ControlPoints(double lat1, double lon1, double lat2, double lon2)
+    {
+        var d = HaversineDistanceKm(lat1, lon1, lat2, lon2);
+        if (d <= 4000) return new[] { MidpointLatLon(lat1, lon1, lat2, lon2) };
+        return new[]
+        {
+            IntermediatePoint(lat1, lon1, lat2, lon2, 2000 / d),
+            IntermediatePoint(lat1, lon1, lat2, lon2, 1 - 2000 / d),
+        };
+    }
+
+    /// <summary>
+    /// Model estimate of foF2 (MHz), the F2-layer critical frequency, at a point.
+    /// IonosondeCalibration compares this with live measurements to correct it.
+    /// </summary>
+    public static double EstimateFoF2(int ssn, double lat, double lon, DateTime utc)
+    {
+        double zenith = SolarZenithAngle(lat, lon, utc);
+
         // Base increases with SSN
         double ssnFactor = 4.0 + ssn * 0.035;
 
-        // Day/night variation
-        double dayNightFactor;
-        if (zenith < 90)
-        {
-            // Daytime: higher foF2
-            dayNightFactor = Math.Pow(Math.Cos(ToRad(zenith)), 0.3);
-        }
-        else
-        {
-            // Nighttime: foF2 drops but doesn't go to zero
-            dayNightFactor = 0.2 + 0.1 * Math.Cos(ToRad(Math.Min(zenith, 120) - 90));
-        }
+        // Day/night variation: foF2 drops at night but doesn't go to zero
+        double dayNightFactor = zenith < 90
+            ? Math.Pow(Math.Cos(ToRad(zenith)), 0.3)
+            : 0.2 + 0.1 * Math.Cos(ToRad(Math.Min(zenith, 120) - 90));
 
         // Latitude factor: foF2 higher near equator
-        double latFactor = 1.0 + 0.3 * Math.Cos(ToRad(midLat * 2));
+        double latFactor = 1.0 + 0.3 * Math.Cos(ToRad(lat * 2));
 
-        double foF2 = ssnFactor * dayNightFactor * latFactor;
+        return ssnFactor * dayNightFactor * latFactor;
+    }
 
-        // M-factor (depends on hop distance / elevation angle)
-        double hopDistance = distanceKm / hops;
-        double mFactor = 1.0 + 2.5 * Math.Sin(ToRad(Math.Min(90, hopDistance / 3500.0 * 90)));
-
-        double muf = foF2 * mFactor;
-
-        // Multi-hop degradation: each additional hop reduces effective MUF
-        if (hops > 1)
-            muf *= Math.Pow(0.90, hops - 1);
-
-        return Math.Max(2.0, muf);
+    /// <summary>Point a fraction <paramref name="f"/> (0–1) of the way along the great circle.</summary>
+    public static (double Lat, double Lon) IntermediatePoint(double lat1, double lon1, double lat2, double lon2, double f)
+    {
+        double phi1 = ToRad(lat1), lam1 = ToRad(lon1), phi2 = ToRad(lat2), lam2 = ToRad(lon2);
+        double delta = HaversineDistanceKm(lat1, lon1, lat2, lon2) / 6371.0;
+        if (delta < 1e-9) return (lat1, lon1);
+        double a = Math.Sin((1 - f) * delta) / Math.Sin(delta);
+        double b = Math.Sin(f * delta) / Math.Sin(delta);
+        double x = a * Math.Cos(phi1) * Math.Cos(lam1) + b * Math.Cos(phi2) * Math.Cos(lam2);
+        double y = a * Math.Cos(phi1) * Math.Sin(lam1) + b * Math.Cos(phi2) * Math.Sin(lam2);
+        double z = a * Math.Sin(phi1) + b * Math.Sin(phi2);
+        return (ToDeg(Math.Atan2(z, Math.Sqrt(x * x + y * y))), ToDeg(Math.Atan2(y, x)));
     }
 
     /// <summary>
@@ -363,25 +417,20 @@ public class PropagationService : IPropagationService
     /// </summary>
     public static int CalculateReliability(double freqMHz, double mufMHz, double lufMHz, int kIndex, int hops)
     {
-        // Above MUF: signal passes through ionosphere
-        if (freqMHz > mufMHz)
-            return 0;
+        if (freqMHz <= 0 || mufMHz <= 0) return 0;
 
-        // Below LUF: signal absorbed by D-layer
-        if (freqMHz < lufMHz)
-            return 0;
+        // Top end: a forecast MUF is a MEDIAN — the real MUF is above it on about
+        // half of days and spreads roughly ±15% day to day (ITU-R P.533 deciles).
+        // So the chance the band reaches this frequency is ~50% at the MUF, ~87%
+        // at the FOT (0.85·MUF), ~13% at 1.15·MUF, near zero by 1.3·MUF — not a
+        // cliff that calls a marginal 10m opening impossible.
+        double reachesUp = NormalCdf((mufMHz - freqMHz) / (MufSpread * mufMHz));
 
-        double usableRange = mufMHz - lufMHz;
-        if (usableRange <= 0) return 0;
+        // Bottom end: D-layer absorption grows as 1/f², so usefulness rises from
+        // nothing at the LUF toward full well above it.
+        double clearsAbsorption = freqMHz <= lufMHz ? 0 : 1 - Math.Pow(lufMHz / freqMHz, 2);
 
-        // FOT (Frequency of Optimum Traffic) = 0.85 * MUF
-        double fot = mufMHz * 0.85;
-        double fotPosition = (fot - lufMHz) / usableRange;
-        double positionInRange = (freqMHz - lufMHz) / usableRange;
-
-        // Bell curve peaked at FOT
-        double deviation = Math.Abs(positionInRange - fotPosition);
-        double baseReliability = 90.0 * Math.Exp(-2.0 * deviation * deviation);
+        double reliability = 99.0 * reachesUp * clearsAbsorption;
 
         // K-index degradation
         double kDegradation = 1.0;
@@ -389,12 +438,24 @@ public class PropagationService : IPropagationService
             kDegradation = Math.Max(0.1, 1.0 - (kIndex - 3) * 0.2);
         else if (kIndex >= 2)
             kDegradation = 1.0 - (kIndex - 1) * 0.05;
-        baseReliability *= kDegradation;
+        reliability *= kDegradation;
 
-        // Multi-hop penalty
-        baseReliability *= Math.Pow(0.92, Math.Max(0, hops - 1));
+        // Each extra hop adds ground-reflection and absorption loss.
+        reliability *= Math.Pow(0.92, Math.Max(0, hops - 1));
 
-        return (int)Math.Clamp(Math.Round(baseReliability), 0, 99);
+        return (int)Math.Clamp(Math.Round(reliability), 0, 99);
+    }
+
+    /// <summary>Day-to-day spread of the real MUF around the forecast median, as a fraction (1σ).</summary>
+    public const double MufSpread = 0.13;
+
+    /// <summary>Standard normal CDF (Abramowitz &amp; Stegun 7.1.26, |error| &lt; 1.5e-7).</summary>
+    public static double NormalCdf(double z)
+    {
+        double x = Math.Abs(z) / Math.Sqrt(2);
+        double t = 1 / (1 + 0.3275911 * x);
+        double erf = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.Exp(-x * x);
+        return z >= 0 ? 0.5 * (1 + erf) : 0.5 * (1 - erf);
     }
 
     #endregion

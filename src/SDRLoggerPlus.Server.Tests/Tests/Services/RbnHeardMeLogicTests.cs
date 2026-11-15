@@ -1,4 +1,5 @@
 using SDRLoggerPlus.Contracts.Models;
+using SDRLoggerPlus.Server.Services;
 using SDRLoggerPlus.Server.Services.Rbn;
 using Xunit;
 
@@ -38,9 +39,9 @@ public class RbnHeardMeLogicTests
     [Fact]
     public void PickLocation_prefers_qrz_then_cty_then_null()
     {
-        Assert.Equal((40.0, -75.0), RbnHeardMeLogic.PickLocation(40.0, -75.0, (1.0, 2.0)));
-        Assert.Equal((1.0, 2.0), RbnHeardMeLogic.PickLocation(null, null, (1.0, 2.0)));
-        Assert.Equal((1.0, 2.0), RbnHeardMeLogic.PickLocation(40.0, null, (1.0, 2.0))); // partial QRZ → cty
+        Assert.Equal(new StationLocation(40.0, -75.0, true), RbnHeardMeLogic.PickLocation(40.0, -75.0, (1.0, 2.0)));
+        Assert.Equal(new StationLocation(1.0, 2.0, false), RbnHeardMeLogic.PickLocation(null, null, (1.0, 2.0)));
+        Assert.Equal(new StationLocation(1.0, 2.0, false), RbnHeardMeLogic.PickLocation(40.0, null, (1.0, 2.0))); // partial QRZ → cty
         Assert.Null(RbnHeardMeLogic.PickLocation(null, null, null));
     }
 }

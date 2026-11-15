@@ -84,3 +84,31 @@ public record TestApiKeyResponse(
     bool IsValid,
     string? ErrorMessage = null
 );
+
+/// <summary>
+/// Ask a provider which models this key (or local install) can use right now.
+/// Model names change every few months, so the app never hard-codes them.
+/// </summary>
+public record ListAiModelsRequest(
+    string Provider,
+    string? ApiKey = null,
+    string? BaseUrl = null
+);
+
+/// <summary>
+/// One chat-capable model offered by the provider.
+/// </summary>
+public record AiModelInfo(
+    string Id,
+    string? Name = null,
+    bool Free = false
+);
+
+/// <summary>
+/// The provider's live model list, or why it could not be fetched.
+/// </summary>
+public record ListAiModelsResponse(
+    bool Success,
+    List<AiModelInfo> Models,
+    string? ErrorMessage = null
+);

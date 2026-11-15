@@ -189,6 +189,12 @@ builder.Services.AddHttpClient();
 
 // Register Space Weather service (shared data source for controllers and propagation)
 builder.Services.AddSingleton<ISpaceWeatherService, SpaceWeatherService>();
+builder.Services.AddHttpClient("Ionosonde", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.Add("User-Agent", "SDRLoggerPlus");
+});
+builder.Services.AddSingleton<IIonosondeService, IonosondeService>();
 
 // Register Propagation service
 builder.Services.AddSingleton<IPropagationService, PropagationService>();

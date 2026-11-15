@@ -362,6 +362,14 @@ export function PropagationPanelPlugin() {
   const subtitle = hasDxTarget && prediction
     ? `${station.callsign || 'DE'} \u2192 ${focusedCallsign || 'DX'} (${prediction.distanceKm.toLocaleString()} km)`
     : 'General Conditions';
+  // Where the path forecast's level came from — live measurements or model only.
+  const forecastBasis = hasDxTarget && prediction
+    ? prediction.forecastSource === 'measured'
+      ? `Calibrated to live ionosondes near this path · ${prediction.attribution ?? ''}`
+      : prediction.forecastSource === 'calibrated'
+        ? `Corrected by live ionosondes (none close to this path) · ${prediction.attribution ?? ''}`
+        : 'Solar-flux model only (live ionosonde data unavailable)'
+    : null;
 
   const views = useMemo<ViewType[]>(() => ['heatmap', 'bar-chart', 'band-conditions'], []);
   const viewTitles = useMemo<Record<ViewType, string>>(() => ({
@@ -422,6 +430,9 @@ export function PropagationPanelPlugin() {
         ) : heatmapData ? (
           <>
             <div className="text-[10px] text-gray-500 text-center py-1">{subtitle}</div>
+            {forecastBasis && (
+              <div className="text-[10px] text-gray-500 text-center pb-1">{forecastBasis}</div>
+            )}
             {currentView === 'heatmap' && (
               <HeatmapView data={heatmapData} bandNames={bandNames} />
             )}

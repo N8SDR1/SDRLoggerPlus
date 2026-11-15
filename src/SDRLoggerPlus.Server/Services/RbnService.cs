@@ -16,8 +16,19 @@ public interface IRbnService
     Task StartAsync(CancellationToken cancellationToken);
     Task StopAsync(CancellationToken cancellationToken);
     IReadOnlyList<RbnSpot> GetRecentSpots(int minutes = 5);
-    Task<(string? Grid, double? Lat, double? Lon, string? Country)> LookupSkimmerLocationAsync(string callsign);
+    /// <summary>
+    /// Where a station (skimmer or human spotter) is: QRZ coordinates when available
+    /// (Precise), else its cty.dat country centroid, else null.
+    /// </summary>
+    Task<StationLocation?> LookupStationLocationAsync(string callsign);
 }
+
+/// <summary>
+/// A station's position. <see cref="Precise"/> = from the station's own QTH (QRZ or
+/// a spot feed's home-QTH field); false = only its country's centroid, which for a
+/// big country (W, VE, UA, VK) can be thousands of km off.
+/// </summary>
+public record StationLocation(double Lat, double Lon, bool Precise);
 
 public class RbnService : IRbnService, IHostedService, IDisposable
 {
@@ -26,7 +37,7 @@ public class RbnService : IRbnService, IHostedService, IDisposable
     private readonly IServiceProvider _serviceProvider;
     private readonly IHotListService _hotListService;
     private readonly ConcurrentBag<RbnSpot> _recentSpots = new();
-    private readonly ConcurrentDictionary<string, (string? Grid, double? Lat, double? Lon, string? Country)> _skimmerLocations = new();
+    private readonly ConcurrentDictionary<string, StationLocation> _stationLocations = new(StringComparer.OrdinalIgnoreCase);
 
     private TcpClient? _tcpClient;
     private NetworkStream? _stream;
@@ -309,13 +320,14 @@ public class RbnService : IRbnService, IHostedService, IDisposable
             .ToList();
     }
 
-    public async Task<(string? Grid, double? Lat, double? Lon, string? Country)> LookupSkimmerLocationAsync(string callsign)
+    public async Task<StationLocation?> LookupStationLocationAsync(string callsign)
     {
-        // Check cache first
-        if (_skimmerLocations.TryGetValue(callsign, out var cached))
-        {
+        // Skimmers report as "W3LPL-#", cluster users as "N8SDR-2": the base call is the station.
+        var call = callsign.Split('-')[0].Trim().ToUpperInvariant();
+        if (call.Length == 0) return null;
+
+        if (_stationLocations.TryGetValue(call, out var cached))
             return cached;
-        }
 
         double? qrzLat = null, qrzLon = null;
         try
@@ -324,30 +336,23 @@ public class RbnService : IRbnService, IHostedService, IDisposable
             var qrz = scope.ServiceProvider.GetService<IQrzService>();
             if (qrz is not null)
             {
-                var info = await qrz.LookupCallsignAsync(callsign);
+                var info = await qrz.LookupCallsignAsync(call);
                 qrzLat = info?.Latitude;
                 qrzLon = info?.Longitude;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "QRZ lookup failed for skimmer {Skimmer}; falling back to cty.dat", callsign);
+            _logger.LogDebug(ex, "QRZ lookup failed for station {Call}; falling back to cty.dat", call);
         }
 
-        var centroid = CtyService.GetCentroidFromCallsign(callsign);
-        var picked = RbnHeardMeLogic.PickLocation(qrzLat, qrzLon, centroid);
+        var result = RbnHeardMeLogic.PickLocation(qrzLat, qrzLon, CtyService.GetCentroidFromCallsign(call));
 
-        // Grid/Country stay null — arcs only need lat/lon; the tuple shape is unchanged.
-        var result = picked is { } p
-            ? (Grid: (string?)null, Lat: (double?)p.Lat, Lon: (double?)p.Lon, Country: (string?)null)
-            : (Grid: (string?)null, Lat: (double?)null, Lon: (double?)null, Country: (string?)null);
-
-        // Only cache a successful lookup. Caching an all-null result forever would prevent a
-        // transient QRZ failure (rate limit, timeout) from ever being retried on a later poll.
-        if (picked is not null)
-        {
-            _skimmerLocations.TryAdd(callsign, result);
-        }
+        // Cache any answer: this runs for every spot's spotter, and an uncached miss
+        // would re-query QRZ each time that spotter posts. Only "nothing at all" is
+        // left uncached so a transient failure can be retried.
+        if (result is not null)
+            _stationLocations.TryAdd(call, result);
         return result;
     }
 }

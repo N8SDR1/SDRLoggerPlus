@@ -35,6 +35,18 @@ public class SpotholeService : BackgroundService
     private static string? Str(JsonElement el, string name) =>
         el.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
 
+    // Spothole sends null for fields it doesn't know (e.g. "freq": null). The
+    // TryGet* methods THROW on a null element rather than returning false, and
+    // one such spot used to abort the whole poll — including the 10-minute
+    // startup backlog. Read a number only when it actually is one.
+    private static double? Num(JsonElement el, string name) =>
+        el.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetDouble(out var v)
+            ? v : null;
+
+    private static int? Int(JsonElement el, string name) =>
+        el.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out var v)
+            ? v : null;
+
     /// <summary>
     /// Maps one spothole API spot (freq in Hz) to the cluster pipeline's ParsedSpot
     /// (kHz). The API supplies dx_country/dx_continent/dx_grid/dx_dxcc_id directly,
@@ -45,7 +57,7 @@ public class SpotholeService : BackgroundService
         var dxCall = Str(spot, "dx_call")?.ToUpperInvariant();
         if (string.IsNullOrWhiteSpace(dxCall)) return null;
 
-        if (!spot.TryGetProperty("freq", out var freqEl) || !freqEl.TryGetDouble(out var freqHz) || freqHz <= 0)
+        if (Num(spot, "freq") is not { } freqHz || freqHz <= 0)
             return null;
 
         var spotter = Str(spot, "de_call")?.ToUpperInvariant() ?? "?";
@@ -59,11 +71,11 @@ public class SpotholeService : BackgroundService
         if (country is null)
             (country, continent) = CtyService.GetCountryFromCallsign(dxCall);
 
-        int? dxcc = spot.TryGetProperty("dx_dxcc_id", out var d) && d.TryGetInt32(out var dxccId) ? dxccId : null;
+        var dxcc = Int(spot, "dx_dxcc_id");
 
         // Use the actual spot time (unix epoch seconds) — the first poll returns a
         // 10-minute backlog, and stamping those "now" would misorder the table.
-        var timestamp = spot.TryGetProperty("time", out var t) && t.TryGetDouble(out var epoch) && epoch > 0
+        var timestamp = Num(spot, "time") is { } epoch && epoch > 0
             ? DateTimeOffset.FromUnixTimeSeconds((long)epoch).UtcDateTime
             : DateTime.UtcNow;
 
@@ -77,8 +89,25 @@ public class SpotholeService : BackgroundService
             Country: country,
             Continent: continent,
             Dxcc: dxcc,
-            Grid: Str(spot, "dx_grid")
+            Grid: Str(spot, "dx_grid"),
+            SpotterLocation: Location(spot, "de"),
+            DxLocation: Location(spot, "dx")
         );
+    }
+
+    /// <summary>
+    /// A station position from Spothole's "{prefix}_latitude/_longitude" fields.
+    /// "{prefix}_location_source" says where it came from: "DXCC" is only the
+    /// country centroid (not precise); "HOME QTH" / "GRID" / "SPOT" / "SIG REF
+    /// LOOKUP" are the station's actual position.
+    /// </summary>
+    internal static StationLocation? Location(JsonElement spot, string prefix)
+    {
+        if (Num(spot, $"{prefix}_latitude") is not { } lat || Num(spot, $"{prefix}_longitude") is not { } lon)
+            return null;
+        var source = Str(spot, $"{prefix}_location_source");
+        var precise = source is not null && !string.Equals(source, "DXCC", StringComparison.OrdinalIgnoreCase);
+        return new StationLocation(lat, lon, precise);
     }
 
     /// <summary>
@@ -105,11 +134,8 @@ public class SpotholeService : BackgroundService
     /// </summary>
     internal static double? AdvanceCursor(double? cursor, JsonElement spot)
     {
-        if (spot.TryGetProperty("received_time", out var rt) && rt.TryGetDouble(out var received))
-        {
-            if (cursor is null || received > cursor)
-                return received;
-        }
+        if (Num(spot, "received_time") is { } received && (cursor is null || received > cursor))
+            return received;
         return cursor;
     }
 

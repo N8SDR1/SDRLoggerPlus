@@ -8,4 +8,5 @@ public interface IAiService
     Task<ChatResponse> ChatAsync(ChatRequest request);
     IAsyncEnumerable<string> ChatStreamAsync(ChatRequest request, CancellationToken cancellationToken = default);
     Task<TestApiKeyResponse> TestApiKeyAsync(TestApiKeyRequest request);
+    Task<ListAiModelsResponse> ListModelsAsync(ListAiModelsRequest request, CancellationToken cancellationToken = default);
 }
