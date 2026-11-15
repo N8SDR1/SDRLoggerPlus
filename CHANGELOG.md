@@ -3,6 +3,57 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-11-15 — v2.15.0 "Deneb"
+
+**Chat AI works again, the DX Coach judges paths from real reception reports, and propagation uses live ionosonde data.**
+
+### Fixed — Chat AI and talk points work again
+Every AI feature had stopped working. The model names built into the app had been retired by
+the providers, and some requests used a format the providers no longer accept. Now:
+- **The model list loads live from your provider**, so it never goes stale. Pick a provider, add a key
+  if it needs one, and choose from the models it offers today. If your saved model has been retired,
+  Settings tells you.
+- **Free options:** **Ollama** (runs on your PC, no key), **Google Gemini** (free key, new in this
+  release), **Groq** (free key), and **OpenRouter** (its free models are marked ★). **OpenAI** and
+  **Anthropic** are the paid choices, and **Custom** works with LM Studio or any other
+  OpenAI-compatible endpoint.
+- **Errors say what went wrong**: a bad key, an unknown model, a used-up quota, or a server that can't
+  be reached.
+
+### New — the DX Coach ranks by evidence, not a guess
+The Coach used to hide spots behind a fixed propagation score that was often wrong. It now shows
+every needed spot and ranks it by the strongest evidence available:
+1. **Heard you** — PSK Reporter or the RBN heard *your* signal within about 1,500 km of the DX on that band.
+2. **Heard near you** — a receiver within about 1,500 km of you heard the DX.
+3. **Heard in your region** — a receiver on your continent heard the DX.
+4. **Likely / Possible / Unlikely** — a forecast, used only when nobody near you has heard it.
+
+Each row shows the reason. The **minimum reliability** slider is gone. If you want the long shots out of
+the way, turn on **Hide unlikely paths** in **Settings → DX Coach**. It is off by default.
+
+### Improved — propagation forecasts use live ionosonde readings
+Forecasts in the Propagation panel and the DX Coach now use live **ionosonde** measurements from the
+GIRO network (via prop.kc2g.com), not just a solar-flux model. When fresh readings are available, the
+panel shows them as the forecast basis. Other changes:
+- The maximum usable frequency (MUF) is now worked out at the points along the path where the signal
+  actually reflects, as the ITU method does.
+- Reliability falls off smoothly above the MUF instead of dropping off a cliff.
+
+Checked against paths that spots proved open, the old model called 0 of 55 daytime paths workable.
+The new one calls 47 of 55.
+
+### Fixed — 160m showed closed every night
+The lowest usable frequency never fell below 2 MHz at night, so top band always read 0%. It now drops
+below 1.8 MHz after dark, and there is no jump at sunset or sunrise.
+
+### Fixed — every US spot showed as "New DXCC"
+Some spot feeds spell a country differently from your log, for example "United States of America"
+versus "United States". Spot status now also works out the entity from the callsign, so the names
+no longer have to match.
+
+### Fixed — one bad SpotHole spot no longer drops the whole update
+A spot with a missing number used to abort the entire poll. Those spots are now handled.
+
 ## 2026-10-17 — v2.14.5 "Antares"
 
 **Bugfix — the Dark map works again (no API key needed).**
