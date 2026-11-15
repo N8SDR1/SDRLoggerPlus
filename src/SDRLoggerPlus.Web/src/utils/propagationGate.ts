@@ -217,14 +217,17 @@ export function calculateLuf(
   kIndex: number,
 ): number {
   const hops = Math.max(1, Math.ceil(distanceKm / 3500));
-  if (zenithDeg >= 90) return 2.0 + kIndex * 0.3;
-
-  const cosZenith = Math.cos(toRad(zenithDeg));
-  let baseLuf = 2.0 + (ssn * 0.02 + 1.5) * Math.pow(cosZenith, 0.5);
-  baseLuf *= 1.0 + 0.2 * (hops - 1);
-  baseLuf += kIndex * 0.5;
-  return Math.max(1.8, Math.min(baseLuf, 15.0));
+  // D-layer absorption rises with the sun and vanishes after dark; one continuous
+  // formula, night floor below 160m so top band can open.
+  const sun = zenithDeg < 90 ? Math.sqrt(Math.cos(toRad(zenithDeg))) : 0;
+  let luf = NIGHT_LUF_MHZ + (ssn * 0.02 + 2.5) * sun;
+  luf *= 1.0 + 0.2 * (hops - 1);
+  luf += kIndex * 0.4;
+  return Math.max(NIGHT_LUF_MHZ, Math.min(luf, 15.0));
 }
+
+/** LUF with the D-layer gone (night), quiet single hop — PropagationService.NightLufMHz. */
+export const NIGHT_LUF_MHZ = 1.0;
 
 /** Reliability 0–99 — port of PropagationService.CalculateReliability. */
 export function calculateReliability(

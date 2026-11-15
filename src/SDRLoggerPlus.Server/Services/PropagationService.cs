@@ -394,22 +394,22 @@ public class PropagationService : IPropagationService
         double zenith = SolarZenithAngle(midLat, midLon, utc);
         int hops = Math.Max(1, (int)Math.Ceiling(distanceKm / 3500.0));
 
-        // Nighttime: D-layer largely disappears
-        if (zenith >= 90)
-            return 2.0 + kIndex * 0.3;
+        // D-layer absorption rises with the sun (√cos zenith) and solar activity,
+        // and vanishes once the sun is down. At night the floor is NightLufMHz —
+        // below 160m (1.8 MHz) — so top band can open after dark. One continuous
+        // formula: no jump at sunset/sunrise.
+        double sun = zenith < 90 ? Math.Sqrt(Math.Cos(ToRad(zenith))) : 0.0;
+        double luf = NightLufMHz + (ssn * 0.02 + 2.5) * sun;
 
-        // Daytime: D-layer absorption increases
-        double cosZenith = Math.Cos(ToRad(zenith));
-        double baseLuf = 2.0 + (ssn * 0.02 + 1.5) * Math.Pow(cosZenith, 0.5);
+        // Each extra hop adds absorption; geomagnetic storms add more.
+        luf *= 1.0 + 0.2 * (hops - 1);
+        luf += kIndex * 0.4;
 
-        // Multi-hop increases absorption
-        baseLuf *= 1.0 + 0.2 * (hops - 1);
-
-        // K-index storms increase absorption
-        baseLuf += kIndex * 0.5;
-
-        return Math.Max(1.8, Math.Min(baseLuf, 15.0));
+        return Math.Clamp(luf, NightLufMHz, 15.0);
     }
+
+    /// <summary>LUF with the D-layer gone (night) on a quiet single-hop path, MHz — below 160m.</summary>
+    public const double NightLufMHz = 1.0;
 
     /// <summary>
     /// Calculate reliability (0-99%) for a frequency on a given path.

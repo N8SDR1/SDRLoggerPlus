@@ -179,6 +179,46 @@ public class PropagationServiceTests
         lufStorm.Should().BeGreaterThan(lufCalm);
     }
 
+    /// <summary>
+    /// The old night floor (2.0 MHz) sat above 160m (1.8 MHz), so top band read
+    /// 0% every night. With the D-layer gone the LUF must fall below 1.8 MHz.
+    /// </summary>
+    [Fact]
+    public void Luf_QuietNight_IsBelow160m()
+    {
+        var midnight = new DateTime(2026, 1, 15, 4, 0, 0, DateTimeKind.Utc); // night over the Atlantic
+        var luf = PropagationService.CalculateLuf(60, 3000, 45, -40, midnight, 1);
+        luf.Should().BeLessThan(1.8);
+    }
+
+    [Fact]
+    public void Luf_HasNoJumpAtSunset()
+    {
+        // Sweep through dusk a minute at a time: LUF must change smoothly.
+        double? prev = null;
+        for (var t = new DateTime(2026, 1, 15, 20, 0, 0, DateTimeKind.Utc); t < new DateTime(2026, 1, 16, 0, 0, 0, DateTimeKind.Utc); t = t.AddMinutes(1))
+        {
+            var luf = PropagationService.CalculateLuf(60, 3000, 40, -84, t, 1);
+            if (prev is { } p) Math.Abs(luf - p).Should().BeLessThan(0.25);
+            prev = luf;
+        }
+    }
+
+    [Fact]
+    public void Reliability_QuietNight_160mPathIsNotDead()
+    {
+        // 160m isn't in the panel's band list, so check the building blocks the
+        // Coach uses: a quiet-night 2,500 km path on 1.83 MHz must be workable.
+        var night = new DateTime(2026, 1, 15, 5, 0, 0, DateTimeKind.Utc);
+        var ssn = 60;
+        var muf = PropagationService.CalculatePathMuf(ssn, 40.0, -84.0, 47.0, -53.0, night);
+        var dist = PropagationService.HaversineDistanceKm(40.0, -84.0, 47.0, -53.0);
+        var (midLat, midLon) = PropagationService.MidpointLatLon(40.0, -84.0, 47.0, -53.0);
+        var luf = PropagationService.CalculateLuf(ssn, dist, midLat, midLon, night, 1);
+
+        PropagationService.CalculateReliability(1.83, muf, luf, 1, 1).Should().BeGreaterThan(20);
+    }
+
     #endregion
 
     #region Reliability Calculations

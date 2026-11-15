@@ -88,10 +88,19 @@ describe('pathMuf / calculateLuf', () => {
     const hopKm = calculateDistance(39.7, -84.5, 51, 10) / 2;
     expect(pathMuf(ssn, 39.7, -84.5, 51, 10, t)).toBeCloseTo(weakest * hopMFactor(hopKm), 9);
   });
-  it('night LUF collapses (D-layer gone)', () => {
+  it('night LUF drops below 160m (D-layer gone)', () => {
     const ssn = ssnFromSfi(140);
-    const night = calculateLuf(ssn, 3000, 100, 2); // zenith >= 90 = night
-    expect(night).toBeLessThan(4);
+    expect(calculateLuf(ssn, 3000, 100, 1)).toBeLessThan(1.8); // zenith >= 90 = night
+  });
+  it('LUF is continuous through sunset', () => {
+    const ssn = ssnFromSfi(120);
+    for (let z = 80; z < 100; z += 0.25) {
+      expect(Math.abs(calculateLuf(ssn, 3000, z + 0.25, 1) - calculateLuf(ssn, 3000, z, 1))).toBeLessThan(0.25);
+    }
+  });
+  it('a quiet-night 160m path is workable, not 0%', () => {
+    const a = assessPropagation({ freqMHz: 1.83, deLat: 40, deLon: -84, dxLat: 47, dxLon: -53, sfi: 120, kIndex: 1, now: new Date('2026-01-15T05:00:00Z') });
+    expect(a.reliability!).toBeGreaterThan(20);
   });
 });
 
