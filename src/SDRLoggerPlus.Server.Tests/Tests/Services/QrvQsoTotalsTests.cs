@@ -91,19 +91,54 @@ public class QrvQsoTotalsTests
     }
 
     [Fact]
-    public void Unstamped_rows_stay_out_and_lyra_std_and_logger_count()
+    public void Every_non_contest_contact_counts_and_a_stamp_is_not_required()
+    {
+        var unstamped = Qso(Now, "USB", null);
+        var blank = Qso(Now, "CW", "");
+        var otherRadio = Qso(Now, "FT8", "Thetis");
+        var logger = Qso(Now, "FT8", "Logger");
+        var lyra = Qso(Now, "USB", "Lyra");
+        var std = Qso(Now, "CW", "STD");
+        var pota = Qso(Now, "FT8", null);
+        pota.AdifExtra = new BsonDocument { ["pota_ref"] = "K-1234" };
+        var contest = Qso(Now, "FT8", null);
+        contest.Contest = new ContestInfo { ContestId = "CQ-WW-SSB" };
+        var contestStamped = Qso(Now, "USB", "Logger");
+        contestStamped.SessionOnly();
+
+        QrvQsoTotals.IsCountedContact(unstamped).Should().BeTrue();
+        QrvQsoTotals.IsCountedContact(blank).Should().BeTrue();
+        QrvQsoTotals.IsCountedContact(otherRadio).Should().BeTrue();
+        QrvQsoTotals.IsCountedContact(logger).Should().BeTrue();
+        QrvQsoTotals.IsCountedContact(pota).Should().BeTrue();
+        QrvQsoTotals.IsCountedContact(contest).Should().BeFalse();
+        QrvQsoTotals.IsCountedContact(contestStamped).Should().BeFalse();
+
+        var totals = QrvQsoTotals.Count(
+            new[] { unstamped, blank, otherRadio, logger, lyra, std, pota, contest, contestStamped }, Now);
+
+        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 2, Cw: 2, Digital: 3));
+        totals.Month.Should().Be(totals.Week);
+        totals.Year.Should().Be(totals.Week);
+    }
+
+    [Fact]
+    public void Contacts_already_in_2026_count_on_month_and_year_and_the_week_starts_monday()
     {
         var qsos = new[]
         {
-            Qso(Now, "USB", null),
-            Qso(Now, "CW", ""),
-            Qso(Now, "FT8", "Logger"),
-            Qso(Now, "USB", "Lyra"),
-            Qso(Now, "CW", "STD"),
+            Qso(new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc), "FT8", null),
+            Qso(new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc), "USB", ""),
+            Qso(new DateTime(2026, 11, 15, 23, 59, 0, DateTimeKind.Utc), "CW", null),
+            Qso(new DateTime(2026, 11, 16, 0, 0, 0, DateTimeKind.Utc), "FT8", null),
+            Qso(new DateTime(2025, 12, 31, 23, 0, 0, DateTimeKind.Utc), "USB", null),
         };
 
         var totals = QrvQsoTotals.Count(qsos, Now);
-        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 1));
+
+        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 0, Cw: 0, Digital: 1));
+        totals.Month.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 1));
+        totals.Year.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 2));
     }
 
     [Fact]
@@ -142,7 +177,7 @@ public class QrvQsoTotalsTests
         saved.Add(Copy(captured()));
         saved.Add(Qso(Now, "USB", null));
 
-        QrvQsoTotals.Count(saved, Now).Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 1));
+        QrvQsoTotals.Count(saved, Now).Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 2, Cw: 1, Digital: 1));
     }
 
     [Fact]

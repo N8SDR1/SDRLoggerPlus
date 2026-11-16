@@ -28,7 +28,8 @@ public interface IAdifService
     /// <param name="markAsSyncedToQrz">Mark imported QSOs as already synced to QRZ (avoids re-uploading QRZ exports)</param>
     /// <param name="clearExistingLogs">Delete all existing QSOs before import</param>
     /// <param name="cancellationToken">Cancellation token to stop import</param>
-    Task<AdifImportResult> ImportAdifAsync(Stream stream, bool skipDuplicates = true, bool markAsSyncedToQrz = true, bool clearExistingLogs = false, CancellationToken cancellationToken = default);
+    /// <param name="stampLogger">When true, stamp each new import <c>Logger</c>. Used by the ADIF monitor and ADIF-over-UDP. A manual import leaves this false. The QRV count does not depend on the stamp.</param>
+    Task<AdifImportResult> ImportAdifAsync(Stream stream, bool skipDuplicates = true, bool markAsSyncedToQrz = true, bool clearExistingLogs = false, CancellationToken cancellationToken = default, bool stampLogger = false);
 
     /// <summary>
     /// Export QSOs from database to ADIF format

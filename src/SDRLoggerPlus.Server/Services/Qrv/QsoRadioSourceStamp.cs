@@ -14,6 +14,16 @@ public static class QsoRadioSourceStamp
         if (!string.IsNullOrEmpty(qso.RadioSource) || tracker == null) return;
         qso.RadioSource = QrvQsoTotals.Classify(tracker.View(preferredRadioId), loggingProgramId);
     }
+
+    /// <summary>
+    /// ADIF monitor and ADIF-over-UDP stamp a new import <see cref="QrvQsoTotals.SourceLogger"/>.
+    /// Does not replace a source already on the row. The count does not depend on this stamp.
+    /// </summary>
+    public static void ApplyWatchedImport(Qso qso)
+    {
+        if (!string.IsNullOrEmpty(qso.RadioSource)) return;
+        qso.RadioSource = QrvQsoTotals.SourceLogger;
+    }
 }
 
 /// <summary>Set when a counted QSO is saved so the totals snapshot is posted.</summary>

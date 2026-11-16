@@ -112,7 +112,7 @@ public partial class AdifService : IAdifService
         return sb.ToString();
     }
 
-    public async Task<AdifImportResult> ImportAdifAsync(Stream stream, bool skipDuplicates = true, bool markAsSyncedToQrz = true, bool clearExistingLogs = false, CancellationToken cancellationToken = default)
+    public async Task<AdifImportResult> ImportAdifAsync(Stream stream, bool skipDuplicates = true, bool markAsSyncedToQrz = true, bool clearExistingLogs = false, CancellationToken cancellationToken = default, bool stampLogger = false)
     {
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
         var fieldIssues = new List<AdifFieldIssue>();
@@ -192,6 +192,8 @@ public partial class AdifService : IAdifService
 
                     qso.CreatedAt = DateTime.UtcNow;
                     qso.UpdatedAt = DateTime.UtcNow;
+                    if (stampLogger)
+                        Qrv.QsoRadioSourceStamp.ApplyWatchedImport(qso);
 
                     // Mark as already synced to QRZ if requested (useful for QRZ exports)
                     if (markAsSyncedToQrz)

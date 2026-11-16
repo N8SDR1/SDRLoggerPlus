@@ -1,48 +1,42 @@
-# QRV QSO totals — count any radio
+# QRV QSO totals — a logged contact counts
 
-**Status:** fixed locally in this folder. Not committed. Not on GitHub. The running SDRLogger+ build still has the old rule.
+**Status:** local change in this folder. Not committed. Not in the installed 2.15.3.
 
 Rebuild and install from:
 
 `Y:\Claude local\SDRLoggerPlus-qrv-fix`
 
-Do not rebuild from `Y:\Claude local\SDRLoggerPlus-v2`. That checkout does not contain this code. Do not rebuild from `origin/cursor/qrv-qso-totals-8d8c` alone. That branch is the parent (`ba48514`) and still counts only Lyra and STD.
+Do not rebuild from `Y:\Claude local\SDRLoggerPlus-v2`.
 
-## What was wrong
+## What 2.15.3 already does
 
-Share QSO totals was on and Logger posted a snapshot. The server accepted it. The website and Discord `#qsos` stayed empty because the snapshot was 0 voice, 0 CW, and 0 digital.
+GitHub release 2.15.3 is “Count QRV QSO totals from any radio.” That build is installed and it is posting. The weekly board stays empty because the count still skips a contact that has no radio stamp.
 
-A contact was counted only when it was stamped `Lyra` or `STD` at save time. Lyra tells Logger its TCI name is `ExpertSDR3` unless that emulation is turned off. The old rule treated `ExpertSDR3` as Lyra only while Combo link was on. Combo is often off, so those FT8 contacts were saved with a blank source and left out. STD is a TCI client of Lyra, so it did not get its own label on Logger’s connection either.
-
-Lyra and STD are Windows-only. SDRLogger+ is Windows, Mac, and Linux. Requiring Lyra or STD kept every other radio, and every non-Windows install, off the board.
+STD, WSJT-X, JTDX, MSHV, and VARAC do not save through Logger’s log button. They append ADIF, and Logger’s ADIF monitor (or ADIF-over-UDP) imports the new record. Those rows have no stamp, so the posted total is 0. The same hole hits a manual ADIF import.
 
 ## The rule now
 
-- A contact logged in SDRLogger+ counts, on any radio.
-- Combo link is not required.
-- Lyra and STD are not required. Mac and Linux count the same as Windows.
-- When the TCI session identifies itself, the saved label is still `Lyra` or `STD`. Otherwise the label is `Logger`. Either label counts.
-- Contest contacts stay out. POTA contacts count in Voice, CW, or Digital.
-- Contacts already in the log stay out. An ADIF import stays out. There is no backfill. Only a contact saved after this build gets a stamp.
-- The public board and `#qsos` still hide a total of 0.
-- Presence (who is on the air) is unchanged. The roster does not feed the totals.
+Every non-contest contact already in the SDRLogger+ log counts for the UTC week, month, and year. The path does not matter:
 
-## Files changed in this folder
+- Log entry inside SDRLogger+
+- ADIF monitor (STD `std.adi`, WSJT-X, JTDX, MSHV, VARAC, or any other watched file)
+- ADIF-over-UDP
+- A manual ADIF import
 
-- `src/SDRLoggerPlus.Server/Services/Qrv/QrvQsoTotals.cs`
-- `src/SDRLoggerPlus.Server/Services/Qrv/QsoRadioSourceStamp.cs`
-- `src/SDRLoggerPlus.Server/Services/Qrv/QrvQsoTotalsService.cs`
+Contest contacts stay out. POTA contacts count in Voice, CW, or Digital. Lyra, STD, and Combo link are not required. The roster is not used to guess a source.
+
+Week is the ISO week (Monday 00:00 UTC). Month and year are the calendar periods in UTC. A log that already has contacts in 2026 will show those on Monthly and Yearly. This week’s board is only contacts dated since Monday 00:00 UTC.
+
+## Files
+
+- `src/SDRLoggerPlus.Server/Services/Qrv/QrvQsoTotals.cs` — `IsCountedContact` no longer requires a stamp
 - `src/SDRLoggerPlus.Server.Tests/Tests/Services/QrvQsoTotalsTests.cs`
 - `src/SDRLoggerPlus.Web/src/components/SettingsPanel.tsx`
 - `src/SDRLoggerPlus.Web/src/components/AboutDialog.tsx`
 - `docs/qrv-qso-totals.md`
 
-`QrvQsoTotalsTests` was run here: 37 passed.
+The ADIF monitor and UDP listener also stamp new imports `Logger`. The count does not depend on that stamp.
 
 ## After the new build is installed
 
-1. Leave **Share QSO totals** on.
-2. Log one new contact. The FT8 contacts already in the log will not appear.
-3. Within about a minute, qrvsdr.cc Weekly and Discord `#qsos` should show that call with the new contact under Digital, Voice, or CW.
-
-The website legend was updated separately in `Y:\Claude local\SDRProject\QRVSDR\public\index.html`. Upload that file to Hostinger when the sentence under the leaderboard should say any radio counts. The server already stores whatever snapshot Logger posts. `qso.php` does not need another upload for this fix.
+Leave **Share QSO totals** on. Do not log another contact to test it. Within about a minute the existing log is recounted and posted. Today’s FT8 contacts should show under Digital on qrvsdr.cc Weekly and in Discord `#qsos`.
