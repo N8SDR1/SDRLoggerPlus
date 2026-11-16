@@ -16,8 +16,9 @@ While it is on, Logger posts a replacement snapshot to
 from a presence heartbeat. The snapshot carries week, month, and year buckets
 of voice, CW, and digital. The week is the ISO week, starting Monday 00:00 UTC.
 
-Only QSOs stamped Lyra or STD at save time count. Contest contacts are
-excluded. Turning the switch off sends one snapshot of zeros.
+A contact logged in SDRLogger+ counts, on any radio. Contest contacts are
+excluded. Contacts already in the log stay out. An ADIF import stays out.
+Turning the switch off sends one snapshot of zeros.
 
 No per-QSO or ADIF upload. Nothing new to upload to Hostinger.
 

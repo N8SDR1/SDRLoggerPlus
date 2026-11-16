@@ -15,6 +15,7 @@ public static class QrvQsoTotals
     public const int MaxCount = 100_000;
     public const string SourceLyra = "Lyra";
     public const string SourceStd = "STD";
+    public const string SourceLogger = "Logger";
 
     public static readonly TimeSpan RefreshPeriod = TimeSpan.FromMinutes(3);
     public static readonly TimeSpan MinPostInterval = TimeSpan.FromSeconds(10);
@@ -51,13 +52,15 @@ public static class QrvQsoTotals
     }
 
     /// <summary>
-    /// Lyra's hello is <c>protocol:Lyra</c>. <c>protocol:ExpertSDR3</c> counts as
-    /// Lyra only while Combo link is on. STD counts only when that same session
-    /// has identified STD, and only for a QSO whose logging program is STD
-    /// (or whose hello itself is <c>protocol:STD</c>). A hand log is not guessed
-    /// to be STD, and a {LOG} macro does not create a source.
+    /// When the TCI session identifies itself, the saved label is still Lyra or STD.
+    /// Otherwise the label is Logger. Either label counts. Combo link is not required
+    /// for the contact to count. Lyra's hello is <c>protocol:Lyra</c>.
+    /// <c>protocol:ExpertSDR3</c> is labeled Lyra only while Combo link is on.
+    /// STD is labeled STD only when that session has identified STD and the logging
+    /// program is STD (or the hello itself is <c>protocol:STD</c>). A hand log is not
+    /// guessed to be STD, and a {LOG} macro does not create a source.
     /// </summary>
-    public static string? Classify(TciSession session, string? loggingProgramId)
+    public static string Classify(TciSession session, string? loggingProgramId)
     {
         var protocol = session.Protocol?.Trim();
         var lyraHello = EqualsName(protocol, SourceLyra);
@@ -67,11 +70,11 @@ public static class QrvQsoTotals
         var std = session.StdIdentified || stdHello;
 
         if (IsStdProgram(loggingProgramId))
-            return std ? SourceStd : null;
+            return std ? SourceStd : SourceLogger;
 
         if (lyra) return SourceLyra;
         if (stdHello) return SourceStd;
-        return null;
+        return SourceLogger;
     }
 
     /// <summary>
@@ -93,7 +96,7 @@ public static class QrvQsoTotals
 
     public static bool IsCountedContact(Qso qso)
     {
-        if (qso.RadioSource is not (SourceLyra or SourceStd)) return false;
+        if (qso.RadioSource is not (SourceLyra or SourceStd or SourceLogger)) return false;
         return !IsContest(qso);
     }
 

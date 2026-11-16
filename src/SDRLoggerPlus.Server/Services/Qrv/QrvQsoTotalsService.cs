@@ -6,7 +6,7 @@ using SDRLoggerPlus.Server.Core.Database;
 namespace SDRLoggerPlus.Server.Services.Qrv;
 
 /// <summary>
-/// Recounts Lyra and STD QSOs and drives <see cref="QrvQsoTotalsClient"/>.
+/// Recounts QSOs stamped at save time and drives <see cref="QrvQsoTotalsClient"/>.
 /// The presence install key is reused. Totals stay quiet while the switch is off.
 /// </summary>
 public sealed class QrvQsoTotalsService : BackgroundService
