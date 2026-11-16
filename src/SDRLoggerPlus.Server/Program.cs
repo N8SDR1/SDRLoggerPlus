@@ -6,6 +6,7 @@ using SDRLoggerPlus.Server.Core.Events;
 using SDRLoggerPlus.Server.Core.Security;
 using SDRLoggerPlus.Server.Services;
 using SDRLoggerPlus.Server.Services.Backup;
+using SDRLoggerPlus.Server.Services.Qrv;
 using SDRLoggerPlus.Server.Services.Wsjtx;
 using SDRLoggerPlus.Server.Services.Weather;
 using SDRLoggerPlus.Server.Services.Sat;
@@ -270,6 +271,18 @@ builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigBackend>(
     sp => sp.GetRequiredService<SDRLoggerPlus.Server.Services.Flex.FlexRadioService>());
 builder.Services.AddSingleton<SDRLoggerPlus.Server.Services.Rig.IRigRegistry,
     SDRLoggerPlus.Server.Services.Rig.RigRegistry>();
+
+// QRV board presence (qrvsdr.cc). Default off. The client never calls Discord.
+builder.Services.AddHttpClient("QRV", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(12);
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "SDRLoggerPlus (QRV)");
+});
+builder.Services.AddSingleton(sp => new QrvPresenceClient(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("QRV"),
+    sp.GetRequiredService<ILogger<QrvPresenceClient>>()));
+builder.Services.AddHostedService<QrvPresenceService>();
 
 
 // Club Log realtime QSO upload (singleton so the one-strike auth block persists)

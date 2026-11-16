@@ -37,6 +37,9 @@ public class SettingsService : ISettingsService
         settings.SpotStatus ??= new();
         settings.Ai ??= new();
         settings.SavedLayouts ??= new();
+        settings.Qrv ??= new();
+        if (string.IsNullOrWhiteSpace(settings.Qrv.BaseUrl))
+            settings.Qrv.BaseUrl = "https://qrvsdr.cc/v1";
 
         return settings;
     }

@@ -29,3 +29,4 @@ export { StatisticsPlugin } from './StatisticsPlugin';
 export { SatPlugin } from './SatPlugin';
 export { SatWebPlugin } from './SatWebPlugin';
 export { MeterPlugin } from './MeterPlugin';
+export { QrvPlugin } from './QrvPlugin';

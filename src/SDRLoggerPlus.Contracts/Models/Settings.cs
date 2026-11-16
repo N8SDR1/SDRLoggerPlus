@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -93,6 +94,13 @@ public class UserSettings
     [BsonElement("contest")]
     public ContestSettings Contest { get; set; } = new();
 
+    /// <summary>
+    /// Opt-in QRV board presence. Default off. The install key is issued by
+    /// qrvsdr.cc and is not part of the settings form.
+    /// </summary>
+    [BsonElement("qrv")]
+    public QrvSettings Qrv { get; set; } = new();
+
     [BsonElement("layoutJson")]
     public string? LayoutJson { get; set; }
 
@@ -119,6 +127,31 @@ public class UserSettings
 
     [BsonElement("updatedAt")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// QRV board (qrvsdr.cc) presence for this install. Presence only: the client
+/// publishes call, band, mode, and app "Logger". Hz, notes, and spots are a
+/// later slice and are not stored here.
+/// </summary>
+public class QrvSettings
+{
+    [BsonElement("enabled")]
+    public bool Enabled { get; set; }
+
+    /// <summary>API root. Either https://qrvsdr.cc or https://qrvsdr.cc/v1.</summary>
+    [BsonElement("baseUrl")]
+    public string BaseUrl { get; set; } = "https://qrvsdr.cc/v1";
+
+    /// <summary>64-hex key issued by the server. Never generated on the client.</summary>
+    [BsonElement("installKey")]
+    [JsonIgnore]
+    public string? InstallKey { get; set; }
+
+    /// <summary>Callsign the install key was issued for.</summary>
+    [BsonElement("boundCall")]
+    [JsonIgnore]
+    public string? BoundCall { get; set; }
 }
 
 /// <summary>

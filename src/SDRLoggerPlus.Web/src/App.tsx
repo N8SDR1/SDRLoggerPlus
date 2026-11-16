@@ -10,7 +10,7 @@ import { SetupWizard } from './components/SetupWizard';
 import { PluginErrorBoundary } from './components/PluginErrorBoundary';
 import { ShortcutOverlay } from './components/ShortcutOverlay';
 import { useSignalRConnection } from './hooks/useSignalR';
-import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, QrzProfilePlugin, ContestsPlugin, ContestEntryPlugin, MultNeededPlugin, ContestBandmapPlugin, ContestScorePlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, SatWebPlugin, MeterPlugin, MapPlugin, DecodesPlugin, GridTrackerPlugin, CoordPlugin } from './plugins';
+import { LogEntryPlugin, LogHistoryPlugin, ClusterPlugin, RotatorPlugin, GlobePlugin, QrzProfilePlugin, ContestsPlugin, ContestEntryPlugin, MultNeededPlugin, ContestBandmapPlugin, ContestScorePlugin, HeaderPlugin, DXpeditionsPlugin, ChatAiPlugin, POTAPlugin, DxCoachPlugin, PropagationPanelPlugin, PanadapterPlugin, StatisticsPlugin, SatPlugin, SatWebPlugin, MeterPlugin, MapPlugin, DecodesPlugin, GridTrackerPlugin, CoordPlugin, QrvPlugin } from './plugins';
 import { useLayoutStore, defaultLayout } from './store/layoutStore';
 import { useSettingsStore, type SettingsSection } from './store/settingsStore';
 import { useSetupStore } from './store/setupStore';
@@ -220,6 +220,13 @@ const PLUGINS: Record<string, PluginDef> = {
     tags: ['map', '2d', 'leaflet', 'spots'],
     scalable: false,
   },
+  'qrv': {
+    name: 'QRV',
+    icon: <Users className="w-4 h-4" />,
+    component: QrvPlugin,
+    category: 'Information',
+    tags: ['qrv', 'presence', 'roster', 'qrvsdr'],
+  },
 };
 
 // Panels whose settings live in a dedicated Settings section get a gear icon on
@@ -235,6 +242,7 @@ const PANEL_SETTINGS_SECTION: Partial<Record<string, SettingsSection>> = {
   'wsjtx-decodes': 'decodealerts',
   'pota': 'weblogbooks',
   'qrz-profile': 'weblogbooks',
+  'qrv': 'qrv',
 };
 
 
