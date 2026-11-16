@@ -3,6 +3,24 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-11-16 — v2.15.2 "Deneb"
+
+**Opt-in QSO totals for the QRV Board. Sharing stays off until you turn it on.**
+
+### New — share QSO totals
+**Settings → QRV Board → Share QSO totals** is a second switch, off by default
+and separate from **Share that I am QRV**.
+
+While it is on, Logger posts a replacement snapshot to
+`https://qrvsdr.cc/v1/qso.php` with `"app": "Logger"` and the `install_key`
+from a presence heartbeat. The snapshot carries week, month, and year buckets
+of voice, CW, and digital. The week is the ISO week, starting Monday 00:00 UTC.
+
+Only QSOs stamped Lyra or STD at save time count. Contest contacts are
+excluded. Turning the switch off sends one snapshot of zeros.
+
+No per-QSO or ADIF upload. Nothing new to upload to Hostinger.
+
 ## 2026-11-16 — v2.15.1 "Deneb"
 
 **Opt-in QRV Board presence. Sharing stays off until you turn it on.**
