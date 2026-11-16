@@ -3,6 +3,23 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-11-16 — v2.15.4 "Deneb"
+
+**Every non-contest contact already in the log counts.**
+
+### Fixed — a logged contact counts, with or without a radio stamp
+v2.15.3 still skipped a contact that has no radio stamp. STD, WSJT-X, JTDX, MSHV, and VARAC do not save through Logger’s log button. They append ADIF, and Logger’s ADIF monitor (or ADIF-over-UDP) imports the new record. Those rows have no stamp, so the posted total is 0. The same hole hits a manual ADIF import.
+
+Every non-contest contact already in the SDRLogger+ log counts for the UTC week, month, and year. The path does not matter: log entry inside SDRLogger+, the ADIF monitor (STD `std.adi`, WSJT-X, JTDX, MSHV, VARAC, or any other watched file), ADIF-over-UDP, or a manual ADIF import.
+
+Contest contacts stay out. POTA contacts count in Voice, CW, or Digital. Lyra, STD, and Combo link are not required. The roster is not used to guess a source.
+
+Week is the ISO week (Monday 00:00 UTC). Month and year are the calendar periods in UTC. A log that already has contacts in 2026 will show those on Monthly and Yearly. This week’s board is only contacts dated since Monday 00:00 UTC.
+
+The ADIF monitor and UDP listener also stamp new imports Logger. The count does not depend on that stamp.
+
+Leave **Share QSO totals** on. Do not log another contact to test it. Within about a minute the existing log is recounted and posted. Today’s FT8 contacts should show under Digital on qrvsdr.cc Weekly and in Discord `#qsos`.
+
 ## 2026-11-16 — v2.15.3 "Deneb"
 
 **QSO totals count a contact logged in SDRLogger+, on any radio.**
