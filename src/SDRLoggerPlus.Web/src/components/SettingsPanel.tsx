@@ -86,6 +86,12 @@ const SETTINGS_SECTIONS: { id: SettingsSection; name: string; icon: React.ReactN
     description: 'Callsign, location, and operator info',
   },
   {
+    id: 'qrv',
+    name: 'QRV Board',
+    icon: <Wifi className="w-5 h-5" />,
+    description: 'Opt-in presence on qrvsdr.cc',
+  },
+  {
     id: 'weblogbooks',
     name: 'Web Logbooks',
     icon: <CloudUpload className="w-5 h-5" />,
@@ -5142,6 +5148,63 @@ function ConfirmationSyncSettingsSection() {
   );
 }
 
+function QrvSettingsSection() {
+  const { settings, updateQrvSettings } = useSettingsStore();
+  const qrv = settings.qrv ?? { enabled: false, baseUrl: 'https://qrvsdr.cc/v1' };
+  const callsign = settings.station?.callsign?.trim();
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold font-ui text-dark-200 mb-1">QRV Board</h3>
+        <p className="text-sm text-dark-300">
+          Optional presence on qrvsdr.cc. Off until you enable it. Logger publishes your station
+          callsign, band, and mode — not your log, and not an exact frequency.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+        <div>
+          <p className="font-medium font-ui text-dark-200">Share that I am QRV</p>
+          <p className="text-xs text-dark-400">Default off. Turning this off sends QRT.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => updateQrvSettings({ enabled: !qrv.enabled })}
+          className={`relative w-12 h-6 rounded-full transition-colors ${qrv.enabled ? 'bg-accent-success' : 'bg-dark-500'}`}
+          aria-pressed={qrv.enabled}
+          aria-label="Share QRV presence"
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${qrv.enabled ? 'translate-x-6' : ''}`} />
+        </button>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-dark-200 mb-1">Board URL</label>
+        <input
+          type="text"
+          value={qrv.baseUrl}
+          onChange={(e) => updateQrvSettings({ baseUrl: e.target.value })}
+          className="w-full bg-dark-700 border border-glass-200 rounded-lg px-3 py-2 text-sm text-dark-100"
+          spellCheck={false}
+        />
+        <p className="text-xs text-dark-400 mt-1">
+          Heartbeats go to <span className="font-mono">/heartbeat.php</span>, QRT to <span className="font-mono">/qrt.php</span>.
+          The app badge is Logger.
+        </p>
+      </div>
+
+      <p className="text-sm text-dark-300">
+        {callsign
+          ? <>Publishes as <span className="font-mono text-dark-100">{callsign.toUpperCase()}</span> from Station settings.</>
+          : 'Set a station callsign before enabling QRV.'}
+        {' '}A radio has to be connected. Open the QRV panel to see who else is on the board.
+        Save Changes to keep this switch.
+      </p>
+    </div>
+  );
+}
+
 function WebLogbooksSection() {
   const [tab, setTab] = useState<WebLogbookTab>('qrz');
   const tabs: { id: WebLogbookTab; label: string }[] = [
@@ -5470,6 +5533,8 @@ export function SettingsPanel() {
     switch (activeSection) {
       case 'station':
         return <StationSettingsSection />;
+      case 'qrv':
+        return <QrvSettingsSection />;
       case 'weblogbooks':
         return <WebLogbooksSection />;
       case 'wsjtx':

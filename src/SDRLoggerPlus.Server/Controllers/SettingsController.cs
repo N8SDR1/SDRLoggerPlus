@@ -112,6 +112,16 @@ public class SettingsController : ControllerBase
                 settings.LayoutJson = existing.LayoutJson;
             }
 
+            // The install key is issued by qrvsdr.cc and ignored on the wire,
+            // so a settings save from the form must not wipe it.
+            settings.Qrv ??= new();
+            settings.Qrv.InstallKey = existing.Qrv?.InstallKey;
+            settings.Qrv.BoundCall = existing.Qrv?.BoundCall;
+            if (string.IsNullOrWhiteSpace(settings.Qrv.BaseUrl))
+                settings.Qrv.BaseUrl = string.IsNullOrWhiteSpace(existing.Qrv?.BaseUrl)
+                    ? "https://qrvsdr.cc/v1"
+                    : existing.Qrv!.BaseUrl;
+
             ResetClubLogBlockIfCredentialsChanged(existing, settings);
 
             var saved = await _settingsService.SaveSettingsAsync(settings);

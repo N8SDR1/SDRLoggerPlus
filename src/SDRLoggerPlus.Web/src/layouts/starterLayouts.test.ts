@@ -9,7 +9,7 @@ const KNOWN_PANELS = new Set([
   'globe-3d', 'qrz-profile', 'contests', 'contest-entry', 'contest-mults',
   'contest-bandmap', 'contest-score', 'header-bar', 'sat-controller', 'sat-web', 'dxpeditions',
   'chat-ai', 'pota', 'dx-coach', 'propagation', 'meters', 'panadapter',
-  'statistics', 'map',
+  'statistics', 'map', 'qrv',
 ]);
 
 function componentsIn(node: unknown): string[] {

@@ -468,6 +468,11 @@ export interface AiSettings {
   includeSpotComments: boolean;
 }
 
+export interface QrvSettings {
+  enabled: boolean;
+  baseUrl: string;
+}
+
 export interface ContestSettings {
   n1mmUdpEnabled: boolean;
   n1mmUdpHost: string;
@@ -508,6 +513,7 @@ export interface Settings {
   weather: WeatherSettings;
   sat: SatControllerSettings;
   contest: ContestSettings;
+  qrv: QrvSettings;
   gridStates: Record<string, string>;
   modeLayouts: ModeLayouts;
 }
@@ -520,7 +526,7 @@ export interface ModeLayouts {
   contest: string | null;
 }
 
-export type SettingsSection = 'station' | 'weblogbooks' | 'wsjtx' | 'decodealerts' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'logbookhealth' | 'sat' | 'dxcoach' | 'voice' | 'server' | 'about';
+export type SettingsSection = 'station' | 'qrv' | 'weblogbooks' | 'wsjtx' | 'decodealerts' | 'alerts' | 'adifmonitor' | 'rbnalerts' | 'rotator' | 'appearance' | 'map' | 'header' | 'ai' | 'backup' | 'logbookhealth' | 'sat' | 'dxcoach' | 'voice' | 'server' | 'about';
 
 interface SettingsState {
   // Settings data
@@ -573,6 +579,7 @@ interface SettingsState {
   updateSatSettings: (sat: Partial<SatControllerSettings>) => void;
   setModeLayout: (mode: keyof ModeLayouts, ref: string | null) => void;
   updateContestSettings: (contest: Partial<ContestSettings>) => void;
+  updateQrvSettings: (qrv: Partial<QrvSettings>) => void;
   updateSpotStatusSettings: (spotStatus: Partial<SpotStatusSettings>) => void;
   addClusterConnection: () => void;
   removeClusterConnection: (connectionId: string) => void;
@@ -873,6 +880,10 @@ const defaultSettings: Settings = {
     autoActivate: false,
     autoActivateLeadSeconds: 90,
     releaseRigWhileControllerActive: false,
+  },
+  qrv: {
+    enabled: false,
+    baseUrl: 'https://qrvsdr.cc/v1',
   },
   contest: {
     n1mmUdpEnabled: false,
@@ -1193,6 +1204,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       isDirty: true,
     })),
 
+  updateQrvSettings: (qrv) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        qrv: { ...state.settings.qrv, ...qrv },
+      },
+      isDirty: true,
+    })),
+
   // Contest interop settings (N1MM UDP / online score)
   updateContestSettings: (contest) =>
     set((state) => ({
@@ -1417,6 +1437,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           },
           sat: { ...defaultSettings.sat, ...settings.sat },
           contest: { ...defaultSettings.contest, ...settings.contest },
+          qrv: { ...defaultSettings.qrv, ...settings.qrv },
           gridStates: { ...defaultSettings.gridStates, ...settings.gridStates },
           modeLayouts: { ...defaultSettings.modeLayouts, ...settings.modeLayouts },
         };

@@ -250,6 +250,21 @@ export function LogEntryPlugin() {
     satGrid: '',
   });
 
+  // QRV presence reads this Mode select (contract §4.3). The post stays on
+  // this machine; the server heartbeats only after QRV is turned on.
+  useEffect(() => {
+    const mode = formData.mode;
+    const radioId = selectedRadioId;
+    const timer = window.setTimeout(() => {
+      fetch('/api/qrv/activity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, radioId }),
+      }).catch(() => {});
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [formData.mode, selectedRadioId]);
+
   // Live S.A.T. controller state — poll (5 s) + SignalR push. Only enabled
   // when SAT integration is on in Settings so we don't hammer the backend
   // for operators who never use satellites.
