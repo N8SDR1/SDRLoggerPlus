@@ -198,6 +198,7 @@ const HELP_SECTIONS = [
   { id: 'contest',  title: 'Contest Logging' },
   { id: 'multiop',  title: 'Multi-op (Beta)' },
   { id: 'spots',    title: 'DX Spots & the Map' },
+  { id: 'qrv',      title: 'QRV Board' },
   { id: 'decodes',  title: 'Digital Decodes & Grid' },
   { id: 'weather',  title: 'Weather & Alerts' },
   { id: 'meters',   title: 'Meters & Panadapter' },
@@ -499,6 +500,12 @@ function HelpTab() {
           </ul>
           <p>The Coach ranks spots and does not hide any by default. To drop the forecast-only long shots, turn on <B>Hide unlikely paths</B> in <P>Settings → DX Coach</P>. Click a row to tune.</p>
           <p><B>"Heard Me" — who's hearing you.</B> Switch on the <B>PSK</B> and <B>RBN</B> layers (on the 3D globe and the 2D map) to draw arcs from your station out to every receiver that recently spotted <em>you</em> — <B>PSK Reporter</B> for digital, <B>RBN skimmers</B> for CW/RTTY. The band follows your connected rig (or pick a band, or <B>All bands</B>), each layer with its own look-back window; click a receiver dot to see its report — frequency, mode, SNR, and how long ago.</p>
+        </Section>
+
+        <Section id="qrv" title="QRV Board">
+          <p>Optional, and off until you turn it on. <P>Settings → QRV Board → Share that I am QRV</P> publishes the station callsign from <P>Settings → Station</P>. The <B>QRV</B> panel (<B>Add Panel → QRV</B>) has the same switch.</p>
+          <p>While it is on, Logger sends a heartbeat to <span className="font-mono text-[11px] text-dark-100">https://qrvsdr.cc/v1/</span> with the app name <B>Logger</B>, your callsign, band, and mode. The panel lists who else is on the board. A heartbeat goes out only when a radio is connected and the dial is on a band the board accepts. Turning the switch off, disconnecting the radio, changing the callsign, or quitting sends QRT.</p>
+          <p className="text-xs text-dark-300">Presence only. Exact frequency, TCI spots, operator notes, and the log (QSO / ADIF) stay on this computer.</p>
         </Section>
 
         <Section id="decodes" title="Digital Decodes & Grid Tracker">

@@ -3,6 +3,23 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-11-16 — v2.15.1 "Deneb"
+
+**Opt-in QRV Board presence. Sharing stays off until you turn it on.**
+
+### New — share that you are QRV
+**Settings → QRV Board → Share that I am QRV** publishes the station callsign
+already stored under **Settings → Station**. Heartbeats, QRT, and the roster go
+to `https://qrvsdr.cc/v1/` with `"app": "Logger"`, plus band and mode. The **QRV**
+panel (**Add Panel → QRV**) has the same switch and lists who is on the board.
+
+A heartbeat is sent only while a radio is connected and the dial is on a band
+the board accepts. Turning the switch off, disconnecting the radio, changing
+the callsign, or quitting sends QRT.
+
+This release sends presence only: callsign, band, and mode. Exact frequency
+(Hz), TCI spots, operator notes, and QSO / ADIF upload stay on this computer.
+
 ## 2026-11-15 — v2.15.0 "Deneb"
 
 **Chat AI works again, the DX Coach judges paths from real reception reports, and propagation uses live ionosonde data.**
