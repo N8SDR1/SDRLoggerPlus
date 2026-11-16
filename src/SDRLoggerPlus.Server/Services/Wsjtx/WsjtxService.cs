@@ -555,7 +555,11 @@ public class WsjtxService : BackgroundService
         request = await FillGapsFromCallbookAsync(scope.ServiceProvider, request);
 
         var qsoService = scope.ServiceProvider.GetRequiredService<IQsoService>();
-        var created = await qsoService.CreateAsync(request);
+        QsoResponse created;
+        using (Qrv.QsoLoggingOrigin.Use(qso.Id))
+        {
+            created = await qsoService.CreateAsync(request);
+        }
 
         lock (l.StateLock)
         {

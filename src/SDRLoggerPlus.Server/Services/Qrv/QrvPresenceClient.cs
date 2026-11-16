@@ -65,6 +65,15 @@ public sealed class QrvPresenceClient
         get { lock (_gate) return _preferredRadioId; }
     }
 
+    /// <summary>
+    /// Call and install key the presence heartbeat is using. Totals reuse this
+    /// key and do not invent another. Call is already normalized.
+    /// </summary>
+    public QrvCredentials Credentials()
+    {
+        lock (_gate) return new QrvCredentials(_apiBase, _stationCall, _installKey);
+    }
+
     public void ApplySettings(bool enabled, string? baseUrl, string? stationCall, string? storedKey, string? storedBoundCall)
     {
         lock (_gate)

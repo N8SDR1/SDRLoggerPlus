@@ -130,9 +130,10 @@ public class UserSettings
 }
 
 /// <summary>
-/// QRV board (qrvsdr.cc) presence for this install. Presence only: the client
-/// publishes call, band, mode, and app "Logger". Hz, notes, and spots are a
-/// later slice and are not stored here.
+/// QRV board (qrvsdr.cc) settings for this install. Presence and QSO totals are
+/// separate opt-ins, both default off. The client publishes call, band, and mode
+/// for presence, and a totals snapshot only when that switch is on. Hz, notes,
+/// and the log itself are not stored here.
 /// </summary>
 public class QrvSettings
 {
@@ -152,6 +153,13 @@ public class QrvSettings
     [BsonElement("boundCall")]
     [JsonIgnore]
     public string? BoundCall { get; set; }
+
+    /// <summary>
+    /// Opt-in QSO totals posted to qso.php. Separate from presence. Default off.
+    /// A replacement snapshot of week, month, and year counts — not the log.
+    /// </summary>
+    [BsonElement("qsoTotalsEnabled")]
+    public bool QsoTotalsEnabled { get; set; }
 }
 
 /// <summary>

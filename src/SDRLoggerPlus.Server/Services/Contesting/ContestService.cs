@@ -5,6 +5,7 @@ using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Contracts.Models.Contesting;
 using SDRLoggerPlus.Server.Core.Database;
 using SDRLoggerPlus.Server.Hubs;
+using SDRLoggerPlus.Server.Services.Qrv;
 
 namespace SDRLoggerPlus.Server.Services.Contesting;
 
@@ -27,6 +28,8 @@ public class ContestService
     private readonly IHubContext<LogHub, ILogHubClient> _hub;
     private readonly ILogger<ContestService> _logger;
     private readonly IHostSerialClient _hostSerial;
+    private readonly TciRadioSourceTracker? _radioSources;
+    private readonly QrvPresenceClient? _qrvPresence;
 
     public ContestService(
         IQsoRepository qsos,
@@ -38,7 +41,9 @@ public class ContestService
         ContestBroadcastService broadcast,
         IHubContext<LogHub, ILogHubClient> hub,
         ILogger<ContestService> logger,
-        IHostSerialClient hostSerial)
+        IHostSerialClient hostSerial,
+        TciRadioSourceTracker? radioSources = null,
+        QrvPresenceClient? qrvPresence = null)
     {
         _qsos = qsos;
         _sessions = sessions;
@@ -50,6 +55,8 @@ public class ContestService
         _hub = hub;
         _logger = logger;
         _hostSerial = hostSerial;
+        _radioSources = radioSources;
+        _qrvPresence = qrvPresence;
     }
 
     /// <summary>
@@ -198,6 +205,9 @@ public class ContestService
 
         var log = await _qsos.GetByContestSessionAsync(session.Id);
         var qso = BuildQso(session, def, request, enrich: true);
+        // Contest contacts are excluded from the totals. The source is still
+        // stamped at save time so it is not guessed later.
+        QsoRadioSourceStamp.Apply(qso, _radioSources, _qrvPresence?.PreferredRadioId, null);
         var eval = ContestScoringEngine.Evaluate(def, session.MyExchange, log, qso);
 
         // Serial: allocated even for dupes (the number was sent on the air).

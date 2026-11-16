@@ -50,6 +50,14 @@ public class Qso
     [BsonElement("mode")]
     public string Mode { get; set; } = null!;
 
+    /// <summary>
+    /// Radio that made this contact, stamped when the QSO was saved.
+    /// "Lyra" or "STD", or null. Older rows, imports, and radios that never
+    /// identified stay null — the source is not guessed later.
+    /// </summary>
+    [BsonElement("radio_source")]
+    public string? RadioSource { get; set; }
+
     [BsonElement("freq")]
     public double? Frequency { get; set; }
 

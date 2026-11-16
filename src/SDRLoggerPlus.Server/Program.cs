@@ -283,6 +283,12 @@ builder.Services.AddSingleton(sp => new QrvPresenceClient(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("QRV"),
     sp.GetRequiredService<ILogger<QrvPresenceClient>>()));
 builder.Services.AddHostedService<QrvPresenceService>();
+builder.Services.AddSingleton<TciRadioSourceTracker>();
+builder.Services.AddSingleton<QrvQsoTotalsSignal>();
+builder.Services.AddSingleton(sp => new QrvQsoTotalsClient(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("QRV"),
+    sp.GetRequiredService<ILogger<QrvQsoTotalsClient>>()));
+builder.Services.AddHostedService<QrvQsoTotalsService>();
 
 
 // Club Log realtime QSO upload (singleton so the one-strike auth block persists)

@@ -477,8 +477,13 @@ public class SatControllerService : BackgroundService
     {
         var repository = scopedProvider.GetRequiredService<IQsoRepository>();
         var spotStatus = scopedProvider.GetService<ISpotStatusService>();
+        var sources = scopedProvider.GetService<Qrv.TciRadioSourceTracker>();
+        var presence = scopedProvider.GetService<Qrv.QrvPresenceClient>();
+        Qrv.QsoRadioSourceStamp.Apply(qso, sources, presence?.PreferredRadioId, null);
 
         var created = await repository.CreateAsync(qso);
+        if (Qrv.QrvQsoTotals.IsCountedContact(created))
+            scopedProvider.GetService<Qrv.QrvQsoTotalsSignal>()?.NoteLogged();
         spotStatus?.OnQsoLogged(created.Callsign, created.Country, created.Band, created.Mode, created.Station?.Grid);
         await _hubContext.BroadcastQso(new QsoLoggedEvent(
             created.Id, created.Callsign, created.QsoDate, created.TimeOn,
