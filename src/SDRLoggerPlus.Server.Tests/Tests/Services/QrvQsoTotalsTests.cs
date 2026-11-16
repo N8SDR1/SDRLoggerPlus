@@ -91,18 +91,58 @@ public class QrvQsoTotalsTests
     }
 
     [Fact]
-    public void Qsos_without_a_lyra_or_std_source_are_not_counted()
+    public void Unstamped_rows_stay_out_and_lyra_std_and_logger_count()
     {
         var qsos = new[]
         {
             Qso(Now, "USB", null),
             Qso(Now, "CW", ""),
-            Qso(Now, "FT8", "WSJT-X"),
-            Qso(Now, "USB", "Thetis"),
+            Qso(Now, "FT8", "Logger"),
             Qso(Now, "USB", "Lyra"),
+            Qso(Now, "CW", "STD"),
         };
 
-        QrvQsoTotals.Count(qsos, Now).Week.Voice.Should().Be(1);
+        var totals = QrvQsoTotals.Count(qsos, Now);
+        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 1));
+    }
+
+    [Fact]
+    public async Task A_contact_from_another_radio_counts_lyra_and_std_still_count_and_contest_does_not()
+    {
+        var tracker = new TciRadioSourceTracker();
+        tracker.Connected("rig-1");
+        tracker.NoteProtocol("rig-1", "Thetis");
+        var presence = new QrvPresenceClient(new HttpClient(new FakeHandler()));
+        var signal = new QrvQsoTotalsSignal();
+        var (service, captured) = Service(tracker, presence, signal);
+        var saved = new List<Qso>();
+
+        await service.CreateAsync(Request("FT8"));
+        captured().RadioSource.Should().Be("Logger");
+        signal.Consume().Should().BeTrue();
+        saved.Add(Copy(captured()));
+
+        tracker.NoteProtocol("rig-1", "Lyra");
+        await service.CreateAsync(Request("USB"));
+        captured().RadioSource.Should().Be("Lyra");
+        signal.Consume().Should().BeTrue();
+        saved.Add(Copy(captured()));
+
+        tracker.NoteStd("rig-1");
+        using (QsoLoggingOrigin.Use("STD"))
+            await service.CreateAsync(Request("CW"));
+        captured().RadioSource.Should().Be("STD");
+        signal.Consume().Should().BeTrue();
+        saved.Add(Copy(captured()));
+
+        await service.CreateAsync(Request("USB", contest: "CQ-WW-SSB"));
+        captured().RadioSource.Should().Be("Lyra");
+        captured().Contest!.ContestId.Should().Be("CQ-WW-SSB");
+        signal.Consume().Should().BeFalse();
+        saved.Add(Copy(captured()));
+        saved.Add(Qso(Now, "USB", null));
+
+        QrvQsoTotals.Count(saved, Now).Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 1));
     }
 
     [Fact]
@@ -141,7 +181,7 @@ public class QrvQsoTotalsTests
     {
         QrvQsoTotals.IsStdIdentity("lyra_log", new[] { "N8SDR", "599" }).Should().BeFalse();
         QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("ExpertSDR3", ComboLinked: false, StdIdentified: false), null)
-            .Should().BeNull();
+            .Should().Be("Logger");
         QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("ExpertSDR3", ComboLinked: true, StdIdentified: false), null)
             .Should().Be("Lyra");
     }
@@ -151,12 +191,13 @@ public class QrvQsoTotalsTests
     {
         QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("Lyra", false, false), null).Should().Be("Lyra");
         QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("lyra", false, false), "WSJT-X").Should().Be("Lyra");
-        QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("ExpertSDR3", false, false), null).Should().BeNull();
+        QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("ExpertSDR3", false, false), null).Should().Be("Logger");
+        QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("Thetis", false, false), null).Should().Be("Logger");
         QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("ExpertSDR3", true, false), null).Should().Be("Lyra");
-        QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("Lyra", false, false), "STD").Should().BeNull();
+        QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("Lyra", false, false), "STD").Should().Be("Logger");
         QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("ExpertSDR3", true, true), "STD").Should().Be("STD");
         QrvQsoTotals.Classify(new QrvQsoTotals.TciSession("STD", false, false), null).Should().Be("STD");
-        QrvQsoTotals.Classify(QrvQsoTotals.TciSession.None, null).Should().BeNull();
+        QrvQsoTotals.Classify(QrvQsoTotals.TciSession.None, null).Should().Be("Logger");
 
         QrvQsoTotals.IsStdIdentity("protocol", new[] { "Lyra", "2.0" }).Should().BeFalse();
         QrvQsoTotals.IsStdIdentity("protocol", new[] { "ExpertSDR3", "1.9" }).Should().BeFalse();
@@ -406,8 +447,9 @@ public class QrvQsoTotalsTests
         tracker.NoteProtocol("lyra-1", "ExpertSDR3");
         tracker.NoteCombo("lyra-1", false);
         await service.CreateAsync(Request("USB"));
-        captured().RadioSource.Should().BeNull();
-        signal.Consume().Should().BeFalse();
+        captured().RadioSource.Should().Be("Logger");
+        signal.Consume().Should().BeTrue();
+        QrvQsoTotals.Count(new[] { captured() }, Now).Week.Voice.Should().Be(1);
 
         tracker.NoteCombo("lyra-1", true);
         await service.CreateAsync(Request("CW", contest: "CQ-WW-CW"));
@@ -423,7 +465,8 @@ public class QrvQsoTotalsTests
 
         tracker.Disconnected("lyra-1");
         await service.CreateAsync(Request("USB"));
-        captured().RadioSource.Should().BeNull();
+        captured().RadioSource.Should().Be("Logger");
+        signal.Consume().Should().BeTrue();
 
         var updated = await UpdateWithoutSource(service, tracker);
         updated.RadioSource.Should().BeNull();
@@ -468,6 +511,18 @@ public class QrvQsoTotalsTests
 
     private static (int Voice, int Cw, int Digital) Bucket(JsonElement counts) =>
         (counts.GetProperty("voice").GetInt32(), counts.GetProperty("cw").GetInt32(), counts.GetProperty("digital").GetInt32());
+
+    private static Qso Copy(Qso qso) => new()
+    {
+        Id = qso.Id,
+        Callsign = qso.Callsign,
+        QsoDate = qso.QsoDate,
+        TimeOn = qso.TimeOn,
+        Band = qso.Band,
+        Mode = qso.Mode,
+        RadioSource = qso.RadioSource,
+        Contest = qso.Contest == null ? null : new ContestInfo { ContestId = qso.Contest.ContestId, SessionId = qso.Contest.SessionId },
+    };
 
     private static Qso Qso(DateTime when, string mode, string? source) => new()
     {

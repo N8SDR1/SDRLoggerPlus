@@ -136,7 +136,7 @@ public class QrvQsoTotalsLocalBoardTests
                 saved.Should().Contain(q => q.RadioSource == "Lyra" && q.Mode == "CW");
                 saved.Should().Contain(q => q.RadioSource == "STD" && q.Mode == "FT8");
                 saved.Should().Contain(q => q.RadioSource == "Lyra" && q.Contest != null && q.Contest.ContestId == "CQ-WW-SSB");
-                saved.Should().Contain(q => q.RadioSource == null && q.Callsign == "K1JT");
+                saved.Should().Contain(q => q.RadioSource == "Logger" && q.Callsign == "K1JT");
             }
 
             settings.Qrv.QsoTotalsEnabled = true;
@@ -150,9 +150,9 @@ public class QrvQsoTotalsLocalBoardTests
 
             snapshot.Url.Should().Be(board.QsoUrl);
             snapshot.ContentType.Should().Contain("application/json");
-            AssertSnapshot(snapshot.Body, voice: 1, cw: 1, digital: 1,
-                monthVoice: 1 + (monthOnly ? 1 : 0), monthCw: 1, monthDigital: 1,
-                yearVoice: 1 + (monthOnly ? 1 : 0), yearCw: 1, yearDigital: 1 + (yearOnly ? 1 : 0));
+            AssertSnapshot(snapshot.Body, voice: 2, cw: 1, digital: 1,
+                monthVoice: 2 + (monthOnly ? 1 : 0), monthCw: 1, monthDigital: 1,
+                yearVoice: 2 + (monthOnly ? 1 : 0), yearCw: 1, yearDigital: 1 + (yearOnly ? 1 : 0));
             await WaitUntilAsync(() => totals.Status().Phase == "posted", TimeSpan.FromSeconds(2));
             totals.Status().Phase.Should().Be("posted");
             totals.Status().Detail.Should().Contain("2026-W47");

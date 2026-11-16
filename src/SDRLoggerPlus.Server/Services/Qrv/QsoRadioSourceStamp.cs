@@ -4,16 +4,15 @@ namespace SDRLoggerPlus.Server.Services.Qrv;
 
 /// <summary>
 /// Writes <see cref="Qso.RadioSource"/> at save time. Does not replace a source
-/// already on the row, and does not invent one when the TCI session has not identified.
+/// already on the row. When the TCI session identifies itself, the label is
+/// Lyra or STD. Otherwise the label is Logger.
 /// </summary>
 public static class QsoRadioSourceStamp
 {
     public static void Apply(Qso qso, TciRadioSourceTracker? tracker, string? preferredRadioId, string? loggingProgramId)
     {
         if (!string.IsNullOrEmpty(qso.RadioSource) || tracker == null) return;
-        var source = QrvQsoTotals.Classify(tracker.View(preferredRadioId), loggingProgramId);
-        if (source != null)
-            qso.RadioSource = source;
+        qso.RadioSource = QrvQsoTotals.Classify(tracker.View(preferredRadioId), loggingProgramId);
     }
 }
 

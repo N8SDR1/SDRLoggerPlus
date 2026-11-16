@@ -5205,7 +5205,7 @@ function QrvSettingsSection() {
         <div>
           <p className="font-medium font-ui text-dark-200">Share QSO totals</p>
           <p className="text-xs text-dark-400">
-            Separate from presence. Default off. Counts Lyra and STD contacts for the UTC week,
+            Separate from presence. Default off. Counts contacts from any radio for the UTC week,
             month, and year — voice, CW, and digital. Contest contacts are left out. POTA counts.
             No frequencies and no individual QSOs. Turning this off sends zeros.
           </p>
