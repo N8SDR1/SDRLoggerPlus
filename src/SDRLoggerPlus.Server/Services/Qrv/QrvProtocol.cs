@@ -305,6 +305,8 @@ public sealed record QrvRosterResult(
     int StaleSeconds,
     IReadOnlyList<QrvRosterEntry> Entries);
 
+public readonly record struct QrvCredentials(string ApiBase, string Call, string? InstallKey);
+
 public sealed record QrvKeyUpdate(string? InstallKey, string? BoundCall);
 
 public sealed class QrvStatusSnapshot

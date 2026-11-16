@@ -15,13 +15,19 @@ namespace SDRLoggerPlus.Server.Controllers;
 public class QrvController : ControllerBase
 {
     private readonly QrvPresenceClient _client;
+    private readonly QrvQsoTotalsClient _totals;
     private readonly IServiceScopeFactory _scopes;
 
-    public QrvController(QrvPresenceClient client, IServiceScopeFactory scopes)
+    public QrvController(QrvPresenceClient client, QrvQsoTotalsClient totals, IServiceScopeFactory scopes)
     {
         _client = client;
+        _totals = totals;
         _scopes = scopes;
     }
+
+    /// <summary>Local totals opt-in state. This does not call qrvsdr.cc.</summary>
+    [HttpGet("totals")]
+    public QrvTotalsStatus Totals() => _totals.Status();
 
     [HttpGet]
     public QrvStatusSnapshot Get([FromQuery] bool watch = false)

@@ -5,6 +5,7 @@ using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Contracts.Events;
 using SDRLoggerPlus.Server.Core.Database;
 using SDRLoggerPlus.Server.Hubs;
+using SDRLoggerPlus.Server.Services.Qrv;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -18,11 +19,16 @@ public class QsoService : IQsoService
     private readonly EqslService? _eqsl;
     private readonly IServiceScopeFactory? _scopeFactory;
     private readonly ILogger<QsoService>? _logger;
+    private readonly TciRadioSourceTracker? _radioSources;
+    private readonly QrvPresenceClient? _qrvPresence;
+    private readonly QrvQsoTotalsSignal? _qrvTotals;
 
     public QsoService(IQsoRepository repository, IHubContext<LogHub, ILogHubClient> hub,
         ISpotStatusService? spotStatusService = null, ClubLogService? clubLog = null,
         HrdLogService? hrdLog = null, EqslService? eqsl = null,
-        IServiceScopeFactory? scopeFactory = null, ILogger<QsoService>? logger = null)
+        IServiceScopeFactory? scopeFactory = null, ILogger<QsoService>? logger = null,
+        TciRadioSourceTracker? radioSources = null, QrvPresenceClient? qrvPresence = null,
+        QrvQsoTotalsSignal? qrvTotals = null)
     {
         _repository = repository;
         _hub = hub;
@@ -32,6 +38,9 @@ public class QsoService : IQsoService
         _eqsl = eqsl;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _radioSources = radioSources;
+        _qrvPresence = qrvPresence;
+        _qrvTotals = qrvTotals;
     }
 
     /// <summary>
@@ -235,7 +244,12 @@ public class QsoService : IQsoService
                 qso.AdifExtra["down_mode"] = request.DownMode;
         }
 
+        QsoRadioSourceStamp.Apply(qso, _radioSources, _qrvPresence?.PreferredRadioId, QsoLoggingOrigin.ProgramId);
+
         var created = await _repository.CreateAsync(qso);
+
+        if (QrvQsoTotals.IsCountedContact(created))
+            _qrvTotals?.NoteLogged();
 
         // Fire-and-forget QSL uploads — logging must never block on (or fail
         // because of) a slow external service. Each service no-ops when

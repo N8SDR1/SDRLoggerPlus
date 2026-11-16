@@ -11,6 +11,7 @@ using SDRLoggerPlus.Contracts.Models;
 using SDRLoggerPlus.Server.Core.Database;
 using SDRLoggerPlus.Server.Dsp;
 using SDRLoggerPlus.Server.Hubs;
+using SDRLoggerPlus.Server.Services.Qrv;
 
 namespace SDRLoggerPlus.Server.Services;
 
@@ -22,6 +23,7 @@ public partial class TciRadioService : BackgroundService
     private readonly ILogger<TciRadioService> _logger;
     private readonly IHubContext<LogHub, ILogHubClient> _hubContext;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly TciRadioSourceTracker _radioSources;
     private readonly ConcurrentDictionary<string, TciRadioDevice> _discoveredRadios = new();
     private readonly ConcurrentDictionary<string, TciRadioConnection> _connections = new();
 
@@ -37,11 +39,13 @@ public partial class TciRadioService : BackgroundService
     public TciRadioService(
         ILogger<TciRadioService> logger,
         IHubContext<LogHub, ILogHubClient> hubContext,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        TciRadioSourceTracker radioSources)
     {
         _logger = logger;
         _hubContext = hubContext;
         _scopeFactory = scopeFactory;
+        _radioSources = radioSources;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -358,7 +362,7 @@ public partial class TciRadioService : BackgroundService
         await _hubContext.BroadcastRadioConnectionStateChanged(
             new RadioConnectionStateChangedEvent(radioId, RadioConnectionState.Connecting));
 
-        var connection = new TciRadioConnection(device, _logger, _hubContext);
+        var connection = new TciRadioConnection(device, _logger, _hubContext, _radioSources);
         if (_connections.TryAdd(radioId, connection))
         {
             _ = connection.ConnectAsync();
@@ -383,7 +387,7 @@ public partial class TciRadioService : BackgroundService
         await _hubContext.BroadcastRadioConnectionStateChanged(
             new RadioConnectionStateChangedEvent(radioId, RadioConnectionState.Connecting));
 
-        var connection = new TciRadioConnection(device, _logger, _hubContext);
+        var connection = new TciRadioConnection(device, _logger, _hubContext, _radioSources);
         if (_connections.TryAdd(radioId, connection))
         {
             _ = connection.ConnectAsync();
@@ -713,6 +717,7 @@ internal class TciRadioConnection
     private readonly TciRadioDevice _device;
     private readonly ILogger _logger;
     private readonly IHubContext<LogHub, ILogHubClient> _hubContext;
+    private readonly TciRadioSourceTracker _sources;
 
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cts;
@@ -759,11 +764,16 @@ internal class TciRadioConnection
 
     public bool IsConnected => _webSocket?.State == WebSocketState.Open;
 
-    public TciRadioConnection(TciRadioDevice device, ILogger logger, IHubContext<LogHub, ILogHubClient> hubContext)
+    public TciRadioConnection(
+        TciRadioDevice device,
+        ILogger logger,
+        IHubContext<LogHub, ILogHubClient> hubContext,
+        TciRadioSourceTracker? sources = null)
     {
         _device = device;
         _logger = logger;
         _hubContext = hubContext;
+        _sources = sources ?? new TciRadioSourceTracker();
     }
 
     // Reconnect-on-drop backoff bounds. The link is retried with capped
@@ -806,6 +816,7 @@ internal class TciRadioConnection
                 var uri = new Uri($"ws://{_device.IpAddress}:{_device.TciPort}");
 
                 await _webSocket.ConnectAsync(uri, ct);
+                _sources.Connected(_device.Id);
 
                 _logger.LogInformation("Connected to TCI radio {Id}", _device.Id);
                 backoffMs = InitialReconnectDelayMs;   // healthy connect → reset backoff
@@ -829,6 +840,7 @@ internal class TciRadioConnection
             {
                 try { _webSocket?.Dispose(); } catch { /* already gone */ }
                 _webSocket = null;
+                _sources.Disconnected(_device.Id);
             }
 
             if (ct.IsCancellationRequested) break;
@@ -1214,6 +1226,9 @@ internal class TciRadioConnection
                 args = argsStr.Split(',').Select(a => a.Trim()).ToArray();
             }
 
+            if (QrvQsoTotals.IsStdIdentity(command, args))
+                _sources.NoteStd(_device.Id);
+
             switch (command)
             {
                 case "vfo":
@@ -1411,6 +1426,7 @@ internal class TciRadioConnection
                     {
                         var on = args.Length >= 1
                                  && args[0].Equals("on", StringComparison.OrdinalIgnoreCase);
+                        _sources.NoteCombo(_device.Id, on);
                         if (on != _comboLinked)
                         {
                             _comboLinked = on;
@@ -1506,6 +1522,8 @@ internal class TciRadioConnection
 
                 case "protocol":
                     // Server identification: protocol:name,version;
+                    // Lyra sends Lyra, or ExpertSDR3 while that emulation is on.
+                    _sources.NoteProtocol(_device.Id, args.Length > 0 ? args[0] : null);
                     _logger.LogInformation("TCI protocol: {Args}", argsStr);
                     break;
 

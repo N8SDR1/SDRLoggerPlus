@@ -506,6 +506,7 @@ function HelpTab() {
           <p>Optional, and off until you turn it on. <P>Settings → QRV Board → Share that I am QRV</P> publishes the station callsign from <P>Settings → Station</P>. The <B>QRV</B> panel (<B>Add Panel → QRV</B>) has the same switch.</p>
           <p>While it is on, Logger sends a heartbeat to <span className="font-mono text-[11px] text-dark-100">https://qrvsdr.cc/v1/</span> with the app name <B>Logger</B>, your callsign, band, and mode. The panel lists who else is on the board. A heartbeat goes out only when a radio is connected and the dial is on a band the board accepts. Turning the switch off, disconnecting the radio, changing the callsign, or quitting sends QRT.</p>
           <p className="text-xs text-dark-300">Presence only. Exact frequency, TCI spots, operator notes, and the log (QSO / ADIF) stay on this computer.</p>
+          <p><B>QSO totals</B> are a second switch, also off until you turn it on: <P>Settings → QRV Board → Share QSO totals</P>. Logger then posts counts for the UTC week, month, and year (voice, CW, digital) for contacts made on Lyra or STD. Contest contacts are left out. POTA counts with the other voice, CW, and digital contacts. No frequencies and no individual QSOs. Lyra in ExpertSDR3 emulation counts only while the Combo link is on. Turning the switch off sends zeros. It uses the install key from a presence heartbeat and does not create another key.</p>
         </Section>
 
         <Section id="decodes" title="Digital Decodes & Grid Tracker">

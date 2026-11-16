@@ -5150,8 +5150,30 @@ function ConfirmationSyncSettingsSection() {
 
 function QrvSettingsSection() {
   const { settings, updateQrvSettings } = useSettingsStore();
-  const qrv = settings.qrv ?? { enabled: false, baseUrl: 'https://qrvsdr.cc/v1' };
+  const qrv = settings.qrv ?? { enabled: false, baseUrl: 'https://qrvsdr.cc/v1', qsoTotalsEnabled: false };
   const callsign = settings.station?.callsign?.trim();
+  const totalsOn = qrv.qsoTotalsEnabled ?? false;
+  const [totalsDetail, setTotalsDetail] = useState<string | null>(null);
+
+  useEffect(() => {
+    let stopped = false;
+    const pull = async () => {
+      try {
+        const response = await fetch('/api/qrv/totals');
+        if (!response.ok || stopped) return;
+        const body = await response.json() as { detail?: string | null; phase?: string };
+        if (!stopped) setTotalsDetail(body.detail ?? null);
+      } catch {
+        if (!stopped) setTotalsDetail(null);
+      }
+    };
+    void pull();
+    const timer = window.setInterval(pull, 3000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -5179,6 +5201,27 @@ function QrvSettingsSection() {
         </button>
       </div>
 
+      <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-lg border border-glass-100">
+        <div>
+          <p className="font-medium font-ui text-dark-200">Share QSO totals</p>
+          <p className="text-xs text-dark-400">
+            Separate from presence. Default off. Counts Lyra and STD contacts for the UTC week,
+            month, and year — voice, CW, and digital. Contest contacts are left out. POTA counts.
+            No frequencies and no individual QSOs. Turning this off sends zeros.
+          </p>
+          {totalsDetail && <p className="text-xs text-dark-300 mt-2">{totalsDetail}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={() => updateQrvSettings({ qsoTotalsEnabled: !totalsOn })}
+          className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${totalsOn ? 'bg-accent-success' : 'bg-dark-500'}`}
+          aria-pressed={totalsOn}
+          aria-label="Share QSO totals"
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${totalsOn ? 'translate-x-6' : ''}`} />
+        </button>
+      </div>
+
       <div>
         <label className="block text-sm font-medium text-dark-200 mb-1">Board URL</label>
         <input
@@ -5199,7 +5242,8 @@ function QrvSettingsSection() {
           ? <>Publishes as <span className="font-mono text-dark-100">{callsign.toUpperCase()}</span> from Station settings.</>
           : 'Set a station callsign before enabling QRV.'}
         {' '}A radio has to be connected. Open the QRV panel to see who else is on the board.
-        Save Changes to keep this switch.
+        QSO totals reuse the install key from one successful presence heartbeat.
+        Save Changes to keep these switches.
       </p>
     </div>
   );

@@ -471,6 +471,8 @@ export interface AiSettings {
 export interface QrvSettings {
   enabled: boolean;
   baseUrl: string;
+  /** Separate from presence. Default off. Posts week/month/year totals, not the log. */
+  qsoTotalsEnabled?: boolean;
 }
 
 export interface ContestSettings {
@@ -884,6 +886,7 @@ const defaultSettings: Settings = {
   qrv: {
     enabled: false,
     baseUrl: 'https://qrvsdr.cc/v1',
+    qsoTotalsEnabled: false,
   },
   contest: {
     n1mmUdpEnabled: false,
