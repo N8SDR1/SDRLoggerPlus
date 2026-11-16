@@ -93,7 +93,7 @@ public class AdifUdpListenerService : BackgroundService
         Stop();
     }
 
-    private async Task HandleDatagramAsync(UdpReceiveResult result, CancellationToken ct)
+    internal async Task HandleDatagramAsync(UdpReceiveResult result, CancellationToken ct)
     {
         var text = Encoding.UTF8.GetString(result.Buffer).Trim();
         if (string.IsNullOrWhiteSpace(text)) return;
@@ -116,7 +116,7 @@ public class AdifUdpListenerService : BackgroundService
         var adif = scope.ServiceProvider.GetRequiredService<IAdifService>();
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
         var report = await adif.ImportAdifAsync(stream, skipDuplicates: true,
-            markAsSyncedToQrz: false, cancellationToken: ct);
+            markAsSyncedToQrz: false, cancellationToken: ct, stampLogger: true);
         if (report.ImportedCount > 0)
         {
             _logger.LogInformation("ADIF-over-UDP: imported {N} QSO(s) from {Peer}",

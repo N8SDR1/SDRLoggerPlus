@@ -53,8 +53,8 @@ public static class QrvQsoTotals
 
     /// <summary>
     /// When the TCI session identifies itself, the saved label is still Lyra or STD.
-    /// Otherwise the label is Logger. Either label counts. Combo link is not required
-    /// for the contact to count. Lyra's hello is <c>protocol:Lyra</c>.
+    /// Otherwise the label is Logger. The count does not depend on that stamp.
+    /// Lyra's hello is <c>protocol:Lyra</c>.
     /// <c>protocol:ExpertSDR3</c> is labeled Lyra only while Combo link is on.
     /// STD is labeled STD only when that session has identified STD and the logging
     /// program is STD (or the hello itself is <c>protocol:STD</c>). A hand log is not
@@ -94,11 +94,11 @@ public static class QrvQsoTotals
             || command.Equals("client", StringComparison.OrdinalIgnoreCase);
     }
 
-    public static bool IsCountedContact(Qso qso)
-    {
-        if (qso.RadioSource is not (SourceLyra or SourceStd or SourceLogger)) return false;
-        return !IsContest(qso);
-    }
+    /// <summary>
+    /// Every non-contest contact already in the log counts. The path does not matter
+    /// and a radio stamp is not required. Contest contacts stay out.
+    /// </summary>
+    public static bool IsCountedContact(Qso qso) => !IsContest(qso);
 
     public static bool IsContest(Qso qso)
     {

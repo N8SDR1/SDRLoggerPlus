@@ -5205,9 +5205,11 @@ function QrvSettingsSection() {
         <div>
           <p className="font-medium font-ui text-dark-200">Share QSO totals</p>
           <p className="text-xs text-dark-400">
-            Separate from presence. Default off. Counts contacts from any radio for the UTC week,
-            month, and year — voice, CW, and digital. Contest contacts are left out. POTA counts.
-            No frequencies and no individual QSOs. Turning this off sends zeros.
+            Separate from presence. Default off. Every non-contest contact already in the log counts
+            for the UTC week, month, and year — voice, CW, and digital. Log entry, the ADIF monitor,
+            ADIF-over-UDP, and a manual ADIF import all count. Contest contacts stay out. POTA counts.
+            Lyra, STD, and Combo link are not required. No frequencies and no individual QSOs.
+            Turning this off sends zeros.
           </p>
           {totalsDetail && <p className="text-xs text-dark-300 mt-2">{totalsDetail}</p>}
         </div>

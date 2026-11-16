@@ -21,12 +21,15 @@ The website leaderboard is still the empty placeholder until a later website cha
 - Opt-in, default **off**, separate from the QRV presence switch.
 - Reuse the `install_key` the presence heartbeat already stored. Do not invent a second key. If no key is stored yet, a normal presence heartbeat has to succeed once before totals will be accepted (`401 bad_key`).
 - Send a **replacement snapshot** of counts, not `+1` and not the logbook. No ADIF, no per-QSO rows, no frequencies, no notes.
-- A contact logged in SDRLogger+ counts, on any radio. Combo link is not required. Lyra and STD are not required. Mac and Linux count the same as Windows.
-- When the TCI session identifies itself, the saved label is still **Lyra** or **STD**. Otherwise the label is **Logger**. Either label counts.
-- Exclude contest QSOs. POTA contacts count in the normal Voice / CW / Digital buckets.
-- Contacts already in the log stay out. An ADIF import stays out. There is no backfill. Only a contact saved after this build gets a stamp.
-- Stamp the source when the QSO is saved. Do not guess it later from whoever is on the roster. Presence is unchanged. The roster does not feed the totals.
-- Lyra’s TCI hello is `protocol:Lyra`. `protocol:ExpertSDR3` is labeled Lyra only while Combo link is on; without that identification the label is Logger, and the contact still counts. STD is labeled STD only when STD has identified itself on the TCI session. A `{LOG}` macro is not the source.
+- Every non-contest contact already in the SDRLogger+ log counts for the UTC week, month, and year. The path does not matter:
+  - Log entry inside SDRLogger+
+  - ADIF monitor (STD `std.adi`, WSJT-X, JTDX, MSHV, VARAC, or any other watched file)
+  - ADIF-over-UDP
+  - A manual ADIF import
+- Contest contacts stay out. POTA contacts count in Voice, CW, or Digital. Lyra, STD, and Combo link are not required. The roster is not used to guess a source.
+- The ADIF monitor and UDP listener also stamp new imports `Logger`. The count does not depend on that stamp. A manual ADIF import is not stamped. When the TCI session identifies itself, a log entry is still labeled **Lyra** or **STD**. Otherwise that label is **Logger**.
+- Week is the ISO week (Monday 00:00 UTC). Month and year are the calendar periods in UTC. A log that already has contacts in 2026 will show those on Monthly and Yearly. This week’s board is only contacts dated since Monday 00:00 UTC.
+- Presence is unchanged. Lyra’s TCI hello is `protocol:Lyra`. `protocol:ExpertSDR3` is labeled Lyra only while Combo link is on. STD is labeled STD only when STD has identified itself on the TCI session. A `{LOG}` macro is not the source.
 
 ## Periods
 

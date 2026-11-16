@@ -116,7 +116,7 @@ public class AdifMonitorService : BackgroundService
         }
     }
 
-    private async Task TickAsync(CancellationToken ct)
+    internal async Task TickAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var settings = (await scope.ServiceProvider.GetRequiredService<ISettingsService>().GetSettingsAsync()).AdifMonitor;
@@ -142,7 +142,7 @@ public class AdifMonitorService : BackgroundService
             // VarAC …) — i.e. NEW QSOs, not a QRZ export. Import them as NOT-synced so the
             // QRZ uploader still picks them up. (Marking-as-synced is only correct when
             // importing your existing QRZ log to avoid re-uploading it.)
-            var import = await adifService.ImportAdifAsync(stream, skipDuplicates: true, markAsSyncedToQrz: false, cancellationToken: ct);
+            var import = await adifService.ImportAdifAsync(stream, skipDuplicates: true, markAsSyncedToQrz: false, cancellationToken: ct, stampLogger: true);
 
             _state.SetOffset(file, result.NewOffset);
             _state.Save();
