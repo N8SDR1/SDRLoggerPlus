@@ -3,6 +3,24 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-11-16 — v2.15.3 "Deneb"
+
+**QSO totals count a contact logged in SDRLogger+, on any radio.**
+
+### Fixed — QSO totals count any radio
+A contact logged in SDRLogger+ counts, on any radio. Combo link is not required.
+Lyra and STD are not required. Mac and Linux count the same as Windows.
+
+When the TCI session identifies itself, the saved label is still Lyra or STD.
+Otherwise the label is Logger. Either label counts.
+
+Contest contacts stay out. POTA contacts count in Voice, CW, or Digital.
+Contacts already in the log stay out. An ADIF import stays out. There is no
+backfill. Only a contact saved after this build gets a stamp.
+
+The public board and `#qsos` still hide a total of 0. Presence is unchanged.
+The roster does not feed the totals.
+
 ## 2026-11-16 — v2.15.2 "Deneb"
 
 **Opt-in QSO totals for the QRV Board. Sharing stays off until you turn it on.**
@@ -16,9 +34,8 @@ While it is on, Logger posts a replacement snapshot to
 from a presence heartbeat. The snapshot carries week, month, and year buckets
 of voice, CW, and digital. The week is the ISO week, starting Monday 00:00 UTC.
 
-A contact logged in SDRLogger+ counts, on any radio. Contest contacts are
-excluded. Contacts already in the log stay out. An ADIF import stays out.
-Turning the switch off sends one snapshot of zeros.
+Only QSOs stamped Lyra or STD at save time count. Contest contacts are
+excluded. Turning the switch off sends one snapshot of zeros.
 
 No per-QSO or ADIF upload. Nothing new to upload to Hostinger.
 
