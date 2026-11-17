@@ -93,18 +93,44 @@
   .credits p { font-size: 14.5px; margin: 6px 0; }
   .credits .name { color: var(--head); font-weight: 600; }
 
-  /* Companion app (Lyra) callout */
+  /* QRV leaderboard tile */
+  .qrv {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--line); border-radius: 16px; padding: 16px;
+  }
+  .qrv-shot {
+    display: block; border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--line); transition: border-color .2s ease;
+  }
+  .qrv-shot:hover { border-color: rgba(0,229,255,0.5); }
+  .qrv-shot img { display: block; width: 100%; height: auto; }
+  .qrv-copy { padding: 16px 8px 6px; }
+  .qrv-copy p { font-size: 14.5px; margin-bottom: 10px; }
+  .qrv-copy p:last-of-type { margin-bottom: 0; }
+
+  /* Companion apps (Lyra, STD) */
   .companion {
     display: flex; align-items: center; gap: 26px;
     background: linear-gradient(180deg, var(--panel), var(--panel-2));
     border: 1px solid rgba(0,229,255,0.22); border-radius: 16px; padding: 26px 28px;
     box-shadow: 0 0 50px rgba(0,229,255,0.06);
   }
+  .companion + .companion { margin-top: 16px; }
   .companion > img { width: 84px; height: 84px; border-radius: 18px; flex-shrink: 0; box-shadow: 0 8px 30px rgba(0,229,255,0.25); }
+  .companion-badge {
+    width: 84px; height: 84px; border-radius: 18px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent); color: #04121a;
+    font-weight: 800; font-size: 22px; letter-spacing: 1px;
+    box-shadow: 0 8px 30px rgba(0,229,255,0.25);
+  }
   .companion h3 { color: var(--head); font-size: 18px; margin-bottom: 8px; }
   .companion p { font-size: 14.5px; color: var(--text); }
   .companion-cta { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
-  @media (max-width: 560px) { .companion { flex-direction: column; text-align: center; } }
+  @media (max-width: 560px) {
+    .companion { flex-direction: column; text-align: center; }
+    .companion-cta { justify-content: center; }
+  }
 
   footer { text-align: center; padding: 34px 0 56px; color: var(--muted); font-size: 13px; }
   footer a { color: var(--muted); }
@@ -172,7 +198,24 @@
     </section>
 
     <section>
-      <h2>Companion app</h2>
+      <h2>QRV leaderboard</h2>
+      <div class="qrv">
+        <a class="qrv-shot" href="https://qrvsdr.cc/">
+          <img src="qrv-leaderboard.png" width="1520" height="494" alt="QRVSDR board at qrvsdr.cc — the on-the-air roster beside weekly voice, CW, and digital totals, with Last worked" loading="lazy">
+        </a>
+        <div class="qrv-copy">
+          <p><strong style="color:var(--head)">Share QSO totals</strong> stays off until you turn it on under <strong style="color:var(--head)">Settings → QRV Board</strong> — separate from <strong style="color:var(--head)">Share that I am QRV</strong>, the on-the-air roster.</p>
+          <p>Weekly, monthly, and yearly totals cover voice, CW, and digital, and <strong style="color:var(--head)">Last worked</strong> is the newest counted contact in that period.</p>
+          <p>Any non-contest contact already in the log counts, including the ADIF monitor, ADIF-over-UDP, and a manual import. Contest contacts stay out, and no frequencies go with the totals.</p>
+          <div class="companion-cta">
+            <a class="btn btn-primary" href="https://qrvsdr.cc/">Open the board</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Companion apps</h2>
       <div class="companion">
         <img src="https://n8sdr1.github.io/Lyra-SDR-cpp/logo.png" alt="Lyra logo">
         <div>
@@ -181,6 +224,16 @@
           <div class="companion-cta">
             <a class="btn btn-primary" href="https://n8sdr1.github.io/Lyra-SDR-cpp/">Visit Lyra</a>
             <a class="btn btn-ghost" href="https://github.com/N8SDR1/Lyra-SDR-cpp">★ GitHub</a>
+          </div>
+        </div>
+      </div>
+      <div class="companion">
+        <div class="companion-badge" aria-hidden="true">STD</div>
+        <div>
+          <h3>STD — Shift, Tone, Decode</h3>
+          <p>A 64-bit Windows digimode console for a TCI radio. Point its worked list at SDRLogger+ and the NEW / BAND / GRID marks follow the whole log, no export.</p>
+          <div class="companion-cta">
+            <a class="btn btn-primary" href="https://n8sdr1.github.io/STD/">Visit STD</a>
           </div>
         </div>
       </div>
