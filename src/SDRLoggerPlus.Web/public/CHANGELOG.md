@@ -3,6 +3,19 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-11-17 — v2.15.5 "Deneb"
+
+**Share QSO totals now includes the newest counted contact’s call.**
+
+### New — Last worked
+Share QSO totals now includes the newest counted contact’s call for the UTC week, month, and year. The board shows that as Last worked.
+
+One call per period. It fills from the log already there. The next counted contact replaces it.
+
+Contest contacts stay out and cannot become that call. Turning the switch off clears it.
+
+No new Hostinger upload.
+
 ## 2026-11-16 — v2.15.4 "Deneb"
 
 **Every non-contest contact already in the log counts.**
