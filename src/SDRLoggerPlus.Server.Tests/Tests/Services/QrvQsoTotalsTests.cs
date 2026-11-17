@@ -49,9 +49,9 @@ public class QrvQsoTotalsTests
 
         var totals = QrvQsoTotals.Count(qsos, Now);
 
-        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 3, Cw: 2, Digital: 2));
-        totals.Month.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 5, Cw: 2, Digital: 2));
-        totals.Year.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 5, Cw: 3, Digital: 2));
+        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 3, Cw: 2, Digital: 2, Last: "W1AW"));
+        totals.Month.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 5, Cw: 2, Digital: 2, Last: "W1AW"));
+        totals.Year.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 5, Cw: 3, Digital: 2, Last: "W1AW"));
     }
 
     [Fact]
@@ -67,9 +67,9 @@ public class QrvQsoTotalsTests
 
         var totals = QrvQsoTotals.Count(qsos, now);
 
-        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 0));
-        totals.Month.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 0, Cw: 1, Digital: 0));
-        totals.Year.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 0, Cw: 1, Digital: 0));
+        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 0, Last: "W1AW"));
+        totals.Month.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 0, Cw: 1, Digital: 0, Last: "W1AW"));
+        totals.Year.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 0, Cw: 1, Digital: 0, Last: "W1AW"));
     }
 
     [Fact]
@@ -86,8 +86,94 @@ public class QrvQsoTotalsTests
 
         var totals = QrvQsoTotals.Count(new[] { pota, byId, bySession }, Now);
 
-        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 0, Digital: 0));
+        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 0, Digital: 0, Last: "W1AW"));
         totals.Year.Total.Should().Be(1);
+        totals.Year.Last.Should().Be("W1AW");
+    }
+
+    [Fact]
+    public void Last_is_the_newest_worked_call_in_that_period()
+    {
+        var sunday = new DateTime(2026, 11, 15, 18, 0, 0, DateTimeKind.Utc);
+        var mondayEarly = new DateTime(2026, 11, 16, 1, 0, 0, DateTimeKind.Utc);
+        var mondayLater = new DateTime(2026, 11, 16, 9, 0, 0, DateTimeKind.Utc);
+        var contest = Qso(mondayLater.AddHours(1), "USB", "Logger", "N0CON");
+        contest.Contest = new ContestInfo { ContestId = "CQ-WW-SSB" };
+        var notACall = Qso(mondayLater.AddMinutes(30), "FT8", null, "TEST");
+        var imported = new[]
+        {
+            Qso(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc), "FT8", "STD", "K1STD"),
+            Qso(new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), "FT8", "Logger", "K1JT"),
+            Qso(new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc), "FT8", null, "N0JTDX"),
+            Qso(new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc), "FT8", "Logger", "N0MSHV"),
+            Qso(sunday, "USB", null, "n9bc"),
+            Qso(mondayEarly, "CW", "STD", "W1AW/7"),
+            Qso(mondayLater, "FT8", "Logger", "K2DIG"),
+            notACall,
+            contest,
+        };
+
+        var totals = QrvQsoTotals.Count(imported, Now);
+
+        // Newest QsoDate in the week is K2DIG. The later contest cannot be last.
+        // TEST is not a callsign: that QSO still counts, and K2DIG remains.
+        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 0, Cw: 1, Digital: 2, Last: "K2DIG"));
+        // Sunday's N9BC is outside this ISO week. Month and year still carry the
+        // newer contact inside those periods, which is K2DIG, not the operator.
+        totals.Week.Last.Should().NotBe("N9BC");
+        totals.Month.Last.Should().Be("K2DIG");
+        totals.Year.Last.Should().Be("K2DIG");
+        totals.Month.Voice.Should().Be(1);
+        totals.Month.Digital.Should().Be(totals.Week.Digital);
+        totals.Year.Voice.Should().Be(1);
+        totals.Week.Last.Should().NotBe("N8SDR");
+        totals.Month.Last.Should().NotBe("N0CON");
+        totals.Year.Last.Should().NotBe("TEST");
+
+        var quietWeek = QrvQsoTotals.Count(new[]
+        {
+            Qso(sunday, "USB", null, "n9bc"),
+            Qso(new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc), "CW", "STD", "W1AW"),
+        }, Now);
+        quietWeek.Week.Should().Be(QrvQsoTotals.ModeCounts.Zero);
+        quietWeek.Month.Last.Should().Be("N9BC");
+        quietWeek.Year.Last.Should().Be("N9BC");
+        quietWeek.Month.Voice.Should().Be(1);
+        quietWeek.Month.Cw.Should().Be(1);
+
+        var skipped = QrvQsoTotals.Count(new[]
+        {
+            Qso(mondayEarly, "USB", null, "N9BC"),
+            Qso(mondayLater, "FT8", "Logger", "NOT A CALL"),
+        }, Now);
+        skipped.Week.Digital.Should().Be(1);
+        skipped.Week.Voice.Should().Be(1);
+        skipped.Week.Last.Should().Be("N9BC");
+        skipped.Month.Last.Should().Be("N9BC");
+        skipped.Year.Last.Should().Be("N9BC");
+
+        var sameInstant = QrvQsoTotals.Count(new[]
+        {
+            Qso(mondayLater, "FT8", null, "TEST"),
+            Qso(mondayLater, "USB", null, "N9BC"),
+            Qso(mondayLater, "CW", "STD", "K1JT"),
+        }, Now);
+        sameInstant.Week.Last.Should().Be("N9BC");
+        sameInstant.Week.Digital.Should().Be(1);
+        sameInstant.Week.Cw.Should().Be(1);
+
+        var importedNewest = QrvQsoTotals.Count(new[]
+        {
+            Qso(mondayEarly, "FT8", "STD", "K1STD"),
+            Qso(mondayEarly.AddHours(1), "FT8", "Logger", "K1JT"),
+            Qso(mondayLater, "FT8", null, "N0VARA"),
+        }, Now);
+        importedNewest.Week.Should().Be(new QrvQsoTotals.ModeCounts(0, 0, 3, "N0VARA"));
+        importedNewest.Month.Last.Should().Be("N0VARA");
+        importedNewest.Year.Last.Should().Be("N0VARA");
+
+        var portable = QrvQsoTotals.Count(new[] { Qso(mondayLater, "CW", null, "W1AW/7") }, Now);
+        portable.Week.Last.Should().Be("W1AW/7");
     }
 
     [Fact]
@@ -117,7 +203,7 @@ public class QrvQsoTotalsTests
         var totals = QrvQsoTotals.Count(
             new[] { unstamped, blank, otherRadio, logger, lyra, std, pota, contest, contestStamped }, Now);
 
-        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 2, Cw: 2, Digital: 3));
+        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 2, Cw: 2, Digital: 3, Last: "W1AW"));
         totals.Month.Should().Be(totals.Week);
         totals.Year.Should().Be(totals.Week);
     }
@@ -136,9 +222,9 @@ public class QrvQsoTotalsTests
 
         var totals = QrvQsoTotals.Count(qsos, Now);
 
-        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 0, Cw: 0, Digital: 1));
-        totals.Month.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 1));
-        totals.Year.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 2));
+        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 0, Cw: 0, Digital: 1, Last: "W1AW"));
+        totals.Month.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 1, Last: "W1AW"));
+        totals.Year.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 1, Cw: 1, Digital: 2, Last: "W1AW"));
     }
 
     [Fact]
@@ -177,7 +263,7 @@ public class QrvQsoTotalsTests
         saved.Add(Copy(captured()));
         saved.Add(Qso(Now, "USB", null));
 
-        QrvQsoTotals.Count(saved, Now).Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 2, Cw: 1, Digital: 1));
+        QrvQsoTotals.Count(saved, Now).Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 2, Cw: 1, Digital: 1, Last: "W1AW"));
     }
 
     [Fact]
@@ -247,9 +333,9 @@ public class QrvQsoTotalsTests
     public void Encode_is_a_replacement_snapshot_without_the_log_or_frequency()
     {
         var json = QrvQsoTotals.Encode("N8SDR", InstallKey, new QrvQsoTotals.Snapshot(
-            new QrvQsoTotals.ModeCounts(0, 1, 12),
-            new QrvQsoTotals.ModeCounts(2, 4, 40),
-            new QrvQsoTotals.ModeCounts(10, 20, 100)));
+            new QrvQsoTotals.ModeCounts(0, 0, 50, "N9BC"),
+            new QrvQsoTotals.ModeCounts(0, 0, 80, "n9bc"),
+            new QrvQsoTotals.ModeCounts(1, 2, 400, "N9BC")));
 
         using var doc = JsonDocument.Parse(json);
         var names = doc.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
@@ -257,12 +343,19 @@ public class QrvQsoTotalsTests
         doc.RootElement.GetProperty("call").GetString().Should().Be("N8SDR");
         doc.RootElement.GetProperty("app").GetString().Should().Be("Logger");
         doc.RootElement.GetProperty("install_key").GetString().Should().Be(InstallKey);
-        Bucket(doc.RootElement.GetProperty("week")).Should().Be((0, 1, 12));
-        Bucket(doc.RootElement.GetProperty("month")).Should().Be((2, 4, 40));
-        Bucket(doc.RootElement.GetProperty("year")).Should().Be((10, 20, 100));
+        Bucket(doc.RootElement.GetProperty("week")).Should().Be((0, 0, 50, "N9BC"));
+        Bucket(doc.RootElement.GetProperty("month")).Should().Be((0, 0, 80, "N9BC"));
+        Bucket(doc.RootElement.GetProperty("year")).Should().Be((1, 2, 400, "N9BC"));
+        json.Should().NotContain("[");
         json.Should().NotContain("freq");
         json.Should().NotContain("adif");
         json.Should().NotContain("hz");
+
+        var cleared = QrvQsoTotals.Encode("N8SDR", InstallKey, QrvQsoTotals.Snapshot.Zero);
+        using var zeros = JsonDocument.Parse(cleared);
+        Bucket(zeros.RootElement.GetProperty("week")).Should().Be((0, 0, 0, ""));
+        Bucket(zeros.RootElement.GetProperty("month")).Should().Be((0, 0, 0, ""));
+        Bucket(zeros.RootElement.GetProperty("year")).Should().Be((0, 0, 0, ""));
     }
 
     [Fact]
@@ -306,7 +399,7 @@ public class QrvQsoTotalsTests
         {
             doc.RootElement.GetProperty("app").GetString().Should().Be("Logger");
             doc.RootElement.GetProperty("call").GetString().Should().Be("N8SDR");
-            Bucket(doc.RootElement.GetProperty("week")).Should().Be((0, 1, 12));
+            Bucket(doc.RootElement.GetProperty("week")).Should().Be((0, 1, 12, "N9BC"));
         }
 
         await client.TickAsync(CancellationToken.None);
@@ -341,9 +434,10 @@ public class QrvQsoTotalsTests
         var zero = handler.Requests.Last();
         zero.Url.Should().EndWith("/v1/qso.php");
         using var doc = JsonDocument.Parse(zero.Body);
-        Bucket(doc.RootElement.GetProperty("week")).Should().Be((0, 0, 0));
-        Bucket(doc.RootElement.GetProperty("month")).Should().Be((0, 0, 0));
-        Bucket(doc.RootElement.GetProperty("year")).Should().Be((0, 0, 0));
+        Bucket(doc.RootElement.GetProperty("week")).Should().Be((0, 0, 0, ""));
+        Bucket(doc.RootElement.GetProperty("month")).Should().Be((0, 0, 0, ""));
+        Bucket(doc.RootElement.GetProperty("year")).Should().Be((0, 0, 0, ""));
+        zero.Body.Should().NotContain("N9BC");
         handler.Requests.Should().HaveCount(2);
     }
 
@@ -540,12 +634,19 @@ public class QrvQsoTotalsTests
     }
 
     private static QrvQsoTotals.Snapshot SampleSnapshot() => new(
-        new QrvQsoTotals.ModeCounts(0, 1, 12),
-        new QrvQsoTotals.ModeCounts(2, 4, 40),
-        new QrvQsoTotals.ModeCounts(10, 20, 100));
+        new QrvQsoTotals.ModeCounts(0, 1, 12, "N9BC"),
+        new QrvQsoTotals.ModeCounts(2, 4, 40, "N9BC"),
+        new QrvQsoTotals.ModeCounts(10, 20, 100, "N9BC"));
 
-    private static (int Voice, int Cw, int Digital) Bucket(JsonElement counts) =>
-        (counts.GetProperty("voice").GetInt32(), counts.GetProperty("cw").GetInt32(), counts.GetProperty("digital").GetInt32());
+    private static (int Voice, int Cw, int Digital, string Last) Bucket(JsonElement counts)
+    {
+        counts.EnumerateObject().Select(p => p.Name).Should().Equal("voice", "cw", "digital", "last");
+        return (
+            counts.GetProperty("voice").GetInt32(),
+            counts.GetProperty("cw").GetInt32(),
+            counts.GetProperty("digital").GetInt32(),
+            counts.GetProperty("last").GetString() ?? "");
+    }
 
     private static Qso Copy(Qso qso) => new()
     {
@@ -559,10 +660,12 @@ public class QrvQsoTotalsTests
         Contest = qso.Contest == null ? null : new ContestInfo { ContestId = qso.Contest.ContestId, SessionId = qso.Contest.SessionId },
     };
 
-    private static Qso Qso(DateTime when, string mode, string? source) => new()
+    private static Qso Qso(DateTime when, string mode, string? source, string call = "W1AW") => new()
     {
         Id = Guid.NewGuid().ToString("N"),
-        Callsign = "W1AW",
+        Callsign = call,
+        // Operating call and the person at the key are not "last".
+        Contest = new ContestInfo { StationCallsign = "N8SDR", Operator = "N8SDR" },
         QsoDate = when,
         TimeOn = "120000",
         Band = "20m",

@@ -20,7 +20,8 @@ The website leaderboard is still the empty placeholder until a later website cha
 - SDRLogger+ is the only app that POSTs QSO totals. Lyra and STD do not.
 - Opt-in, default **off**, separate from the QRV presence switch.
 - Reuse the `install_key` the presence heartbeat already stored. Do not invent a second key. If no key is stored yet, a normal presence heartbeat has to succeed once before totals will be accepted (`401 bad_key`).
-- Send a **replacement snapshot** of counts, not `+1` and not the logbook. No ADIF, no per-QSO rows, no frequencies, no notes.
+- Send a **replacement snapshot** of counts, not `+1` and not the logbook. No ADIF, no per-QSO rows, no frequencies, no notes, no list of calls.
+- Each bucket includes `last`: the newest counted contact’s call in that UTC period. It is the worked station (`Qso.Callsign`), not the operator. Week, month, and year are counted separately. A quiet week leaves `week.last` empty while month and year still carry the newer contact inside those periods. Contest contacts stay out of the count and cannot become `last`. A call that is not a callsign is skipped for `last`; the QSO still counts and the previous valid call remains. One call per period.
 - Every non-contest contact already in the SDRLogger+ log counts for the UTC week, month, and year. The path does not matter:
   - Log entry inside SDRLogger+
   - ADIF monitor (STD `std.adi`, WSJT-X, JTDX, MSHV, VARAC, or any other watched file)
@@ -62,17 +63,19 @@ Each value is an integer from 0 through 100000. All three buckets are required o
   "call": "N8SDR",
   "app": "Logger",
   "install_key": "<key from the presence heartbeat>",
-  "week":  { "voice": 0, "cw": 1, "digital": 12 },
-  "month": { "voice": 2, "cw": 4, "digital": 40 },
-  "year":  { "voice": 10, "cw": 20, "digital": 100 }
+  "week":  { "voice": 0, "cw": 1, "digital": 12, "last": "N9BC" },
+  "month": { "voice": 2, "cw": 4, "digital": 40, "last": "N9BC" },
+  "year":  { "voice": 10, "cw": 20, "digital": 100, "last": "N9BC" }
 }
 ```
+
+`last` is a string. `""` means that period has no counted callsign. The server drops a `last` it cannot normalize and still stores the counts. An old build that omits `last` keeps posting totals; the column stays blank until a build that sends it.
 
 `app` must be the string `Logger`. `call` must match the callsign bound to that install key.
 
 Post when the operator turns the opt-in on, after a counted QSO is saved, and about every few minutes while the opt-in stays on. The server rejects a second POST for the same key inside 10 seconds (`429 rate_limited`). Back off. Do not retry in a tight loop.
 
-When the operator turns the opt-in off, POST one snapshot of zeros so the call leaves the board.
+When the operator turns the opt-in off, POST one snapshot of zeros and `last` of `""` for all three periods, so the call leaves the board and the Last worked column clears.
 
 ## Responses
 
