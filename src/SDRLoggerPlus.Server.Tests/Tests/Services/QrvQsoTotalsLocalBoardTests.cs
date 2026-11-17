@@ -152,7 +152,8 @@ public class QrvQsoTotalsLocalBoardTests
             snapshot.ContentType.Should().Contain("application/json");
             AssertSnapshot(snapshot.Body, voice: 2, cw: 1, digital: 1,
                 monthVoice: 2 + (monthOnly ? 1 : 0), monthCw: 1, monthDigital: 1,
-                yearVoice: 2 + (monthOnly ? 1 : 0), yearCw: 1, yearDigital: 1 + (yearOnly ? 1 : 0));
+                yearVoice: 2 + (monthOnly ? 1 : 0), yearCw: 1, yearDigital: 1 + (yearOnly ? 1 : 0),
+                last: "W1AW");
             await WaitUntilAsync(() => totals.Status().Phase == "posted", TimeSpan.FromSeconds(2));
             totals.Status().Phase.Should().Be("posted");
             totals.Status().Detail.Should().Contain("2026-W47");
@@ -165,7 +166,7 @@ public class QrvQsoTotalsLocalBoardTests
             qsoPosts.Should().HaveCount(2);
             _output.WriteLine(qsoPosts[1].Body);
             Console.WriteLine("QRV_QSO_ZEROS " + qsoPosts[1].Body);
-            AssertSnapshot(qsoPosts[1].Body, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            AssertSnapshot(qsoPosts[1].Body, 0, 0, 0, 0, 0, 0, 0, 0, 0, last: "");
             qsoPosts[1].Url.Should().Be(board.QsoUrl);
 
             await Task.Delay(TimeSpan.FromSeconds(2));
@@ -194,12 +195,15 @@ public class QrvQsoTotalsLocalBoardTests
         string json,
         int voice, int cw, int digital,
         int monthVoice, int monthCw, int monthDigital,
-        int yearVoice, int yearCw, int yearDigital)
+        int yearVoice, int yearCw, int yearDigital,
+        string last)
     {
         json.Length.Should().BeLessThan(500);
         json.Should().NotContain("[");
-        foreach (var leak in new[] { "W1AW", "K2DIG", "K1JT", "N0CON", "secret-note", "K-1234", "CQ-WW", "14200", "FT8", "USB", "20m", "adif", "freq", "hz" })
+        foreach (var leak in new[] { "K2DIG", "K1JT", "N0CON", "secret-note", "K-1234", "CQ-WW", "14200", "FT8", "USB", "20m", "adif", "freq", "hz" })
             json.Should().NotContain(leak);
+        if (last.Length == 0)
+            json.Should().NotContain("W1AW");
 
         using var doc = JsonDocument.Parse(json);
         doc.RootElement.EnumerateObject().Select(p => p.Name).Should().Equal(
@@ -207,15 +211,19 @@ public class QrvQsoTotalsLocalBoardTests
         doc.RootElement.GetProperty("call").GetString().Should().Be("N8SDR");
         doc.RootElement.GetProperty("app").GetString().Should().Be("Logger");
         doc.RootElement.GetProperty("install_key").GetString().Should().Be(InstallKey);
-        Bucket(doc.RootElement.GetProperty("week")).Should().Be((voice, cw, digital));
-        Bucket(doc.RootElement.GetProperty("month")).Should().Be((monthVoice, monthCw, monthDigital));
-        Bucket(doc.RootElement.GetProperty("year")).Should().Be((yearVoice, yearCw, yearDigital));
+        Bucket(doc.RootElement.GetProperty("week")).Should().Be((voice, cw, digital, last));
+        Bucket(doc.RootElement.GetProperty("month")).Should().Be((monthVoice, monthCw, monthDigital, last));
+        Bucket(doc.RootElement.GetProperty("year")).Should().Be((yearVoice, yearCw, yearDigital, last));
     }
 
-    private static (int Voice, int Cw, int Digital) Bucket(JsonElement counts)
+    private static (int Voice, int Cw, int Digital, string Last) Bucket(JsonElement counts)
     {
-        counts.EnumerateObject().Select(p => p.Name).Should().Equal("voice", "cw", "digital");
-        return (counts.GetProperty("voice").GetInt32(), counts.GetProperty("cw").GetInt32(), counts.GetProperty("digital").GetInt32());
+        counts.EnumerateObject().Select(p => p.Name).Should().Equal("voice", "cw", "digital", "last");
+        return (
+            counts.GetProperty("voice").GetInt32(),
+            counts.GetProperty("cw").GetInt32(),
+            counts.GetProperty("digital").GetInt32(),
+            counts.GetProperty("last").GetString() ?? "");
     }
 
     private static QsoService QsoLogger(

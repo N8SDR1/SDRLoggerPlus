@@ -96,7 +96,7 @@ public class QrvAdifImportCountTests : IDisposable
         QrvQsoTotals.ModeBucket(potaRow.Mode).Should().Be("voice");
 
         var totals = QrvQsoTotals.Count(_stored, Now);
-        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 2, Cw: 1, Digital: 2));
+        totals.Week.Should().Be(new QrvQsoTotals.ModeCounts(Voice: 2, Cw: 1, Digital: 2, Last: "N0POT"));
         totals.Month.Should().Be(totals.Week);
         totals.Year.Should().Be(totals.Week);
     }

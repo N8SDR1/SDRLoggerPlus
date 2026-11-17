@@ -5208,8 +5208,10 @@ function QrvSettingsSection() {
             Separate from presence. Default off. Every non-contest contact already in the log counts
             for the UTC week, month, and year — voice, CW, and digital. Log entry, the ADIF monitor,
             ADIF-over-UDP, and a manual ADIF import all count. Contest contacts stay out. POTA counts.
-            Lyra, STD, and Combo link are not required. No frequencies and no individual QSOs.
-            Turning this off sends zeros.
+            Lyra, STD, and Combo link are not required. Each period also sends the newest counted
+            contact’s call (Last worked on the board). One call per period. The column fills from the
+            log already there, and the next counted contact replaces that call. No frequencies, no
+            notes, and no list of calls. Turning this off sends zeros and clears that call.
           </p>
           {totalsDetail && <p className="text-xs text-dark-300 mt-2">{totalsDetail}</p>}
         </div>

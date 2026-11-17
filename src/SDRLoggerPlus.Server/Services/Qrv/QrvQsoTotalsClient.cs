@@ -7,7 +7,8 @@ namespace SDRLoggerPlus.Server.Services.Qrv;
 /// <summary>
 /// Posts QSO-total snapshots to qso.php. Opt-in, default off, separate from
 /// presence. Reuses the presence install key. Sends nothing while the switch
-/// is off. One zero snapshot when the operator turns it off.
+/// is off. One zero snapshot when the operator turns it off: counts of 0 and
+/// <c>last</c> of "" for week, month, and year.
 /// </summary>
 public sealed class QrvQsoTotalsClient
 {

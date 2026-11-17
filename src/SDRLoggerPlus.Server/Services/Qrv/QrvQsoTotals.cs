@@ -6,9 +6,11 @@ using SDRLoggerPlus.Contracts.Models;
 namespace SDRLoggerPlus.Server.Services.Qrv;
 
 /// <summary>
-/// QSO-totals rules from docs/qrv-qso-totals.md. Replacement snapshots only:
-/// call, app "Logger", the presence install key, and week/month/year
-/// voice/cw/digital counts. No ADIF, no per-QSO rows, no frequencies.
+/// QSO-totals rules from docs/qrv-qso-totals.md and docs/qrv-last-worked.md.
+/// Replacement snapshots only: call, app "Logger", the presence install key,
+/// and week/month/year voice/cw/digital counts. Each bucket also carries
+/// <c>last</c>, the newest counted contact's call in that period. No ADIF,
+/// no per-QSO rows, no frequencies, no notes, no list of calls.
 /// </summary>
 public static class QrvQsoTotals
 {
@@ -39,9 +41,13 @@ public static class QrvQsoTotals
         public static TciSession None => new(null, false, false);
     }
 
-    public readonly record struct ModeCounts(int Voice, int Cw, int Digital)
+    /// <summary>
+    /// Counts plus <see cref="Last"/>, the newest counted callsign in the period.
+    /// Empty when the period has no valid call, and empty on the zero snapshot.
+    /// </summary>
+    public readonly record struct ModeCounts(int Voice, int Cw, int Digital, string Last = "")
     {
-        public static ModeCounts Zero => new(0, 0, 0);
+        public static ModeCounts Zero => new(0, 0, 0, "");
 
         public int Total => Voice + Cw + Digital;
     }
@@ -146,6 +152,10 @@ public static class QrvQsoTotals
         var week = new int[3];
         var month = new int[3];
         var year = new int[3];
+        DateTime? weekWhen = null, monthWhen = null, yearWhen = null;
+        var weekLast = "";
+        var monthLast = "";
+        var yearLast = "";
 
         foreach (var qso in qsos)
         {
@@ -153,12 +163,29 @@ public static class QrvQsoTotals
             var when = AsUtc(qso.QsoDate);
             if (when > now) continue;
             var bucket = BucketIndex(qso.Mode);
-            if (when >= yearStart) year[bucket]++;
-            if (when >= monthStart) month[bucket]++;
-            if (when >= weekStart) week[bucket]++;
+            // Worked station only. Operator and station callsign are not last.
+            var call = QrvProtocol.NormalizeCall(qso.Callsign);
+            if (when >= yearStart)
+            {
+                year[bucket]++;
+                Consider(ref yearWhen, ref yearLast, when, call);
+            }
+            if (when >= monthStart)
+            {
+                month[bucket]++;
+                Consider(ref monthWhen, ref monthLast, when, call);
+            }
+            if (when >= weekStart)
+            {
+                week[bucket]++;
+                Consider(ref weekWhen, ref weekLast, when, call);
+            }
         }
 
-        return new Snapshot(Clamp(week), Clamp(month), Clamp(year));
+        return new Snapshot(
+            Clamp(week) with { Last = weekLast },
+            Clamp(month) with { Last = monthLast },
+            Clamp(year) with { Last = yearLast });
     }
 
     public static string Encode(string call, string installKey, Snapshot snapshot)
@@ -211,7 +238,22 @@ public static class QrvQsoTotals
         ["voice"] = counts.Voice,
         ["cw"] = counts.Cw,
         ["digital"] = counts.Digital,
+        // One call per period. "" leaves the column empty (quiet period, or totals off).
+        ["last"] = QrvProtocol.NormalizeCall(counts.Last) ?? "",
     };
+
+    /// <summary>
+    /// Newest <paramref name="when"/> wins. A call that is not a callsign is
+    /// skipped, the QSO still counts, and the previous valid call remains.
+    /// An equal timestamp is not newer, so the call already chosen stays.
+    /// </summary>
+    private static void Consider(ref DateTime? bestWhen, ref string last, DateTime when, string? call)
+    {
+        if (call == null) return;
+        if (bestWhen != null && when <= bestWhen.Value) return;
+        bestWhen = when;
+        last = call;
+    }
 
     private static ModeCounts Clamp(int[] buckets) =>
         new(Clamp(buckets[0]), Clamp(buckets[1]), Clamp(buckets[2]));

@@ -15,7 +15,10 @@ describe('QRV QSO totals setting', () => {
     expect(screen.getByText(/ADIF monitor/)).toBeInTheDocument();
     expect(screen.getByText(/ADIF-over-UDP/)).toBeInTheDocument();
     expect(screen.getByText(/manual ADIF import all count/)).toBeInTheDocument();
+    expect(screen.getByText(/Last worked on the board/)).toBeInTheDocument();
+    expect(screen.getByText(/Turning this off sends zeros and clears that call/)).toBeInTheDocument();
     expect(screen.queryByText(/ADIF import stays out/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share last worked' })).not.toBeInTheDocument();
   });
 
   it('stays off until that switch is set, and does not turn presence on', () => {
