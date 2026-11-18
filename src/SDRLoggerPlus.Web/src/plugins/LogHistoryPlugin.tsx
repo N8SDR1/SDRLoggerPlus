@@ -307,6 +307,7 @@ export function LogHistoryPlugin() {
       setImportResult(data);
       queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] });
       queryClient.invalidateQueries({ queryKey: ['gridmap'] });
     },
   });
@@ -349,6 +350,7 @@ export function LogHistoryPlugin() {
       setMergeResult(result);
       queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] });
     } catch (error) {
       console.error('Failed to merge confirmations:', error);
       setMergeError(error instanceof Error ? error.message : 'Merge failed');
@@ -371,6 +373,7 @@ export function LogHistoryPlugin() {
       setMergeResult(result);
       queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] });
     } catch (error) {
       console.error(`Failed to download ${kind} confirmations:`, error);
       setMergeError(error instanceof Error ? error.message : `${kind} download failed`);
@@ -386,6 +389,7 @@ export function LogHistoryPlugin() {
       await api.deleteQso(deletingQso.id);
       queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] });
       setDeletingQso(null);
     } catch (error) {
       console.error('Failed to delete QSO:', error);
@@ -419,6 +423,7 @@ export function LogHistoryPlugin() {
       await api.deleteQsos(selectedQsos.map(q => q.id));
       queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] });
       clearSelection();
       setConfirmingBulkDelete(false);
     } catch (error) {
@@ -487,6 +492,7 @@ export function LogHistoryPlugin() {
       // "Saving…") until the refreshed rows are actually in.
       await queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] });
       setEditingQso(null);
     } catch (error) {
       console.error('Failed to update QSO:', error);

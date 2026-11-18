@@ -26,6 +26,7 @@ internal static partial class CtyService
     // reload cty.dat without a process restart. Guarded by _loadLock so a
     // concurrent lookup can't observe a torn state during a reload.
     private static Dictionary<string, CtyEntity>? _prefixMap;
+    private static Dictionary<string, CtyEntity>? _exactCallMap;
     private static Dictionary<string, string>? _countryToContinentMap;
     private static string? _cachedVersion;
     private static readonly object _loadLock = new();
@@ -41,9 +42,28 @@ internal static partial class CtyService
             if (_prefixMap != null) return _prefixMap;
             lock (_loadLock)
             {
-                _prefixMap ??= LoadCurrentCtyDat();
+                if (_prefixMap != null) return _prefixMap;
+                var loaded = LoadCurrentCtyDat();
+                _prefixMap = loaded.Prefixes;
+                _exactCallMap = loaded.ExactCalls;
                 return _prefixMap;
             }
+        }
+    }
+
+    /// <summary>Prefix keys from the loaded cty.dat, including slash primaries such as <c>3D2/c</c>.</summary>
+    internal static IReadOnlyDictionary<string, CtyEntity> Prefixes => PrefixMap;
+
+    /// <summary>
+    /// Exact-call overrides (<c>=</c> in cty.dat). Not used by <see cref="FindEntity"/>.
+    /// The DXCC glance honors them; cluster lookup does not.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, CtyEntity> ExactCalls
+    {
+        get
+        {
+            _ = PrefixMap;
+            return _exactCallMap ?? new Dictionary<string, CtyEntity>(StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -157,7 +177,9 @@ internal static partial class CtyService
     {
         lock (_loadLock)
         {
-            _prefixMap = LoadCurrentCtyDat();
+            var loaded = LoadCurrentCtyDat();
+            _prefixMap = loaded.Prefixes;
+            _exactCallMap = loaded.ExactCalls;
             _countryToContinentMap = null; // rebuilt lazily on next access
         }
     }
@@ -190,7 +212,7 @@ internal static partial class CtyService
 
     // ── Loaders ─────────────────────────────────────────────────────────────
 
-    private static Dictionary<string, CtyEntity> LoadCurrentCtyDat()
+    private static (Dictionary<string, CtyEntity> Prefixes, Dictionary<string, CtyEntity> ExactCalls) LoadCurrentCtyDat()
     {
         // Prefer a user-supplied override (from /api/cty/update). If it's
         // missing, malformed, or throws — fall back to the embedded bundle
@@ -201,11 +223,11 @@ internal static partial class CtyService
             try
             {
                 var content = File.ReadAllText(userPath);
-                var map = ParseCtyDat(content);
-                if (map.Count > 100) // sanity check: real cty.dat has ~5000+ prefixes
+                var parsed = ParseCtyDatDetailed(content);
+                if (parsed.Prefixes.Count > 100) // sanity check: real cty.dat has ~5000+ prefixes
                 {
                     _cachedVersion = ExtractVersion(content);
-                    return map;
+                    return parsed;
                 }
             }
             catch
@@ -216,7 +238,7 @@ internal static partial class CtyService
         return ParseEmbeddedCtyDat();
     }
 
-    private static Dictionary<string, CtyEntity> ParseEmbeddedCtyDat()
+    private static (Dictionary<string, CtyEntity> Prefixes, Dictionary<string, CtyEntity> ExactCalls) ParseEmbeddedCtyDat()
     {
         var assembly = typeof(CtyService).Assembly;
         var resourceName = assembly.GetManifestResourceNames()
@@ -226,7 +248,7 @@ internal static partial class CtyService
         using var reader = new StreamReader(stream);
         var content = reader.ReadToEnd();
         _cachedVersion = ExtractVersion(content);
-        return ParseCtyDat(content);
+        return ParseCtyDatDetailed(content);
     }
 
     /// <summary>
@@ -250,8 +272,12 @@ internal static partial class CtyService
     }
 
     internal static Dictionary<string, CtyEntity> ParseCtyDat(string content)
+        => ParseCtyDatDetailed(content).Prefixes;
+
+    internal static (Dictionary<string, CtyEntity> Prefixes, Dictionary<string, CtyEntity> ExactCalls) ParseCtyDatDetailed(string content)
     {
         var map = new Dictionary<string, CtyEntity>(StringComparer.OrdinalIgnoreCase);
+        var exactCalls = new Dictionary<string, CtyEntity>(StringComparer.OrdinalIgnoreCase);
         var lines = content.Split('\n');
 
         string? country = null;
@@ -321,9 +347,16 @@ internal static partial class CtyService
                 {
                     var prefix = rawPrefix.Trim();
 
-                    // Skip exact callsign matches (prefixed with =)
+                    // Exact callsign overrides (prefixed with =) are not prefix keys.
+                    // FindEntity ignores them. The glance reads them from ExactCalls.
                     if (prefix.StartsWith('='))
+                    {
+                        var exact = AnnotationRegex().Replace(prefix[1..], "");
+                        exact = exact.Trim().TrimStart('*');
+                        if (!string.IsNullOrEmpty(exact))
+                            exactCalls.TryAdd(exact, entity);
                         continue;
+                    }
 
                     // Strip override annotations
                     prefix = AnnotationRegex().Replace(prefix, "");
@@ -341,7 +374,7 @@ internal static partial class CtyService
             i++;
         }
 
-        return map;
+        return (map, exactCalls);
     }
 
     private static Dictionary<string, string> BuildCountryToContinentMap()
