@@ -197,6 +197,13 @@ public class QsoService : IQsoService
             }
         };
 
+        // The callbook country is written onto Station only. Statistics drops a
+        // QSO whose Country is empty, so a contact just logged from Log Entry
+        // or WSJT-X would never reach DXCC. Copy the station country onto the
+        // QSO when the QSO country is still empty.
+        if (string.IsNullOrWhiteSpace(qso.Country) && !string.IsNullOrWhiteSpace(qso.Station?.Country))
+            qso.Country = qso.Station.Country;
+
         // POTA tagging — write the standard ADIF POTA fields into
         // AdifExtra so PotaStatistics picks them up and QSOs round-
         // trip through ADIF export cleanly.

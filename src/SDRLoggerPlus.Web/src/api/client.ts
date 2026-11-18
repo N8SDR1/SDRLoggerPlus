@@ -189,6 +189,26 @@ export interface DxccFilters {
   toDate?: string;
 }
 
+export interface DxccGlanceCell {
+  worked: boolean;
+  confirmed: boolean;
+  qsoCount: number;
+  /** Stage 2. Stage 1 leaves this false and the grid does not read it. */
+  callsignWorked: boolean;
+}
+
+export interface DxccGlanceRow {
+  modeGroup: string;
+  cells: DxccGlanceCell[];
+}
+
+export interface DxccEntityGlance {
+  entityName: string;
+  primaryPrefix: string;
+  bands: string[];
+  rows: DxccGlanceRow[];
+}
+
 // VUCC Types
 export interface VuccStatistics {
   totalUniqueGrids: number;
@@ -449,6 +469,18 @@ class ApiClient {
     if (filters?.toDate) params.append('toDate', filters.toDate);
     const qs = params.toString();
     return this.fetch<DxccStatistics>(`/statistics/dxcc${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Log Entry DXCC glance. 200 with the grid, 204 (→ null) when the call is
+   * empty, still ambiguous, or not a DXCC entity. No QRZ.
+   */
+  async getDxccEntityGlance(call: string): Promise<DxccEntityGlance | null> {
+    const params = new URLSearchParams({ call });
+    const response = await fetch(`${API_BASE}/statistics/dxcc/glance?${params}`);
+    if (response.status === 204) return null;
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    return response.json();
   }
 
   async getVuccStatistics(filters?: VuccFilters): Promise<VuccStatistics> {

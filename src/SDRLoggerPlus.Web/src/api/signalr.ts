@@ -1127,6 +1127,7 @@ class SignalRService {
       if (evt.imported > 0) {
         queryClient.invalidateQueries({ queryKey: ['qsos'] });
         queryClient.invalidateQueries({ queryKey: ['statistics'] });
+        queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] });
         queryClient.invalidateQueries({ queryKey: ['gridmap'] });
       }
     });

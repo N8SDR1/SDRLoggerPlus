@@ -12,6 +12,7 @@ import { useAppStore } from '../store/appStore';
 import { activeLayoutRef, applyLayoutRef, layoutRefLabel, liveLayoutDiffersFromActive, saveLiveToActiveSlot } from '../layouts/applyLayout';
 import { useSettingsStore } from '../store/settingsStore';
 import { GlassPanel } from '../components/GlassPanel';
+import { DxccEntityGlanceGrid } from '../components/DxccEntityGlanceGrid';
 import { getCountryFlag } from '../core/countryFlags';
 import { useRegisterShortcuts } from '../hooks/useRegisterShortcuts';
 import type { Shortcut } from '../utils/shortcuts';
@@ -685,6 +686,7 @@ export function LogEntryPlugin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['qsos'] });
       queryClient.invalidateQueries({ queryKey: ['statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] });
       // Save focused callsign to map overlay BEFORE clearing (only logged QSOs persist on map)
       const info = useAppStore.getState().focusedCallsignInfo;
       if (info?.latitude != null && info?.longitude != null) {
@@ -1014,6 +1016,17 @@ export function LogEntryPlugin() {
     }, 400);
     return () => clearTimeout(timer);
   }, [formData.callsign, formData.band, formData.mode]);
+
+  // DXCC entity glance. Independent of the callbook card: a short unambiguous
+  // prefix can show the grid before the card, and an ambiguous call shows the
+  // card with no grid. 204 comes back as null.
+  const glanceCall = formData.callsign.trim();
+  const { data: dxccGlance } = useQuery({
+    queryKey: ['dxcc-entity-glance', glanceCall.toUpperCase()],
+    queryFn: () => api.getDxccEntityGlance(glanceCall),
+    enabled: glanceCall.length > 0,
+    staleTime: 60_000,
+  });
 
   // v1.x-style mode switcher tabs. Each mode has its own accent color
   // matching v1.x: General=cyan, POTA=green, SAT=goldish yellow.
@@ -1599,6 +1612,9 @@ export function LogEntryPlugin() {
             </div>
           </div>
         )}
+
+        {/* DXCC entity glance — under the lookup card, above Name. */}
+        {dxccGlance && <DxccEntityGlanceGrid glance={dxccGlance} />}
 
         {/* Name field with lock pattern */}
         <div>

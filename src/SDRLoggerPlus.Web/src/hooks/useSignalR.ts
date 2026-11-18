@@ -126,6 +126,7 @@ export function useSignalRConnection() {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ['qsos'] }),
           queryClient.invalidateQueries({ queryKey: ['statistics'] }),
+          queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] }),
         ]);
 
         console.log('Rehydration complete');
@@ -162,6 +163,7 @@ export function useSignalRConnection() {
             // Invalidate QSO queries to refetch
             queryClient.invalidateQueries({ queryKey: ['qsos'] });
             queryClient.invalidateQueries({ queryKey: ['statistics'] });
+            queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] });
             // Refresh the Grid Tracker's worked layer so a just-worked grid
             // turns green immediately instead of on the next timed refetch.
             queryClient.invalidateQueries({ queryKey: ['gridmap'] });
@@ -175,6 +177,7 @@ export function useSignalRConnection() {
             }
             queryClient.invalidateQueries({ queryKey: ['qsos'] });
             queryClient.invalidateQueries({ queryKey: ['statistics'] });
+            queryClient.invalidateQueries({ queryKey: ['dxcc-entity-glance'] });
             useToastStore
               .getState()
               .push(`${evt.source}: ${evt.updated} QSO${evt.updated === 1 ? '' : 's'} newly confirmed`, 'success');

@@ -43,6 +43,19 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
+    /// Log Entry DXCC glance for one call. 204 when the call is empty, still
+    /// ambiguous, or not a DXCC entity. Does not change <c>GET dxcc</c>.
+    /// </summary>
+    [HttpGet("dxcc/glance")]
+    [ProducesResponseType(typeof(DxccEntityGlance), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<ActionResult<DxccEntityGlance>> GetDxccEntityGlance([FromQuery] string? call = null)
+    {
+        var glance = await _awardsService.GetDxccEntityGlanceAsync(call);
+        return glance is null ? NoContent() : Ok(glance);
+    }
+
+    /// <summary>
     /// Get VUCC grid square statistics with worked/confirmed status by band
     /// </summary>
     [HttpGet("vucc")]

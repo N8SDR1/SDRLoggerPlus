@@ -31,6 +31,29 @@ public record BandSummary(
 );
 
 /// <summary>
+/// Log Entry DXCC glance for one resolved entity. Null from the service means
+/// the call is empty, ambiguous, or not a DXCC entity (the API answers 204).
+/// </summary>
+public record DxccEntityGlance(
+    string EntityName,
+    string PrimaryPrefix,
+    IReadOnlyList<string> Bands,
+    IReadOnlyList<DxccGlanceRow> Rows
+);
+
+public record DxccGlanceRow(
+    string ModeGroup,
+    IReadOnlyList<DxccGlanceCell> Cells
+);
+
+public record DxccGlanceCell(
+    bool Worked,
+    bool Confirmed,
+    int QsoCount,
+    bool CallsignWorked
+);
+
+/// <summary>
 /// Which confirmation channels count as "confirmed". ARRL awards (VUCC, FFMA)
 /// credit only LoTW and paper cards, so a grid confirmed on eQSL or QRZ Logbook
 /// alone reads as confirmed under <see cref="Any"/> but not under

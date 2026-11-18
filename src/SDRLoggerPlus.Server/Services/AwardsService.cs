@@ -7,6 +7,7 @@ namespace SDRLoggerPlus.Server.Services;
 public interface IAwardsService
 {
     Task<DxccStatistics> GetDxccStatisticsAsync(StatisticsFilters? filters = null);
+    Task<DxccEntityGlance?> GetDxccEntityGlanceAsync(string? callsign);
     Task<VuccStatistics> GetVuccStatisticsAsync(StatisticsFilters? filters = null);
     Task<GridMapStatistics> GetGridMapAsync(StatisticsFilters? filters = null);
     Task<PotaStatistics> GetPotaStatisticsAsync(PotaFilters? filters = null);
