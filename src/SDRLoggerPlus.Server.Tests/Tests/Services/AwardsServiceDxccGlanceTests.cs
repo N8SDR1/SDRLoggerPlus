@@ -283,7 +283,47 @@ public class AwardsServiceDxccGlanceTests
         cell.Worked.Should().BeTrue();
         cell.Confirmed.Should().BeTrue();
         cell.QsoCount.Should().Be(2);
-        cell.CallsignWorked.Should().BeFalse();
+        cell.CallsignWorked.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CallsignCorner_IsThisBaseCallOnly_AndDoesNotChangeEntityColor()
+    {
+        Setup(
+            Qso("W1AW", mode: "USB"),
+            Qso("HB9GUX/P", country: "Switzerland", mode: "USB"),
+            Qso("F/HB9GUX", country: "France", band: "40m", mode: "CW",
+                tweak: q => q.Qsl = Confirmed("lotw")),
+            Qso("F5ABC", country: "France", band: "40m", mode: "CW"));
+
+        var w1aw = (await _service.GetDxccEntityGlanceAsync("W1AW"))!;
+        var k1jt = (await _service.GetDxccEntityGlanceAsync("K1JT"))!;
+        var w1 = At(w1aw, "phone", "20m");
+        var k1 = At(k1jt, "phone", "20m");
+        w1.Worked.Should().BeTrue();
+        w1.Confirmed.Should().BeFalse();
+        w1.CallsignWorked.Should().BeTrue();
+        k1.Worked.Should().Be(w1.Worked);
+        k1.Confirmed.Should().Be(w1.Confirmed);
+        k1.QsoCount.Should().Be(w1.QsoCount);
+        k1.CallsignWorked.Should().BeFalse();
+
+        var hb9 = (await _service.GetDxccEntityGlanceAsync("HB9GUX"))!;
+        var portable = (await _service.GetDxccEntityGlanceAsync("HB9GUX/MM"))!;
+        var otherSwiss = (await _service.GetDxccEntityGlanceAsync("HB9YYY"))!;
+        At(hb9, "phone", "20m").CallsignWorked.Should().BeTrue();
+        At(portable, "phone", "20m").CallsignWorked.Should().BeTrue();
+        At(otherSwiss, "phone", "20m").Worked.Should().BeTrue();
+        At(otherSwiss, "phone", "20m").CallsignWorked.Should().BeFalse();
+
+        var france = (await _service.GetDxccEntityGlanceAsync("F/HB9GUX"))!;
+        france.EntityName.Should().Be("France");
+        var franceCw = At(france, "cw", "40m");
+        franceCw.Worked.Should().BeTrue();
+        franceCw.Confirmed.Should().BeTrue();
+        franceCw.QsoCount.Should().Be(2);
+        franceCw.CallsignWorked.Should().BeTrue();
+        ShouldBeEmpty(At(france, "phone", "20m"));
     }
 
     [Fact]

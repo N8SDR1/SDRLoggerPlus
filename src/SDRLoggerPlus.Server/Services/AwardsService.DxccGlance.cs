@@ -25,6 +25,7 @@ public partial class AwardsService
         var personal = (await AllQsosAsync()).ToList();
         var columns = GlanceColumns(personal);
         var counted = QsosForEntity(personal, entity);
+        var wantedBase = CallsignHelper.ExtractBaseCall(callsign);
 
         var buckets = new Dictionary<(string Band, string Group), List<Qso>>();
         foreach (var qso in counted)
@@ -47,12 +48,12 @@ public partial class AwardsService
             {
                 buckets.TryGetValue((band, group), out var hits);
                 var count = hits?.Count ?? 0;
-                // Stage 2 fills CallsignWorked. Stage 1 leaves it false.
                 cells.Add(new DxccGlanceCell(
                     Worked: count > 0,
                     Confirmed: hits?.Any(IsConfirmed) == true,
                     QsoCount: count,
-                    CallsignWorked: false));
+                    CallsignWorked: hits?.Any(q =>
+                        string.Equals(CallsignHelper.ExtractBaseCall(q.Callsign), wantedBase, StringComparison.OrdinalIgnoreCase)) == true));
             }
             rows.Add(new DxccGlanceRow(group, cells));
         }

@@ -10,9 +10,20 @@ function cellTitle(qsoCount: number, confirmed: boolean): string {
   return `${qsoCount} QSO${qsoCount === 1 ? '' : 's'}${confirmed ? ' · Confirmed' : ''}`;
 }
 
+function CallsignCorner() {
+  return (
+    <span
+      data-testid="callsign-corner"
+      title="This callsign"
+      className="absolute right-0.5 top-0.5 h-1.5 w-1.5 bg-accent-info"
+    />
+  );
+}
+
 /**
  * Log Entry DXCC grid. Not a control: a cell does not tune the radio.
- * Stage 1 does not read callsignWorked.
+ * A blue corner means this callsign, not the whole entity, has been worked
+ * on that band and mode group. It does not change the worked or confirmed color.
  */
 export function DxccEntityGlanceGrid({ glance }: { glance: DxccEntityGlance }) {
   return (
@@ -44,19 +55,22 @@ export function DxccEntityGlanceGrid({ glance }: { glance: DxccEntityGlance }) {
                 </td>
                 {row.cells.map((cell, index) => {
                   const band = glance.bands[index] ?? String(index);
+                  const corner = cell.callsignWorked ? <CallsignCorner /> : null;
                   if (!cell.worked) {
                     return (
-                      <td key={band} className="px-1 py-0.5 text-center text-xs text-dark-400">
+                      <td key={band} className="relative px-1 py-0.5 text-center text-xs text-dark-400">
                         -
+                        {corner}
                       </td>
                     );
                   }
                   return (
-                    <td key={band} className="px-1 py-0.5 text-center">
+                    <td key={band} className="relative px-1 py-0.5 text-center">
                       <span
                         title={cellTitle(cell.qsoCount, cell.confirmed)}
                         className={`inline-block h-3 w-3 rounded-sm ${cell.confirmed ? 'bg-accent-success' : 'bg-accent-warning'}`}
                       />
+                      {corner}
                     </td>
                   );
                 })}
@@ -72,6 +86,8 @@ export function DxccEntityGlanceGrid({ glance }: { glance: DxccEntityGlance }) {
         <span className="text-dark-300">Worked</span>
         <span className="inline-block h-3 w-3 rounded-sm border border-glass-100 bg-dark-600" />
         <span className="text-dark-300">Not worked</span>
+        <span className="inline-block h-3 w-3 bg-accent-info" />
+        <span className="text-dark-300">This callsign</span>
       </div>
     </div>
   );

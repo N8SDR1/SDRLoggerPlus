@@ -53,9 +53,21 @@ describe('DxccEntityGlanceGrid', () => {
     expect(screen.getByText('Not worked')).toBeInTheDocument();
   });
 
-  it('ignores the callsign mark in stage 1', () => {
-    const { container } = render(<DxccEntityGlanceGrid glance={glance()} />);
-    expect(container.querySelector('.bg-accent-info')).toBeNull();
+  it('draws a blue corner for this callsign without changing the entity color', () => {
+    const data = glance();
+    data.rows[2].cells[1] = { worked: false, confirmed: false, qsoCount: 0, callsignWorked: true };
+    render(<DxccEntityGlanceGrid glance={data} />);
+
     expect(screen.getByTitle('2 QSOs · Confirmed')).toHaveClass('bg-accent-success');
+    expect(screen.getByTitle('2 QSOs · Confirmed')).not.toHaveClass('bg-accent-info');
+    expect(screen.getByTitle('1 QSO')).toHaveClass('bg-accent-warning');
+    expect(screen.getAllByTestId('callsign-corner')).toHaveLength(2);
+    expect(screen.getAllByTestId('callsign-corner')[0]).toHaveClass('bg-accent-info');
+
+    const dash = screen.getAllByText('-').find(node => node.querySelector('[data-testid="callsign-corner"]'));
+    expect(dash).toBeTruthy();
+    expect(dash?.textContent).toContain('-');
+    expect(dash?.querySelector('.bg-accent-success, .bg-accent-warning')).toBeNull();
+    expect(screen.getByText('This callsign')).toBeInTheDocument();
   });
 });
