@@ -3,6 +3,17 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-11-18 — v2.15.6 "Deneb"
+
+**Log Entry shows which bands and modes you still need for that country.**
+
+### New — DXCC entity glance
+While a call is in Log Entry, a grid for that DXCC entity sits under the lookup card. The columns are the bands already in the log. The rows are Phone, CW, and Digital. Green is confirmed, amber is worked, and an empty cell is still needed. A country never worked still shows the grid, with every cell empty. If the prefix could still be more than one country, the grid stays hidden.
+
+A blue corner on a cell means this callsign, not only the country, has been worked on that band and mode group.
+
+Confirmed is LoTW, a paper card, eQSL, or QRZ, the same rule Statistics already uses. A contact just logged keeps its country, so the next look includes it. Cluster colors, decode colors, and DX Coach are unchanged.
+
 ## 2026-11-17 — v2.15.5 "Deneb"
 
 **Share QSO totals now includes the newest counted contact’s call.**
