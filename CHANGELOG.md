@@ -3,6 +3,17 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-11-18 — v2.15.7 "Deneb"
+
+**Fixes a memory leak that let SDRLogger+ grow to several gigabytes with lightning on the globe.**
+
+### Fixed — memory kept growing while lightning showed on a globe
+With **Lightning** turned on, the 3D Globe and the globe view on the 2D Map draw a ripple around every recent strike. Each ripple stayed in memory after it faded, so during storms the app could grow by 100 MB or more a minute and reach several gigabytes over a session.
+
+The cause was in the globe library. Its rings layer creates a new circle for every ripple and expects finished animations to be cleaned up, but the version of the animation library it now installs with keeps them. SDRLogger+ now draws the lightning ripples itself: one circle per strike, reused for every ripple and removed when the strike ages out. The ripples look and time the same as before.
+
+If your copy has grown large, restarting SDRLogger+ frees the memory. After updating, it stays flat.
+
 ## 2026-11-18 — v2.15.6 "Deneb"
 
 **Log Entry shows which bands and modes you still need for that country.**
