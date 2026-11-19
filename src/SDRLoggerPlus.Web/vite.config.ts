@@ -30,6 +30,16 @@ const appVersion = process.env.VITE_APP_VERSION || desktopVersion;
 export default defineConfig({
   plugins: [react(), ...(useHttps ? [basicSsl()] : [])],
   base: "./",
+  resolve: {
+    alias: {
+      // Patched tile engine: the published package retains every satellite
+      // tile for the session. See src/vendor/three-slippy-map-globe.mjs.
+      "three-slippy-map-globe": resolve(projectRoot, "src/vendor/three-slippy-map-globe.mjs"),
+    },
+  },
+  optimizeDeps: {
+    exclude: ["three-slippy-map-globe"],
+  },
   define: {
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion),
   },
