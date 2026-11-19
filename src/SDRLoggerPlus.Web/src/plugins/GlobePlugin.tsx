@@ -12,6 +12,7 @@ import type { CallsignLookedUpEvent } from '../api/signalr';
 import { StrikeStore, type Strike } from '../utils/lightningStrikes';
 import { setLightningStrikesCallback, clearLightningStrikesCallback } from '../api/signalr';
 import { createDayNightShell, type DayNightShell } from '../utils/dayNightShell';
+import { createLightningRipples, type LightningRipples } from '../utils/lightningRipples';
 import { createIonosphereShells, DEFAULT_IONO_LAYERS, type IonosphereShells } from '../utils/ionosphereShells';
 import { getSunPosition } from '../utils/solarCalculations';
 import { formatDistance } from '../utils/units';
@@ -265,13 +266,6 @@ interface GlobeInstance {
   polygonSideColor(fn: string | ((d: unknown) => string)): GlobeInstance;
   polygonAltitude(alt: number | ((d: unknown) => number)): GlobeInstance;
   polygonsTransitionDuration(duration: number): GlobeInstance;
-  ringsData(data: unknown[]): GlobeInstance;
-  ringColor(accessor: (d: unknown) => (t: number) => string): GlobeInstance;
-  ringMaxRadius(accessor: number | ((d: unknown) => number)): GlobeInstance;
-  ringPropagationSpeed(accessor: number | ((d: unknown) => number)): GlobeInstance;
-  ringRepeatPeriod(accessor: number | ((d: unknown) => number)): GlobeInstance;
-  ringAltitude(accessor: number | ((d: unknown) => number)): GlobeInstance;
-  ringResolution(res: number): GlobeInstance;
   customLayerData(data: unknown[]): GlobeInstance;
   customThreeObject(fn: (d: unknown) => object): GlobeInstance;
   customThreeObjectUpdate(fn: (obj: object, d: unknown) => void): GlobeInstance;
@@ -348,6 +342,7 @@ export function GlobeCore({ hideOverlays, rotating }: { hideOverlays?: boolean; 
   selectSpotRef.current = selectSpot;
   const strikeStoreRef = useRef(new StrikeStore());
   const dayNightShellRef = useRef<DayNightShell | null>(null);
+  const lightningRipplesRef = useRef<LightningRipples | null>(null);
   const ionoShellsRef = useRef<IonosphereShells | null>(null);
   // Current D/E/F layer colours (0..1 RGB), tracked from the active theme.
   const ionoLayerColorsRef = useRef<[number, number, number][]>(
@@ -956,26 +951,14 @@ export function GlobeCore({ hideOverlays, rotating }: { hideOverlays?: boolean; 
       const material = globe.globeMaterial();
       material.opacity = 0.95;
 
-      // Lightning strike rings — the strike layer owns ringsData (see the strike
-      // effect + the removed per-frame clear in renderBeam). Pure white (keeps
-      // clear of the DX-spot/POTA palette); intensity fades with strike age,
-      // local strikes render brighter than distant ones.
-      globe
-        .ringColor((d: unknown) => {
-          const s = d as { local: boolean; ts: number };
-          return (t: number) => {
-            const ageMin = (Date.now() - s.ts) / 60_000;
-            const ageFactor = ageMin < 1 ? 1 : ageMin < 5 ? 0.7 : 0.45;
-            const alpha = Math.max(0, 1 - t) * ageFactor * (s.local ? 1 : 0.6);
-            return `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
-          };
-        })
-        .ringMaxRadius((d: unknown) => ((d as { local: boolean }).local ? 3.5 : 2.5))
-        .ringPropagationSpeed(2)
-        .ringRepeatPeriod(2000)   // re-ripple while the strike is retained (5–10 min)
-        .ringAltitude(0.006)
-        .ringResolution(32)   // halved — ring count is capped, keep per-ring cost low
-        .ringsData([]);
+      // Lightning strike ripples — our own scene layer, NOT globe.gl's
+      // ringsData: that layer kept every ripple's mesh in memory forever
+      // (see utils/lightningRipples.ts). Pure white (keeps clear of the
+      // DX-spot/POTA palette); dimmer with strike age, local strikes larger
+      // and brighter. The strike effect feeds and animates it.
+      const lightningRipples = createLightningRipples(THREE, 100, (lat, lng, alt) => globe!.getCoords(lat, lng, alt));
+      globe.scene().add(lightningRipples.group);
+      lightningRipplesRef.current = lightningRipples;
 
       // Strike-center lightning bolts (custom layer): a red bolt with a white
       // outline marks each strike's exact spot for 60 s after live arrival, then
@@ -1106,6 +1089,8 @@ export function GlobeCore({ hideOverlays, rotating }: { hideOverlays?: boolean; 
       }
       dayNightShellRef.current?.dispose();
       dayNightShellRef.current = null;
+      lightningRipplesRef.current?.dispose();
+      lightningRipplesRef.current = null;
       ionoShellsRef.current?.dispose();
       ionoShellsRef.current = null;
       setGlobeReady(false);
@@ -1509,19 +1494,21 @@ export function GlobeCore({ hideOverlays, rotating }: { hideOverlays?: boolean; 
     globeRef.current.controls().autoRotate = effectiveRotating;
   }, [effectiveRotating, globeReady]);
 
-  // Lightning strikes → globe.gl ringsData. Backfill via REST, then live via SignalR.
+  // Lightning strikes → ripple layer + strike bolts. Backfill via REST, then live via SignalR.
   useEffect(() => {
     if (!globeReady || !globeRef.current) return;
+    const ripples = lightningRipplesRef.current;
     if (!settings.map.showLightning) {
-      globeRef.current.ringsData([]);
+      ripples?.setStrikes([], Date.now());
       globeRef.current.customLayerData([]);
       return;
     }
     const store = strikeStoreRef.current;
     let cancelled = false;
 
-    // Stable ring datum per strike — globe.gl diffs ringsData by object
-    // identity, so fresh literals each sweep would rebuild every ring mesh.
+    // Stable ring datum per strike — the ripple layer and globe.gl's custom
+    // layer both diff by object identity, so a fresh literal each sweep would
+    // restart every ripple and rebuild every bolt.
     // Arrival time (for the 60 s strike-bolt window) lives in the persistent
     // StrikeStore keyed by strike-key — NOT here — so it survives dedupe and
     // this effect being torn down/recreated on toggle. Bolts key on arrival,
@@ -1548,7 +1535,7 @@ export function GlobeCore({ hideOverlays, rotating }: { hideOverlays?: boolean; 
         .sort((a, b) => (Number(b.r.local) - Number(a.r.local)) || (b.r.ts - a.r.ts)); // local first, then newest
       const rings = prioritized.slice(0, MAX_RINGS).map(x => x.r);
       const dots = prioritized.filter(x => x.live).slice(0, MAX_BOLTS).map(x => x.r);
-      globeRef.current.ringsData(rings);
+      ripples?.setStrikes(rings, now);
       globeRef.current.customLayerData(dots);
     };
 
@@ -1569,12 +1556,21 @@ export function GlobeCore({ hideOverlays, rotating }: { hideOverlays?: boolean; 
     // Age-out sweep so rings fade even without new strikes arriving.
     const interval = setInterval(render, 2000);
 
+    // Ripple animation — moves the existing circles each frame, allocates nothing.
+    let raf = 0;
+    const animate = () => {
+      ripples?.update(Date.now());
+      raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+
     return () => {
       cancelled = true;
       clearInterval(interval);
+      cancelAnimationFrame(raf);
       clearLightningStrikesCallback(cb);
+      ripples?.setStrikes([], Date.now());
       if (globeRef.current) {
-        globeRef.current.ringsData([]);
         globeRef.current.customLayerData([]);
       }
     };
