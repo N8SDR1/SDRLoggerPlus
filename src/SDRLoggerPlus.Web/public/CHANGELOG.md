@@ -3,6 +3,19 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-11-26 — v2.15.8 "Deneb"
+
+**Log Entry logs your rig's real frequency on every contact.**
+
+### Fixed — a contact could be logged with no frequency
+With **Following** on, logging a contact emptied the frequency box. The box then showed a grey **14.250**, which was only the box's hint text and looked like a real frequency. The box refilled only when the rig next reported a new frequency. If you stayed on frequency and logged the next station, that contact was saved with **no frequency** and had to be corrected by hand.
+
+While Log Entry follows a rig, the frequency now comes straight from the rig every time it is shown or logged, so it can't be emptied or left behind. Clearing the form after a contact keeps the frequency, and band and mode no longer jump back to old values. SAT mode still logs the satellite uplink, and without a rig the frequency you type is used.
+
+The empty-box hint now reads **not set**, so it can't be mistaken for a frequency.
+
+If earlier contacts have a blank frequency, you can fill it in with **Edit QSO** in Log History.
+
 ## 2026-11-18 — v2.15.7 "Deneb"
 
 **Fixes a memory leak that let SDRLogger+ grow to several gigabytes with lightning on the globe.**
