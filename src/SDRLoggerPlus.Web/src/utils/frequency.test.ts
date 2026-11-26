@@ -5,6 +5,7 @@ import {
   formMhzToStoredKhz,
   rigHzToStoredKhz,
   storedKhzToFormMhz,
+  logEntryFrequencyMhz,
 } from './frequency';
 
 describe('spotKhzToMhzString', () => {
@@ -73,5 +74,29 @@ describe('storedKhzToFormMhz', () => {
   it('shows stored kHz as MHz in the edit form', () => {
     expect(storedKhzToFormMhz(14074)).toBe(14.074);
     expect(storedKhzToFormMhz(50313)).toBe(50.313);
+  });
+});
+
+describe('logEntryFrequencyMhz', () => {
+  const base = { following: true, rigFrequencyHz: 14_237_500, satMode: false, formFrequency: '' };
+
+  it('uses the rig frequency while following, even when the form copy is empty', () => {
+    // The field bug: after a QSO the form was reset to '' and showed a grey
+    // "14.250" placeholder; the next QSO was logged with no frequency.
+    expect(logEntryFrequencyMhz(base)).toEqual({ mhz: '14.237500', fromRig: true });
+  });
+
+  it('ignores a stale form value (spot / decoder) while the rig is followed', () => {
+    expect(logEntryFrequencyMhz({ ...base, formFrequency: '14.250000' }).mhz).toBe('14.237500');
+  });
+
+  it('uses the typed value when not following, or no rig, or the rig reports 0', () => {
+    expect(logEntryFrequencyMhz({ ...base, following: false, formFrequency: '7.150' })).toEqual({ mhz: '7.150', fromRig: false });
+    expect(logEntryFrequencyMhz({ ...base, rigFrequencyHz: undefined, formFrequency: '7.150' }).mhz).toBe('7.150');
+    expect(logEntryFrequencyMhz({ ...base, rigFrequencyHz: 0, formFrequency: '7.150' }).mhz).toBe('7.150');
+  });
+
+  it('keeps the S.A.T. uplink in SAT mode', () => {
+    expect(logEntryFrequencyMhz({ ...base, satMode: true, formFrequency: '145.900000' })).toEqual({ mhz: '145.900000', fromRig: false });
   });
 });

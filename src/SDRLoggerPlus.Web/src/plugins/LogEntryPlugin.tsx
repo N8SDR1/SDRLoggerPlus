@@ -6,7 +6,7 @@ import { AUTO_HISTORY_KEY, isAutoHistoryEnabled } from '../utils/autoHistory';
 import { formatDupeWarning, MIN_CALLSIGN_LENGTH } from '../utils/dupeWarning';
 import { signalRService, setTciMetersCallback, clearTciMetersCallback, addSatStateCallback, removeSatStateCallback, type TciMetersEvent } from '../api/signalr';
 import { S9_DBM, DB_PER_S_UNIT } from '../utils/smeter';
-import { spotKhzToMhzString, spotKhzToHz, formMhzToStoredKhz, rigHzToStoredKhz } from '../utils/frequency';
+import { spotKhzToMhzString, spotKhzToHz, formMhzToStoredKhz, rigHzToStoredKhz, logEntryFrequencyMhz } from '../utils/frequency';
 import { useSignalR } from '../hooks/useSignalR';
 import { useAppStore } from '../store/appStore';
 import { activeLayoutRef, applyLayoutRef, layoutRefLabel, liveLayoutDiffersFromActive, saveLiveToActiveSlot } from '../layouts/applyLayout';
@@ -466,15 +466,23 @@ export function LogEntryPlugin() {
   // Get current radio state
   const currentRadioState = selectedRadioId ? radioStates.get(selectedRadioId) : null;
 
-  // Auto-populate from radio state when followRadio is enabled. The form
-  // DISPLAYS MHz (v1.x parity); it is converted to kHz on submit, which is
-  // how Qso.Frequency is stored. Six decimals preserve sub-Hz rig precision.
+  // The frequency shown and logged. While following a rig it is the rig's
+  // live frequency, read here every render — never copied into formData,
+  // where the post-QSO reset emptied it and nothing refilled it until the
+  // rig next changed frequency (see logEntryFrequencyMhz). MHz, 6 decimals.
+  const { mhz: frequency, fromRig: frequencyFromRig } = logEntryFrequencyMhz({
+    following: followRadio,
+    rigFrequencyHz: currentRadioState?.frequencyHz,
+    satMode: logMode === 'sat',
+    formFrequency: formData.frequency,
+  });
+
+  // Band and mode follow the rig too; they stay editable (picking a band
+  // tunes the rig there), so they are copied into the form on each change.
   useEffect(() => {
     if (followRadio && currentRadioState) {
-      const frequencyMhz = (currentRadioState.frequencyHz / 1_000_000).toFixed(6);
       setFormData(prev => ({
         ...prev,
-        frequency: frequencyMhz,
         band: currentRadioState.band || prev.band,
         mode: normalizeMode(currentRadioState.mode) || prev.mode,
       }));
@@ -708,8 +716,12 @@ export function LogEntryPlugin() {
       // Clear form. Note we intentionally KEEP activatingPark (it's a
       // session-level setting, not per-QSO) but clear p2pPark since
       // that's specific to the QSO we just logged.
-      setFormData({
-        ...formData,
+      // Functional update: this callback runs after the save returns, so a
+      // formData captured at submit time would roll back any band/mode the
+      // rig reported meanwhile. Frequency stays — it is where you are, not
+      // part of the contact (and while following, it comes from the rig).
+      setFormData(prev => ({
+        ...prev,
         callsign: '',
         name: '',
         qth: '',
@@ -717,7 +729,6 @@ export function LogEntryPlugin() {
         grid: '',
         contest: '',
         remarks: '',
-        frequency: '',
         rstSentPlus: '',
         rstRcvdPlus: '',
         workedPark: '',
@@ -727,7 +738,7 @@ export function LogEntryPlugin() {
         // the auto-fill effect will re-apply them from the S.A.T.
         // controller anyway.
         satGrid: '',
-      });
+      }));
     },
   });
 
@@ -808,7 +819,7 @@ export function LogEntryPlugin() {
       rstSentPlus: '',
       rstRcvd: '59',
       rstRcvdPlus: '',
-      frequency: followRadio && currentRadioState ? formData.frequency : '',
+      frequency: '',
       name: '',
       qth: '',
       county: '',
@@ -831,7 +842,7 @@ export function LogEntryPlugin() {
     setTimeLocked(true);
     setNameLocked(true);
     clearCallsignFromAllControls();
-  }, [formData.band, formData.mode, formData.frequency, followRadio, currentRadioState, clearCallsignFromAllControls]);
+  }, [formData.band, formData.mode, clearCallsignFromAllControls]);
 
   // Build + submit the current QSO. `overrides` lets the Combo {LOG} path
   // (Stage B) stamp the on-air RST / mode / frequency Lyra reports at macro
@@ -857,9 +868,9 @@ export function LogEntryPlugin() {
     // Combo carries Hz and the form displays MHz (v1.x parity), but backend
     // Qso.Frequency is stored in kHz — ADIF export divides by 1000 to get MHz.
     // Convert at this boundary only; the form stays MHz.
-    const frequency = (overrides?.frequencyHz && overrides.frequencyHz > 0)
+    const frequencyKhz = (overrides?.frequencyHz && overrides.frequencyHz > 0)
       ? rigHzToStoredKhz(overrides.frequencyHz)
-      : (formData.frequency ? formMhzToStoredKhz(parseFloat(formData.frequency)) : undefined);
+      : (frequency ? formMhzToStoredKhz(parseFloat(frequency)) : undefined);
 
     // Use the timestamp from state (either live or manual)
     const qsoDateTime = new Date(`${qsoDate}T${qsoTime}:00.000Z`);
@@ -869,7 +880,7 @@ export function LogEntryPlugin() {
       timeOn: qsoTime.replace(':', '') + '00',
       band: formData.band,
       mode,
-      frequency,
+      frequency: frequencyKhz,
       rstSent,
       rstRcvd,
       name: formData.name || focusedCallsignInfo?.name,
@@ -1257,7 +1268,7 @@ export function LogEntryPlugin() {
                     // the operator hasn't tuned yet; disabled catches
                     // that case so we never send garbage to POTA.
                     const call = settings.station.callsign?.trim().toUpperCase() || '';
-                    const freqMhz = parseFloat(formData.frequency);
+                    const freqMhz = parseFloat(frequency);
                     if (!call || !activatingPark || !freqMhz) return;
                     try {
                       const resp = await fetch('/api/pota/spot', {
@@ -1277,11 +1288,11 @@ export function LogEntryPlugin() {
                       alert(`POTA self-spot failed: ${e instanceof Error ? e.message : String(e)}`);
                     }
                   }}
-                  disabled={!formData.frequency || !activatingPark}
+                  disabled={!frequency || !activatingPark}
                   className="ml-auto px-2 py-1 rounded bg-green-500/20 border border-green-500/40 text-green-300 text-xs font-ui hover:bg-green-500/30 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
                   title={
                     !activatingPark ? 'Set your activating park first'
-                    : !formData.frequency ? 'Set the frequency you are operating on'
+                    : !frequency ? 'Set the frequency you are operating on'
                     : `Self-spot ${activatingPark} on POTA.app (uses POTA username/password from Settings)`
                   }
                 >
@@ -1698,13 +1709,13 @@ export function LogEntryPlugin() {
           <div className="w-32">
             <label className="text-xs font-ui text-dark-200 mb-1 flex items-center gap-1">
               Frequency (MHz)
-              {followRadio && currentRadioState && (
+              {frequencyFromRig && (
                 <span className="w-1.5 h-1.5 rounded-full bg-accent-success" title="From radio" />
               )}
             </label>
             <input
               type="text"
-              value={formData.frequency}
+              value={frequency}
               onChange={(e) => {
                 const frequency = e.target.value;
                 const freqMhz = parseFloat(frequency);
@@ -1717,11 +1728,13 @@ export function LogEntryPlugin() {
                   band: newBand || prev.band,
                 }));
               }}
-              placeholder="14.250"
+              // Not a number: a grey "14.250" here was read as a real
+              // frequency when the box was actually empty.
+              placeholder="not set"
               className={`glass-input w-full font-mono text-sm ${
-                followRadio && currentRadioState ? 'border-accent-success/30' : ''
+                frequencyFromRig ? 'border-accent-success/30' : ''
               }`}
-              readOnly={followRadio && !!currentRadioState}
+              readOnly={frequencyFromRig}
             />
           </div>
 
@@ -1970,7 +1983,7 @@ export function LogEntryPlugin() {
               // MHz in the form; the cluster wire format is kHz so we
               // convert. Callsign and freq are required — Spot is
               // useless without either.
-              const freqMhz = parseFloat(formData.frequency);
+              const freqMhz = parseFloat(frequency);
               if (!formData.callsign || !freqMhz) return;
               try {
                 const r = await sendDxSpot(formData.callsign, freqMhz * 1000, formData.remarks || undefined);
@@ -1981,7 +1994,7 @@ export function LogEntryPlugin() {
                 alert(`Spot failed: ${e instanceof Error ? e.message : String(e)}`);
               }
             }}
-            disabled={!formData.callsign || !formData.frequency}
+            disabled={!formData.callsign || !frequency}
             className="glass-button flex items-center justify-center gap-1.5 py-2 px-3 disabled:opacity-40 disabled:cursor-not-allowed"
             title="Send this QSO as a DX spot to your chosen telnet cluster (SpotHole is receive-only — add a cluster in Settings → Cluster to spot)"
           >

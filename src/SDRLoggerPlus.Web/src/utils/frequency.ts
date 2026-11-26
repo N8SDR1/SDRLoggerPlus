@@ -49,3 +49,30 @@ export function rigHzToStoredKhz(hz: number): number {
 export function storedKhzToFormMhz(khz: number): number {
   return Math.round((khz / 1000) * 1e6) / 1e6;
 }
+
+// -- Log Entry frequency --------------------------------------------------
+
+/**
+ * The frequency Log Entry shows and logs, as the form's MHz string.
+ *
+ * While Log Entry follows a connected rig, the rig's live frequency IS the
+ * QSO frequency: it is read from the radio state at the moment it is shown or
+ * logged, never kept as a copy in the form. A copy could be emptied (the form
+ * resets after each QSO) or go stale (a spot or decoder pushed its own value),
+ * and a rig only reports when its frequency changes, so nothing would refill
+ * it — the next QSO was logged with no or the wrong frequency. SAT mode logs
+ * the uplink the S.A.T. controller fills in instead, and without a rig the
+ * operator's typed value is used.
+ */
+export function logEntryFrequencyMhz(opts: {
+  following: boolean;
+  rigFrequencyHz: number | null | undefined;
+  satMode: boolean;
+  formFrequency: string;
+}): { mhz: string; fromRig: boolean } {
+  const { following, rigFrequencyHz, satMode, formFrequency } = opts;
+  if (following && !satMode && rigFrequencyHz != null && rigFrequencyHz > 0) {
+    return { mhz: (rigFrequencyHz / 1_000_000).toFixed(6), fromRig: true };
+  }
+  return { mhz: formFrequency, fromRig: false };
+}
