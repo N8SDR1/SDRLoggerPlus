@@ -787,6 +787,8 @@ export function GlobeCore({ hideOverlays, rotating }: { hideOverlays?: boolean; 
         globe(containerRef.current)
         // Use Google satellite tiles with labels - shows countries, cities as you zoom.
         // Online enhancement only; the bundled base textures below render without internet.
+        // Tiles the camera leaves are dropped by the vendored tile engine
+        // (src/vendor/three-slippy-map-globe.mjs); the stock engine kept them.
         .globeTileEngineUrl((x, y, l) => `https://mt1.google.com/vt/lyrs=y&x=${x}&y=${y}&z=${l}`)
         // Bundled locally (public/textures) so the globe works offline and does not depend
         // on the unpkg CDN, which was leaving the globe blank when unreachable.
