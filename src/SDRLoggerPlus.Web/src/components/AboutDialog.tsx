@@ -590,7 +590,8 @@ function HelpTab() {
           <ul className="ml-4 list-disc space-y-1.5">
             <li><B>Statistics</B> panel — DXCC, WAS, WAZ, WPX, WAC, 5-band awards, VUCC, <B>FFMA</B>, POTA, IOTA; worked vs. confirmed, filterable by band / continent. The DXCC tab shows each entity's <B>ARRL primary prefix</B> (K, VE, DL…) beside the name and can <B>sort by prefix</B>.</li>
             <li><B>FFMA</B> (Fred Fish Memorial Award) — all 488 six-metre grids of the lower 48, confirmed by LoTW or paper QSL. Shown as a checklist grouped by grid field: confirmed (green), worked-but-unconfirmed (amber), and still-needed — filter to <em>Needed</em> to see exactly what's left to chase.</li>
-            <li><B>Propagation</B> panel — HF band conditions (from N0NBH) as a 24-hour heatmap by band and UTC hour.</li>
+            <li><B>Solar</B> panel and the header — today's <B>solar flux (SFI)</B> and <B>sunspot number</B> from NOAA's daily reports, plus the live <B>K-index</B>. If NOAA is unreachable or behind, the numbers come from HamQSL (N0NBH). The DX Coach and the propagation forecast use these same numbers.</li>
+            <li><B>Propagation</B> panel — HF band conditions as a 24-hour heatmap by band and UTC hour. With a DX station focused, the path forecast is calibrated with live <B>ionosonde</B> readings (prop.kc2g.com) where available, and the panel says what it is based on.</li>
             <li><B>Rotator</B> panel — azimuth / elevation readout + preset headings; configure the hamlib rotctld / serial connection in <P>Settings → Rotator</P>.</li>
           </ul>
         </Section>

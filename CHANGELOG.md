@@ -3,6 +3,15 @@
 All notable changes to SDRLoggerPlus v2 are recorded here.
 This file is bundled with the app and shown in About → Changelog.
 
+## 2026-11-27 — v2.15.9 "Deneb"
+
+**Solar flux and sunspot number now show today's values.**
+
+### Fixed — SFI and SSN were last month's averages
+The solar flux (SFI) and sunspot number in the header and the Solar panel came from a NOAA report of **monthly averages**, so they showed last month's figures. On Nov 27 SDRLogger+ showed SFI 108 and SSN 46 (October's averages) while the day's values were 91 and 30. The DX Coach and the propagation forecast use the same numbers, so they assumed a stronger sun than there was.
+
+SFI and SSN now come from NOAA's **daily** reports. The flux updates three times a day, and the panel's "Updated" time shows when. If NOAA is unreachable or more than three days behind, the numbers come from HamQSL (N0NBH), which is also daily. The K-index was already live and is unchanged.
+
 ## 2026-11-26 — v2.15.8 "Deneb"
 
 **Log Entry logs your rig's real frequency on every contact.**
